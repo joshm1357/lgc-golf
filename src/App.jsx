@@ -15,6 +15,7 @@ import MapScreen from './screens/MapScreen.jsx';
 import Trophies from './screens/Trophies.jsx';
 import Tribunal, { TribunalCase } from './screens/Tribunal.jsx';
 import Courses from './screens/Courses.jsx';
+import { DrawOverlay } from './components/DrawCeremony.jsx';
 
 function Gate() {
   const { loading, status } = useSession();
@@ -57,6 +58,7 @@ function Inside() {
         <Route path="*" element={<Leaderboard />} />
       </Routes>
       {!hideTabs && <TabBar />}
+      <DrawOverlay />
       <Toaster />
     </div>
   );

@@ -105,8 +105,11 @@ export function DataProvider({ children }) {
     for (const rp of data.round_players) (roundPlayers[rp.round_id] ||= []).push(rp);
     const currentTrip = trips.find((t) => t.status === 'active') || trips[0] || null;
     const liveRound = [...rounds].reverse().find((r) => r.status === 'live') || null;
+    const d = new Date();
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const defaultRound =
       liveRound ||
+      [...rounds].reverse().find((r) => r.play_date === today) ||
       [...rounds].reverse().find((r) => r.trip_id === currentTrip?.id && r.status !== 'setup') ||
       [...rounds].reverse().find((r) => r.trip_id === currentTrip?.id) ||
       rounds[rounds.length - 1] || null;

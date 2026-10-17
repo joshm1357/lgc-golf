@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useSession, playerName } from '../lib/store.jsx';
 import { Header, Avatar, Loading, toast } from '../components/ui.jsx';
+import DrawSetup from '../components/DrawSetup.jsx';
 
 async function run(fn, okMsg) {
   try {
@@ -273,12 +274,23 @@ function RoundCard({ round }) {
       {(ld !== round.ld_holes.join(' ') || ctp !== round.ctp_holes.join(' ')) && (
         <button type="button" className="btn sm" onClick={() => run(() => supabase.from('rounds').update({ ld_holes: parseNums(ld).filter((n) => n >= 1 && n <= 18), ctp_holes: parseNums(ctp).filter((n) => n >= 1 && n <= 18) }).eq('id', round.id), 'Side comps saved').then(data.reload)}>Save side comp holes</button>
       )}
+      {round.format === 'ambrose' && <DrawButton round={round} />}
       {round.format === 'ambrose' ? <TeamsEditor round={round} /> : <StablefordPlayers round={round} />}
       <details>
         <summary className="small muted">Delete this round</summary>
         <button type="button" className="btn danger sm" style={{ marginTop: 8 }} onClick={() => { if (window.confirm(`Delete ${round.name} and all its scores?`)) run(() => supabase.from('rounds').delete().eq('id', round.id), 'Round deleted').then(data.reload); }}>Delete round</button>
       </details>
     </div>
+  );
+}
+
+function DrawButton({ round }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button type="button" className="btn gold" onClick={() => setOpen(true)}>🎲 The Draw — random fair teams, live for everyone</button>
+      {open && <DrawSetup round={round} onClose={() => setOpen(false)} />}
+    </>
   );
 }
 

@@ -5,6 +5,7 @@ import { roundBoard, headlines } from '../lib/board.js';
 import { formatToPar, strokesReceived, stablefordPoints } from '../lib/scoring.js';
 import { Header, Seg, AvatarStack, Icon, Sheet, Loading } from '../components/ui.jsx';
 import { TrophyArt } from '../components/TrophyArt.jsx';
+import DrawSetup from '../components/DrawSetup.jsx';
 
 export function useRoundChoice() {
   const data = useData();
@@ -36,6 +37,7 @@ export default function Leaderboard() {
   const [round, choose] = useRoundChoice();
   const [mode, setMode] = useState('live');
   const [open, setOpen] = useState(null);
+  const [drawing, setDrawing] = useState(false);
   const scores = useScores(round?.id);
 
   const board = useMemo(() => {
@@ -139,7 +141,13 @@ export default function Leaderboard() {
         <span style={{ textAlign: 'right' }}>{projected ? 'Win' : isA ? 'Move' : '+/−'}</span>
       </div>
       <div className="card lb">
-        {rows.length === 0 && <div className="empty">{isA ? 'No teams yet.' : 'No players in this round yet.'}</div>}
+        {rows.length === 0 && (
+          <div className="empty">
+            {isA ? (status?.is_admin
+              ? <button type="button" className="btn gold" onClick={() => setDrawing(true)}>🎲 Start the draw</button>
+              : 'Teams come out of the draw — watch for it here.') : 'No players in this round yet.'}
+          </div>
+        )}
         {rows.map((r, i) => {
           const prev = prevRanks?.[r.id];
           const mv = prev ? prev - r.rank : 0;
@@ -186,6 +194,7 @@ export default function Leaderboard() {
         <Link to={`/score/${round.id}`} className="btn gold fab">Enter score{myTeam ? ` — ${myTeam.name}` : ''}</Link>
       )}
 
+      {drawing && <DrawSetup round={round} onClose={() => setDrawing(false)} />}
       {open && (
         <Sheet title={open.name} onClose={() => setOpen(null)}>
           <Scorecard row={open} board={board} />

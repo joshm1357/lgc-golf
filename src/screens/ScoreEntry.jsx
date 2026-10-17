@@ -50,6 +50,7 @@ export default function ScoreEntry() {
   const [pickedUp, setPickedUp] = useState(false);
   const [moment, setMoment] = useState(null);
   const [photo, setPhoto] = useState(null);
+  const [drive, setDrive] = useState(null);
   const [busy, setBusy] = useState(false);
 
   // Reset the stepper when the hole or subject changes.
@@ -59,6 +60,7 @@ export default function ScoreEntry() {
     setPickedUp(false);
     setMoment(null);
     setPhoto(null);
+    setDrive(null);
   }, [resetKey]);
 
   if (!data.ready) return <Loading />;
@@ -73,6 +75,17 @@ export default function ScoreEntry() {
   const playedCount = holes.filter((h) => myScores[h.n]).length;
   const editor = existing?.entered_by ? data.playersById[existing.entered_by] : null;
   const locked = round.status !== 'live' && !status?.is_admin;
+  // Ambrose minimum-drives rule.
+  const minDrives = isA ? round.min_drives || 0 : 0;
+  const driveBy = drive === '' ? null : drive ?? existing?.tee_shot_player ?? null;
+  const driveCounts = Object.fromEntries((subject.players || []).filter(Boolean).map((p) => [p.id, 0]));
+  for (const h of holes) {
+    const who = h.n === hole.n ? driveBy : myScores[h.n]?.tee_shot_player;
+    if (who && who in driveCounts) driveCounts[who] += 1;
+  }
+  const holesLeftAfter = holes.filter((h) => h.n !== hole.n && !myScores[h.n]).length;
+  const stillNeeded = Object.values(driveCounts).reduce((a, c) => a + Math.max(0, minDrives - c), 0);
+  const driveSqueeze = minDrives && stillNeeded > holesLeftAfter;
 
   async function save() {
     setBusy(true);
@@ -80,6 +93,7 @@ export default function ScoreEntry() {
       const row = {
         round_id: round.id, subject_id: subject.id, subject_type: isA ? 'team' : 'player', hole: hole.n,
         strokes: isPickup ? null : strokes, picked_up: !!isPickup, entered_by: me,
+        ...(isA ? { tee_shot_player: driveBy } : {}),
       };
       const sent = await saveScore(row);
       if (!sent) toast('Saved on your phone — will sync when signal returns');
@@ -161,6 +175,32 @@ export default function ScoreEntry() {
           )}
         </div>
       </div>
+
+      {isA && minDrives > 0 && (
+        <div className="section">
+          <div className="card pad stack" style={{ gap: 8, borderColor: driveSqueeze ? 'var(--down)' : 'var(--line)' }}>
+            <div className="row between"><span className="label">Whose drive?</span><span className="small muted">min {minDrives} each</span></div>
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, (subject.players || []).length)}, minmax(0, 1fr))`, gap: 8 }}>
+              {(subject.players || []).filter(Boolean).map((p) => {
+                const c = driveCounts[p.id] || 0;
+                const done = c >= minDrives;
+                return (
+                  <button key={p.id} type="button" className="chip" aria-pressed={driveBy === p.id} onClick={() => { setHoleN(hole.n); setDrive(driveBy === p.id ? '' : p.id); }}
+                    style={{ minHeight: 52, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    <span>{playerName(p)}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: driveBy === p.id ? '#fff' : done ? 'var(--up)' : 'var(--down)' }}>{c}/{minDrives}{done ? ' ✓' : ''}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {driveSqueeze ? (
+              <span className="err" style={{ fontSize: 13 }}>Careful — {Object.entries(driveCounts).filter(([, c]) => c < minDrives).map(([id, c]) => `${playerName(data.playersById[id])} needs ${minDrives - c} more`).join(', ')} with only {holesLeftAfter} holes left.</span>
+            ) : (
+              <span className="small muted">{Object.entries(driveCounts).filter(([, c]) => c < minDrives).map(([id, c]) => `${playerName(data.playersById[id])} needs ${minDrives - c} more`).join(' · ') || 'Drive rule done ✓'}</span>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="section stack">
         <span className="label">Moment (optional — goes to the feed)</span>

@@ -122,6 +122,10 @@ export default function Leaderboard() {
         </div>
       )}
 
+      {round.rules && round.status !== 'locked' && (
+        <div className="section"><div className="card pad small" style={{ lineHeight: 1.45 }}><strong>Today's rules:</strong> {round.rules} <a href="?guide" style={{ fontWeight: 700 }}>How it works</a></div></div>
+      )}
+
       {heads.length > 0 && round.status !== 'locked' && (
         <div className="heads">
           {heads.map((h, i) => (

@@ -13,6 +13,7 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
 /** Turn a Supabase error into a plain-English message. */
 export function friendlyError(err) {
   if (!err) return '';
+  if (typeof Event !== 'undefined' && err instanceof Event) return "Couldn't read that photo — try a different one.";
   const msg = err.message || String(err);
   if (/anonymous sign-ins are disabled/i.test(msg)) {
     return 'Sign-in is switched off in Supabase. Ask Josh to turn on "Allow anonymous sign-ins".';

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useScores, useSession, playerName } from '../lib/store.jsx';
@@ -6,7 +6,7 @@ import { saveScore } from '../lib/offline.js';
 import { uploadPhoto } from '../lib/images.js';
 import { courseHoles } from '../lib/board.js';
 import { strokesReceived, stablefordPoints } from '../lib/scoring.js';
-import { Icon, Loading, toast } from '../components/ui.jsx';
+import { Icon, Loading, toast, PhotoButtons } from '../components/ui.jsx';
 
 const MOMENTS = ['Chip-in', 'Bomb drive', 'Lost ball', 'Air shot', 'Three-putt', 'Tree hit', 'Sandy save'];
 
@@ -51,7 +51,6 @@ export default function ScoreEntry() {
   const [moment, setMoment] = useState(null);
   const [photo, setPhoto] = useState(null);
   const [busy, setBusy] = useState(false);
-  const fileRef = useRef();
 
   // Reset the stepper when the hole or subject changes.
   const resetKey = `${subject?.id}|${hole?.n}`;
@@ -169,10 +168,7 @@ export default function ScoreEntry() {
             <button key={m} type="button" className="chip" aria-pressed={moment === m} onClick={() => setMoment(moment === m ? null : m)}>{m}</button>
           ))}
         </div>
-        <button type="button" className="btn ghost block" onClick={() => fileRef.current.click()}>
-          {Icon.camera()}<span>{photo ? 'Photo added ✓' : 'Add a photo to the feed'}</span>
-        </button>
-        <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => setPhoto(e.target.files?.[0] || null)} />
+        <PhotoButtons onPick={setPhoto} picked={!!photo} cameraLabel={photo ? 'Retake' : 'Photo for feed'} libraryLabel="Choose photo" />
       </div>
 
       <div className="section" style={{ paddingBottom: 28 }}>

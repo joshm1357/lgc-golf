@@ -158,6 +158,28 @@ export function timeAgo(iso) {
   return new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
 }
 
+/**
+ * Two clear choices: open the camera, or pick from the gallery.
+ * (A single "choose file" button hides the camera on some Android phones.)
+ */
+export function PhotoButtons({ onPick, facing = 'environment', cameraLabel = 'Take a photo', libraryLabel = 'Choose photo', picked }) {
+  const camRef = React.useRef();
+  const libRef = React.useRef();
+  const handle = (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (f) onPick(f);
+  };
+  return (
+    <div className="row" style={{ gap: 8 }}>
+      <button type="button" className="btn ghost grow" onClick={() => camRef.current.click()}>{Icon.camera()}<span>{cameraLabel}</span></button>
+      <button type="button" className="btn ghost grow" onClick={() => libRef.current.click()}><span>{picked ? 'Photo added ✓' : libraryLabel}</span></button>
+      <input ref={camRef} type="file" accept="image/*" capture={facing} hidden onChange={handle} />
+      <input ref={libRef} type="file" accept="image/*" hidden onChange={handle} />
+    </div>
+  );
+}
+
 export function Loading({ text = 'Loading…' }) {
   return <div className="loading">{text}</div>;
 }

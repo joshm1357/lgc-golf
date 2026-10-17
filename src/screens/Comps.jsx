@@ -1,10 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useRealtime, useSession, playerName } from '../lib/store.jsx';
 import { uploadPhoto } from '../lib/images.js';
 import { distanceM, getFix } from '../lib/geo.js';
-import { Header, Seg, Avatar, Icon, Sheet, timeAgo, toast } from '../components/ui.jsx';
+import { Header, Seg, Avatar, Icon, Sheet, timeAgo, toast, PhotoButtons } from '../components/ui.jsx';
 import CourseMap, { avatarIcon, teeIcon } from '../components/CourseMap.jsx';
 import { useRoundChoice, RoundChips } from './Leaderboard.jsx';
 
@@ -182,7 +182,6 @@ function EntryForm({ round, kind, hole, holeInfo, leader, playerIds, onClose, on
   const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [gpsMsg, setGpsMsg] = useState('');
-  const fileRef = useRef();
   const tee = holeInfo?.tee;
   const autoLd = kind === 'ld' && tee && pt ? Math.round(distanceM(tee, pt)) : null;
   const shownDist = distTouched ? dist : autoLd != null ? String(autoLd) : dist;
@@ -244,8 +243,8 @@ function EntryForm({ round, kind, hole, holeInfo, leader, playerIds, onClose, on
             ]} />
           )}
         </div>
-        <button type="button" className="btn ghost block" onClick={() => fileRef.current.click()}>{Icon.camera()}<span>{file ? 'Photo added ✓' : kind === 'ctp' ? 'Photo of the ball near the pin' : 'Photo of the ball'}</span></button>
-        <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => setFile(e.target.files?.[0] || null)} />
+        <span className="label">{kind === 'ctp' ? 'Photo of the ball near the pin' : 'Photo of the ball'}</span>
+        <PhotoButtons onPick={setFile} picked={!!file} cameraLabel={file ? 'Retake' : 'Take a photo'} />
         <button type="button" className="btn gold block" disabled={busy || (kind === 'ctp' && shownDist === '')} onClick={save}>{busy ? 'Saving…' : 'Save entry'}</button>
       </div>
     </Sheet>

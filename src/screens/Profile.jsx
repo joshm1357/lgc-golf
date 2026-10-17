@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useScores, useSession, playerName } from '../lib/store.jsx';
 import { roundBoard } from '../lib/board.js';
 import { uploadPhoto } from '../lib/images.js';
-import { Header, Avatar, Icon, Loading, toast } from '../components/ui.jsx';
+import { Header, Avatar, Icon, Loading, toast, PhotoButtons } from '../components/ui.jsx';
 
 /** Everything we know about a player: Stableford rounds, Ambrose results, trophies, comps, Tribunal, handicap. */
 export function usePlayerHistory(playerId) {
@@ -83,12 +83,10 @@ export default function Profile() {
   const [name, setName] = useState('');
   const [nick, setNick] = useState('');
   const [busy, setBusy] = useState(false);
-  const fileRef = useRef();
 
   if (!p) return <Loading text="Player not found" />;
 
-  async function changePhoto(e) {
-    const f = e.target.files?.[0];
+  async function changePhoto(f) {
     if (!f) return;
     setBusy(true);
     try {
@@ -118,10 +116,7 @@ export default function Profile() {
         <div className="card pad row" style={{ gap: 16 }}>
           <div style={{ position: 'relative' }}>
             <Avatar player={p} size={92} />
-            {canEdit && (
-              <button type="button" className="btn sm" style={{ position: 'absolute', right: -6, bottom: -4, minHeight: 34, padding: '0 8px', borderRadius: 999 }} onClick={() => fileRef.current.click()} disabled={busy} aria-label="Change photo">{Icon.camera(16)}</button>
-            )}
-            <input ref={fileRef} type="file" accept="image/*" hidden onChange={changePhoto} />
+
           </div>
           <div className="grow">
             <div className="label">Handicap</div>
@@ -129,6 +124,7 @@ export default function Profile() {
             <div className="small muted">Changes only via the admin or the Tribunal</div>
           </div>
         </div>
+        {canEdit && <PhotoButtons onPick={changePhoto} facing="user" cameraLabel={busy ? 'Uploading…' : 'New selfie'} libraryLabel="Choose photo" />}
         {canEdit && (edit ? (
           <div className="card pad stack">
             <label className="field"><span>Name</span><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></label>

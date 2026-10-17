@@ -285,7 +285,8 @@ function TeamsEditor({ round }) {
   return (
     <div className="stack">
       <span className="label">Teams</span>
-      {teams.map((t) => <TeamRow key={t.id} team={t} />)}
+      {teams.map((t) => <TeamRow key={t.id} team={t} takenElsewhere={teams.filter((o) => o.id !== t.id).flatMap((o) => o.players.map((p) => p.id))} />)}
+      {data.players.length < 2 && <span className="small muted">Only {data.players.length} player so far — the lads appear here once they join with the PIN, or add them under 3. Players.</span>}
       <div className="stack card pad">
         <strong>Add a team</strong>
         <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Team name" />
@@ -307,20 +308,36 @@ function TeamsEditor({ round }) {
   );
 }
 
-function TeamRow({ team }) {
+function TeamRow({ team, takenElsewhere = [] }) {
   const data = useData();
   const [hcp, setHcp] = useState(String(team.handicap));
+  const [editing, setEditing] = useState(false);
+  const ids = team.players.map((p) => p.id);
+  const total = team.players.reduce((s, p) => s + Number(p.handicap || 0), 0);
   return (
+    <div className="stack" style={{ gap: 6, borderBottom: '1px solid var(--line)', paddingBottom: 8 }}>
     <div className="row">
       <div className="grow">
         <strong>{team.name}</strong>
         <div className="small muted ellipsis">{team.players.map(playerName).join(', ') || 'No players'}</div>
+        <button type="button" className="small" style={{ background: 'none', border: 0, padding: 0, color: 'var(--navy)', fontWeight: 700 }} onClick={() => setEditing(!editing)}>{editing ? 'Done' : 'Change players'}</button>
       </div>
       <input className="input" style={{ width: 70, minHeight: 38 }} inputMode="decimal" value={hcp} onChange={(e) => setHcp(e.target.value)} aria-label="Team handicap" />
       {Number(hcp) !== Number(team.handicap) && hcp !== '' && (
         <button type="button" className="btn sm" onClick={() => run(() => supabase.from('teams').update({ handicap: Number(hcp) }).eq('id', team.id), 'Saved').then(data.reload)}>Save</button>
       )}
       <button type="button" className="btn ghost sm" aria-label={`Remove ${team.name}`} onClick={() => { if (window.confirm(`Remove ${team.name}?`)) run(() => supabase.from('teams').delete().eq('id', team.id), 'Team removed').then(data.reload); }}>✕</button>
+    </div>
+    {editing && (
+      <div className="stack" style={{ gap: 6 }}>
+        <span className="small muted">Tap to add or remove. Players in other teams are hidden. Handicaps add to {total}.</span>
+        <PlayerPicker selected={ids} exclude={takenElsewhere} onToggle={async (pid) => {
+          if (ids.includes(pid)) await run(() => supabase.from('team_players').delete().eq('team_id', team.id).eq('player_id', pid));
+          else await run(() => supabase.from('team_players').insert({ team_id: team.id, player_id: pid }));
+          data.reload();
+        }} />
+      </div>
+    )}
     </div>
   );
 }

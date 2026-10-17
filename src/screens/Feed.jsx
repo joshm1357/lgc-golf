@@ -1,9 +1,9 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useRealtime, useSession, playerName } from '../lib/store.jsx';
 import { uploadPhoto } from '../lib/images.js';
-import { Header, Avatar, Icon, Sheet, timeAgo, toast } from '../components/ui.jsx';
+import { Header, Avatar, Icon, Sheet, timeAgo, toast, PhotoButtons } from '../components/ui.jsx';
 
 const REACTIONS = ['🔥', '😂', '👏', '🤦', '🍺'];
 
@@ -145,8 +145,7 @@ function Composer({ onClose, onPosted }) {
   const [file, setFile] = useState(null);
   const [hole, setHole] = useState('');
   const [busy, setBusy] = useState(false);
-  const fileRef = useRef();
-  const preview = file ? URL.createObjectURL(file) : null;
+  const preview = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
 
   async function post() {
     setBusy(true);
@@ -170,10 +169,8 @@ function Composer({ onClose, onPosted }) {
   return (
     <Sheet title="New post" onClose={onClose}>
       <div className="stack">
-        <button type="button" className="btn ghost block" onClick={() => fileRef.current.click()} style={{ minHeight: preview ? 0 : 120, padding: preview ? 0 : undefined, overflow: 'hidden' }}>
-          {preview ? <img src={preview} alt="" style={{ width: '100%', display: 'block' }} /> : <>{Icon.camera(26)}<span>Take or choose a photo</span></>}
-        </button>
-        <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => setFile(e.target.files?.[0] || null)} />
+        {preview && <img src={preview} alt="" style={{ width: '100%', display: 'block', borderRadius: 12 }} />}
+        <PhotoButtons onPick={setFile} picked={!!file} cameraLabel={file ? 'Retake' : 'Take a photo'} />
         <textarea className="textarea" placeholder="Say something…" value={text} onChange={(e) => setText(e.target.value)} />
         <label className="field"><span>Hole (optional)</span><input className="input" inputMode="numeric" value={hole} onChange={(e) => setHole(e.target.value.replace(/\D/g, '').slice(0, 2))} /></label>
         <button type="button" className="btn gold block" disabled={busy || (!text.trim() && !file)} onClick={post}>{busy ? 'Posting…' : 'Post to the feed'}</button>

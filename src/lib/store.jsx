@@ -171,3 +171,12 @@ export function playerName(p) {
   if (!p) return 'Unknown';
   return p.nickname || p.name;
 }
+
+/** For the demo page: supply fixed session + data without touching the database. */
+export function DemoProviders({ session, data, children }) {
+  return (
+    <SessionCtx.Provider value={session}>
+      <DataCtx.Provider value={data}>{children}</DataCtx.Provider>
+    </SessionCtx.Provider>
+  );
+}

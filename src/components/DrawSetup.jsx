@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { supabase, friendlyError } from '../lib/supabase.js';
-import { useData, playerName } from '../lib/store.jsx';
-import { makeDraw, teamSizes, REVEAL_MS } from '../lib/draw.js';
+import { useData, useSession, playerName } from '../lib/store.jsx';
+import { teamSizes, REVEAL_MS } from '../lib/draw.js';
 import { Avatar, Sheet, toast } from './ui.jsx';
 
 /** Admin: choose who's in and how many teams, then start the live draw for everyone. */
 export default function DrawSetup({ round, onClose }) {
   const data = useData();
+  const me = useSession().status.player_id;
   const tripRounds = data.rounds.filter((r) => r.trip_id === round.trip_id && r.id !== round.id);
   const onTrip = new Set(tripRounds.flatMap((r) => (data.roundPlayers[r.id] || []).map((rp) => rp.player_id)));
   const players = data.players.filter((p) => p.approved !== false).sort((a, b) => a.name.localeCompare(b.name));
@@ -15,23 +16,27 @@ export default function DrawSetup({ round, onClose }) {
   const [balance, setBalance] = useState(false);
   const [busy, setBusy] = useState(false);
   const n = sel.length;
-  const options = [2, 3, 4, 5].filter((x) => n >= x * 2);
+  // Every way to split the field into teams of 2 or more, labelled by team size.
+  const options = Array.from({ length: Math.floor(n / 2) - 1 }, (_, i) => i + 2);
   const teams = k && options.includes(k) ? k : options.find((x) => n / x <= 4) || options[0];
+  const sizeLabel = (x) => {
+    const sz = teamSizes(n, x);
+    const lo = Math.min(...sz), hi = Math.max(...sz);
+    return lo === hi ? `Teams of ${hi} · ${x} teams` : `Teams of ${hi}/${lo} · ${x} teams (${sz.join('-')})`;
+  };
   const toggle = (id) => setSel(sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id]);
-  const field = sel.map((id) => ({ id, handicap: Number(data.playersById[id].handicap) }));
 
-  async function start() {
+  async function openRoom() {
     setBusy(true);
     try {
-      const d = makeDraw(field, teams, { balance });
-      await supabase.from('draws').update({ status: 'cancelled' }).eq('round_id', round.id).in('status', ['running', 'done']);
+      await supabase.from('draws').update({ status: 'cancelled' }).eq('round_id', round.id).in('status', ['lobby', 'running', 'done']);
       const { error } = await supabase.from('draws').insert({
         round_id: round.id,
-        payload: { ...d, handicaps: Object.fromEntries(field.map((p) => [p.id, p.handicap])), balance, interval_ms: REVEAL_MS },
-        // Start 3 seconds from now so every phone catches the first pick.
-        started_at: new Date(Date.now() + 3000).toISOString(),
+        status: 'lobby',
+        payload: { field: sel, k: teams, balance, interval_ms: REVEAL_MS },
       });
       if (error) throw error;
+      await supabase.from('posts').insert({ kind: 'user', player_id: me, round_id: round.id, trip_id: round.trip_id, body: `🎲 The draw room is open for ${round.name} — open the app to watch the teams drawn live.` });
       onClose();
     } catch (e) {
       toast(friendlyError(e));
@@ -57,26 +62,27 @@ export default function DrawSetup({ round, onClose }) {
         </div>
         {options.length > 0 ? (
           <>
-            <span className="label">How many teams</span>
-            <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            <span className="label">Team size</span>
+            <div className="stack" style={{ gap: 6 }}>
               {options.map((x) => (
-                <button key={x} type="button" className="chip" aria-pressed={x === teams} onClick={() => setK(x)}>
-                  {x} teams · {teamSizes(n, x).join('/')}
+                <button key={x} type="button" className="chip" style={{ textAlign: 'left' }} aria-pressed={x === teams} onClick={() => setK(x)}>
+                  {sizeLabel(x)}
                 </button>
               ))}
             </div>
             <span className="label">How random</span>
             <div className="seg light" role="group">
-              <button type="button" aria-pressed={!balance} onClick={() => setBalance(false)}>Fully random</button>
-              <button type="button" aria-pressed={balance} onClick={() => setBalance(true)}>Even it out</button>
+              <button type="button" aria-pressed={!balance} onClick={() => setBalance(false)}>Truly random</button>
+              <button type="button" aria-pressed={balance} onClick={() => setBalance(true)}>Keep it close</button>
             </div>
             <span className="small muted">
-              {balance ? 'Still random, but only line-ups where the team handicaps are within a shot of each other.' : 'Pure luck of the draw — could be stacked.'}
+              {balance ? 'Still random, but only line-ups where the team handicaps end up within a shot of each other.' : 'Pure luck of the draw — could be stacked.'}
               {' '}Team handicap = combined handicaps ÷ (2 × team size): 4-player ÷ 8, 3-player ÷ 6. Locking in the draw replaces any teams already set for this round.
             </span>
-            <button type="button" className="btn gold block" disabled={busy || !teams} onClick={start} style={{ minHeight: 56, fontSize: 18 }}>
-              {busy ? 'Starting…' : `🎲 Start the draw — ${teams} teams`}
+            <button type="button" className="btn gold block" disabled={busy || !teams} onClick={openRoom} style={{ minHeight: 56, fontSize: 18 }}>
+              {busy ? 'Opening…' : `🎲 Open the draw room — ${teams} teams`}
             </button>
+            <span className="small muted">Everyone's phone shows the draw room. When the lads are watching, you press Start.</span>
           </>
         ) : <div className="err">Pick at least 4 players.</div>}
       </div>

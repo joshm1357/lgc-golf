@@ -143,9 +143,13 @@ export default function Leaderboard() {
       <div className="card lb">
         {rows.length === 0 && (
           <div className="empty">
-            {isA ? (status?.is_admin
-              ? <button type="button" className="btn gold" onClick={() => setDrawing(true)}>🎲 Start the draw</button>
-              : 'Teams come out of the draw — watch for it here.') : 'No players in this round yet.'}
+            {isA ? (status?.is_admin ? (
+              <div className="stack" style={{ alignItems: 'stretch' }}>
+                <strong style={{ color: 'var(--text)' }}>How are teams decided?</strong>
+                <button type="button" className="btn gold" onClick={() => setDrawing(true)}>🎲 Random draw — live for everyone</button>
+                <Link to="/admin" className="btn ghost">Pick the teams myself</Link>
+              </div>
+            ) : 'Teams come out of the draw — keep the app open and it will pop up.') : 'No players in this round yet.'}
           </div>
         )}
         {rows.map((r, i) => {

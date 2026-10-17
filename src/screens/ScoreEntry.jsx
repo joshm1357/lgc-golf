@@ -75,6 +75,8 @@ export default function ScoreEntry() {
   const playedCount = holes.filter((h) => myScores[h.n]).length;
   const editor = existing?.entered_by ? data.playersById[existing.entered_by] : null;
   const locked = round.status !== 'live' && !status?.is_admin;
+  const compHere = (round.ctp_holes || []).includes(hole.n) ? { kind: 'ctp', label: 'Closest to pin' }
+    : (round.ld_holes || []).includes(hole.n) ? { kind: 'ld', label: 'Longest drive' } : null;
   // Ambrose minimum-drives rule.
   const minDrives = isA ? round.min_drives || 0 : 0;
   const driveBy = drive === '' ? null : drive ?? existing?.tee_shot_player ?? null;
@@ -108,6 +110,10 @@ export default function ScoreEntry() {
           body: moment ? `${moment} on ${hole.n}${isA ? ` (${subject.name})` : ''}` : null,
         });
         if (postErr) toast("Score saved, but the feed post didn't go — no signal?");
+      }
+      if (compHere && window.confirm(`${compHere.label} on ${hole.n} — record it now? (OK = record, Cancel = next hole)`)) {
+        nav(`/comps?r=${round.id}&kind=${compHere.kind}&hole=${hole.n}&add=1`);
+        return;
       }
       const next = holes.find((h) => h.n > hole.n && !myScores[h.n]) || holes.find((h) => !myScores[h.n] && h.n !== hole.n);
       if (next) setHoleN(next.n);
@@ -158,6 +164,15 @@ export default function ScoreEntry() {
         <div className="sync"><strong>{scores.pendingCount} waiting to sync.</strong> They'll send when signal's back.</div>
       )}
       {locked && <div className="sync">This round isn't live — scores can't be changed.</div>}
+      {compHere && (
+        <div className="section">
+          <a href={`#/comps?r=${round.id}&kind=${compHere.kind}&hole=${hole.n}&add=1`} className="card pad row" style={{ background: 'var(--gold-soft)', borderColor: 'var(--gold)', textDecoration: 'none', color: 'inherit' }}>
+            <span style={{ fontSize: 26 }}>{compHere.kind === 'ctp' ? '🎯' : '💣'}</span>
+            <span className="grow"><strong>{compHere.label} hole!</strong><div className="small muted">{compHere.kind === 'ctp' ? 'Measure it, snap the ball by the pin, record it.' : 'Pin the ball on the map, add a photo, record it.'}</div></span>
+            <span className="btn sm gold">Record</span>
+          </a>
+        </div>
+      )}
 
       <div className="section">
         <div className="card" style={{ padding: '20px 16px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>

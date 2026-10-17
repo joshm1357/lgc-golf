@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useRealtime, useSession, playerName } from '../lib/store.jsx';
 import { uploadPhoto } from '../lib/images.js';
@@ -28,10 +28,11 @@ export default function Comps() {
   const data = useData();
   const { status } = useSession();
   const [round, choose] = useRoundChoice();
-  const [kind, setKind] = useState('ctp');
-  const [holeSel, setHoleSel] = useState(null);
+  const [params] = useSearchParams();
+  const [kind, setKind] = useState(params.get('kind') === 'ld' ? 'ld' : 'ctp');
+  const [holeSel, setHoleSel] = useState(params.get('hole') ? Number(params.get('hole')) : null);
   const [entries, setEntries] = useState([]);
-  const [adding, setAdding] = useState(false);
+  const [adding, setAdding] = useState(params.get('add') === '1');
 
   const load = useCallback(async () => {
     if (!round) return;

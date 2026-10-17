@@ -122,6 +122,18 @@ export default function Leaderboard() {
         </div>
       )}
 
+      {round.status === 'live' && ((round.ctp_holes || []).length > 0 || (round.ld_holes || []).length > 0) && (
+        <div className="section">
+          <Link to={`/comps?r=${round.id}`} className="card pad row" style={{ background: 'var(--gold-soft)', borderColor: 'var(--gold)', textDecoration: 'none', color: 'inherit' }}>
+            <span className="grow small" style={{ lineHeight: 1.4 }}>
+              <strong>Side comps today:</strong>
+              {(round.ctp_holes || []).length > 0 && <> 🎯 Closest to pin on {round.ctp_holes.join(', ')}</>}
+              {(round.ld_holes || []).length > 0 && <> · 💣 Longest drive on {round.ld_holes.join(', ')}</>}
+            </span>
+            <span className="btn sm gold">Record</span>
+          </Link>
+        </div>
+      )}
       {round.rules && round.status !== 'locked' && (
         <div className="section"><div className="card pad small" style={{ lineHeight: 1.45 }}><strong>Today's rules:</strong> {round.rules} <a href="?guide" style={{ fontWeight: 700 }}>How it works</a></div></div>
       )}

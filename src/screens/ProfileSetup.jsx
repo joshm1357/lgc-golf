@@ -1,28 +1,44 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { supabase, friendlyError } from '../lib/supabase.js';
-import { useData, useSession } from '../lib/store.jsx';
+import { useData, useSession, playerName } from '../lib/store.jsx';
 import { uploadPhoto } from '../lib/images.js';
-import { Avatar, Icon, Loading, PhotoButtons, toast } from '../components/ui.jsx';
+import { Avatar, Icon, Loading, PhotoButtons, Sheet, toast } from '../components/ui.jsx';
 
-/** First time in: pick yourself from the list, or set up a new profile. */
+function PhotoCircle({ preview, player }) {
+  return (
+    <div style={{ width: 112, height: 112, borderRadius: '50%', border: '2px dashed #8A96A6', background: '#F2F4F6', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}>
+      {preview ? <img src={preview} alt="Your photo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        : player?.avatar_url ? <img src={player.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        : Icon.camera(34)}
+    </div>
+  );
+}
+
+/** First time in: pick your name from the list. Anyone not on it can add themselves — the admin approves them. */
 export default function ProfileSetup() {
   const { refresh } = useSession();
   const data = useData();
-  const [mode, setMode] = useState('new');
+  const [mode, setMode] = useState('pick');
+  const [chosen, setChosen] = useState(null);
   const [name, setName] = useState('');
   const [nickname, setNickname] = useState('');
   const [hcp, setHcp] = useState('');
   const [file, setFile] = useState(null);
-  const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const preview = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
 
   if (!data.ready) return <Loading />;
-  const players = [...data.players].sort((a, b) => a.name.localeCompare(b.name));
+  const players = data.players.filter((p) => p.approved !== false).sort((a, b) => a.name.localeCompare(b.name));
 
-  function pick(f) {
-    setFile(f);
-    setPreview(URL.createObjectURL(f));
+  async function upload() {
+    if (!file) return null;
+    try {
+      return await uploadPhoto(file, 'avatars', { maxDim: 400, square: true, quality: 0.85 });
+    } catch (e3) {
+      toast(`Photo didn't upload (${friendlyError(e3)}) — add it later from your profile.`);
+      return null;
+    }
   }
 
   async function create(e) {
@@ -30,17 +46,8 @@ export default function ProfileSetup() {
     setBusy(true);
     setErr('');
     try {
-      let url = null;
-      if (file) {
-        try {
-          url = await uploadPhoto(file, 'avatars', { maxDim: 400, square: true, quality: 0.85 });
-        } catch (e3) {
-          toast(`Photo didn't upload (${friendlyError(e3)}) — you can add it later from your profile.`);
-        }
-      }
-      const { error } = await supabase.rpc('create_my_player', {
-        p_name: name, p_nickname: nickname, p_handicap: Number(hcp), p_avatar_url: url,
-      });
+      const url = await upload();
+      const { error } = await supabase.rpc('create_my_player', { p_name: name, p_nickname: nickname, p_handicap: Number(hcp), p_avatar_url: url });
       if (error) throw error;
       await data.reload();
       await refresh();
@@ -51,59 +58,97 @@ export default function ProfileSetup() {
     }
   }
 
-  async function claim(p) {
+  async function claim() {
     setBusy(true);
     setErr('');
-    const { error } = await supabase.rpc('claim_player', { p_player_id: p.id });
-    if (error) setErr(friendlyError(error));
-    else await refresh();
-    setBusy(false);
+    try {
+      const { error } = await supabase.rpc('claim_player', { p_player_id: chosen.id });
+      if (error) throw error;
+      const url = await upload();
+      if (url) {
+        const { error: e2 } = await supabase.from('players').update({ avatar_url: url }).eq('id', chosen.id);
+        if (e2) toast(friendlyError(e2));
+      }
+      await data.reload();
+      await refresh();
+    } catch (e2) {
+      setErr(friendlyError(e2));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
     <div className="app">
       <header className="hdr">
-        <div className="hdr-title">Set up your profile</div>
-        <div className="hdr-sub">Your photo is your icon on every leaderboard, post and map pin.</div>
+        <div className="hdr-title">{mode === 'pick' ? 'Who are you?' : 'Add yourself'}</div>
+        <div className="hdr-sub">{mode === 'pick' ? 'Tap your name. Your photo becomes your icon on every leaderboard, post and map pin.' : "Not on the list? Add yourself — the admin will approve you."}</div>
       </header>
-      <div className="section stack">
-        {players.length > 0 && (
-          <div className="seg light" role="group">
-            <button type="button" aria-pressed={mode === 'new'} onClick={() => setMode('new')}>I'm new</button>
-            <button type="button" aria-pressed={mode === 'pick'} onClick={() => setMode('pick')}>I'm already on the list</button>
-          </div>
-        )}
-
+      <div className="section stack" style={{ paddingBottom: 24 }}>
         {mode === 'pick' ? (
-          <div className="card">
-            {players.map((p) => (
-              <button key={p.id} type="button" className="lb-row" style={{ gridTemplateColumns: '40px 1fr auto' }} onClick={() => claim(p)} disabled={busy}>
-                <Avatar player={p} size={36} />
-                <span className="lb-name">{p.name}{p.nickname ? <span className="muted small"> · {p.nickname}</span> : null}</span>
-                <span className="muted small">That's me</span>
-              </button>
-            ))}
-          </div>
+          <>
+            <div className="card">
+              {players.map((p) => (
+                <button key={p.id} type="button" className="lb-row" style={{ gridTemplateColumns: '40px 1fr auto' }} onClick={() => { setChosen(p); setFile(null); setErr(''); }}>
+                  <Avatar player={p} size={36} />
+                  <span className="lb-name">{p.name}{p.nickname ? <span className="muted small"> · {p.nickname}</span> : null}</span>
+                  <span className="muted">{Icon.next()}</span>
+                </button>
+              ))}
+              {!players.length && <div className="empty">Nobody on the list yet.</div>}
+            </div>
+            <button type="button" className="btn ghost block" onClick={() => setMode('new')}>I'm not on the list</button>
+          </>
         ) : (
           <form className="card pad stack" onSubmit={create}>
-            <div className="row" style={{ justifyContent: 'center', flexDirection: 'column', gap: 10 }}>
-              <div style={{ width: 112, height: 112, borderRadius: '50%', border: '2px dashed #8A96A6', background: '#F2F4F6', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {preview ? <img src={preview} alt="Your photo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : Icon.camera(34)}
-              </div>
-              <div style={{ width: '100%' }}><PhotoButtons onPick={pick} facing="user" cameraLabel="Take a selfie" libraryLabel="Choose photo" /></div>
-            </div>
-            <label className="field"><span>Name</span><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Mike Morris" required /></label>
+            <PhotoCircle preview={preview} />
+            <PhotoButtons onPick={setFile} facing="user" cameraLabel="Take a selfie" libraryLabel="Choose photo" />
+            <label className="field"><span>Name</span><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="First and last name" required /></label>
             <label className="field"><span>Nickname (optional)</span><input className="input" value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="What the lads call you" /></label>
             <label className="field">
               <span>Starting handicap</span>
               <input className="input" inputMode="decimal" value={hcp} onChange={(e) => setHcp(e.target.value)} placeholder="e.g. 14" required />
-              <span className="small muted" style={{ fontWeight: 400 }}>You set this once. After that it only changes through the admin or the Tribunal.</span>
             </label>
+            <div className="sync" style={{ margin: 0 }}>The admin needs to approve new people before you can join in.</div>
             {err && <div className="err">{err}</div>}
-            <button className="btn gold block" disabled={busy || !name || hcp === '' || Number.isNaN(Number(hcp))}>{busy ? 'Saving…' : "I'm in"}</button>
+            <div className="row">
+              <button type="button" className="btn ghost grow" onClick={() => setMode('pick')}>Back to the list</button>
+              <button className="btn gold grow" disabled={busy || !name || hcp === '' || Number.isNaN(Number(hcp))}>{busy ? 'Sending…' : 'Ask to join'}</button>
+            </div>
           </form>
         )}
-        {mode === 'pick' && err && <div className="err">{err}</div>}
+      </div>
+
+      {chosen && (
+        <Sheet title={`You're ${playerName(chosen)}?`} onClose={() => setChosen(null)}>
+          <div className="stack">
+            <PhotoCircle preview={preview} player={chosen} />
+            <PhotoButtons onPick={setFile} facing="user" cameraLabel={chosen.avatar_url ? 'New selfie' : 'Take a selfie'} libraryLabel="Choose photo" />
+            <span className="small muted" style={{ textAlign: 'center' }}>Optional — you can add or change your photo later.</span>
+            {err && <div className="err">{err}</div>}
+            <button type="button" className="btn gold block" disabled={busy} onClick={claim}>{busy ? 'Saving…' : `Yes, I'm ${playerName(chosen)}`}</button>
+          </div>
+        </Sheet>
+      )}
+    </div>
+  );
+}
+
+/** Shown to someone who added themselves until the admin approves them. */
+export function AwaitingApproval({ player }) {
+  const { refresh } = useSession();
+  const data = useData();
+  const [pickInstead, setPickInstead] = useState(false);
+  if (pickInstead) return <ProfileSetup />;
+  return (
+    <div className="app" style={{ minHeight: '100vh' }}>
+      <header className="hdr"><div className="hdr-title">Nearly there</div><div className="hdr-sub">Waiting for the admin to approve you</div></header>
+      <div className="section stack" style={{ alignItems: 'center', textAlign: 'center', paddingTop: 30 }}>
+        <Avatar player={player} size={96} />
+        <div style={{ fontSize: 20, fontWeight: 700 }}>{player.name}</div>
+        <p className="muted" style={{ lineHeight: 1.5, maxWidth: 320 }}>The admin has been told you're here. This screen opens up by itself once you're approved.</p>
+        <button type="button" className="btn ghost" onClick={async () => { await data.reload(); await refresh(); }}>Check again</button>
+        <button type="button" className="btn ghost" onClick={() => setPickInstead(true)}>Actually, I'm on the list</button>
       </div>
     </div>
   );

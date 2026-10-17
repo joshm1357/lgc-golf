@@ -3,7 +3,7 @@ import { HashRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { SessionProvider, DataProvider, useSession, useData } from './lib/store.jsx';
 import { TabBar, Toaster, Loading } from './components/ui.jsx';
 import Join from './screens/Join.jsx';
-import ProfileSetup from './screens/ProfileSetup.jsx';
+import ProfileSetup, { AwaitingApproval } from './screens/ProfileSetup.jsx';
 import Leaderboard from './screens/Leaderboard.jsx';
 import ScoreEntry from './screens/ScoreEntry.jsx';
 import Admin from './screens/Admin.jsx';
@@ -35,6 +35,9 @@ function Inside() {
     return data.error ? <div className="empty">Couldn't load: {data.error.message}. Pull down to refresh.</div> : <Loading />;
   }
   if (!status.player_id) return <ProfileSetup />;
+  const me = data.playersById[status.player_id];
+  if (!me) return <ProfileSetup />;
+  if (me.approved === false && !status.is_admin) return <AwaitingApproval player={me} />;
   const hideTabs = loc.pathname.startsWith('/score/');
   return (
     <div className="app">

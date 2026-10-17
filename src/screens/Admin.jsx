@@ -56,6 +56,7 @@ export default function Admin() {
       <Header back title="Admin" sub="Set up trips, courses, players and rounds" />
       <div className="section stack" style={{ paddingBottom: 20 }}>
         <p className="note" style={{ margin: '0 4px' }}>Order for a new round: 1. Trip → 2. Course → 3. Players → 4. Round & teams → Start round.</p>
+        <PendingApprovals />
         <TripsAdmin />
         <CoursesAdmin />
         <PlayersAdmin />
@@ -156,11 +157,31 @@ function CourseForm({ course, onDone }) {
 }
 
 // ---------- Players ----------
+function PendingApprovals() {
+  const data = useData();
+  const pending = data.players.filter((p) => p.approved === false);
+  if (!pending.length) return null;
+  return (
+    <div className="card pad stack" style={{ borderColor: 'var(--gold)', background: 'var(--gold-soft)' }}>
+      <strong>Waiting for your approval ({pending.length})</strong>
+      <span className="small muted">These people weren't on the list and added themselves.</span>
+      {pending.map((p) => (
+        <div key={p.id} className="row">
+          <Avatar player={p} size={36} />
+          <span className="grow"><strong>{p.name}</strong>{p.nickname ? <span className="muted small"> · {p.nickname}</span> : ''}<div className="small muted">Handicap {Number(p.handicap)}</div></span>
+          <button type="button" className="btn sm" onClick={() => run(() => supabase.from('players').update({ approved: true }).eq('id', p.id), `${p.name} approved`).then(data.reload)}>Approve</button>
+          <button type="button" className="btn ghost sm" aria-label={`Reject ${p.name}`} onClick={() => { if (window.confirm(`Reject ${p.name}? Their profile will be removed.`)) run(() => supabase.from('players').delete().eq('id', p.id), 'Removed').then(data.reload); }}>✕</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function PlayersAdmin() {
   const data = useData();
   const [name, setName] = useState('');
   const [hcp, setHcp] = useState('');
-  const players = [...data.players].sort((a, b) => a.name.localeCompare(b.name));
+  const players = data.players.filter((p) => p.approved !== false).sort((a, b) => a.name.localeCompare(b.name));
   return (
     <Section title={`3. Players (${players.length})`}>
       <p className="small muted" style={{ margin: 0 }}>Players normally add themselves when they join. Add someone here if they won't have the app.</p>
@@ -263,7 +284,7 @@ function RoundCard({ round }) {
 
 function PlayerPicker({ selected, onToggle, exclude = [] }) {
   const data = useData();
-  const players = [...data.players].sort((a, b) => a.name.localeCompare(b.name)).filter((p) => !exclude.includes(p.id) || selected.includes(p.id));
+  const players = data.players.filter((p) => p.approved !== false).sort((a, b) => a.name.localeCompare(b.name)).filter((p) => !exclude.includes(p.id) || selected.includes(p.id));
   return (
     <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
       {players.map((p) => (
@@ -351,7 +372,7 @@ function StablefordPlayers({ round }) {
     <div className="stack">
       <span className="label">Players & playing handicaps</span>
       <button type="button" className="btn ghost sm" onClick={async () => {
-        const add = data.players.filter((p) => !inRound.includes(p.id)).map((p) => ({ round_id: round.id, player_id: p.id, playing_handicap: Math.round(Number(p.handicap)) }));
+        const add = data.players.filter((p) => p.approved !== false && !inRound.includes(p.id)).map((p) => ({ round_id: round.id, player_id: p.id, playing_handicap: Math.round(Number(p.handicap)) }));
         if (add.length) await run(() => supabase.from('round_players').insert(add), `Added ${add.length} players`);
         data.reload();
       }}>Add everyone at their current handicap</button>

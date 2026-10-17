@@ -7,12 +7,13 @@ export default function More() {
   const { status } = useSession();
   const data = useData();
   const me = data.playersById[status.player_id];
+  const pending = status.is_admin ? data.players.filter((p) => p.approved === false).length : 0;
   const items = [
     { to: '/trophies', icon: Icon.trophy, label: 'Trophies & honour board', sub: 'BD and the Ambrose trophy' },
     { to: '/tribunal', icon: Icon.gavel, label: 'Handicap Tribunal', sub: 'Lodge a case, vote, see verdicts' },
     { to: '/courses', icon: Icon.map, label: 'Courses', sub: 'Every course and its history' },
     { to: `/player/${status.player_id}`, icon: Icon.user, label: 'My profile', sub: 'Photo, nickname, history' },
-    { to: '/admin', icon: Icon.cog, label: status.is_admin ? 'Admin' : "I'm the admin", sub: status.is_admin ? 'Trips, courses, players, rounds' : 'Needs the admin PIN' },
+    { to: '/admin', icon: Icon.cog, label: status.is_admin ? 'Admin' : "I'm the admin", sub: status.is_admin ? (pending ? `${pending} waiting for approval` : 'Trips, courses, players, rounds') : 'Needs the admin PIN' },
   ];
   return (
     <div className="page">

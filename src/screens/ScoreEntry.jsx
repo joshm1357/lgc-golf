@@ -51,7 +51,18 @@ export default function ScoreEntry() {
   const [moment, setMoment] = useState(null);
   const [photo, setPhoto] = useState(null);
   const [drive, setDrive] = useState(null);
+  const [compLeader, setCompLeader] = useState(null);
   const [busy, setBusy] = useState(false);
+
+  // Current side-comp leader for this hole (so players know if they're closer).
+  const compKind = round && hole ? ((round.ctp_holes || []).includes(hole.n) ? 'ctp' : (round.ld_holes || []).includes(hole.n) ? 'ld' : null) : null;
+  useEffect(() => {
+    setCompLeader(null);
+    if (!compKind) return;
+    supabase.from('side_entries').select('*').eq('round_id', round.id).eq('hole', hole.n).eq('kind', compKind).not('distance_m', 'is', null)
+      .order('distance_m', { ascending: compKind === 'ctp' }).limit(1)
+      .then(({ data: rows }) => setCompLeader(rows?.[0] || null), () => {});
+  }, [compKind, round?.id, hole?.n]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset the stepper when the hole or subject changes.
   const resetKey = `${subject?.id}|${hole?.n}`;
@@ -111,10 +122,6 @@ export default function ScoreEntry() {
         });
         if (postErr) toast("Score saved, but the feed post didn't go — no signal?");
       }
-      if (compHere && window.confirm(`${compHere.label} on ${hole.n} — record it now? (OK = record, Cancel = next hole)`)) {
-        nav(`/comps?r=${round.id}&kind=${compHere.kind}&hole=${hole.n}&add=1`);
-        return;
-      }
       const next = holes.find((h) => h.n > hole.n && !myScores[h.n]) || holes.find((h) => !myScores[h.n] && h.n !== hole.n);
       if (next) setHoleN(next.n);
       else {
@@ -168,7 +175,12 @@ export default function ScoreEntry() {
         <div className="section">
           <a href={`#/comps?r=${round.id}&kind=${compHere.kind}&hole=${hole.n}&add=1`} className="card pad row" style={{ background: 'var(--gold-soft)', borderColor: 'var(--gold)', textDecoration: 'none', color: 'inherit' }}>
             <span style={{ fontSize: 26 }}>{compHere.kind === 'ctp' ? '🎯' : '💣'}</span>
-            <span className="grow"><strong>{compHere.label} hole!</strong><div className="small muted">{compHere.kind === 'ctp' ? 'Measure it, snap the ball by the pin, record it.' : 'Pin the ball on the map, add a photo, record it.'}</div></span>
+            <span className="grow"><strong>{compHere.label} hole</strong>
+              <div className="small muted">
+                {compLeader ? `Leader: ${playerName(data.playersById[compLeader.player_id])}, ${Number(compLeader.distance_m)} m. ` : 'No one on the board yet. '}
+                {compHere.kind === 'ctp' ? 'On the green and closer? Record it — optional.' : 'Beat it? Record it — optional.'}
+              </div>
+            </span>
             <span className="btn sm gold">Record</span>
           </a>
         </div>

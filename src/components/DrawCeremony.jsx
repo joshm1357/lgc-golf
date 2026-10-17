@@ -8,7 +8,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useRealtime, useSession, playerName } from '../lib/store.jsx';
-import { REVEAL_MS, SPIN_MS, teamHandicap, makeDraw } from '../lib/draw.js';
+import { REVEAL_MS, SPIN_MS, makeDraw } from '../lib/draw.js';
 import { Avatar, toast } from './ui.jsx';
 
 export const TEAM_COLOURS = ['#D9A521', '#5FB3E0', '#E0705F', '#7FD1AE', '#C79BE6', '#F2F4F6'];
@@ -247,7 +247,9 @@ function Ceremony({ draw, onClose, actions, header, busy, run, isAdmin, me }) {
   const revealed = picks.slice(0, revealedCount);
   const teamRows = teams.map((tm, ti) => {
     const got = revealed.filter((p) => p.team === ti).map((p) => p.player_id);
-    const hcpSoFar = got.length ? teamHandicap(got.map((id) => Number(data.playersById[id]?.handicap ?? 0))) : null;
+    // Builds up to the final team handicap: drawn players' handicaps ÷ (2 × full team size).
+    const sum = got.reduce((a, id) => a + Number(data.playersById[id]?.handicap ?? 0), 0);
+    const hcpSoFar = got.length ? Math.round((sum / (2 * tm.players.length)) * 10) / 10 : null;
     return { ...tm, got, hcpSoFar, colour: TEAM_COLOURS[ti % TEAM_COLOURS.length], drawing: !finished && ti === focusTeamIdx };
   });
   const colour = TEAM_COLOURS[focusTeamIdx % TEAM_COLOURS.length];
@@ -306,7 +308,7 @@ function Ceremony({ draw, onClose, actions, header, busy, run, isAdmin, me }) {
             <div key={tm.name} style={{ border: `2px solid ${tm.colour}`, borderRadius: 14, padding: 10, background: tm.drawing ? 'rgba(255,255,255,.09)' : 'rgba(255,255,255,.03)', boxShadow: tm.drawing ? `0 0 18px ${tm.colour}55` : 'none' }}>
               <div style={{ fontFamily: 'var(--display)', fontSize: 20, fontWeight: 700, color: tm.colour }}>{tm.name}</div>
               <div style={{ fontSize: 13, color: '#AFC0D4', marginBottom: 6 }}>
-                {finished ? <>Team handicap <strong style={{ color: '#F4EFE3', fontSize: 16 }}>{tm.handicap}</strong></> : tm.hcpSoFar != null ? `Handicap so far ${tm.hcpSoFar}` : 'Waiting…'}
+                {finished ? <>Team handicap <strong style={{ color: '#F4EFE3', fontSize: 16 }}>{tm.handicap}</strong></> : tm.hcpSoFar != null ? `Team handicap so far ${tm.hcpSoFar}` : 'Waiting…'}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {tm.players.map((pid, i) => {

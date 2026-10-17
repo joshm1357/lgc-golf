@@ -133,14 +133,20 @@ export function useScores(roundIds) {
       setRows([]);
       return;
     }
-    const { data } = await supabase.from('scores').select('*').in('round_id', ids);
-    setRows(data || []);
+    try {
+      const { data, error } = await supabase.from('scores').select('*').in('round_id', ids);
+      if (error || !data) return; // no signal: keep what we already have on screen
+      setRows(data);
+    } catch {
+      /* keep what we have */
+    }
   }, [idKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     load();
   }, [load]);
-  useEffect(() => onQueueChange(setQueue), []);
+  // When the queue changes (e.g. a save just synced), re-load so the synced score stays on screen.
+  useEffect(() => onQueueChange((q) => { setQueue(q); load(); }), [load]);
   useRealtime(['scores'], load, ids.length === 1 ? `round_id=eq.${ids[0]}` : undefined);
 
   return useMemo(() => {

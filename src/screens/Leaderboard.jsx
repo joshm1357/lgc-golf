@@ -49,15 +49,18 @@ export default function Leaderboard() {
 
   // "Since you last looked": ranks stored on this phone at the last visit.
   const storeKey = round ? `lgc-ranks-${round.id}` : null;
-  const [prevRanks] = useState(() => {
-    try { return storeKey ? JSON.parse(localStorage.getItem(storeKey) || 'null') : null; } catch { return null; }
-  });
+  const prevByRound = useRef({});
+  if (storeKey && !(storeKey in prevByRound.current)) {
+    try { prevByRound.current[storeKey] = JSON.parse(localStorage.getItem(storeKey) || 'null'); } catch { prevByRound.current[storeKey] = null; }
+  }
+  const prevRanks = storeKey ? prevByRound.current[storeKey] : null;
   const latest = useRef(null);
-  latest.current = board ? Object.fromEntries(board.rows.map((r) => [r.id, r.rank])) : null;
+  latest.current = board ? { key: storeKey, ranks: Object.fromEntries(board.rows.map((r) => [r.id, r.rank])) } : null;
   useEffect(() => {
     const save = () => {
-      if (storeKey && latest.current && Object.keys(latest.current).length) {
-        try { localStorage.setItem(storeKey, JSON.stringify(latest.current)); } catch { /* ignore */ }
+      const l = latest.current;
+      if (l?.key && Object.keys(l.ranks).length) {
+        try { localStorage.setItem(l.key, JSON.stringify(l.ranks)); } catch { /* ignore */ }
       }
     };
     const onVis = () => document.visibilityState === 'hidden' && save();

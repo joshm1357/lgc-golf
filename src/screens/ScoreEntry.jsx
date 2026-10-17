@@ -89,10 +89,11 @@ export default function ScoreEntry() {
         if (photo) {
           try { url = await uploadPhoto(photo, 'feed'); } catch { toast('Photo upload failed — try again from the Feed'); }
         }
-        await supabase.from('posts').insert({
+        const { error: postErr } = await supabase.from('posts').insert({
           kind: 'user', player_id: me, round_id: round.id, trip_id: round.trip_id, hole: hole.n, photo_url: url,
           body: moment ? `${moment} on ${hole.n}${isA ? ` (${subject.name})` : ''}` : null,
         });
+        if (postErr) toast("Score saved, but the feed post didn't go — no signal?");
       }
       const next = holes.find((h) => h.n > hole.n && !myScores[h.n]) || holes.find((h) => !myScores[h.n] && h.n !== hole.n);
       if (next) setHoleN(next.n);
@@ -148,15 +149,15 @@ export default function ScoreEntry() {
         <div className="card" style={{ padding: '20px 16px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
           <span className="muted" style={{ fontWeight: 600 }}>{isA ? 'Team score on this hole' : `${subject.name}'s score`}</span>
           <div className="stepper">
-            <button type="button" className="step" aria-label="One less" onClick={() => { setPickedUp(false); setValue(Math.max(1, strokes - 1)); }}>{Icon.minus()}</button>
+            <button type="button" className="step" aria-label="One less" onClick={() => { setHoleN(hole.n); setPickedUp(false); setValue(Math.max(1, strokes - 1)); }}>{Icon.minus()}</button>
             <span className="big-num" style={{ color: !isPickup && strokes < hole.par ? 'var(--under)' : 'var(--text)' }}>{isPickup ? 'P' : strokes}</span>
-            <button type="button" className="step solid" aria-label="One more" onClick={() => { setPickedUp(false); setValue(Math.min(20, strokes + 1)); }}>{Icon.plus()}</button>
+            <button type="button" className="step solid" aria-label="One more" onClick={() => { setHoleN(hole.n); setPickedUp(false); setValue(Math.min(20, strokes + 1)); }}>{Icon.plus()}</button>
           </div>
           <span style={{ fontWeight: 700, color: !isPickup && strokes < hole.par ? 'var(--under)' : 'var(--muted)' }}>
             {isPickup ? 'Picked up — 0 points' : `${scoreWord(strokes, hole.par)}${recv ? ` · net ${scoreWord(net, hole.par).toLowerCase()}` : ''}${!isA ? ` · ${stablefordPoints(hole, strokes, subject.hcp)} pts` : ''}`}
           </span>
           {!isA && (
-            <button type="button" className="chip" aria-pressed={!!isPickup} onClick={() => setPickedUp(!isPickup)}>Picked up</button>
+            <button type="button" className="chip" aria-pressed={!!isPickup} onClick={() => { setHoleN(hole.n); setPickedUp(!isPickup); }}>Picked up</button>
           )}
         </div>
       </div>

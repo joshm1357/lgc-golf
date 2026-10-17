@@ -24,7 +24,7 @@ export function roundBoard({ round, course, teams = [], roundPlayers = [], playe
       const st = ambroseStatus(holes, sc, t.handicap);
       return {
         id: t.id, name: t.name, players: t.players || [], handicap: t.handicap, scores: sc, ...st,
-        sortValue: st.netToPar, cb: st.finished ? countbackKey(holes, sc, t.handicap) : null,
+        sortValue: st.thru ? st.netToPar : 999, cb: st.finished ? countbackKey(holes, sc, t.handicap) : null,
         form3: recentForm(st.perHole, sc, 3, 0),
       };
     });
@@ -55,7 +55,7 @@ export function roundBoard({ round, course, teams = [], roundPlayers = [], playe
     const st = stablefordStatus(holes, sc, rp.playing_handicap);
     return {
       id: rp.player_id, name: p ? p.nickname || p.name : '?', players: p ? [p] : [], handicap: rp.playing_handicap,
-      scores: sc, ...st, sortValue: st.vsExpected,
+      scores: sc, ...st, sortValue: st.thru ? st.vsExpected : -999,
       cb: st.finished ? stablefordCountback(holes, st.perHole) : null,
       form3: recentForm(st.perHole, sc, 3, 2),
     };

@@ -39,30 +39,80 @@ export async function saveScore(row) {
   return flush();
 }
 
-let flushing = false;
+// Only database rule/constraint/data errors are permanent. Everything else
+// (no signal — e.g. Safari's "Load failed" — timeouts, server hiccups, expired login) is kept and retried.
+const isPermanent = (error) => /^(42|23|22)/.test(error?.code || '');
+const strip = ({ queued_at, ...r }) => r; // eslint-disable-line no-unused-vars
+
+function timeoutSignal(ms) {
+  if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') return AbortSignal.timeout(ms);
+  const c = new AbortController(); // older iPhones
+  setTimeout(() => c.abort(), ms);
+  return c.signal;
+}
+
+function upsert(rows) {
+  return supabase.from('scores')
+    .upsert(rows, { onConflict: 'round_id,subject_id,hole' })
+    .abortSignal(timeoutSignal(10000));
+}
+
+function removeSent(sentRows) {
+  // Remove only what we sent — a newer save of the same hole may have arrived meanwhile.
+  const sentAt = new Map(sentRows.map((r) => [keyOf(r), r.queued_at]));
+  write(read().filter((r) => !sentAt.has(keyOf(r)) || r.queued_at > sentAt.get(keyOf(r))));
+}
+
+// One send at a time; a save that arrives mid-send waits its turn, then sends.
+let current = null;
 export async function flush() {
-  if (flushing) return false;
-  flushing = true;
+  while (current) {
+    try { await current; } catch { /* the earlier send's problem, not ours */ }
+  }
+  current = doFlush();
   try {
-    let q = read();
-    if (!q.length) return true;
-    const rows = q.map(({ queued_at, ...r }) => r); // eslint-disable-line no-unused-vars
-    const { error } = await supabase.from('scores').upsert(rows, { onConflict: 'round_id,subject_id,hole' });
-    if (error) {
-      // A permanent error (e.g. round locked) shouldn't block the queue forever.
-      if (!/fetch|network/i.test(error.message)) {
-        console.warn('Score save rejected', error);
-        write([]);
-        throw error;
-      }
-      return false;
-    }
-    // Remove only what we sent (new saves may have arrived meanwhile).
-    const sent = new Set(q.map(keyOf));
-    write(read().filter((r) => !sent.has(keyOf(r)) || r.queued_at > q.find((x) => keyOf(x) === keyOf(r)).queued_at));
-    return true;
+    return await current;
   } finally {
-    flushing = false;
+    current = null;
+  }
+}
+
+async function doFlush() {
+  let ok = false;
+  let rejected = null;
+  try {
+    const q = read();
+    if (!q.length) return true;
+    let error;
+    try {
+      ({ error } = await upsert(q.map(strip)));
+    } catch (e) {
+      error = { message: String(e?.message || e), code: '' };
+    }
+    if (!error) {
+      removeSent(q);
+      ok = true;
+    } else if (isPermanent(error)) {
+      // Send one at a time so one bad row (e.g. a locked round) doesn't sink the good ones.
+      for (const row of q) {
+        let e1;
+        try {
+          ({ error: e1 } = await upsert([strip(row)]));
+        } catch (e) {
+          e1 = { code: '' };
+        }
+        if (!e1 || isPermanent(e1)) {
+          removeSent([row]);
+          if (e1) rejected = e1;
+        }
+      }
+      ok = !read().length;
+    }
+    if (rejected) throw rejected;
+    return ok;
+  } finally {
+    // A newer save may have arrived while we were sending.
+    if (ok && read().length) setTimeout(() => flush().catch(() => {}), 0);
   }
 }
 

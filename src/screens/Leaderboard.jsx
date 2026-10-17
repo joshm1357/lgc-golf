@@ -4,7 +4,7 @@ import { useData, useScores, useSession } from '../lib/store.jsx';
 import { roundBoard, headlines } from '../lib/board.js';
 import { formatToPar, strokesReceived, stablefordPoints } from '../lib/scoring.js';
 import { Header, Seg, AvatarStack, Icon, Sheet, Loading } from '../components/ui.jsx';
-import { Crest } from '../components/Logo.jsx';
+import { TrophyArt } from '../components/TrophyArt.jsx';
 
 export function useRoundChoice() {
   const data = useData();
@@ -110,7 +110,7 @@ export default function Leaderboard() {
 
       {winner && (
         <div className="winner">
-          <Crest size={64} />
+          <TrophyArt name={trophy?.name} type={trophy?.type} size={72} />
           <div className="grow">
             <div className="label">{trophy ? trophy.name : 'Winner'}{isA ? '' : ' · this round'}</div>
             <div className="t">{winner.name}</div>

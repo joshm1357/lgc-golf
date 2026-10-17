@@ -86,7 +86,7 @@ export function DataProvider({ children }) {
   useEffect(() => {
     load();
   }, [load]);
-  useRealtime(['players', 'rounds', 'teams', 'team_players', 'quick_results'], load);
+  useRealtime(['players', 'rounds', 'teams', 'team_players', 'quick_results', 'honour_board', 'trophies', 'round_players', 'courses'], load);
 
   const value = useMemo(() => {
     if (!data) return { ready: false, error, reload: load };

@@ -190,3 +190,26 @@ img { max-width: 100%; }
 .loading { min-height: 60vh; display: flex; align-items: center; justify-content: center; color: var(--muted); }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(150px + var(--safe-bottom)); background: var(--text); color: #fff; padding: 10px 16px; border-radius: 999px; font-weight: 600; z-index: 60; font-size: 14px; }
 .leaflet-container { font-family: var(--body); }
+
+/* Trophy Room */
+.room { background: #1E1611; min-height: 100vh; color: #F4EFE3; }
+.room .hdr { background: linear-gradient(180deg, #3A2919 0%, #2A1D14 100%); border-bottom: 3px solid #C9A24A; }
+.room .hdr-title { font-family: 'Pirata One', serif; font-weight: 400; font-size: 34px; color: #EBD496; letter-spacing: .02em; }
+.cabinet { display: flex; gap: 12px; overflow-x: auto; padding: 18px 14px 6px; scrollbar-width: none; }
+.cabinet::-webkit-scrollbar { display: none; }
+.case { flex: none; width: 152px; border-radius: 14px; border: 1px solid #4A3727; background: radial-gradient(120% 70% at 50% 0%, rgba(255, 228, 170, .22) 0%, rgba(255, 228, 170, 0) 60%), #2A1D14; padding: 14px 10px 10px; display: flex; flex-direction: column; align-items: center; gap: 8px; color: inherit; text-align: center; }
+.case[aria-pressed="true"] { border: 2px solid #C9A24A; box-shadow: 0 0 0 3px rgba(201, 162, 74, .25); }
+.plate { width: 100%; border-radius: 6px; padding: 6px 6px 5px; background: linear-gradient(90deg, #A9822F, #EBD496 50%, #A9822F); color: #3D2B0C; }
+.plate .t { font-family: 'Pirata One', serif; font-size: 20px; line-height: 1.05; }
+.plate .s { font-size: 11px; font-weight: 700; letter-spacing: .04em; }
+.room .label { color: #C9B48A; }
+.room .note { color: #C9B48A; }
+.room .muted { color: #C9B48A; }
+.room .card .muted, .room .card .label, .room .card .note { color: var(--muted); }
+.room .card { color: var(--text); }
+.plaques { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.plaque { border-radius: 6px; padding: 8px 10px; background: linear-gradient(90deg, #A9822F, #EBD496 50%, #A9822F); color: #3D2B0C; display: flex; flex-direction: column; box-shadow: inset 0 0 0 1px rgba(61, 43, 12, .35); }
+.plaque .yr { font-size: 11px; font-weight: 700; letter-spacing: .06em; }
+.plaque .nm { font-family: 'Pirata One', serif; font-size: 19px; line-height: 1.1; }
+.plaque.holder { grid-column: span 2; padding: 12px 14px; }
+.plaque.holder .nm { font-size: 28px; }

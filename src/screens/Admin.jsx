@@ -424,7 +424,7 @@ function TrophiesAdmin() {
     <Section title={`5. Trophies — ${trip.name}`}>
       {list.map((t) => (
         <div key={t.id} className="row between">
-          <span><strong>{t.name}</strong> <span className="muted small">{t.type === 'ambrose' ? 'Ambrose (team)' : 'Stableford total'}</span></span>
+          <span><strong>{t.name}</strong> <span className="muted small">{t.type === 'ambrose' ? 'Ambrose (team)' : t.type === 'manual' ? 'Awarded' : 'Stableford total'}</span></span>
           <button type="button" className="btn ghost sm" onClick={() => run(() => supabase.from('trophies').delete().eq('id', t.id), 'Removed').then(data.reload)}>Remove</button>
         </div>
       ))}
@@ -436,6 +436,7 @@ function TrophiesAdmin() {
         <select className="select" value={type} onChange={(e) => setType(e.target.value)}>
           <option value="stableford_total">Stableford — total points across the trip</option>
           <option value="ambrose">Ambrose — winning team</option>
+          <option value="manual">Awarded by the group (e.g. the Noodle Cup)</option>
         </select>
         <button className="btn">Add trophy</button>
       </form>

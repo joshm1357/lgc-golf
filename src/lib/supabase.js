@@ -1,0 +1,23 @@
+import { createClient } from '@supabase/supabase-js';
+
+// These two values are public by design (they ship in every browser).
+// The data is protected by the group PIN and Row Level Security in the database.
+export const SUPABASE_URL = 'https://luogyzvrbedmicjejilr.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_uNBEcPawkDZHYGeubyYyag_MwhYkhR7';
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true, storageKey: 'lgc-auth' },
+  realtime: { params: { eventsPerSecond: 10 } },
+});
+
+/** Turn a Supabase error into a plain-English message. */
+export function friendlyError(err) {
+  if (!err) return '';
+  const msg = err.message || String(err);
+  if (/anonymous sign-ins are disabled/i.test(msg)) {
+    return 'Sign-in is switched off in Supabase. Ask Josh to turn on "Allow anonymous sign-ins".';
+  }
+  if (/Failed to fetch|NetworkError|network/i.test(msg)) return 'No signal — try again in a moment.';
+  if (/row-level security|permission denied/i.test(msg)) return "You're not allowed to do that.";
+  return msg.replace(/^.*?ERROR:\s*/, '');
+}

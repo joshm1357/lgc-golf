@@ -329,7 +329,7 @@ for each row execute function public.players_handicap_guard();
 
 -- ---------- Scores: timestamp + birdie auto-posts ----------
 create or replace function public.scores_touch() returns trigger
-language plpgsql as $$
+language plpgsql set search_path = public as $$
 begin new.updated_at = now(); return new; end $$;
 create trigger scores_touch before insert or update on public.scores
 for each row execute function public.scores_touch();
@@ -417,7 +417,7 @@ begin
   end if;
   update public.tribunal_cases set status = 'closed', verdict = v_verdict, guilty_votes = g, not_guilty_votes = ng,
     chair_ruling = nullif(trim(coalesce(p_ruling,'')), ''),
-    overruled = (p_override in ('upheld','dismissed') and p_override <> case when g > ng then 'upheld' else 'dismissed' end),
+    overruled = coalesce(p_override in ('upheld','dismissed') and p_override <> case when g > ng then 'upheld' else 'dismissed' end, false),
     old_handicap = v_old, new_handicap = v_new, closed_at = now()
   where id = p_case;
   insert into public.posts (kind, body, link)

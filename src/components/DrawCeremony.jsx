@@ -2,7 +2,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useRealtime, useSession, playerName } from '../lib/store.jsx';
-import { REVEAL_MS, SPIN_MS } from '../lib/draw.js';
+import { REVEAL_MS, SPIN_MS, teamHandicap } from '../lib/draw.js';
 import { Avatar, toast } from './ui.jsx';
 
 const TEAM_COLOURS = ['#D9A521', '#5FB3E0', '#E0705F', '#7FD1AE', '#C79BE6', '#F2F4F6'];
@@ -48,7 +48,6 @@ export default function DrawCeremony({ draw, onClose }) {
   const data = useData();
   const { status } = useSession();
   const { teams, picks } = draw.payload;
-  const salaries = draw.payload.salaries || {};
   const interval = draw.payload.interval_ms || REVEAL_MS;
   const total = picks.length * interval;
   const [skipped, setSkipped] = useState(false);
@@ -95,8 +94,8 @@ export default function DrawCeremony({ draw, onClose }) {
   const revealed = picks.slice(0, revealedCount);
   const teamRows = teams.map((tm, ti) => {
     const got = revealed.filter((p) => p.team === ti).map((p) => p.player_id);
-    const sal = got.reduce((a, id) => a + (salaries[id] || 0), 0);
-    return { ...tm, got, sal: Math.round(sal * 10) / 10, colour: TEAM_COLOURS[ti % TEAM_COLOURS.length] };
+    const hcpSoFar = got.length ? teamHandicap(got.map((id) => Number(data.playersById[id]?.handicap ?? 0))) : null;
+    return { ...tm, got, hcpSoFar, colour: TEAM_COLOURS[ti % TEAM_COLOURS.length] };
   });
 
   async function lockIn() {
@@ -132,7 +131,7 @@ export default function DrawCeremony({ draw, onClose }) {
       <div style={{ maxWidth: 560, margin: '0 auto', padding: 'calc(18px + env(safe-area-inset-top, 0px)) 16px 28px', display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontFamily: "'Pirata One', serif", fontSize: 46, color: '#EBD496', lineHeight: 1 }}>The Draw</div>
-          <div style={{ fontSize: 14, color: '#AFC0D4' }}>{data.rounds.find((r) => r.id === draw.round_id)?.name} · random teams, salary-capped</div>
+          <div style={{ fontSize: 14, color: '#AFC0D4' }}>{data.rounds.find((r) => r.id === draw.round_id)?.name} · {draw.payload.balance ? 'random, evened out' : 'fully random'}</div>
         </div>
 
         {!finished ? (
@@ -144,7 +143,7 @@ export default function DrawCeremony({ draw, onClose }) {
             <div style={{ fontFamily: 'var(--display)', fontSize: 34, fontWeight: 700, opacity: spinning ? 0.55 : 1, filter: spinning ? 'blur(1px)' : 'none' }}>{face ? playerName(face) : '…'}</div>
             {!spinning && current && (
               <>
-                <div style={{ fontSize: 15, color: '#AFC0D4' }}>Salary ${(salaries[current.player_id] ?? 0).toFixed(1)}M · off {Number(face?.handicap)}</div>
+                <div style={{ fontSize: 15, color: '#AFC0D4' }}>Off {Number(face?.handicap)}</div>
                 <div style={{ fontFamily: 'var(--display)', fontSize: 28, fontWeight: 700, color: TEAM_COLOURS[current.team % TEAM_COLOURS.length] }}>→ {teamOf?.name}</div>
               </>
             )}
@@ -161,7 +160,7 @@ export default function DrawCeremony({ draw, onClose }) {
             <div key={tm.name} style={{ border: `2px solid ${tm.colour}`, borderRadius: 14, padding: 10, background: 'rgba(255,255,255,.04)' }}>
               <div style={{ fontFamily: 'var(--display)', fontSize: 20, fontWeight: 700, color: tm.colour }}>{tm.name}</div>
               <div style={{ fontSize: 12, color: '#AFC0D4', marginBottom: 6 }}>
-                ${tm.sal.toFixed(1)}M{finished ? ` · team hcp ${tm.handicap}` : ''}
+                {finished ? `Team handicap ${tm.handicap}` : tm.hcpSoFar != null ? `Handicap so far ${tm.hcpSoFar}` : 'Waiting…'}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {tm.players.map((pid, i) => {
@@ -179,7 +178,7 @@ export default function DrawCeremony({ draw, onClose }) {
           ))}
         </div>
 
-        {finished && <p style={{ fontSize: 12.5, color: '#AFC0D4', lineHeight: 1.45, margin: 0 }}>Salaries come from handicap, nudged by this trip's Stableford form. The draw shuffled thousands of times and only kept splits where the teams' average salaries were within $0.4M, then picked one at random. Team handicap = combined handicaps ÷ (2 × team size).</p>}
+        {finished && <p style={{ fontSize: 12.5, color: '#AFC0D4', lineHeight: 1.45, margin: 0 }}>Team handicap = combined handicaps ÷ (2 × team size): 4-player ÷ 8, 3-player ÷ 6.{draw.payload.balance ? ' "Even it out" only kept random line-ups where the team handicaps were within a shot of each other.' : ''}</p>}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {status.is_admin && !finished && <button type="button" className="btn ghost" onClick={() => setSkipped(true)}>Skip to the result (just my screen)</button>}

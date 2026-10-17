@@ -86,14 +86,11 @@ export function makeDraw(players, k, { balance = false, tries = 4000, slack = 1,
     players: tm.map((p) => p.id),
     handicap: hcps(tm),
   }));
-  const queues = teams.map((tm, i) => shuffle(tm.players, rand).map((id) => ({ player_id: id, team: i })));
+  // Lotto-style reveal: one team at a time (team order shuffled), names in random order within each team.
   const teamOrder = shuffle(teams.map((_, i) => i), rand);
-  const picks = [];
-  for (let r = 0; r < Math.max(...sizes); r++) {
-    for (const ti of teamOrder) if (queues[ti][r]) picks.push(queues[ti][r]);
-  }
+  const picks = teamOrder.flatMap((ti) => shuffle(teams[ti].players, rand).map((id) => ({ player_id: id, team: ti })));
   return { teams, picks, spread: Math.round(spreadOf(chosen) * 10) / 10 };
 }
 
-export const REVEAL_MS = 4200; // time per player in the ceremony
-export const SPIN_MS = 2800; // of which: spinning through faces
+export const REVEAL_MS = 4500; // timed mode: time per name
+export const SPIN_MS = 2400; // the drum rolls this long before each name lands

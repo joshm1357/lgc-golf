@@ -15,7 +15,8 @@ export default function DrawDemo() {
   const [asAdmin, setAsAdmin] = useState(true);
   const [k, setK] = useState(3);
   const [balance, setBalance] = useState(false);
-  const fresh = (kk = k, bal = balance) => ({ id: 'demo', round_id: 'demo-round', status: 'lobby', started_at: new Date().toISOString(), payload: { field: FIELD.map((p) => p.id), k: kk, balance: bal, interval_ms: REVEAL_MS } });
+  const [pace, setPace] = useState('click');
+  const fresh = (kk = k, bal = balance, pc = pace) => ({ id: 'demo', round_id: 'demo-round', status: 'lobby', started_at: new Date().toISOString(), payload: { field: FIELD.map((p) => p.id), k: kk, balance: bal, pace: pc, interval_ms: REVEAL_MS } });
   const [draw, setDraw] = useState(fresh());
   const [round, setRound] = useState({ id: 'demo-round', name: 'Sunday Ambrose — Shoalhaven Heads', status: 'setup' });
 
@@ -25,7 +26,8 @@ export default function DrawDemo() {
   const session = { loading: false, status: { is_member: true, is_admin: asAdmin, player_id: 'p0' }, refresh: () => {} };
 
   const actions = {
-    async start(d, field) { setDraw({ ...d, status: 'running', payload: { ...d.payload, ...makeDraw(field, d.payload.k, { balance: d.payload.balance }) }, started_at: new Date(Date.now() + 5000).toISOString() }); },
+    async start(d, field) { setDraw({ ...d, status: 'running', payload: { ...d.payload, ...makeDraw(field, d.payload.k, { balance: d.payload.balance }), step: 0 }, started_at: new Date(Date.now() + 5000).toISOString() }); },
+    async next() { setDraw((x) => ({ ...x, payload: { ...x.payload, step: Math.min(x.payload.picks.length, (x.payload.step || 0) + 1) } })); },
     async finish(d) { setDraw((x) => (x.status === 'running' ? { ...x, status: 'done' } : x)); },
     async lock(d, _data, _me, startRound) { setDraw({ ...d, status: 'locked' }); if (startRound) setRound({ ...round, status: 'live' }); },
     async cancel() { setDraw(fresh()); },
@@ -40,10 +42,14 @@ export default function DrawDemo() {
         <button type="button" onClick={() => setAsAdmin(!asAdmin)} style={{ border: '1px solid #15202E', borderRadius: 999, background: 'transparent', padding: '2px 10px', fontWeight: 700 }}>{asAdmin ? 'View as a player' : 'View as admin'}</button>
         {draw.status === 'lobby' && (
           <>
-            <select value={k} onChange={(e) => { const v = Number(e.target.value); setK(v); setDraw(fresh(v, balance)); }} style={{ borderRadius: 6, fontWeight: 700 }} aria-label="Team size">
+            <select value={k} onChange={(e) => { const v = Number(e.target.value); setK(v); setDraw(fresh(v, balance, pace)); }} style={{ borderRadius: 6, fontWeight: 700 }} aria-label="Team size">
               {[2, 3, 4].map((x) => <option key={x} value={x}>{x} teams ({teamSizes(FIELD.length, x).join('-')})</option>)}
             </select>
-            <select value={balance ? 'close' : 'random'} onChange={(e) => { const b = e.target.value === 'close'; setBalance(b); setDraw(fresh(k, b)); }} style={{ borderRadius: 6, fontWeight: 700 }} aria-label="How random">
+            <select value={pace} onChange={(e) => { setPace(e.target.value); setDraw(fresh(k, balance, e.target.value)); }} style={{ borderRadius: 6, fontWeight: 700 }} aria-label="Reveal">
+              <option value="click">Click through</option>
+              <option value="timed">Timed</option>
+            </select>
+            <select value={balance ? 'close' : 'random'} onChange={(e) => { const b = e.target.value === 'close'; setBalance(b); setDraw(fresh(k, b, pace)); }} style={{ borderRadius: 6, fontWeight: 700 }} aria-label="How random">
               <option value="random">Truly random</option>
               <option value="close">Keep it close</option>
             </select>

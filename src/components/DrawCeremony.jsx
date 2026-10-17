@@ -48,9 +48,15 @@ const liveActions = {
     const d = makeDraw(field, draw.payload.k, { balance: draw.payload.balance });
     const { error } = await supabase.from('draws').update({
       status: 'running',
-      payload: { ...draw.payload, ...d },
+      payload: { ...draw.payload, ...d, step: 0 },
       started_at: new Date(Date.now() + COUNTDOWN_MS).toISOString(),
     }).eq('id', draw.id);
+    if (error) throw error;
+  },
+  // Click-through mode: admin reveals the next name on every phone.
+  async next(draw) {
+    const step = Math.min(draw.payload.picks.length, (draw.payload.step || 0) + 1);
+    const { error } = await supabase.from('draws').update({ payload: { ...draw.payload, step } }).eq('id', draw.id);
     if (error) throw error;
   },
   async finish(draw) {
@@ -78,7 +84,7 @@ const liveActions = {
     await supabase.from('draws').update({ status: 'cancelled' }).eq('id', draw.id);
   },
   async reopen(draw) {
-    const { teams, picks, spread, ...rest } = draw.payload; // eslint-disable-line no-unused-vars
+    const { teams, picks, spread, step, ...rest } = draw.payload; // eslint-disable-line no-unused-vars
     await supabase.from('draws').update({ status: 'lobby', payload: rest }).eq('id', draw.id);
   },
 };
@@ -129,7 +135,7 @@ export default function DrawCeremony({ draw, onClose, actions = liveActions, dem
   const header = (
     <div style={{ textAlign: 'center' }}>
       <div style={{ fontFamily: "'Pirata One', serif", fontSize: 46, color: '#EBD496', lineHeight: 1 }}>The Draw</div>
-      <div style={sub}>{roundName} · {draw.payload.k} teams · {draw.payload.balance ? 'random, kept close' : 'truly random'}</div>
+      <div style={sub}>{roundName} · {draw.payload.k} teams · {draw.payload.balance ? 'random, kept close' : 'truly random'} · {draw.payload.pace === 'click' ? 'admin clicks through' : 'timed'}</div>
     </div>
   );
 
@@ -175,55 +181,78 @@ export default function DrawCeremony({ draw, onClose, actions = liveActions, dem
   return <Ceremony draw={draw} onClose={onClose} actions={actions} demo={demo} header={header} busy={busy} run={run} isAdmin={isAdmin} me={me} />;
 }
 
-function Ceremony({ draw, onClose, actions, demo, header, busy, run, isAdmin, me }) {
+function Ceremony({ draw, onClose, actions, header, busy, run, isAdmin, me }) {
   const data = useData();
   const { teams, picks } = draw.payload;
+  const clickMode = draw.payload.pace === 'click';
   const interval = draw.payload.interval_ms || REVEAL_MS;
-  const total = picks.length * interval;
   const [skipped, setSkipped] = useState(false);
   const [startRound, setStartRound] = useState(true);
   const start = new Date(draw.started_at).getTime();
-  const runningClock = draw.status === 'running' && !skipped;
-  const now = useNow(runningClock);
-  const countdown = runningClock && now < start ? Math.ceil((start - now) / 1000) : 0;
-  const elapsed = runningClock ? Math.max(0, now - start) : total + 1;
-  const finished = elapsed >= total;
-  const idx = Math.min(picks.length - 1, Math.floor(elapsed / interval));
-  const within = elapsed - idx * interval;
-  const spinning = !finished && within < SPIN_MS;
-  const revealedCount = countdown ? 0 : finished ? picks.length : idx + (spinning ? 0 : 1);
-  const lastBuzz = useRef(-1);
+  const live = draw.status === 'running' && !skipped;
+  const now = useNow(live);
   const round = data.rounds.find((r) => r.id === draw.round_id);
 
+  // Click mode: each phone starts the drum the moment it hears about a new step.
+  const step = draw.payload.step || 0;
+  const [seen, setSeen] = useState(() => ({ step, at: 0 })); // at 0 = already shown when we opened
   useEffect(() => {
-    if (!countdown && !finished && !spinning && lastBuzz.current !== idx) {
-      lastBuzz.current = idx;
-      try { navigator.vibrate?.(60); } catch { /* ignore */ }
+    if (step !== seen.step) setSeen({ step, at: Date.now() });
+  }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const countdown = live && now < start ? Math.ceil((start - now) / 1000) : 0;
+  let triggered;
+  let within;
+  if (!live) {
+    triggered = picks.length;
+    within = Infinity;
+  } else if (clickMode) {
+    triggered = countdown ? 0 : step;
+    within = seen.at ? now - seen.at : Infinity;
+  } else {
+    triggered = countdown ? 0 : Math.min(picks.length, Math.floor((now - start) / interval) + 1);
+    within = now - (start + (triggered - 1) * interval);
+  }
+  const cur = triggered - 1;
+  const spinning = triggered > 0 && within < SPIN_MS && !countdown;
+  const revealedCount = Math.max(0, triggered - (spinning ? 1 : 0));
+  const finished = !live || (revealedCount === picks.length && !spinning);
+  const lastBuzz = useRef(-1);
+
+  useEffect(() => {
+    if (live && revealedCount > 0 && lastBuzz.current !== revealedCount) {
+      lastBuzz.current = revealedCount;
+      try { navigator.vibrate?.(80); } catch { /* ignore */ }
     }
-  }, [idx, spinning, finished, countdown]);
+  }, [revealedCount, live]);
 
   useEffect(() => {
     if (finished && draw.status === 'running' && isAdmin) actions.finish(draw);
   }, [finished, draw, isAdmin, actions]);
 
-  const current = picks[idx];
+  const current = cur >= 0 ? picks[cur] : null;
+  const upNext = picks[triggered] || null;
+  const focusTeam = current ? teams[current.team] : upNext ? teams[upNext.team] : null;
+  const focusTeamIdx = current ? current.team : upNext ? upNext.team : 0;
   let face = current ? data.playersById[current.player_id] : null;
   if (spinning && current) {
-    const left = picks.slice(idx).map((p) => p.player_id);
+    // The drum: roll through everyone not yet drawn, slowing down, landing on the pick.
+    const left = picks.slice(cur).map((p) => p.player_id);
     const n = left.length;
-    const t = within / SPIN_MS;
-    const steps = 26;
-    const step = Math.floor(steps * (1 - Math.pow(1 - t, 3)));
-    const k = ((0 - (steps - step)) % n + n) % n;
-    face = data.playersById[left[k]];
+    const t = Math.min(1, within / SPIN_MS);
+    const steps = 22;
+    const stp = Math.floor(steps * (1 - Math.pow(1 - t, 3)));
+    face = data.playersById[left[((0 - (steps - stp)) % n + n) % n]];
   }
-  const teamOf = current ? teams[current.team] : null;
   const revealed = picks.slice(0, revealedCount);
   const teamRows = teams.map((tm, ti) => {
     const got = revealed.filter((p) => p.team === ti).map((p) => p.player_id);
     const hcpSoFar = got.length ? teamHandicap(got.map((id) => Number(data.playersById[id]?.handicap ?? 0))) : null;
-    return { ...tm, got, hcpSoFar, colour: TEAM_COLOURS[ti % TEAM_COLOURS.length] };
+    return { ...tm, got, hcpSoFar, colour: TEAM_COLOURS[ti % TEAM_COLOURS.length], drawing: !finished && ti === focusTeamIdx };
   });
+  const colour = TEAM_COLOURS[focusTeamIdx % TEAM_COLOURS.length];
+  const waitingForClick = live && clickMode && !countdown && !spinning && triggered < picks.length;
+  const nextIsNewTeam = upNext && (!current || upNext.team !== current.team);
 
   return (
     <div role="dialog" aria-modal="true" aria-label="The Draw" style={shell}>
@@ -231,23 +260,33 @@ function Ceremony({ draw, onClose, actions, demo, header, busy, run, isAdmin, me
         {header}
 
         {countdown ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 300, gap: 6 }} aria-live="assertive">
-            <div style={{ ...sub, fontWeight: 700, letterSpacing: '.12em' }}>DRAW STARTS IN</div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 320, gap: 6 }} aria-live="assertive">
+            <div style={{ ...sub, fontWeight: 700, letterSpacing: '.12em' }}>THE DRAW STARTS IN</div>
             <div key={countdown} style={{ fontFamily: "'Pirata One', serif", fontSize: 150, lineHeight: 1, color: '#EBD496' }}>{countdown}</div>
+            {upNext && <div style={{ ...sub, fontSize: 16 }}>First up: <strong style={{ color: TEAM_COLOURS[upNext.team % TEAM_COLOURS.length] }}>{teams[upNext.team].name}</strong></div>}
           </div>
         ) : !finished ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, minHeight: 300, justifyContent: 'center' }} aria-live="polite">
-            <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '.12em', color: '#AFC0D4' }}>PICK {idx + 1} OF {picks.length}</div>
-            <div style={{ borderRadius: '50%', padding: 6, background: spinning ? 'transparent' : TEAM_COLOURS[current.team % TEAM_COLOURS.length], transition: 'background .2s', transform: spinning ? 'scale(1)' : 'scale(1.08)' }}>
-              <Avatar player={face} size={150} />
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, minHeight: 320, justifyContent: 'center' }} aria-live="polite">
+            <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '.12em', color: '#AFC0D4' }}>
+              {waitingForClick && nextIsNewTeam ? 'NEXT UP' : 'NOW DRAWING'}
             </div>
-            <div style={{ fontFamily: 'var(--display)', fontSize: 34, fontWeight: 700, opacity: spinning ? 0.55 : 1, filter: spinning ? 'blur(1px)' : 'none' }}>{face ? playerName(face) : '…'}</div>
-            {spinning ? <div style={sub}>Drawing…</div> : current && (
-              <>
-                <div style={{ ...sub, fontSize: 15 }}>Off {Number(face?.handicap)}</div>
-                <div style={{ fontFamily: 'var(--display)', fontSize: 28, fontWeight: 700, color: TEAM_COLOURS[current.team % TEAM_COLOURS.length] }}>→ {teamOf?.name}</div>
-              </>
-            )}
+            <div style={{ fontFamily: 'var(--display)', fontSize: 30, fontWeight: 700, color: colour, lineHeight: 1 }}>{(waitingForClick ? teams[upNext.team] : focusTeam)?.name}</div>
+            <div style={{ position: 'relative', marginTop: 8 }}>
+              {/* the lotto ball */}
+              <div style={{ width: 176, height: 176, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'radial-gradient(circle at 35% 30%, #FFFFFF 0%, #E9EDF2 45%, #B9C2CC 100%)', boxShadow: spinning ? `0 0 0 6px rgba(255,255,255,.08), 0 0 40px rgba(235,212,150,.35)` : `0 0 0 6px ${colour}, 0 0 48px ${colour}`, transform: spinning ? `rotate(${(within / 6) % 360}deg)` : 'scale(1.04)', transition: spinning ? 'none' : 'transform .25s, box-shadow .25s' }}>
+                {waitingForClick && !current ? (
+                  <span style={{ fontFamily: "'Pirata One', serif", fontSize: 64, color: '#1C2B3F' }}>?</span>
+                ) : (
+                  <div style={{ transform: spinning ? `rotate(${-(within / 6) % 360}deg)` : 'none' }}><Avatar player={face} size={140} /></div>
+                )}
+              </div>
+            </div>
+            <div style={{ fontFamily: 'var(--display)', fontSize: 36, fontWeight: 700, minHeight: 44, opacity: spinning ? 0.5 : 1, filter: spinning ? 'blur(1.5px)' : 'none' }}>
+              {waitingForClick && !current ? '' : face ? playerName(face) : ''}
+            </div>
+            {!spinning && current && <div style={{ ...sub, fontSize: 15 }}>Off {Number(data.playersById[current.player_id]?.handicap)} · {teams[current.team].name}</div>}
+            {spinning && <div style={sub}>Drawing…</div>}
+            <div style={{ ...sub, fontSize: 12 }}>Name {Math.max(1, triggered)} of {picks.length}</div>
           </div>
         ) : (
           <div style={{ textAlign: 'center', fontFamily: 'var(--display)', fontSize: 26, fontWeight: 700 }}>
@@ -255,9 +294,16 @@ function Ceremony({ draw, onClose, actions, demo, header, busy, run, isAdmin, me
           </div>
         )}
 
+        {live && clickMode && isAdmin && !countdown && triggered < picks.length && (
+          <button type="button" className="btn gold" style={{ minHeight: 60, fontSize: 20 }} disabled={busy || spinning} onClick={() => run(() => actions.next(draw))}>
+            {triggered === 0 ? '🎱 Draw the first name' : nextIsNewTeam ? `🎱 Start ${teams[upNext.team].name}` : '🎱 Draw the next name'}
+          </button>
+        )}
+        {live && clickMode && !isAdmin && waitingForClick && <div style={{ textAlign: 'center', ...sub }}>Waiting for the admin to draw the next name…</div>}
+
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(teams.length, 2)}, minmax(0, 1fr))`, gap: 10 }}>
           {teamRows.map((tm) => (
-            <div key={tm.name} style={{ border: `2px solid ${tm.colour}`, borderRadius: 14, padding: 10, background: 'rgba(255,255,255,.04)' }}>
+            <div key={tm.name} style={{ border: `2px solid ${tm.colour}`, borderRadius: 14, padding: 10, background: tm.drawing ? 'rgba(255,255,255,.09)' : 'rgba(255,255,255,.03)', boxShadow: tm.drawing ? `0 0 18px ${tm.colour}55` : 'none' }}>
               <div style={{ fontFamily: 'var(--display)', fontSize: 20, fontWeight: 700, color: tm.colour }}>{tm.name}</div>
               <div style={{ fontSize: 13, color: '#AFC0D4', marginBottom: 6 }}>
                 {finished ? <>Team handicap <strong style={{ color: '#F4EFE3', fontSize: 16 }}>{tm.handicap}</strong></> : tm.hcpSoFar != null ? `Handicap so far ${tm.hcpSoFar}` : 'Waiting…'}
@@ -270,7 +316,7 @@ function Ceremony({ draw, onClose, actions, demo, header, busy, run, isAdmin, me
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 32, opacity: shown ? 1 : 0.35 }}>
                       {shown ? <Avatar player={p} size={28} /> : <span style={{ width: 28, height: 28, borderRadius: '50%', border: '2px dashed #5C6B7E', display: 'inline-block' }} />}
                       <span style={{ fontWeight: 600, fontSize: 15 }}>{shown ? playerName(p) : '?'}</span>
-                      {shown && finished && <span style={{ marginLeft: 'auto', fontSize: 12, color: '#AFC0D4' }}>{Number(p?.handicap)}</span>}
+                      {shown && <span style={{ marginLeft: 'auto', fontSize: 12, color: '#AFC0D4' }}>{Number(p?.handicap)}</span>}
                     </div>
                   );
                 })}
@@ -282,7 +328,7 @@ function Ceremony({ draw, onClose, actions, demo, header, busy, run, isAdmin, me
         {finished && <p style={{ fontSize: 12.5, color: '#AFC0D4', lineHeight: 1.45, margin: 0 }}>Team handicap = combined handicaps ÷ (2 × team size): 4-player ÷ 8, 3-player ÷ 6.{draw.payload.balance ? ' "Keep it close" only used random line-ups where the team handicaps were within a shot of each other.' : ''}</p>}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {isAdmin && !finished && !countdown && <button type="button" className="btn ghost" onClick={() => setSkipped(true)}>Skip to the result (just my screen)</button>}
+          {isAdmin && !finished && !countdown && !clickMode && <button type="button" className="btn ghost" onClick={() => setSkipped(true)}>Skip to the result (just my screen)</button>}
           {isAdmin && finished && draw.status !== 'locked' && (
             <>
               {round?.status === 'setup' && (

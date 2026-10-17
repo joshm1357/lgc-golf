@@ -14,6 +14,7 @@ export default function DrawSetup({ round, onClose }) {
   const [sel, setSel] = useState(() => players.filter((p) => onTrip.has(p.id) || p.name === 'Hamish Davey').map((p) => p.id));
   const [k, setK] = useState(null);
   const [balance, setBalance] = useState(false);
+  const [pace, setPace] = useState('click');
   const [busy, setBusy] = useState(false);
   const n = sel.length;
   // Every way to split the field into teams of 2 or more, labelled by team size.
@@ -33,7 +34,7 @@ export default function DrawSetup({ round, onClose }) {
       const { error } = await supabase.from('draws').insert({
         round_id: round.id,
         status: 'lobby',
-        payload: { field: sel, k: teams, balance, interval_ms: REVEAL_MS },
+        payload: { field: sel, k: teams, balance, pace, interval_ms: REVEAL_MS },
       });
       if (error) throw error;
       await supabase.from('posts').insert({ kind: 'user', player_id: me, round_id: round.id, trip_id: round.trip_id, body: `🎲 The draw room is open for ${round.name} — open the app to watch the teams drawn live.` });
@@ -75,6 +76,12 @@ export default function DrawSetup({ round, onClose }) {
               <button type="button" aria-pressed={!balance} onClick={() => setBalance(false)}>Truly random</button>
               <button type="button" aria-pressed={balance} onClick={() => setBalance(true)}>Keep it close</button>
             </div>
+            <span className="label">Reveal</span>
+            <div className="seg light" role="group">
+              <button type="button" aria-pressed={pace === 'click'} onClick={() => setPace('click')}>I'll click through</button>
+              <button type="button" aria-pressed={pace === 'timed'} onClick={() => setPace('timed')}>Timed</button>
+            </div>
+            <span className="small muted">{pace === 'click' ? 'You tap for each name — the drum rolls for a couple of seconds, then the name lands on everyone\'s phone.' : 'A new name every few seconds, team by team.'}</span>
             <span className="small muted">
               {balance ? 'Still random, but only line-ups where the team handicaps end up within a shot of each other.' : 'Pure luck of the draw — could be stacked.'}
               {' '}Team handicap = combined handicaps ÷ (2 × team size): 4-player ÷ 8, 3-player ÷ 6. Locking in the draw replaces any teams already set for this round.

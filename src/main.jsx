@@ -8,7 +8,7 @@ const DrawDemo = lazy(() => import('./screens/DrawDemo.jsx'));
 const Guide = lazy(() => import('./screens/Guide.jsx'));
 
 // Paint the group's look from last time straight away, so there's no flash of other colours.
-if (savedLook()) applyLook(savedLook());
+if (savedLook()) applyLook(savedLook(), savedLook().name);
 
 const q = new URLSearchParams(window.location.search);
 const page = q.has('guide') ? <Guide /> : q.get('demo') === 'draw' ? <DrawDemo /> : <App />;

@@ -5,7 +5,7 @@ import { setCurrentGroup } from '../lib/group.js';
 import { inviteCode } from '../lib/invite.js';
 import { SIGN_IN, signInWith, signInWithEmail, verifyEmailCode, isEmptyNewAccount } from '../lib/auth.js';
 import { GroupCrest } from '../components/Logo.jsx';
-import { savedLook } from '../lib/theme.js';
+import { savedLook, paintLook } from '../lib/theme.js';
 
 async function ensureSignedIn() {
   const { data: { session } } = await supabase.auth.getSession();
@@ -16,7 +16,7 @@ async function ensureSignedIn() {
 }
 
 /** Joining by invite link (#/join/CODE): used before you're in any group, and inside the app for another group. */
-export function InviteJoin({ code, inside = false }) {
+export function InviteJoin({ code, inside = false, onLook }) {
   const { refresh } = useSession();
   const [info, setInfo] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -29,6 +29,8 @@ export function InviteJoin({ code, inside = false }) {
         const { data, error } = await supabase.rpc('invite_info', { p_token: code });
         if (error) throw error;
         if (live) setInfo(data || { bad: true });
+        // Show the group's own crest and colours (not when already inside another group's app).
+        if (live && data?.look && !inside) { paintLook(data.look, data.group_name); onLook?.(data.look); }
       } catch (e) {
         if (live) { setErr(friendlyError(e)); setInfo({ bad: true }); }
       }
@@ -84,6 +86,7 @@ export default function Join() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [pasted, setPasted] = useState(null);
+  const [inviteLook, setInviteLook] = useState(null);
   // An invite link opened in the browser, or pasted into the box (on iPhone the Home Screen app is separate from
   // Safari, so a link tapped in a chat opens Safari — pasting it here is how the Home Screen app joins).
   const code = inviteCode(window.location.hash) || pasted;
@@ -115,14 +118,14 @@ export default function Join() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--navy)', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 18 }}>
-      <GroupCrest size={code ? 120 : 170} look={savedLook()} />
+      <GroupCrest size={code ? 120 : 170} look={inviteLook || savedLook()} name={inviteLook?.name} />
       {isEmptyNewAccount(status, user) && (
         <div className="stack" style={{ width: '100%', maxWidth: 340, gap: 8, textAlign: 'center' }}>
           <div className="err" style={{ color: '#FFB4AB' }}>No account found for that sign-in. If you’ve used the app before, open it on your old phone and add this sign-in there first (More → Group & invites). Or join with an invite link below.</div>
           <button type="button" className="btn ghost sm" style={{ color: '#fff', borderColor: 'rgba(255,255,255,.5)' }} onClick={() => supabase.auth.signOut().then(() => window.location.reload())}>Sign out</button>
         </div>
       )}
-      {code ? <><InviteJoin code={code} />{SIGN_IN.length > 0 && <ReturningSignIn />}</> : (
+      {code ? <><InviteJoin code={code} onLook={setInviteLook} />{SIGN_IN.length > 0 && <ReturningSignIn />}</> : (
         <>
           <div style={{ fontFamily: 'var(--display)', fontSize: 34, fontWeight: 700 }}>{savedLook()?.short_name ? `${savedLook().short_name} Golf` : 'The Golf Trip'}</div>
           <form onSubmit={submit} style={{ width: '100%', maxWidth: 340, display: 'flex', flexDirection: 'column', gap: 12 }}>

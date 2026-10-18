@@ -476,6 +476,7 @@ function RoundPlayerRow({ round, rp, points }) {
 // ---------- Trophies ----------
 function TrophiesAdmin() {
   const data = useData();
+  const { status } = useSession();
   const trip = data.currentTrip;
   const [name, setName] = useState('');
   const [type, setType] = useState('stableford_total');
@@ -493,11 +494,11 @@ function TrophiesAdmin() {
         e.preventDefault();
         if (await run(() => supabase.from('trophies').insert({ trip_id: trip.id, name, type }), 'Trophy added')) { setName(''); data.reload(); }
       }}>
-        <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Trophy name, e.g. The BD" required />
+        <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={status?.legacy ? 'Trophy name, e.g. The BD' : 'Trophy name, e.g. The Cup'} required />
         <select className="select" value={type} onChange={(e) => setType(e.target.value)}>
           <option value="stableford_total">Stableford — total points across the trip</option>
           <option value="ambrose">Ambrose — winning team</option>
-          <option value="manual">Awarded by the group (e.g. the Noodle Cup)</option>
+          <option value="manual">Awarded by the group{status?.legacy ? ' (e.g. the Noodle Cup)' : ' (e.g. best on-course outfit)'}</option>
         </select>
         <button className="btn">Add trophy</button>
       </form>
@@ -508,7 +509,8 @@ function TrophiesAdmin() {
 // ---------- Honour board ----------
 function HonourAdmin() {
   const data = useData();
-  const [f, setF] = useState({ trophy_name: 'BD', label: '', winner_names: '' });
+  const { status } = useSession();
+  const [f, setF] = useState({ trophy_name: status?.legacy ? 'BD' : '', label: '', winner_names: '' });
   const list = [...data.honour_board].sort((a, b) => b.sort_key - a.sort_key);
   return (
     <Section title={`6. Honour board (${list.length})`}>

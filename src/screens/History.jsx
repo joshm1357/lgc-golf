@@ -45,7 +45,7 @@ function Winners() {
     for (const h of data.honour_board) if (!seen.has(h.trophy_name.toLowerCase())) seen.set(h.trophy_name.toLowerCase(), h.trophy_name);
     return [...seen.values()].sort((a, b) => a.localeCompare(b));
   }, [data.trophies, data.honour_board]);
-  const [trophy, setTrophy] = useState(names[0] || EACH_LINE);
+  const [trophy, setTrophy] = useState(names[0] || '__new__');
   const [newName, setNewName] = useState('');
   const [text, setText] = useState('');
   const [one, setOne] = useState({ label: '', winners: '' });
@@ -74,19 +74,21 @@ function Winners() {
           <select className="select" value={trophy} onChange={(e) => setTrophy(e.target.value)}>
             {names.map((n) => <option key={n} value={n}>{n}</option>)}
             <option value="__new__">A trophy that’s not listed…</option>
-            <option value={EACH_LINE}>Different trophies — named on each line</option>
+            <option value={EACH_LINE}>Several — trophy named on each line</option>
           </select>
         </label>
         {trophy === '__new__' && <label className="field"><span>Trophy name</span><input className="input" value={newName} maxLength={60} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. The Wooden Spoon" /></label>}
 
+        {trophy === EACH_LINE ? <span className="small muted">To add one winner, pick its trophy above.</span> : (
         <div className="stack" style={{ gap: 6 }}>
           <span className="label">Add one</span>
           <div className="row" style={{ gap: 8 }}>
             <input className="input" style={{ width: 96, flex: 'none' }} value={one.label} maxLength={30} onChange={(e) => setOne({ ...one, label: e.target.value })} placeholder="Year" aria-label="Year" />
             <input className="input grow" style={{ minWidth: 0 }} value={one.winners} maxLength={200} onChange={(e) => setOne({ ...one, winners: e.target.value })} placeholder="Winner(s)" aria-label="Winner(s)" />
           </div>
-          <button type="button" className="btn" disabled={busy || !one.label.trim() || !one.winners.trim() || trophy === EACH_LINE} onClick={addOne}>Add</button>
+          <button type="button" className="btn" disabled={busy || !one.label.trim() || !one.winners.trim() || !trophyName} onClick={addOne}>Add</button>
         </div>
+        )}
 
         <div className="stack" style={{ gap: 6 }}>
           <span className="label">Or paste a list</span>

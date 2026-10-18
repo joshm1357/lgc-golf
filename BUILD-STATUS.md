@@ -485,6 +485,30 @@ group refused, bad names, switches and handicaps refused, not signed in refused,
 players list, plus handicaps, steps under 10 minutes); phone width `tests/e2e/start-test.mjs` 20 checks (join screen →
 start page → all 7 steps → invite, coming back mid-way, someone already on the list skipped, no sideways scroll).
 
+## v2.1 Stage 8 — Shared course library (branch `stage-8-courses`, on staging only)
+
+**Built**
+- **Database (035, applied on staging):** a `course_library` shared by every group — name, town, where it is, pars,
+  stroke indexes, tees and greens (nothing else: no pins, rounds, scores, players, or which group shared it). Each
+  group still plays its own copy in `courses` (rounds don't change, so old phones are unaffected).
+  `share_course` (organisers: put one of your courses in the library, or update the entry you shared; a copy of a
+  library course can't be shared twice), `search_courses` (by name or town, nearest first when you give a location,
+  with distance, holes, greens mapped and how many groups use it), `library_course` (preview), `copy_library_course`
+  (your own copy to adjust — tees, greens — without changing the shared one; asking twice gives the same copy).
+  The library table itself can't be read or changed directly.
+- **App:** Admin → Courses: **📚 Find a course in the library** (search box, **📍 Near me**, preview with the
+  scorecard, **Add to our courses**) and **Share** on each course (with town and state). Trip set-up offers the
+  library when a course isn't listed.
+- **OpenStreetMap credit:** greens filled from OpenStreetMap are marked, and every map showing them (green mapper,
+  shot planner, side comps) carries "Greens © OpenStreetMap contributors"; the library and preview say so too.
+  (L.G.C's earlier OpenStreetMap fills weren't marked; re-filling a course marks it.)
+
+**Tested:** `supabase/tests/stage8_courses.sql` 16 checks (players can't share, 17-hole course refused, table not
+readable, search by name with area/holes/greens/credit, distance, only course details kept, copy is the group's own,
+copying twice gives the same course, changing a copy leaves the library alone, use count, a copy can't be shared again,
+can't share another group's course or see it, sharing again updates the same entry, not signed in sees nothing);
+unit test (OpenStreetMap marking); phone width `tests/e2e/courses-test.mjs` 10 checks. All other phone tests pass.
+
 ## Known limits
 - GPS distances are approximate (±5–10 m) and straight-line; closest-to-pin distance is typed in.
 - Location sharing only works while the app is open.

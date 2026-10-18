@@ -94,3 +94,12 @@ describe('shot planning', () => {
     expect(planLegs(null, [p(100), p(250)], p(300)).legs.map((l) => l.m)).toEqual([150, 50]);
   });
 });
+
+describe('OpenStreetMap credit', () => {
+  it('holes filled from OpenStreetMap are marked, so maps show its credit', () => {
+    const holes = [{ n: 1, par: 4, si: 1 }, { n: 2, par: 3, si: 2, green: { lat: 1, lng: 1 } }];
+    const { holes: out } = mergeGreens(holes, { 1: { green: { lat: 2, lng: 2 } }, 2: { green: { lat: 3, lng: 3 } } }, false);
+    expect(out[0].osm).toBe(true);
+    expect(out[1].osm).toBeUndefined(); // already mapped by hand, not replaced
+  });
+});

@@ -56,7 +56,7 @@ already per group). 5. ✅ on staging, reviewed, in `product` — Rulebook per g
 and Trophy Room mix history and app-made winners by year; past trips show their winners.
 
 **Phase 3 — Open the doors**
-7. ✅ on staging, reviewed, in `product` — Start-a-group wizard (under 10 minutes). 8. Shared course library (OpenStreetMap credit). 9. Launch basics:
+7. ✅ on staging, reviewed, in `product` — Start-a-group wizard (under 10 minutes). 8. ✅ on staging (review next) — Shared course library (OpenStreetMap credit). 9. Launch basics:
 move to Vercel with `<slug>.thegolftrip.club` (STOP — Josh buys the domain), Supabase Pro (STOP — Josh switches it on),
 DRAFT privacy policy and terms, delete-my-data, error alerts (ask first), share cards, basic usage numbers.
 

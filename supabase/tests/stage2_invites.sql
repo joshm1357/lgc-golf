@@ -80,7 +80,7 @@ do $$ begin
 exception when others then insert into t_results (label, result) values ('admin PIN in a new group', 'refused'); end $$;
 insert into t_results (label, result) select 'my_status', (s ->> 'role') || ' / legacy ' || (s ->> 'legacy') || ' / signed in ' || (s ->> 'signed_in')
   from (select public.my_status() s) x;
-insert into public.rule_votes (rule_id, player_id, vote) values ('00000000-0000-4000-8000-0000000e0c01', '00000000-0000-4000-8000-0000000e0b02', 'yes');
+insert into public.rule_votes (rule_id, player_id, vote) values ('00000000-0000-4000-8000-0000000e0c01', '00000000-0000-4000-8000-0000000e0b02', 'for');
 insert into t_results (label, result) values ('player votes on a rule', 'ok');
 
 -- ================= eg — joins with the guest link =================
@@ -91,7 +91,7 @@ do $$ begin perform set_config('request.headers', '{"x-group-id":"00000000-0000-
 insert into t_results (label, result) select 'guest joined as', role from public.group_members where user_id = auth.uid();
 select public.claim_player('00000000-0000-4000-8000-0000000e0b03');
 do $$ begin
-  insert into public.rule_votes (rule_id, player_id, vote) values ('00000000-0000-4000-8000-0000000e0c01', '00000000-0000-4000-8000-0000000e0b03', 'yes');
+  insert into public.rule_votes (rule_id, player_id, vote) values ('00000000-0000-4000-8000-0000000e0c01', '00000000-0000-4000-8000-0000000e0b03', 'for');
   insert into t_results (label, result) values ('guest votes on a rule', 'ok');
 exception when others then insert into t_results (label, result) values ('guest votes on a rule', 'refused'); end $$;
 do $$ begin

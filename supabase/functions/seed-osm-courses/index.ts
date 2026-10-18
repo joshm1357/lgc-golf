@@ -13,8 +13,9 @@ const NAMES: Record<string, string> = {
   NSW: 'New South Wales', VIC: 'Victoria', QLD: 'Queensland', WA: 'Western Australia', SA: 'South Australia',
   TAS: 'Tasmania', ACT: 'Australian Capital Territory', NT: 'Northern Territory',
 };
-// The main Overpass server first, then two public mirrors if it's busy or refuses.
-const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
+// The main Overpass server first, then public mirrors if it's busy or refuses.
+const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://overpass.kumi.systems/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter', 'https://overpass.osm.jp/api/interpreter'];
 const URL_ = Deno.env.get('SUPABASE_URL')!;
 const KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
@@ -68,7 +69,9 @@ out;`;
             // A server that ran out of time or memory still says 200, with a remark — that's a failure, not "no courses".
             const j = await r.json();
             if (j.remark && /error|timed out|out of memory|runtime/i.test(j.remark)) { tried.push(`${new URL(url).host} remark: ${String(j.remark).slice(0, 120)}`); continue; }
-            return j.elements || [];
+            // A server without boundary data answers with nothing — try the next one.
+            if (!(j.elements || []).some((e: El) => e.tags?.leisure === 'golf_course')) { tried.push(`${new URL(url).host} no courses`); continue; }
+            return j.elements;
           }
           tried.push(`${new URL(url).host} ${r.status} ${(await r.text()).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 160)}`);
         } catch (e) { tried.push(`${new URL(url).host} ${(e as Error).message.slice(0, 60)}`); }
@@ -77,9 +80,7 @@ out;`;
     };
     // The state's boundary by its code; if that finds no courses, by its name.
     let els = await overpass(query(`area["ISO3166-2"="${STATES[state]}"]`));
-    if (els && !els.some((e) => e.tags?.leisure === 'golf_course')) {
-      els = await overpass(query(`area["boundary"="administrative"]["admin_level"="4"]["name"="${NAMES[state]}"]`));
-    }
+    if (!els) els = await overpass(query(`area["boundary"="administrative"]["admin_level"="4"]["name"="${NAMES[state]}"]`));
     if (!els) return new Response(`OpenStreetMap servers said: ${tried.join('; ')}`, { status: 502 });
     if (!els.some((e) => e.tags?.leisure === 'golf_course')) return new Response(`No courses came back for ${state} — try again later. ${tried.join('; ')}`, { status: 502 });
 

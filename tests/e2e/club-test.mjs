@@ -242,6 +242,17 @@ await page.getByText('Work at this club? Claim this page').waitFor({ timeout: 15
 check(true, 'an unclaimed course page invites the club to claim it');
 
 
+// 5b. A course that's only listed: no scorecard yet, no round button, how to fill it.
+PAGE.v = { id: LIB[0].id, slug: 'kangaroo-valley', name: 'Kangaroo Valley Golf Course', area: 'Kangaroo Valley NSW', lat: -34.73, lng: 150.53, osm: true, verified: false, club: null, holes: [] };
+await page.goto(`${BASE}#/c/kangaroo-valley`);
+await page.reload();
+await page.getByText('No scorecard yet').waitFor({ timeout: 15000 });
+check(!(await page.getByRole('button', { name: /Start a round/ }).count()), 'a listed course has no start-a-round button');
+check(await page.getByRole('link', { name: '📍 Where it is' }).isVisible() && await page.getByText(/Course details ©/).isVisible(), 'listed course shows where it is, with the OpenStreetMap credit');
+await page.screenshot({ path: `${SHOTS}/k5b-listed.png`, fullPage: true });
+await noScroll('Listed course');
+PAGE.v = { id: LIB[0].id, slug: LIB[0].slug, name: LIB[0].name, area: 'Bowral NSW', osm: false, verified: false, club: null, holes: H };
+
 // 6. The club's counts: numbers only.
 CLUB.v = { ...CLUB.v };
 await page.goto(`${BASE}#/club`);

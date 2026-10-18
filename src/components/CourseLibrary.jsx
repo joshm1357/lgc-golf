@@ -69,10 +69,10 @@ export function FindCourse({ onAdded, hint = 'add it below' }) {
             <strong style={{ minWidth: 0 }}>{r.name}</strong>
             {r.km != null && <span className="small muted" style={{ flex: 'none' }}>{Number(r.km) < 10 ? Number(r.km).toFixed(1) : Math.round(Number(r.km))} km</span>}
           </div>
-          <span className="small muted">{[r.area, `${r.holes} holes`, r.greens ? `${r.greens} greens mapped` : 'no greens mapped yet', r.copies ? `used by ${r.copies} group${r.copies === 1 ? '' : 's'}` : null].filter(Boolean).join(' · ')}</span>
+          <span className="small muted">{[r.area, r.holes ? `${r.holes} holes` : 'no scorecard yet', r.holes ? (r.greens ? `${r.greens} greens mapped` : 'no greens mapped yet') : null, r.copies ? `used by ${r.copies} group${r.copies === 1 ? '' : 's'}` : null].filter(Boolean).join(' · ')}</span>
           {r.partner && <span className="small" style={{ fontWeight: 700 }}>Partner course{r.verified ? ' · hole data checked by the club' : ''}</span>}
           {have.has(r.id) && <span className="small" style={{ fontWeight: 700 }}>✓ In your courses</span>}
-          {r.osm && <span className="small muted">Greens <OsmCredit /></span>}
+          {r.osm && <span className="small muted">Map data <OsmCredit /></span>}
         </button>
       ))}
       {open && <LibraryCourse row={open} have={have.has(open.id)} sameName={sameName(open)} busy={busy} onAdd={() => add(open)} onClose={() => setOpen(null)} />}
@@ -89,7 +89,11 @@ function LibraryCourse({ row, have, sameName, busy, onAdd, onClose }) {
   return (
     <Sheet title={row.name} onClose={onClose}>
       <div className="stack">
-        <span className="small muted">{[row.area, `${row.holes} holes`, holes.length ? `par ${parTotal(holes)}` : null].filter(Boolean).join(' · ')}</span>
+        <span className="small muted">{[row.area, row.holes ? `${row.holes} holes` : null, holes.length ? `par ${parTotal(holes)}` : null].filter(Boolean).join(' · ')}</span>
+        {row.holes === 0 && (
+          <span className="small">This course is listed, but nobody has added its scorecard yet. Add it as a new course with its pars and stroke
+            indexes (from the scorecard), then share it — that fills this listing for the next group.</span>
+        )}
         {holes.length > 0 && (
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(9, holes.length)}, minmax(0, 1fr))`, gap: 4, textAlign: 'center' }} className="small">
             {holes.map((h) => (
@@ -99,10 +103,12 @@ function LibraryCourse({ row, have, sameName, busy, onAdd, onClose }) {
             ))}
           </div>
         )}
-        <span className="small muted">You get your own copy: change tees, greens or anything else for your group without changing it for anyone else.</span>
-        {row.osm && <span className="small muted">Some greens are from OpenStreetMap — <OsmCredit />.</span>}
+        {row.holes > 0 && <span className="small muted">You get your own copy: change tees, greens or anything else for your group without changing it for anyone else.</span>}
+        {row.osm && <span className="small muted">Course details from OpenStreetMap — <OsmCredit />.</span>}
         {sameName && !have && <span className="small err" style={{ margin: 0 }}>You already have a course called {row.name} (added by hand). Adding this gives you a second one — fine if you want its greens.</span>}
-        <button type="button" className="btn gold block" disabled={busy || have} onClick={onAdd}>{have ? 'Already in your courses' : sameName ? 'Add it anyway' : 'Add to our courses'}</button>
+        {row.holes === 0
+          ? <button type="button" className="btn ghost block" onClick={onClose}>OK</button>
+          : <button type="button" className="btn gold block" disabled={busy || have} onClick={onAdd}>{have ? 'Already in your courses' : sameName ? 'Add it anyway' : 'Add to our courses'}</button>}
       </div>
     </Sheet>
   );

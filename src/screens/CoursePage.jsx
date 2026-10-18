@@ -138,6 +138,7 @@ function Course({ slug }) {
     );
   }
   const greens = course.holes.filter((h) => h.green);
+  if (!course.holes.length) return <ListedOnly course={course} />;
   return (
     <>
       <Top title={course.name} sub={[course.area, `${course.holes.length} holes · par ${parTotal(course.holes)}`].filter(Boolean).join(' · ')} />
@@ -155,11 +156,34 @@ function Course({ slug }) {
             {course.club && <PartnerCard club={course.club} />}
             <Scorecard holes={course.holes} />
             {course.verified && <span className="small muted">✓ Hole data checked by the club.</span>}
-            {course.osm && <span className="small muted">Some greens © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors.</span>}
+            {course.osm && <span className="small muted">Course details © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors.</span>}
             <a href="#/start" className="small" style={{ fontWeight: 700, textAlign: 'center' }}>Run a golf group? Start your own →</a>
             {!course.club && <a href="#/club" className="small muted" style={{ textAlign: 'center' }}>Work at this club? Claim this page</a>}
           </>
         ) : <QuickStart course={course} onCancel={() => setStarting(false)} />}
+      </div>
+    </>
+  );
+}
+
+/** A course that's listed (from OpenStreetMap) but has no scorecard yet: where it is, and how to fill it in. */
+function ListedOnly({ course }) {
+  return (
+    <>
+      <Top title={course.name} sub={course.area || 'Golf course'} />
+      <div className="stack" style={{ maxWidth: 520, margin: '0 auto', padding: 16, gap: 12 }}>
+        {course.club && <PartnerCard club={course.club} />}
+        <div className="card pad stack" style={{ gap: 6 }}>
+          <strong>No scorecard yet</strong>
+          <span className="small">This course is listed, but nobody has added its pars yet, so rounds can’t start from here.</span>
+          <span className="small">Playing here with your group? In the app, add it under Courses with the pars and stroke indexes from the scorecard, then tap “Share” — it fills this page for everyone.</span>
+        </div>
+        {course.lat != null && course.lng != null && (
+          <a className="btn ghost block" href={`https://www.openstreetmap.org/?mlat=${course.lat}&mlon=${course.lng}#map=15/${course.lat}/${course.lng}`} target="_blank" rel="noopener noreferrer">📍 Where it is</a>
+        )}
+        {course.osm && <span className="small muted">Course details © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors.</span>}
+        <a href="#/start" className="small" style={{ fontWeight: 700, textAlign: 'center' }}>Run a golf group? Start your own →</a>
+        {!course.club && <a href="#/club" className="small muted" style={{ textAlign: 'center' }}>Work at this club? Claim this page and add your hole data</a>}
       </div>
     </>
   );

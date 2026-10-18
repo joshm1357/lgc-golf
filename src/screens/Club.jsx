@@ -384,6 +384,7 @@ function Kit({ club }) {
         </div>
         {pages.map((c) => (
           <React.Fragment key={c.slug}>
+            {!c.holes?.length && <div className="no-print card pad small err" style={{ margin: 0 }}>{c.name} has no hole data yet — add it (Club screen → Hole data) before putting codes out, or golfers can’t start a round.</div>}
             <div className="kit-sheet stack" style={{ gap: 12 }}>
               <strong className="no-print">{c.name}: cart sticker and counter card</strong>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>

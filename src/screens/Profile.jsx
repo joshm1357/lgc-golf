@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useScores, useSession, playerName } from '../lib/store.jsx';
 import { roundBoard } from '../lib/board.js';
+import { honourSort } from '../lib/history.js';
 import { uploadPhoto } from '../lib/images.js';
 import { Header, Avatar, Icon, Loading, toast, PhotoButtons } from '../components/ui.jsx';
 
@@ -45,7 +46,7 @@ export function usePlayerHistory(playerId) {
     const p = data.playersById[playerId];
     const honours = data.honour_board.filter((h) =>
       (h.player_ids || []).includes(playerId) || (p && h.winner_names.toLowerCase().includes(p.name.toLowerCase()))
-    ).sort((a, b) => b.sort_key - a.sort_key);
+    ).sort(honourSort);
     // Side comp wins: best entry per round/hole/kind.
     const groups = {};
     for (const e of extra.side) (groups[`${e.round_id}|${e.hole}|${e.kind}`] ||= []).push(e);

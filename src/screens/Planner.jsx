@@ -267,7 +267,6 @@ function PollCard({ poll, pd }) {
                   {winner && '✅ '}{optionTitle(poll, o)}
                   {!winner && r.leading && isOpen && <span className="small" style={{ marginLeft: 6, color: '#7A5A00', fontWeight: 800 }}>LEADING</span>}
                 </div>
-                {poll.kind === 'dates' && o.label && o.label !== optionTitle(poll, o) && <div className="small muted">{o.label}</div>}
                 {(o.address || o.cost_pp != null || o.notes) && (
                   <div className="small muted">{[o.address, o.cost_pp != null ? `~$${Number(o.cost_pp)} pp` : null, o.notes].filter(Boolean).join(' · ')}</div>
                 )}

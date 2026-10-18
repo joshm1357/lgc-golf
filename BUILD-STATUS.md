@@ -615,9 +615,10 @@ time next year); phone width `tests/e2e/quick-test.mjs` 21 checks. All other pho
   like just "Golf Club" are skipped (the one already seeded is hidden); a server that gives up part-way counts as a
   failure, not "no courses"; holes near two courses (36-hole clubs) aren't used; listing search results and the claim
   search credit OpenStreetMap; the job's "no sign-in token check" setting is in config.toml.
-- **Seeding progress on staging:** Tasmania (72), ACT (10), NT (12, one with a full scorecard) done; SA, WA, VIC,
-  QLD and NSW to go. OpenStreetMap's main query server refuses Supabase's servers (406), so the job works through four
-  public mirrors and skips any that answer with nothing.
+- **Seeding done on staging:** 1,423 Australian courses listed (NSW 398 in three slices, VIC 374, QLD 240, WA 187,
+  SA 132, TAS 72, NT 12, ACT 10); 25 came with a full scorecard from OpenStreetMap; 1 junk name hidden. OpenStreetMap's
+  main query server refuses Supabase's servers (406), so the job works through four public mirrors and skips any that
+  answer with nothing; big states run in slices (`?state=NSW&part=1&of=3`).
 - **Not built yet:** club photos (logo only for now).
 - **For Josh — OpenStreetMap licence (ODbL), before seeding live:** credit is shown everywhere the data appears. The
   licence also says that if we publicly use a database built from OSM data, we must offer that OSM-derived part (course

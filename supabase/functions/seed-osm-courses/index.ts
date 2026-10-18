@@ -13,8 +13,9 @@ const NAMES: Record<string, string> = {
   NSW: 'New South Wales', VIC: 'Victoria', QLD: 'Queensland', WA: 'Western Australia', SA: 'South Australia',
   TAS: 'Tasmania', ACT: 'Australian Capital Territory', NT: 'Northern Territory',
 };
-// The main Overpass server first, then two public mirrors if it's busy or refuses.
-const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
+// The main Overpass server first, then public mirrors if it's busy or refuses.
+const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://overpass.kumi.systems/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter', 'https://overpass.osm.jp/api/interpreter'];
 const URL_ = Deno.env.get('SUPABASE_URL')!;
 const KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 

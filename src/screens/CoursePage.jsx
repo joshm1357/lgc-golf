@@ -65,7 +65,8 @@ function FindACourse() {
     const t = setTimeout(async () => {
       try {
         await ensureSignedIn();
-        const { data, error } = await supabase.rpc('search_courses', { p_query: q, p_lat: null, p_lng: null, p_limit: 20 });
+        let { data, error } = await supabase.rpc('find_courses', { p_query: q, p_lat: null, p_lng: null, p_limit: 20 });
+        if (error && /PGRST202|Could not find the function/i.test(`${error.code} ${error.message}`)) ({ data, error } = await supabase.rpc('search_courses', { p_query: q, p_lat: null, p_lng: null, p_limit: 20 }));
         if (error) throw error;
         setErr('');
         setRows(data || []);
@@ -82,7 +83,7 @@ function FindACourse() {
         {rows?.map((r) => (
           <a key={r.id} href={`#/c/${r.slug}`} className="card pad stack" style={{ gap: 2, textDecoration: 'none', color: 'inherit' }}>
             <strong>{r.name}</strong>
-            <span className="small muted">{[r.area, `${r.holes} holes`].filter(Boolean).join(' · ')}</span>
+            <span className="small muted">{[r.area, `${r.holes} holes`, r.partner ? 'Partner course' : null].filter(Boolean).join(' · ')}</span>
           </a>
         ))}
         {rows && !rows.length && !err && <span className="small muted">No courses by that name yet. Groups add them as they play — or <a href="#/start">start a group</a> and add yours.</span>}
@@ -125,13 +126,33 @@ function Course({ slug }) {
                 <CourseMap className="map" markers={greens.map((h) => ({ id: `g${h.n}`, lat: h.green.lat, lng: h.green.lng, popup: `Hole ${h.n} · par ${h.par}` }))} osm={course.holes.some((h) => h.osm)} animate={false} />
               </LazyArea>
             )}
+            {course.club && <PartnerCard club={course.club} />}
             <Scorecard holes={course.holes} />
+            {course.verified && <span className="small muted">✓ Hole data checked by the club.</span>}
             {course.osm && <span className="small muted">Some greens © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors.</span>}
             <a href="#/start" className="small" style={{ fontWeight: 700, textAlign: 'center' }}>Run a golf group? Start your own →</a>
+            {!course.club && <a href="#/club" className="small muted" style={{ textAlign: 'center' }}>Work at this club? Claim this page</a>}
           </>
         ) : <QuickStart course={course} onCancel={() => setStarting(false)} />}
       </div>
     </>
+  );
+}
+
+/** A partner course: the club's logo, offers for groups and who to ask about a group booking. Clearly labelled. */
+function PartnerCard({ club }) {
+  return (
+    <div className="card pad stack" style={{ gap: 6 }}>
+      <div className="row" style={{ gap: 10 }}>
+        {club.logo_url && <img src={club.logo_url} alt={`${club.name} logo`} width={48} height={48} style={{ borderRadius: 8, objectFit: 'contain', background: '#fff', flex: 'none' }} />}
+        <span><strong>{club.name}</strong><div className="small muted">Partner course</div></span>
+      </div>
+      {club.offers && <span className="small">🎁 {club.offers}</span>}
+      {club.booking_note && <span className="small">{club.booking_note}</span>}
+      {(club.booking_email || club.booking_phone) && (
+        <span className="small">Group bookings: {club.booking_email && <a href={`mailto:${club.booking_email}`}>{club.booking_email}</a>}{club.booking_email && club.booking_phone ? ' · ' : ''}{club.booking_phone && <a href={`tel:${club.booking_phone.replace(/\s/g, '')}`}>{club.booking_phone}</a>}</span>
+      )}
+    </div>
   );
 }
 

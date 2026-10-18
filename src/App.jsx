@@ -32,6 +32,7 @@ const Group = lazyScreen(() => import('./screens/Group.jsx'));
 const History = lazyScreen(() => import('./screens/History.jsx'));
 const Start = lazyScreen(() => import('./screens/Start.jsx'));
 const CoursePage = lazyScreen(() => import('./screens/CoursePage.jsx'));
+const Club = lazyScreen(() => import('./screens/Club.jsx'));
 const RoundReady = lazyScreen(() => import('./screens/QuickRound.jsx'), 'RoundReady');
 
 // A fresh plan screen per plan, so nothing carries over when a notification jumps to another one.
@@ -68,6 +69,8 @@ function Gate() {
   const [problem] = useState(() => signInProblemFromUrl());
   // The public start page and the start-a-group wizard work whether or not you're in a group yet.
   if (loc.pathname === '/start' || loc.pathname.startsWith('/start/')) return <LazyArea resetKey="start" fallback={<Loading />}><Start /></LazyArea>;
+  // Club partners (claiming a course, the club's own page; Josh's claim approvals).
+  if (loc.pathname === '/club' || loc.pathname.startsWith('/club/')) return <LazyArea resetKey="club" fallback={<Loading />}><Club /></LazyArea>;
   // The public course page (and the quick round from it): no sign-in needed to look.
   if (loc.pathname === '/c' || loc.pathname.startsWith('/c/')) {
     return (

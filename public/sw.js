@@ -167,8 +167,8 @@ self.addEventListener('fetch', (event) => {
 
 self.addEventListener('push', (event) => {
   let msg = {};
-  try { msg = event.data ? event.data.json() : {}; } catch { msg = { title: 'L.G.C', body: event.data && event.data.text() }; }
-  event.waitUntil(self.registration.showNotification(msg.title || 'L.G.C', {
+  try { msg = event.data ? event.data.json() : {}; } catch { msg = { title: 'The Golf Trip', body: event.data && event.data.text() }; }
+  event.waitUntil(self.registration.showNotification(msg.title || 'The Golf Trip', {
     body: msg.body || '',
     icon: `${BASE}brand/icon-192.png`,
     badge: `${BASE}brand/icon-192.png`,

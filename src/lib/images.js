@@ -37,8 +37,9 @@ function imgFrom(src) {
   });
 }
 
-/** Shrink a photo on the phone before uploading. Square-crops when `square` is true. */
-export async function compressImage(file, { maxDim = 1600, quality = 0.8, square = false } = {}) {
+/** Shrink a photo on the phone before uploading. Square-crops when `square` is true. `png` keeps see-through parts
+ * (crests and logos); photos are saved as JPEG. */
+export async function compressImage(file, { maxDim = 1600, quality = 0.8, square = false, png = false } = {}) {
   const img = await loadImage(file);
   const W = img.width || img.naturalWidth, H = img.height || img.naturalHeight;
   let sx = 0, sy = 0, sw = W, sh = H;
@@ -53,19 +54,23 @@ export async function compressImage(file, { maxDim = 1600, quality = 0.8, square
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
-  canvas.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
-  const blob = await new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/jpeg', quality));
+  const ctx = canvas.getContext('2d');
+  if (!png) { ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, w, h); } // JPEG has no see-through: white, not black
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
+  const blob = await new Promise((resolve) => canvas.toBlob((b) => resolve(b), png ? 'image/png' : 'image/jpeg', quality));
   if (!blob) throw new Error("Couldn't shrink that photo.");
   return blob;
 }
 
-/** Upload a photo and return its public URL. Falls back to the original file if shrinking fails. */
-export async function uploadPhoto(file, folder, opts) {
+/** Upload a photo and return its public URL. Falls back to the original file if shrinking fails — except with
+ * `strict` (crests): those must be shrunk, so every phone can show them. */
+export async function uploadPhoto(file, folder, opts = {}) {
   let blob;
-  let type = 'image/jpeg';
+  let type = opts.png ? 'image/png' : 'image/jpeg';
   try {
     blob = await compressImage(file, opts);
   } catch (e) {
+    if (opts.strict) throw new Error('This phone couldn’t open that picture. Try a PNG or JPEG (a screenshot of the logo works).');
     if (file.size > 12 * 1024 * 1024) throw new Error('That photo is too big to upload. Try another one.');
     blob = file;
     type = file.type || 'image/jpeg';

@@ -162,7 +162,7 @@ export function TribunalCase() {
         <div className="hdr-row"><Link to="/tribunal" className="back" style={{ textDecoration: 'none' }}>{Icon.back()}<span>Tribunal</span></Link></div>
         <div className="row label" style={{ color: 'var(--gold)', gap: 6 }}>{Icon.gavel(16)}<span>Handicap Tribunal · {open ? 'in session' : 'closed'}</span></div>
         <div className="hdr-row">
-          <Avatar player={accused} size={54} ring="#D9A521" />
+          <Avatar player={accused} size={54} ring="var(--gold)" />
           <div className="hdr-grow">
             <div className="hdr-title">The Lads v {playerName(accused)}</div>
             <div className="hdr-sub">Lodged by {playerName(lodger)} · {timeAgo(c.created_at)}</div>

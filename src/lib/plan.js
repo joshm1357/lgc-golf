@@ -234,7 +234,7 @@ export function icsFor(plan, url = '') {
   const esc = (s) => String(s || '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/[,;]/g, (m) => `\\${m}`);
   const where = [plan.location_name, plan.address].filter(Boolean).join(', ');
   return [
-    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//LGC Golf//Planner//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//The Golf Trip//Planner//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
     'BEGIN:VEVENT',
     `UID:plan-${plan.id}@lgc-golf`,
     `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)}Z`,

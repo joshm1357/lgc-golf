@@ -65,7 +65,7 @@ export default function Trophies() {
       <header className="hdr">
         <div className="hdr-row"><button type="button" className="back" onClick={() => (window.history.length > 1 ? nav(-1) : nav('/'))}>{Icon.back()}<span>Back</span></button></div>
         <div className="hdr-title">The Trophy Room</div>
-        <div className="hdr-sub">L.G.C{trip ? ` · ${trip.name}` : ''}</div>
+        <div className="hdr-sub">{status?.look?.short_name || status?.group_name}{trip ? ` · ${trip.name}` : ''}</div>
       </header>
 
       {!trophies.length && <div className="empty" style={{ color: '#C9B48A' }}>The cabinet's empty. {status.is_admin && <Link to="/admin" style={{ color: '#EBD496' }}>Add trophies in Admin</Link>}</div>}

@@ -72,7 +72,7 @@ export async function notify(type, payload = {}) {
 }
 
 /** Share sheet (pick Messenger) where available; otherwise copy to the clipboard. Returns 'shared' | 'copied' | 'failed'. */
-export async function shareText(text, title = 'L.G.C') {
+export async function shareText(text, title = (typeof document !== 'undefined' && document.title) || 'The Golf Trip') {
   try {
     if (navigator.share) {
       await navigator.share({ title, text });

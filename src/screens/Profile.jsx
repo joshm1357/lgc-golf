@@ -66,8 +66,8 @@ function HcpChart({ hist }) {
   const y = (v) => hgt - 8 - ((v - min) / (max - min)) * (hgt - 16);
   return (
     <svg viewBox={`0 0 ${w} ${hgt}`} width="100%" height={hgt} role="img" aria-label={`Handicap over time: ${pts.join(', ')}`}>
-      <polyline points={pts.map((v, i) => `${x(i)},${y(v)}`).join(' ')} fill="none" stroke="#1C2B3F" strokeWidth="2.5" />
-      {pts.map((v, i) => <circle key={i} cx={x(i)} cy={y(v)} r="4" fill="#D9A521" stroke="#1C2B3F" strokeWidth="1.5" />)}
+      <polyline points={pts.map((v, i) => `${x(i)},${y(v)}`).join(' ')} fill="none" stroke="var(--navy)" strokeWidth="2.5" />
+      {pts.map((v, i) => <circle key={i} cx={x(i)} cy={y(v)} r="4" fill="var(--gold)" stroke="var(--navy)" strokeWidth="1.5" />)}
     </svg>
   );
 }

@@ -5,6 +5,7 @@ import { supabase } from './supabase.js';
 import { pendingScores, onQueueChange, freeCacheSpace } from './offline.js';
 import { currentGroup, setCurrentGroup, GROUP_TABLES } from './group.js';
 import { featureOn } from './features.js';
+import { applyLook, clearLook, DEFAULT_LOOK, LGC_LOOK } from './theme.js';
 
 // The offline copy of a group's players, rounds, courses… is kept per group.
 const refKey = () => `ref-${currentGroup() || 'x'}`;
@@ -56,6 +57,9 @@ export function SessionProvider({ children }) {
     // The database says which group I'm in (the one this phone asked for, if I'm still in it).
     if (status?.group_id) setCurrentGroup(status.group_id);
     setState({ loading: false, user: session.user, status, offline: !!(error && cached) });
+    // The group's look. (An older database has no look: it only has L.G.C.)
+    if (status?.is_member) applyLook(status.look || (status.legacy === false ? DEFAULT_LOOK : LGC_LOOK), status.group_name);
+    else if (!error && data && !data.is_member) clearLook(); // not in a group (any more): don't keep another group's look
   }, []);
 
   useEffect(() => {
@@ -63,6 +67,7 @@ export function SessionProvider({ children }) {
     const { data: sub } = supabase.auth.onAuthStateChange((evt) => {
       if (evt === 'SIGNED_OUT') {
         freeCacheSpace(); // the saved offline copies belong to whoever was signed in
+        clearLook();
         setCurrentGroup(null);
         refresh();
       }

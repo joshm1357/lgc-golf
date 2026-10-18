@@ -1,5 +1,6 @@
 -- 033b — run after 033. Pasted by hand into the SQL editor (it contains a delete, which the automatic tool won't run).
--- Take back a handicap that was added as history (a typo). Real changes (admin, Tribunal) can't be removed.
+-- Take back a handicap that was added as history (a typo). Only history entries — the app offers no way to remove a
+-- real change (admin, Tribunal) here.
 create or replace function public.remove_history_handicap(p_id uuid)
 returns void language plpgsql security definer set search_path = '' as $$
 declare v_g uuid := private.current_group();

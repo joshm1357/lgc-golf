@@ -1,15 +1,18 @@
-Expected (staging, after 033). Run as one script; it rolls itself back.
+Expected (staging, after 033 and 033c). Run as one script; it rolls itself back.
 
 player adds winners = refused
 player adds handicaps = refused
 organiser adds 3 winners = 3
 saved as history, only own players and trips = 2019 Cup imported=true players=1 trip=false; 2023 Cup imported=true players=0 trip=true; 2023 Spoon imported=true players=0 trip=false
+the same list again adds = 0
+a winner with no year = refused
 a list with a bad line = refused
 nothing from the bad list saved = 0
 201 lines at once = refused
 honour linked to another group's trip = refused
 engraving linked to own trip = ok
 organiser adds 2 handicaps = 2
+the same handicap again adds = 0
 handicap history = 15.2 on 2021-06-01 imported=true; -1.0 on 2022-06-01 imported=true
 today's handicap unchanged = 12.0
 bad handicap line = refused   (another group's player)

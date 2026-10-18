@@ -76,7 +76,7 @@ export default function Trips() {
 
         {past.length > 0 && <span className="label" style={{ marginTop: 6 }}>Past trips</span>}
         {past.map((x) => <PastCard key={x.plan.id} plan={x.plan} stage={x.stage} photo={photos[x.plan.trip_id]} rounds={data.rounds.filter((r) => x.plan.trip_id && r.trip_id === x.plan.trip_id).length}
-          winners={trophiesOn && x.plan.trip_id ? data.honour_board.filter((h) => h.trip_id === x.plan.trip_id) : []} />)}
+          winners={trophiesOn && x.plan.trip_id ? data.honour_board.filter((h) => h.trip_id === x.plan.trip_id).sort((a, b) => a.trophy_name.localeCompare(b.trophy_name)) : []} />)}
       </div>
       {suggesting && <SuggestSheet onClose={() => setSuggesting(false)} onSaved={(p) => nav(`/plan/${p.id}`)} />}
     </div>
@@ -189,6 +189,7 @@ function PastCard({ plan, stage, photo, rounds, winners = [] }) {
         <div className="small muted">{cancelled ? (plan.proposed ? 'Idea passed on' : 'Called off') : [plan.start_date ? fmtRange(plan.start_date, plan.end_date) : null, plan.location_name].filter(Boolean).join(' · ') || 'Done'}</div>
         {!cancelled && rounds > 0 && <div className="small" style={{ fontWeight: 700 }}>{rounds} round{rounds === 1 ? '' : 's'} played</div>}
         {winners.slice(0, 3).map((h) => <div key={h.id} className="small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>🏆 {h.trophy_name}: <strong>{h.winner_names}</strong></div>)}
+        {winners.length > 3 && <div className="small muted">+{winners.length - 3} more in the Trophy Room</div>}
       </div>
     </Link>
   );

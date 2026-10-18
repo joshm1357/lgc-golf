@@ -1,4 +1,4 @@
--- Stage 6 test: history import. STAGING only, after 033. Rolled back; results in the error message.
+-- Stage 6 test: history import. STAGING only, after 033 and 033c. Rolled back; results in the error message.
 create temp table t_results (n serial, label text, result text);
 grant all on t_results to authenticated;
 grant all on sequence t_results_n_seq to authenticated;
@@ -44,6 +44,10 @@ insert into t_results (label, result) values ('organiser adds 3 winners', public
 insert into t_results (label, result) select 'saved as history, only own players and trips',
   string_agg(label || ' ' || trophy_name || ' imported=' || imported || ' players=' || coalesce(array_length(player_ids, 1), 0) || ' trip=' || (trip_id is not null), '; ' order by label, trophy_name)
   from public.honour_board where group_id = '00000000-0000-4000-8000-00000000ac00';
+insert into t_results (label, result) values ('the same list again adds', public.import_honours('[{"trophy":"cup","label":"2019","winners":"kev & lou"}]')::text);
+do $$ begin perform public.import_honours('[{"trophy":"Cup","label":"Hunter","winners":"Kev"}]');
+  insert into t_results (label, result) values ('a winner with no year', 'ok');
+exception when others then insert into t_results (label, result) values ('a winner with no year', 'refused'); end $$;
 do $$ begin perform public.import_honours('[{"trophy":"Cup","label":"2018","winners":"Kev"},{"trophy":"Cup","label":"2017","winners":""}]');
   insert into t_results (label, result) values ('a list with a bad line', 'ok');
 exception when others then insert into t_results (label, result) values ('a list with a bad line', 'refused'); end $$;
@@ -63,6 +67,7 @@ exception when others then insert into t_results (label, result) values ('engrav
 insert into t_results (label, result) values ('organiser adds 2 handicaps', public.import_handicaps('[
   {"player_id":"00000000-0000-4000-8000-00000000ac11","date":"2021-06-01","handicap":15.2},
   {"player_id":"00000000-0000-4000-8000-00000000ac11","date":"2022-06-01","handicap":-1}]')::text);
+insert into t_results (label, result) values ('the same handicap again adds', public.import_handicaps('[{"player_id":"00000000-0000-4000-8000-00000000ac11","date":"2021-06-01","handicap":15.2}]')::text);
 insert into t_results (label, result) select 'handicap history', string_agg(new_handicap || ' on ' || (created_at at time zone 'UTC')::date || ' imported=' || imported, '; ' order by created_at)
   from public.handicap_history where player_id = '00000000-0000-4000-8000-00000000ac11';
 insert into t_results (label, result) select 'today''s handicap unchanged', handicap::text from public.players where id = '00000000-0000-4000-8000-00000000ac11';

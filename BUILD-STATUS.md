@@ -175,6 +175,68 @@ STOP → live SQL below → merge `v1.5` into `main` (deploys) → check the liv
 **Not yet tested — needs Josh:** notify refusing another group's ids for a *signed-in* caller, and the old-version
 (v1.5 build) browser test against staging, both need **anonymous sign-ins switched on in `lgc-golf-staging`**
 (Authentication → Sign In / Providers). The old-app behaviour (no header) is covered by the SQL tests.
+**Independent review → fixes (migration 024, 18 Oct)** — 3 must-fix, 6 should-fix, all done on staging:
+- The old `members` list is L.G.C's only (an organiser of another group could read and change it); nobody can write
+  to `members` or `group_members` directly any more.
+- A score can't name another group's player or team (the birdie post could leak a name).
+- Every link to another row must stay in the group — a round's course, a job's owner, a cost's payer, a vote's option,
+  a room's people… (one automatic check per table, rebuilt by later migrations), and a row with two parents is checked
+  against both.
+- Joining and admin PINs: 10 wrong tries an hour per sign-in (30 per internet address), then "wait an hour". New
+  groups get a 10-character joining code made by the app (`reset_group_code()`), so there's nothing to guess and no
+  "that PIN is taken" hint; L.G.C keeps choosing its own PIN. Empty PINs refused.
+- `group_members` taken off live updates (its delete events reached every phone); notify and the connector read
+  options/courses through the group too; the connector no longer remembers wrong keys.
+- Tested: isolation test now 47 checks (members list, cross-group job owner, direct membership insert, own-PIN on a
+  new group, new joining code, cross-group birdie, the 11th wrong PIN).
+- Not done (notes): the photos bucket is public (links are unguessable; a private bucket with signed links is a later
+  job); the draw room's live "who's here" channel is public (as in v1.5).
+
+## v2.0 Stage 1b — Trips (branch `stage-1b-trips`, on staging only)
+
+**Built** (spec: `docs/TRIPS-SPEC.md`)
+- **Database (025).** `plans.organiser_id` (whoever suggested it; only the admin can change it) and `budget_pp`;
+  `groups.vote_decider` (`admin` | `admin_or_organiser`, set in Admin → 8); `start_trip_votes()` — whoever suggested a
+  trip opens its first dates and place votes with their options; `decide_poll()` / `can_decide()` — the admin, or the
+  trip's organiser if the group allows it, closes a vote and the winner fills in the trip's dates or place;
+  `plan_comments` (Chat); `notify_prefs` and `notify_queue`. **Lock-in makes the trip in the app**: when a plan is set
+  to Locked in with dates (new button, or the old Edit sheet on an old phone) its `trips` row is made once, and later
+  date changes follow it. **Trips start and finish on their own**: on its first day a locked-in trip becomes the
+  current trip (the old one closes, and any round still live in it); a week after the last day it's marked Done.
+  Past trips with no plan (e.g. the 2026 South Coast trip) got one, so every trip is in one list.
+- **Server.** `notify`: each person's choice per group — straight away (default, so nothing changes for L.G.C), a
+  daily digest at their hour, or only important (draw room, a job for you, money, your trip tomorrow). "The draw
+  room is open" always goes straight away. Hourly digest job (`lgc-hourly-digest`, 3 past each hour). New messages:
+  Chat, "locked in"; a suggestion now goes to everyone (they can vote straight away); the suggester can send their
+  own vote's message; the organiser can send "decided" when allowed.
+- **App.** Bottom bar **Trips** (was Coming up): the trip that's on or next (big card; Leaderboard button while on),
+  other locked-in trips, **Ideas and voting** (what's still to decide: "Dates: 3 options, closes Fri"), **Past trips**
+  (dates, place, rounds played, first photo; called-off greyed). **Suggest a trip or round**: 2–3 date options or
+  "roughly…", 1–3 places with rough cost, budget each, vote closing date. Each trip: stage bar
+  (Idea → Deciding → Locked in → On now → Done), organiser, **Chat** tab, **Lock it in** (admin), "Add the rounds" to
+  the trip made at lock-in. More → Notifications: **When you hear about things** + iPhone Home Screen steps.
+
+**Tested (staging)**
+- `supabase/tests/stage1b_trips.sql` — 37 checks: a suggestion opens its two votes (once), only the suggester or
+  admin can, anyone adds options; organiser can't be handed over by a player; Chat lands in the right group; settings
+  only your own; nobody reads the digest queue; with "admin" the organiser can't pick a winner, with "admin or
+  organiser" they can (own trip only, not another player); a retry of the same pick is fine, changing a decided vote
+  isn't; another group sees 0 trips/votes/options/chat/settings and can't comment, open votes or change the setting;
+  lock-in makes exactly one trip; dates follow; old-phone lock-in works; first day → current trip, old one closed;
+  a week later → Done.
+- Digest end to end on the staging server: a job due tomorrow for a digest person is queued (not sent); at the wrong
+  hour nothing goes; at their hour the 3 waiting items go as one; "only important": the job goes straight away, a
+  vote closing tomorrow doesn't. (No real phone subscribed on staging, so "sent" is counted as 0 — the queue and the
+  once-a-day log show what happened.)
+- Phone width (375 px, `tests/e2e/trips-test.mjs`): 18 checks — Trips tab sections, Suggest sheet, idea's stage bar
+  and votes, Chat, closing a vote via `decide_poll`, Lock it in, Admin setting, no sideways scroll, no page errors.
+  The v1.5 browser checks (`tests/e2e/phone-test.mjs`) all still pass. 75 unit tests.
+- Regression after 024 + 025 (re-run on staging): isolation 47/47, Trips 37/37, L.G.C access checks 30/30.
+
+### Live order for v2.0 (at the release STOP — not before)
+022 → 023 → 024 → 025 on live, then deploy `notify` and `lgc-mcp`, then the app. (On staging 024 ran after 025; 025
+calls the same-group check builder again, so the order above is the one for live.)
+
 ## Known limits
 - GPS distances are approximate (±5–10 m) and straight-line; closest-to-pin distance is typed in.
 - Location sharing only works while the app is open.

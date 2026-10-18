@@ -38,7 +38,7 @@ Full brief: `the-golf-trip-full-build-prompt.md` (in the Claude project). Every 
 1. **Groups** — `groups` and `group_members` tables, `group_id` on every table (filled in automatically so old phones
    keep working), access rules per group, notifications/reminders/connector/photos/phone storage per group,
    isolation tests (no group can see or change another's data), old-version test.
-1b. **Trips** (decided 18 Oct — spec in `docs/TRIPS-SPEC.md`) — one Trip from idea → votes on dates and place with
+1b. ✅ on staging — **Trips** (decided 18 Oct — spec in `docs/TRIPS-SPEC.md`) — one Trip from idea → votes on dates and place with
    discussion → locked in → on the trip → done (the record). The Trips tab replaces Coming up: now/next, ideas and
    voting, past trips. Admin picks vote winners (group setting can let the trip's organiser too). Rules, players,
    handicaps, Tribunal, courses and trophies stay group-wide. Plus **notification choices** per person: straight away,

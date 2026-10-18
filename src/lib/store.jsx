@@ -5,6 +5,14 @@ import { supabase } from './supabase.js';
 import { pendingScores, onQueueChange } from './offline.js';
 
 const SessionCtx = createContext(null);
+
+// Offline: the last good copy of things the app needs to open and score with no signal.
+export function cacheGet(key) {
+  try { return JSON.parse(localStorage.getItem(`lgc-cache-${key}`) || 'null'); } catch { return null; }
+}
+export function cacheSet(key, value) {
+  try { localStorage.setItem(`lgc-cache-${key}`, JSON.stringify(value)); } catch { /* full or blocked: fine */ }
+}
 const DataCtx = createContext(null);
 
 export function SessionProvider({ children }) {
@@ -16,8 +24,16 @@ export function SessionProvider({ children }) {
       setState({ loading: false, user: null, status: null });
       return;
     }
-    const { data, error } = await supabase.rpc('my_status');
-    setState({ loading: false, user: session.user, status: error ? null : data });
+    let res;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new Error('offline');
+      res = await supabase.rpc('my_status');
+    } catch (e) { res = { error: e }; }
+    const { data, error } = res;
+    if (!error && data) cacheSet(`status-${session.user.id}`, data);
+    // No signal: use who I was last time on this phone, so the app still opens.
+    const cached = error ? cacheGet(`status-${session.user.id}`) : null;
+    setState({ loading: false, user: session.user, status: error ? cached : data, offline: !!(error && cached) });
   }, []);
 
   useEffect(() => {
@@ -69,17 +85,31 @@ export function DataProvider({ children }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
+  const [offline, setOffline] = useState(false);
   const load = useCallback(async () => {
-    const results = await Promise.all(
-      REF_TABLES.map((t) => supabase.from(t).select('*'))
-    );
+    let results;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false && cacheGet('ref')) throw new Error('offline');
+      results = await Promise.all(REF_TABLES.map((t) => supabase.from(t).select('*')));
+    } catch (e) {
+      results = [{ error: e }];
+    }
     const bad = results.find((r) => r.error);
     if (bad) {
+      // No signal: open on the last copy saved on this phone.
+      const cached = cacheGet('ref');
+      if (cached) {
+        setData((cur) => cur || cached);
+        setOffline(true);
+        return;
+      }
       setError(bad.error);
       return;
     }
     const d = Object.fromEntries(REF_TABLES.map((t, i) => [t, results[i].data || []]));
+    cacheSet('ref', d);
     setError(null);
+    setOffline(false);
     setData(d);
   }, []);
 
@@ -114,10 +144,10 @@ export function DataProvider({ children }) {
       [...rounds].reverse().find((r) => r.trip_id === currentTrip?.id) ||
       rounds[rounds.length - 1] || null;
     return {
-      ready: true, error, reload: load, ...data, trips, rounds, playersById, coursesById,
+      ready: true, error, offline, reload: load, ...data, trips, rounds, playersById, coursesById,
       teamsByRound, roundPlayers, currentTrip, liveRound, defaultRound,
     };
-  }, [data, error, load]);
+  }, [data, error, load, offline]);
 
   return <DataCtx.Provider value={value}>{children}</DataCtx.Provider>;
 }
@@ -128,7 +158,7 @@ export const useData = () => useContext(DataCtx);
 export function useScores(roundIds) {
   const ids = (Array.isArray(roundIds) ? roundIds : [roundIds]).filter(Boolean);
   const idKey = ids.join(',');
-  const [rows, setRows] = useState([]);
+  const [rows, setRows] = useState(() => cacheGet(`scores-${idKey}`) || []);
   const [queue, setQueue] = useState(pendingScores());
 
   const load = useCallback(async () => {
@@ -138,7 +168,13 @@ export function useScores(roundIds) {
     }
     try {
       const { data, error } = await supabase.from('scores').select('*').in('round_id', ids);
-      if (error || !data) return; // no signal: keep what we already have on screen
+      if (error || !data) {
+        // No signal: show the last copy saved for these rounds (plus anything queued on this phone).
+        const c = cacheGet(`scores-${idKey}`);
+        if (c) setRows(c);
+        return;
+      }
+      cacheSet(`scores-${idKey}`, data);
       setRows(data);
     } catch {
       /* keep what we have */

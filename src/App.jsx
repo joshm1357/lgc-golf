@@ -16,6 +16,14 @@ import Trophies from './screens/Trophies.jsx';
 import Tribunal, { TribunalCase } from './screens/Tribunal.jsx';
 import Courses from './screens/Courses.jsx';
 import Planner, { PlanDetail } from './screens/Planner.jsx';
+import Rulebook from './screens/Rulebook.jsx';
+import { useParams } from 'react-router-dom';
+
+// A fresh plan screen per plan, so nothing carries over when a notification jumps to another one.
+function PlanDetailRoute() {
+  const { planId } = useParams();
+  return <PlanDetail key={planId} />;
+}
 import { DrawOverlay } from './components/DrawCeremony.jsx';
 
 function Gate() {
@@ -43,8 +51,10 @@ function Inside() {
   if (!me) return <ProfileSetup />;
   if (me.approved === false && !status.is_admin) return <AwaitingApproval player={me} />;
   const hideTabs = loc.pathname.startsWith('/score/');
+  const offline = data.offline || (typeof navigator !== 'undefined' && navigator.onLine === false);
   return (
     <div className="app">
+      {offline && <div className="sync" role="status">📵 No signal — showing the copy saved on this phone. Scores you enter are kept and sent when signal comes back.</div>}
       <Routes>
         <Route path="/" element={<Leaderboard />} />
         <Route path="/score/:roundId" element={<ScoreEntry />} />
@@ -59,7 +69,8 @@ function Inside() {
         <Route path="/courses" element={<Courses />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/plan" element={<Planner />} />
-        <Route path="/plan/:planId" element={<PlanDetail />} />
+        <Route path="/plan/:planId" element={<PlanDetailRoute />} />
+        <Route path="/rules" element={<Rulebook />} />
         <Route path="*" element={<Leaderboard />} />
       </Routes>
       {!hideTabs && <TabBar />}

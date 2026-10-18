@@ -44,8 +44,8 @@ export async function enablePush() {
   let sub = await reg.pushManager.getSubscription();
   if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(VAPID_PUBLIC) });
   const j = sub.toJSON();
-  await supabase.from('push_subscriptions').delete().eq('endpoint', j.endpoint); // re-save cleanly as me
-  const { error } = await supabase.from('push_subscriptions').insert({ endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, user_agent: navigator.userAgent.slice(0, 200) });
+  // Saves this phone under me — and takes it over if an old sign-in on this phone had it.
+  const { error } = await supabase.rpc('save_push_subscription', { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth, p_ua: navigator.userAgent });
   if (error) throw error;
   await notify('test');
 }
@@ -88,8 +88,17 @@ export async function shareText(text, title = 'L.G.C') {
   }
 }
 
-/** Save a calendar file — opens in the phone's calendar. */
-export function downloadFile(name, text, type = 'text/calendar') {
+/** Save a calendar file — opens in the phone's calendar. iPhone Home Screen apps need the share sheet. */
+export async function downloadFile(name, text, type = 'text/calendar') {
+  try {
+    const file = new File([text], name, { type });
+    if (navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ files: [file], title: name });
+      return;
+    }
+  } catch (e) {
+    if (e?.name === 'AbortError') return;
+  }
   const url = URL.createObjectURL(new Blob([text], { type }));
   const a = document.createElement('a');
   a.href = url;

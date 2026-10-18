@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { tallyPoll, nonVoters, kitty, suggestions, icsFor, fmtRange, countdown, daysUntil, nudgeText } from './plan.js';
+import { tallyPoll, nonVoters, kitty, settleUp, suggestions, icsFor, fmtRange, countdown, daysUntil, nudgeText } from './plan.js';
 import { makeGroupDraw } from './draw.js';
 
 describe('date / location votes', () => {
@@ -38,16 +38,35 @@ describe('kitty', () => {
       [{ player_id: 'mark', paid: 350 }],
       ['josh', 'mark', 'al', 'cam']
     );
-    expect(k.perHead).toBe(350); // 1200/4 + 50
     expect(k.total).toBe(1400);
     const by = Object.fromEntries(k.people.map((p) => [p.player_id, p.balance]));
     expect(by.mark).toBe(0);
     expect(by.al).toBe(350);
     expect(by.josh).toBe(350 - 1200); // owed back 850
-    expect(k.pot).toBe(350 - 200); // paid in minus green fees paid from the kitty
+    expect(k.kitty).toBe(350 - 200); // paid in minus green fees paid from the kitty
+  });
+  it('splits a cost only between the people it was for', () => {
+    const k = kitty([{ amount: 90, per_head: false, paid_by: 'fred', split_between: ['fred', 'paul', 'josh'] }], [], ['fred', 'paul', 'josh', 'mark']);
+    const by = Object.fromEntries(k.people.map((p) => [p.player_id, p.balance]));
+    expect(by.paul).toBe(30);
+    expect(by.mark).toBe(0);
+    expect(by.fred).toBe(-60);
+  });
+  it('counts person-to-person payments and works out who pays who', () => {
+    const k = kitty([{ amount: 400, per_head: false, paid_by: 'josh' }], [], ['josh', 'hamish', 'al', 'cam'], [{ from_id: 'hamish', to_id: 'josh', amount: 100 }]);
+    const by = Object.fromEntries(k.people.map((p) => [p.player_id, p.balance]));
+    expect(by.hamish).toBe(0);
+    expect(by.josh).toBe(-200);
+    expect(k.settle).toEqual(expect.arrayContaining([{ from: 'al', to: 'josh', amount: 100 }, { from: 'cam', to: 'josh', amount: 100 }]));
+    expect(k.settle).toHaveLength(2);
+    expect(k.toCollect).toBe(200);
+  });
+  it('settles with the fewest payments', () => {
+    const t = settleUp([{ id: 'a', balance: 50 }, { id: 'b', balance: 30 }, { id: 'c', balance: -80 }]);
+    expect(t).toEqual([{ from: 'a', to: 'c', amount: 50 }, { from: 'b', to: 'c', amount: 30 }]);
   });
   it('handles nobody being in yet', () => {
-    expect(kitty([{ amount: 100, per_head: false }], [], []).perHead).toBe(0);
+    expect(kitty([{ amount: 100, per_head: false }], [], []).people).toEqual([]);
   });
 });
 

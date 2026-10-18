@@ -69,6 +69,10 @@ async function players() {
   const { data } = await db.from('players').select('id,name,nickname,approved');
   return (data || []).filter((p) => p.approved !== false);
 }
+async function admins() {
+  const { data } = await db.from('members').select('player_id').eq('is_admin', true);
+  return (data || []).map((m) => m.player_id).filter(Boolean);
+}
 async function plan(id: string) {
   const { data } = await db.from('plans').select('*').eq('id', id).single();
   return data;
@@ -87,20 +91,29 @@ async function openPollNonVoters(planId: string, pollId?: string) {
   const need = (opts || []).length;
   return people.filter((p) => (votes || []).filter((v) => v.player_id === p.id).length < need).map((p) => p.id);
 }
+// Same maths as src/lib/plan.js kitty(): balance = share − fronted − paid − sent + received.
 async function kittyOwing(planId: string) {
-  const [{ data: costs }, { data: pays }, { data: rsvps }] = await Promise.all([
+  const [{ data: costs }, { data: pays }, { data: rsvps }, { data: tr }] = await Promise.all([
     db.from('plan_costs').select('*').eq('plan_id', planId),
     db.from('plan_payments').select('*').eq('plan_id', planId),
     db.from('plan_rsvps').select('*').eq('plan_id', planId).eq('status', 'in'),
+    db.from('plan_transfers').select('*').eq('plan_id', planId),
   ]);
   const inIds = (rsvps || []).map((r) => r.player_id);
-  const n = inIds.length || 1;
-  const totalOf = (c: { per_head: boolean; amount: number }) => (c.per_head ? Number(c.amount) * n : Number(c.amount));
-  const share = (costs || []).reduce((s, c) => s + (c.per_head ? Number(c.amount) : Number(c.amount) / n), 0);
-  return inIds.map((pid) => {
-    const fronted = (costs || []).filter((c) => c.paid_by === pid).reduce((s, c) => s + totalOf(c), 0);
-    const paid = (pays || []).filter((p) => p.player_id === pid).reduce((s, p) => s + Number(p.paid || 0), 0);
-    return { pid, owes: Math.round((share - fronted - paid) * 100) / 100 };
+  const transfers = tr || [];
+  type Cost = { per_head: boolean; amount: number; paid_by: string | null; split_between: string[] | null };
+  const group = (c: Cost) => (c.split_between && c.split_between.length ? c.split_between : inIds);
+  const totalOf = (c: Cost) => (c.per_head ? Number(c.amount) * group(c).length : Number(c.amount));
+  const shareOf = (c: Cost, pid: string) => (!group(c).includes(pid) ? 0 : c.per_head ? Number(c.amount) : Number(c.amount) / group(c).length);
+  const ids = [...new Set([...inIds, ...(costs || []).flatMap((c: Cost) => c.split_between || [])])];
+  return ids.map((pid) => {
+    const share = (costs || []).reduce((s: number, c: Cost) => s + shareOf(c, pid), 0);
+    const fronted = (costs || []).filter((c: Cost) => c.paid_by === pid).reduce((s: number, c: Cost) => s + totalOf(c), 0);
+    const paid = (pays || []).filter((p) => p.player_id === pid).reduce((s, p) => s + Number(p.paid || 0), 0)
+      + transfers.filter((t) => t.from_id === pid && !t.to_id).reduce((s, t) => s + Number(t.amount), 0);
+    const sent = transfers.filter((t) => t.from_id === pid && t.to_id).reduce((s, t) => s + Number(t.amount), 0);
+    const received = transfers.filter((t) => t.to_id === pid).reduce((s, t) => s + Number(t.amount), 0);
+    return { pid, owes: Math.round((share - fronted - paid - sent + received) * 100) / 100 };
   }).filter((x) => x.owes > 0.5);
 }
 
@@ -229,9 +242,47 @@ Deno.serve(async (req) => {
       case 'job_assigned': {
         const { data: j } = await db.from('plan_items').select('*').eq('id', body.item_id).single();
         if (!j?.owner_id) break;
+        // Only whoever made the job (or the admin) can send this, and only once per job and owner.
+        if (j.created_by !== from && !me.is_admin) return json({ error: 'Not your job' }, 403);
+        if (!(await once(`job-assigned:${j.id}:${j.owner_id}`))) break;
         const pl = await plan(j.plan_id);
         const ppl = await players();
         sent = await send([j.owner_id], { title: `📋 New job: ${j.title}`, body: `${pl.name} — from ${name(ppl.find((p) => p.id === from))}`, url: planUrl(pl.id, 'jobs') }, from);
+        break;
+      }
+      case 'plan_proposed': {
+        const pl = await plan(body.plan_id);
+        if (!pl?.proposed || (pl.created_by !== from && !me.is_admin)) return json({ error: 'Not your proposal' }, 403);
+        if (!(await once(`plan-proposed:${pl.id}`))) break;
+        const ppl = await players();
+        sent = await send(await admins(), { title: `💡 ${name(ppl.find((p) => p.id === from))} proposed: ${pl.name}`, body: 'Approve it to start planning, or decline.', url: planUrl(pl.id) }, from);
+        break;
+      }
+      case 'rule_proposed': {
+        const { data: r } = await db.from('rules').select('*').eq('id', body.rule_id).single();
+        if (!r || r.status !== 'proposed' || (r.proposed_by !== from && !me.is_admin)) return json({ error: 'Not your rule' }, 403);
+        if (!(await once(`rule-proposed:${r.id}`))) break;
+        const ppl = await players();
+        // The admin putting a rule up goes to everyone; a member's proposal goes to the admin first.
+        const msg = { title: `📜 Rule up for a vote: ${r.title}`, body: r.value ? `${r.value} — have your say` : 'Have your say', url: `${APP}#/rules` };
+        sent = me.is_admin ? await send('all', msg, from) : await send(await admins(), { ...msg, title: `📜 ${name(ppl.find((p) => p.id === from))} proposed a rule: ${r.title}` }, from);
+        break;
+      }
+      case 'rule_decided': {
+        if (!me.is_admin) return json({ error: 'Admin only' }, 403);
+        const { data: r } = await db.from('rules').select('*').eq('id', body.rule_id).single();
+        if (!r || !['active', 'rejected', 'retired'].includes(r.status)) break;
+        const verb = { active: '✅ New rule', rejected: '❌ Rule rejected', retired: '🗄️ Rule retired' }[r.status as 'active'];
+        sent = await send('all', { title: `${verb}: ${r.title}`, body: r.decision_note || r.value || '', url: `${APP}#/rules` }, from);
+        break;
+      }
+      case 'payment_recorded': {
+        const { data: t } = await db.from('plan_transfers').select('*').eq('id', body.transfer_id).single();
+        if (!t || t.created_by !== from || !t.to_id || t.to_id === from) break;
+        if (!(await once(`payment:${t.id}`))) break;
+        const pl = await plan(t.plan_id);
+        const ppl = await players();
+        sent = await send([t.to_id], { title: `💸 ${name(ppl.find((p) => p.id === t.from_id))} says they paid you $${Number(t.amount).toFixed(2).replace(/\.00$/, '')}`, body: `${pl.name} — tap to confirm you got it.`, url: planUrl(pl.id, 'kitty') }, from);
         break;
       }
       case 'draw_open':

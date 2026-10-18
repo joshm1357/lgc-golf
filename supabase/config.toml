@@ -1,0 +1,5 @@
+# Edge Function settings. 'notify' checks the caller itself (member token, or the
+# daily scheduler's secret header), so the gateway's token check must stay off —
+# otherwise the daily reminders get refused.
+[functions.notify]
+verify_jwt = false

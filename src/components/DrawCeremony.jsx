@@ -24,8 +24,9 @@ export function DrawOverlay() {
   });
   const load = useCallback(async () => {
     const since = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
-    const { data } = await supabase.from('draws').select('*').gte('created_at', since).neq('status', 'cancelled').order('created_at', { ascending: false }).limit(1);
-    const d = data?.[0] || null;
+    const { data } = await supabase.from('draws').select('*').gte('created_at', since).neq('status', 'cancelled').order('created_at', { ascending: false }).limit(10);
+    // A draw that's open or running always wins over one that's finished (e.g. cars drawn after the teams room opened).
+    const d = (data || []).find((x) => x.status === 'lobby' || x.status === 'running' || x.status === 'done') || data?.[0] || null;
     // A locked draw only reappears for 30 minutes.
     if (d && d.status === 'locked' && Date.now() - new Date(d.started_at).getTime() > 30 * 60 * 1000) setDraw(null);
     else setDraw(d);
@@ -96,10 +97,14 @@ const liveActions = {
 /** Rooms/cars draw: write who's in each room or car to the plan. */
 async function lockGroups(draw, data, me) {
   const { teams, groups, keep, kind, title } = draw.payload;
-  if (!keep) {
-    const { error } = await supabase.from('plan_group_members').delete().in('group_id', groups.map((g) => g.id));
-    if (error) throw error;
-  }
+  // Redraw everyone: clear all the rooms/cars first. Keep mode: just make sure nobody drawn is also somewhere else.
+  const drawn = teams.flatMap((tm) => tm.players);
+  const { data: all } = await supabase.from('plan_groups').select('id').eq('plan_id', draw.plan_id).eq('kind', kind);
+  const allIds = (all || []).map((g) => g.id);
+  let q = supabase.from('plan_group_members').delete().in('group_id', allIds.length ? allIds : groups.map((g) => g.id));
+  if (keep) q = q.in('player_id', drawn.length ? drawn : ['00000000-0000-0000-0000-000000000000']);
+  const { error: e0 } = await q;
+  if (e0) throw e0;
   const rows = teams.flatMap((tm) => tm.players.map((pid) => ({ group_id: tm.group_id, player_id: pid })));
   if (rows.length) {
     const { error } = await supabase.from('plan_group_members').insert(rows);
@@ -333,7 +338,7 @@ function Ceremony({ draw, onClose, actions, header, busy, run, isAdmin, me, grou
             <div key={tm.name} style={{ border: `2px solid ${tm.colour}`, borderRadius: 14, padding: 10, background: tm.drawing ? 'rgba(255,255,255,.09)' : 'rgba(255,255,255,.03)', boxShadow: tm.drawing ? `0 0 18px ${tm.colour}55` : 'none' }}>
               <div style={{ fontFamily: 'var(--display)', fontSize: 20, fontWeight: 700, color: tm.colour }}>{tm.name}</div>
               <div style={{ fontSize: 13, color: '#AFC0D4', marginBottom: 6 }}>
-                {groupsMode ? `${tm.got.length} drawn · ${tm.capacity || tm.players.length} ${draw.payload.kind === 'car' ? 'seats' : 'beds'} free` : finished ? <>Team handicap <strong style={{ color: '#F4EFE3', fontSize: 16 }}>{tm.handicap}</strong></> : tm.hcpSoFar != null ? `Team handicap so far ${tm.hcpSoFar}` : 'Waiting…'}
+                {groupsMode ? `${tm.got.length} of ${tm.players.length} drawn` : finished ? <>Team handicap <strong style={{ color: '#F4EFE3', fontSize: 16 }}>{tm.handicap}</strong></> : tm.hcpSoFar != null ? `Team handicap so far ${tm.hcpSoFar}` : 'Waiting…'}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {tm.players.map((pid, i) => {

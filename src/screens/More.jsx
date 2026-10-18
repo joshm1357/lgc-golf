@@ -10,7 +10,8 @@ export default function More() {
   const me = data.playersById[status.player_id];
   const pending = status.is_admin ? data.players.filter((p) => p.approved === false).length : 0;
   const items = [
-    { to: '/plan', icon: Icon.flag, label: 'Coming up', sub: 'Plan trips & rounds — votes, who’s in, jobs, kitty, rooms' },
+    { to: '/map', icon: Icon.pin, label: 'Where’s everyone', sub: 'Course map with each group’s location' },
+    { to: '/rules', icon: Icon.book, label: 'The Rulebook', sub: 'Our rules and bonuses — propose and vote on changes' },
     { to: '/trophies', icon: Icon.trophy, label: 'The Trophy Room', sub: 'BD, Putt Buddies, Noodle Cup and the honour boards' },
     { to: '/tribunal', icon: Icon.gavel, label: 'Handicap Tribunal', sub: 'Lodge a case, vote, see verdicts' },
     { to: '/courses', icon: Icon.map, label: 'Courses', sub: 'Every course and its history' },

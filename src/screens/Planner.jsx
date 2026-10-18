@@ -5,7 +5,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { supabase, friendlyError } from '../lib/supabase.js';
-import { useData, useRealtime, useSession, playerName } from '../lib/store.jsx';
+import { useData, useRealtime, useSession, playerName, cacheGet, cacheSet } from '../lib/store.jsx';
 import { Header, Avatar, AvatarStack, Sheet, Loading, Icon, toast } from '../components/ui.jsx';
 import {
   tallyPoll, nonVoters, suggestions, fmtRange, countdown, nudgeText, RSVP_LABEL, DEFAULT_BRING, todayISO,
@@ -13,7 +13,7 @@ import {
 import { notify, shareText, appLink, pushState, enablePush, disablePush, isIOS } from '../lib/push.js';
 import { DetailsTab, JobsTab, KittyTab, GroupsTab } from './PlanTabs.jsx';
 
-const PLAN_TABLES = ['plans', 'plan_polls', 'plan_options', 'plan_votes', 'plan_rsvps', 'plan_items', 'plan_costs', 'plan_payments', 'plan_groups', 'plan_group_members'];
+const PLAN_TABLES = ['plans', 'plan_polls', 'plan_options', 'plan_votes', 'plan_rsvps', 'plan_items', 'plan_costs', 'plan_payments', 'plan_groups', 'plan_group_members', 'plan_transfers'];
 const STATUS_LABEL = { planning: 'Planning', confirmed: 'Locked in', done: 'Done', cancelled: 'Called off' };
 
 export function useRun() {
@@ -85,11 +85,12 @@ export default function Planner() {
       <Header logo title="Coming up" sub="Trips and rounds being organised" />
       <div className="section stack">
         <NotifyCard compact />
-        {upcoming.length === 0 && <div className="empty">Nothing being organised yet.{status.is_admin ? ' Start one below.' : ' The admin can start one.'}</div>}
+        {upcoming.length === 0 && <div className="empty">Nothing being organised yet. Start one below.</div>}
         {upcoming.map((p) => <PlanCard key={p.id} plan={p} rsvps={rows.rsvps.filter((r) => r.plan_id === p.id)} me={status.player_id} />)}
-        {status.is_admin && (
-          <button type="button" className="btn gold block" style={{ minHeight: 56 }} onClick={() => setCreating(true)}>+ Plan a trip or round</button>
-        )}
+        <button type="button" className="btn gold block" style={{ minHeight: 56 }} onClick={() => setCreating(true)}>
+          {status.is_admin ? '+ Plan a trip or round' : '💡 Suggest a trip or round'}
+        </button>
+        {!status.is_admin && <span className="small muted" style={{ textAlign: 'center' }}>The lads can say if they’d be in; the admin approves it.</span>}
         {past.length > 0 && (
           <details>
             <summary className="label" style={{ padding: '10px 0', cursor: 'pointer' }}>Past & called off ({past.length})</summary>
@@ -110,7 +111,7 @@ function PlanCard({ plan, rsvps, me }) {
     <Link to={`/plan/${plan.id}`} className="card pad stack" style={{ gap: 6, textDecoration: 'none', color: 'inherit' }}>
       <div className="row between" style={{ alignItems: 'flex-start' }}>
         <div>
-          <div className="small muted" style={{ fontWeight: 700 }}>{plan.kind === 'round' ? '⛳ ONE-DAY ROUND' : '🧳 TRIP'} · {STATUS_LABEL[plan.status]}</div>
+          <div className="small muted" style={{ fontWeight: 700 }}>{plan.kind === 'round' ? '⛳ ONE-DAY ROUND' : '🧳 TRIP'} · {plan.proposed ? (plan.status === 'cancelled' ? 'Declined' : '💡 Proposed') : STATUS_LABEL[plan.status]}</div>
           <div style={{ fontSize: 19, fontWeight: 800 }}>{plan.name}</div>
         </div>
         {plan.start_date && <span className="small" style={{ flex: 'none', padding: '4px 10px', borderRadius: 999, background: 'var(--gold-soft)', border: '1px solid var(--gold)', fontWeight: 700, whiteSpace: 'nowrap' }}>{countdown(plan.start_date)}</span>}
@@ -130,12 +131,24 @@ export function usePlanData(planId) {
   const [d, setD] = useState(null);
   const load = useCallback(async () => {
     const by = (t) => supabase.from(t).select('*').eq('plan_id', planId);
-    const [plan, polls, rsvps, items, costs, payments, groups] = await Promise.all([
-      supabase.from('plans').select('*').eq('id', planId).maybeSingle(),
-      by('plan_polls').order('created_at'), by('plan_rsvps'), by('plan_items').order('sort').order('created_at'),
-      by('plan_costs').order('created_at'), by('plan_payments'), by('plan_groups').order('sort').order('created_at'),
-    ]);
-    if (plan.error) return; // no signal: keep what's on screen
+    let res;
+    try {
+      res = await Promise.all([
+        supabase.from('plans').select('*').eq('id', planId).maybeSingle(),
+        by('plan_polls').order('created_at'), by('plan_rsvps'), by('plan_items').order('sort').order('created_at'),
+        by('plan_costs').order('created_at'), by('plan_payments'), by('plan_groups').order('sort').order('created_at'),
+        by('plan_transfers').order('created_at'),
+      ]);
+    } catch {
+      res = [{ error: true }];
+    }
+    const [plan, polls, rsvps, items, costs, payments, groups, transfers] = res;
+    if (plan.error) {
+      // No signal: show the copy saved on this phone last time.
+      const c = cacheGet(`plan-${planId}`);
+      if (c) setD((cur) => cur || { ...c, reload: load, offline: true });
+      return;
+    }
     const pollIds = (polls.data || []).map((p) => p.id);
     const groupIds = (groups.data || []).map((g) => g.id);
     const [options, votes, members] = await Promise.all([
@@ -143,11 +156,13 @@ export function usePlanData(planId) {
       pollIds.length ? supabase.from('plan_votes').select('*').in('poll_id', pollIds) : { data: [] },
       groupIds.length ? supabase.from('plan_group_members').select('*').in('group_id', groupIds) : { data: [] },
     ]);
-    setD({
+    const next = {
       plan: plan.data, polls: polls.data || [], rsvps: rsvps.data || [], items: items.data || [], costs: costs.data || [],
       payments: payments.data || [], groups: groups.data || [], options: options.data || [], votes: votes.data || [], members: members.data || [],
-      reload: load,
-    });
+      transfers: transfers.data || [],
+    };
+    cacheSet(`plan-${planId}`, next);
+    setD({ ...next, reload: load });
   }, [planId]);
   useEffect(() => { load(); }, [load]);
   useRealtime(PLAN_TABLES, load);
@@ -182,7 +197,7 @@ export function PlanDetail() {
   return (
     <div className="page">
       <Header back="Coming up" title={plan.name} sub={sub}
-        right={status.is_admin && <button type="button" className="btn ghost sm" style={{ color: '#fff', background: 'transparent', borderColor: 'rgba(255,255,255,.45)' }} onClick={() => setEditing(true)}>Edit</button>}>
+        right={(status.is_admin || (plan.proposed && plan.created_by === status.player_id)) && <button type="button" className="btn ghost sm" style={{ color: '#fff', background: 'transparent', borderColor: 'rgba(255,255,255,.45)' }} onClick={() => setEditing(true)}>Edit</button>}>
         <div className="chips" role="tablist" aria-label="Sections" style={{ margin: '4px -16px 0', padding: '0 16px' }}>
           {TABS.map((t) => (
             <button key={t.value} type="button" role="tab" className="chip" aria-selected={t.value === current} onClick={() => setTab(t.value)}
@@ -191,7 +206,8 @@ export function PlanDetail() {
         </div>
       </Header>
       <div className="section stack">
-        {plan.status === 'cancelled' && <div className="err">This one’s been called off.</div>}
+        {plan.status === 'cancelled' && <div className="err">{plan.proposed ? 'The admin passed on this one.' : 'This one’s been called off.'}</div>}
+        {plan.proposed && plan.status !== 'cancelled' && <ProposalBanner plan={plan} reload={pd.reload} />}
         <Checklist pd={pd} onGo={setTab} />
         {current === 'vote' && <VoteTab pd={pd} />}
         {current === 'people' && <PeopleTab pd={pd} />}
@@ -214,7 +230,7 @@ function Checklist({ pd, onGo }) {
   const [hidden, setHidden] = useState(() => { try { return JSON.parse(localStorage.getItem(`lgc-hide-${pd.plan.id}`) || '[]'); } catch { return []; } });
   const [busy, run] = useRun();
   const list = useMemo(() => suggestions(pd.plan, { ...pd, playerIds: everyone(data).map((p) => p.id) }), [pd, data]);
-  if (!status.is_admin || pd.plan.status === 'done' || pd.plan.status === 'cancelled') return null;
+  if (!status.is_admin || pd.plan.proposed || pd.plan.status === 'done' || pd.plan.status === 'cancelled') return null;
   const shown = list.filter((s) => !hidden.includes(s.key));
   if (!shown.length) return null;
   const hide = (k) => {
@@ -613,7 +629,30 @@ function PeopleTab({ pd }) {
   );
 }
 
-// ---------------------------------------------------------------- Create / edit a plan (admin)
+function ProposalBanner({ plan, reload }) {
+  const data = useData();
+  const { status } = useSession();
+  const [busy, run] = useRun();
+  const by = data.playersById[plan.created_by];
+  return (
+    <div className="card pad stack" style={{ gap: 8, background: 'var(--gold-soft)', borderColor: 'var(--gold)' }}>
+      <div><strong>💡 Suggested by {by ? playerName(by) : 'one of the lads'}.</strong> <span className="small">Say if you’d be in on the Who’s in tab — the admin decides whether it goes ahead.</span></div>
+      {status.is_admin && (
+        <div className="row" style={{ gap: 8 }}>
+          <button type="button" className="btn gold sm" disabled={busy} onClick={() => run(async () => {
+            await must(supabase.from('plans').update({ proposed: false }).eq('id', plan.id));
+            await feedPost(status.player_id, plan, `🗓️ It’s on: ${plan.name} is being planned (thanks ${by ? playerName(by) : 'mate'}). Say if you’re in.`);
+            await notify('plan_new', { plan_id: plan.id });
+            reload();
+          }, 'Approved — planning’s open')}>✅ Approve — start planning</button>
+          <button type="button" className="btn ghost sm" disabled={busy} onClick={() => { if (window.confirm('Pass on this suggestion?')) run(async () => { await must(supabase.from('plans').update({ status: 'cancelled' }).eq('id', plan.id)); reload(); }, 'Passed'); }}>Pass</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- Create / edit a plan (admin, or a suggestion from anyone)
 
 function PlanSheet({ plan, onClose, onSaved }) {
   const { status } = useSession();
@@ -623,7 +662,7 @@ function PlanSheet({ plan, onClose, onSaved }) {
   const f = (k) => ({ value: v[k] ?? '', onChange: (e) => set({ ...v, [k]: e.target.value }) });
   const save = () => run(async () => {
     const row = {
-      kind: v.kind, name: v.name.trim(), status: v.status || 'planning',
+      kind: v.kind, name: v.name.trim(), status: status.is_admin ? v.status || 'planning' : 'planning',
       start_date: v.start_date || null, end_date: v.kind === 'round' ? v.start_date || null : v.end_date || v.start_date || null,
       location_name: v.location_name?.trim() || null, address: v.address?.trim() || null, link: v.link?.trim() || null,
       brief: v.brief?.trim() || null, rsvp_deadline: v.rsvp_deadline || null, kitty_note: v.kitty_note?.trim() || null,
@@ -633,6 +672,16 @@ function PlanSheet({ plan, onClose, onSaved }) {
       onSaved?.(plan); onClose();
       return;
     }
+    if (!status.is_admin) {
+      // A suggestion: the lads can say if they'd be in; the admin approves or passes.
+      const created = await must(supabase.from('plans').insert({ ...row, status: 'planning', proposed: true }).select().single());
+      await must(supabase.from('plan_rsvps').upsert({ plan_id: created.id, player_id: status.player_id, status: 'in' }));
+      await feedPost(status.player_id, created, `💡 New idea: ${created.name}${created.start_date ? ` (${fmtRange(created.start_date, created.end_date)})` : ''}${created.location_name ? ` at ${created.location_name}` : ''}. Open it and say if you’d be in.`);
+      await notify('plan_proposed', { plan_id: created.id });
+      onClose(); onSaved?.(created);
+      toast('Suggested — the admin has been told');
+      return;
+    }
     const created = await must(supabase.from('plans').insert(row).select().single());
     await feedPost(status.player_id, created, `🗓️ ${created.name} is being planned — open it to say if you’re in.`);
     const r = await notify('plan_new', { plan_id: created.id });
@@ -640,7 +689,7 @@ function PlanSheet({ plan, onClose, onSaved }) {
     toast(`Started${r.sent ? ` — ${r.sent} phone${r.sent === 1 ? '' : 's'} notified` : ''}`);
   });
   return (
-    <Sheet title={plan ? 'Edit' : 'Plan something'} onClose={onClose}>
+    <Sheet title={plan ? 'Edit' : status.is_admin ? 'Plan something' : 'Suggest something'} onClose={onClose}>
       <div className="stack">
         <div className="seg light" role="group">
           <button type="button" aria-pressed={v.kind === 'trip'} onClick={() => set({ ...v, kind: 'trip' })}>🧳 Trip (away)</button>
@@ -659,17 +708,20 @@ function PlanSheet({ plan, onClose, onSaved }) {
             <label className="field"><span>The details — accommodation, check-in, meeting point, anything</span><textarea className="textarea" rows={5} style={{ padding: 12 }} {...f('brief')} /></label>
             <label className="field"><span>Reply by (reminder goes out the day before)</span><input className="input" type="date" {...f('rsvp_deadline')} /></label>
             <label className="field"><span>How to pay the kitty (shown on the Kitty tab)</span><input className="input" {...f('kitty_note')} placeholder="e.g. PayID 04xx xxx xxx — Josh" /></label>
-            <label className="field"><span>Status</span>
-              <select className="select" {...f('status')}>{Object.entries(STATUS_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
-            </label>
+            {status.is_admin && (
+              <label className="field"><span>Status</span>
+                <select className="select" {...f('status')}>{Object.entries(STATUS_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+              </label>
+            )}
           </>
         )}
-        <button type="button" className="btn gold block" disabled={busy || !v.name?.trim()} onClick={save}>{plan ? 'Save' : 'Start planning'}</button>
+        {!plan && !status.is_admin && <label className="field"><span>Pitch it to the lads (optional)</span><textarea className="textarea" rows={3} style={{ padding: 12 }} {...f('brief')} placeholder="Why it’d be great, rough cost, who’s keen…" /></label>}
+        <button type="button" className="btn gold block" disabled={busy || !v.name?.trim()} onClick={save}>{plan ? 'Save' : status.is_admin ? 'Start planning' : 'Suggest it'}</button>
         {plan && (
           <button type="button" className="btn ghost block" onClick={() => {
-            if (!window.confirm(`Delete "${plan.name}" and all its votes, jobs and kitty? This can’t be undone. (To keep it but call it off, set Status to Called off.)`)) return;
+            if (!window.confirm(status.is_admin ? `Delete "${plan.name}" and all its votes, jobs and kitty? This can’t be undone. (To keep it but call it off, set Status to Called off.)` : `Withdraw your suggestion "${plan.name}"?`)) return;
             run(async () => { await must(supabase.from('plans').delete().eq('id', plan.id)); onClose(); nav('/plan'); }, 'Deleted');
-          }}>Delete this plan</button>
+          }}>{status.is_admin ? 'Delete this plan' : 'Withdraw my suggestion'}</button>
         )}
       </div>
     </Sheet>

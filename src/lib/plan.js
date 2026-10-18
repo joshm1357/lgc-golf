@@ -92,30 +92,65 @@ export function nonVoters(options, votes, playerIds) {
 const cents = (x) => Math.round(x * 100) / 100;
 
 /**
- * The kitty.
- * costs: [{ amount, per_head, paid_by }]; payments: [{ player_id, paid }]; inIds: players who are in.
- * Returns { total, perHead, pot, people: [{ player_id, share, fronted, paid, balance }] }
- *   share   = what this person's part of the trip costs
- *   fronted = money they paid on the group's behalf (e.g. put the house on their card)
- *   paid    = money they've put into the kitty
- *   balance = share − fronted − paid (positive = still owes, negative = is owed)
- *   pot     = money in the kitty that hasn't been spent on a cost paid from the kitty
+ * Shared costs ("the kitty").
+ * costs:     [{ amount, per_head, paid_by, split_between }]  split_between null/empty = everyone who's in
+ * payments:  [{ player_id, paid }]            money put into the kitty (recorded by the admin)
+ * inIds:     players who are in
+ * transfers: [{ from_id, to_id, amount }]     person-to-person payments (to_id null = into the kitty)
+ * Returns { total, people, kitty, settle }
+ *   share    = this person's part of the costs they're in on
+ *   fronted  = what they paid on the group's behalf
+ *   paid     = what they've put into the kitty
+ *   sent / received = person-to-person payments
+ *   balance  = share − fronted − paid − sent + received   (positive = still owes, negative = is owed)
+ *   kitty    = money held in the kitty that isn't spent (negative = the kitty is short)
+ *   settle   = the fewest payments that square everyone up: [{ from, to, amount }] ('kitty' = the kitty)
  */
-export function kitty(costs, payments, inIds) {
-  const n = inIds.length;
-  const totalOf = (c) => (c.per_head ? Number(c.amount) * n : Number(c.amount));
+export function kitty(costs, payments, inIds, transfers = []) {
+  const groupOf = (c) => (c.split_between && c.split_between.length ? c.split_between : inIds);
+  const totalOf = (c) => (c.per_head ? Number(c.amount) * groupOf(c).length : Number(c.amount));
+  const shareOf = (c, pid) => {
+    const g = groupOf(c);
+    if (!g.includes(pid) || !g.length) return 0;
+    return c.per_head ? Number(c.amount) : Number(c.amount) / g.length;
+  };
   const total = cents(costs.reduce((s, c) => s + totalOf(c), 0));
-  const perHead = n ? cents(costs.reduce((s, c) => s + (c.per_head ? Number(c.amount) : Number(c.amount) / n), 0)) : 0;
-  const everyone = [...new Set([...inIds, ...payments.map((p) => p.player_id), ...costs.map((c) => c.paid_by).filter(Boolean)])];
+  const everyone = [...new Set([
+    ...inIds, ...payments.map((p) => p.player_id), ...costs.map((c) => c.paid_by).filter(Boolean),
+    ...costs.flatMap((c) => c.split_between || []), ...transfers.flatMap((t) => [t.from_id, t.to_id]).filter(Boolean),
+  ])];
   const people = everyone.map((pid) => {
-    const share = inIds.includes(pid) ? perHead : 0;
+    const share = cents(costs.reduce((s, c) => s + shareOf(c, pid), 0));
     const fronted = cents(costs.filter((c) => c.paid_by === pid).reduce((s, c) => s + totalOf(c), 0));
-    const paid = cents(payments.filter((p) => p.player_id === pid).reduce((s, p) => s + Number(p.paid || 0), 0));
-    return { player_id: pid, share, fronted, paid, balance: cents(share - fronted - paid) };
+    const paid = cents(payments.filter((p) => p.player_id === pid).reduce((s, p) => s + Number(p.paid || 0), 0)
+      + transfers.filter((t) => t.from_id === pid && !t.to_id).reduce((s, t) => s + Number(t.amount), 0));
+    const sent = cents(transfers.filter((t) => t.from_id === pid && t.to_id).reduce((s, t) => s + Number(t.amount), 0));
+    const received = cents(transfers.filter((t) => t.to_id === pid).reduce((s, t) => s + Number(t.amount), 0));
+    return { player_id: pid, share, fronted, paid, sent, received, balance: cents(share - fronted - paid - sent + received) };
   });
-  const paidIn = payments.reduce((s, p) => s + Number(p.paid || 0), 0);
+  const paidIn = payments.reduce((s, p) => s + Number(p.paid || 0), 0) + transfers.filter((t) => !t.to_id).reduce((s, t) => s + Number(t.amount), 0);
   const spentFromKitty = costs.filter((c) => !c.paid_by).reduce((s, c) => s + totalOf(c), 0);
-  return { total, perHead, pot: cents(paidIn - spentFromKitty), people };
+  const pot = cents(paidIn - spentFromKitty);
+  const settle = settleUp([...people.map((p) => ({ id: p.player_id, balance: p.balance })), { id: 'kitty', balance: pot }]);
+  return { total, people, kitty: pot, settle, toCollect: cents(people.reduce((s, p) => s + Math.max(0, p.balance), 0)) };
+}
+
+/** Fewest payments to square up: biggest debtor pays biggest creditor, repeat. Ignores amounts under 50c. */
+export function settleUp(entries) {
+  const debt = entries.filter((e) => e.balance > 0.5).map((e) => ({ ...e })).sort((a, b) => b.balance - a.balance);
+  const cred = entries.filter((e) => e.balance < -0.5).map((e) => ({ ...e, balance: -e.balance })).sort((a, b) => b.balance - a.balance);
+  const out = [];
+  let i = 0;
+  let j = 0;
+  while (i < debt.length && j < cred.length) {
+    const amt = cents(Math.min(debt[i].balance, cred[j].balance));
+    if (amt >= 0.5) out.push({ from: debt[i].id, to: cred[j].id, amount: amt });
+    debt[i].balance = cents(debt[i].balance - amt);
+    cred[j].balance = cents(cred[j].balance - amt);
+    if (debt[i].balance < 0.5) i++;
+    if (cred[j].balance < 0.5) j++;
+  }
+  return out;
 }
 
 /** Organising checklist. Each: { title, weeksOut, match, kinds, why } — `match` spots it already on the jobs list. */

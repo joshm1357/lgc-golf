@@ -45,10 +45,12 @@ export default function Club() {
   }, []);
   useEffect(() => { load(); }, [load]);
   const claimsPage = typeof window !== 'undefined' && window.location.hash.startsWith('#/club/claims');
+  const kitPage = typeof window !== 'undefined' && window.location.hash.startsWith('#/club/kit');
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg, #F4F5F7)' }}>
       {me === undefined ? <><Top title="Clubs" /><div className="muted" style={{ padding: 16 }}>Loading…</div></>
         : claimsPage && me?.platform_admin ? <Claims />
+        : kitPage && me?.club ? <Kit club={me.club} />
         : me?.club ? <ClubHome club={me.club} reload={load} admin={me.platform_admin} />
         : <ClaimStart me={me} reload={load} />}
       <Toaster />
@@ -68,7 +70,7 @@ function ClaimStart({ me, reload }) {
           <strong>What a club gets</strong>
           <span className="small">• Your course page shows your logo, hole data you’ve checked, a group-booking contact and any offers for visiting groups.</span>
           <span className="small">• Counts of how many groups play your course through the app — never anyone’s names, scores or whereabouts.</span>
-          <span className="small">• Coming next: a QR kit for carts, par 3s and the counter, and a clubhouse TV leaderboard.</span>
+          <span className="small">• A QR kit for carts, par 3s and the counter, and a clubhouse TV leaderboard that shows only groups who say yes.</span>
         </div>
         {me?.platform_admin && <a href="#/club/claims" className="btn ghost block">Josh: claims to approve →</a>}
         {!me?.signed_in ? <SignInFirst /> : (
@@ -203,7 +205,8 @@ function ClubHome({ club, reload, admin }) {
             </div>
           ))}
         </div>
-        <div className="card pad small muted">Coming next: your QR kit (carts, par 3 signs, counter card, clubhouse TV) and counts of groups playing your course. You’ll never see players’ names, scores or whereabouts.</div>
+        <Counts />
+        <a href="#/club/kit" className="btn block">🖨️ Your QR kit (carts, par 3 signs, counter card, TV)</a>
       </div>
       {editing && <HoleData course={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload(); }} />}
     </>
@@ -284,6 +287,109 @@ function Claims() {
               </div>
             )}
           </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------- Counts (never names)
+
+const PLACES = { cart: 'Cart stickers', par3: 'Par 3 signs', counter: 'Counter card', tv: 'Clubhouse TV', stay: 'Stay cards', card: 'Results cards', invite: 'Invites' };
+
+function Counts() {
+  const [days, setDays] = useState(90);
+  const [s, setS] = useState(null);
+  useEffect(() => { supabase.rpc('club_stats', { p_days: days }).then(({ data }) => setS(data || null)); }, [days]);
+  const scans = s?.scans || {};
+  const total = Object.values(scans).reduce((a, n) => a + Number(n), 0);
+  return (
+    <div className="card pad stack" style={{ gap: 8 }}>
+      <div className="row between"><strong>How groups find you</strong>
+        <select className="select" style={{ width: 'auto', minHeight: 36 }} value={days} onChange={(e) => setDays(Number(e.target.value))} aria-label="Period">
+          <option value={30}>30 days</option><option value={90}>90 days</option><option value={365}>A year</option>
+        </select>
+      </div>
+      {!s ? <span className="small muted">Loading…</span> : (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
+            {[['Scans', total], ['Rounds started', s.rounds_started], ['Groups started', s.groups_created], ['Came back', s.groups_came_back], ['Trips planned', s.trips_planned], ['Became a group', s.made_official]].map(([k, v]) => (
+              <div key={k} className="card" style={{ padding: '8px 6px', textAlign: 'center' }}><div className="num" style={{ fontSize: 24 }}>{v ?? 0}</div><div className="small muted">{k}</div></div>
+            ))}
+          </div>
+          {total > 0 && <span className="small muted">Scans by where the code is: {Object.entries(scans).map(([k, n]) => `${PLACES[k] || k} ${n}`).join(' · ')}</span>}
+          <span className="small muted">Counts only — you never see players’ names, scores or whereabouts.</span>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- The QR kit (print, or save as PDF)
+
+function useQr(text) {
+  const [url, setUrl] = useState(null);
+  useEffect(() => {
+    let live = true;
+    import('qrcode').then((QR) => QR.toDataURL(text, { margin: 1, width: 600, errorCorrectionLevel: 'M' })).then((u) => live && setUrl(u)).catch(() => {});
+    return () => { live = false; };
+  }, [text]);
+  return url;
+}
+
+function QrCard({ link, title, line, small }) {
+  const qr = useQr(link);
+  return (
+    <div className="kit-card" style={{ border: '2px solid #1F4B33', borderRadius: 14, padding: 16, textAlign: 'center', background: '#fff', color: '#15202E', breakInside: 'avoid' }}>
+      <div style={{ fontFamily: 'var(--display)', fontSize: small ? 22 : 30, fontWeight: 700, lineHeight: 1.1 }}>{title}</div>
+      {qr && <img src={qr} alt={`QR code: ${title}`} style={{ width: small ? 150 : 200, height: small ? 150 : 200, margin: '10px auto', display: 'block' }} />}
+      <div style={{ fontSize: small ? 14 : 16 }}>{line}</div>
+      <div style={{ fontSize: 11, marginTop: 6, color: '#555' }}>The Golf Trip</div>
+    </div>
+  );
+}
+
+function Kit({ club }) {
+  const [pages, setPages] = useState([]);
+  useEffect(() => {
+    Promise.all(club.courses.map((c) => supabase.rpc('course_page', { p_slug: c.slug }).then(({ data }) => data))).then((r) => setPages(r.filter(Boolean)));
+  }, [club.courses]);
+  const base = `${window.location.origin}${import.meta.env.BASE_URL}`;
+  const link = (slug, p, h) => `${base}#/c/${slug}?ref=${club.ref}&p=${p}${h ? `&h=${h}` : ''}`;
+  return (
+    <>
+      <style>{`@media print { .no-print { display: none !important; } body { background: #fff !important; } .kit-sheet { break-after: page; } }`}</style>
+      <div className="no-print"><Top title="Your QR kit" sub={club.name} /></div>
+      <div className="stack" style={{ maxWidth: 760, margin: '0 auto', padding: 16, gap: 14 }}>
+        <div className="no-print stack" style={{ gap: 8 }}>
+          <a href="#/club" className="small">← Back</a>
+          <div className="card pad small" style={{ borderColor: 'var(--gold)' }}>
+            <strong>Draft — please don’t print yet.</strong> These codes point at the test address. The real kit comes once The Golf Trip moves to its own web address, and Josh sends it to you.
+          </div>
+          <button type="button" className="btn block" onClick={() => window.print()}>🖨️ Print or save as PDF</button>
+        </div>
+        {pages.map((c) => (
+          <React.Fragment key={c.slug}>
+            <div className="kit-sheet stack" style={{ gap: 12 }}>
+              <strong className="no-print">{c.name}: cart sticker and counter card</strong>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
+                <QrCard link={link(c.slug, 'cart')} title="Live scores for your group" line="Scan, 30 seconds, no app store." />
+                <QrCard link={link(c.slug, 'counter')} title="Bringing a group?" line="Live leaderboard, side comps and trophies — free. Scan to start." />
+              </div>
+            </div>
+            <div className="kit-sheet stack" style={{ gap: 12 }}>
+              <strong className="no-print">Par 3 signs</strong>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+                {c.holes.filter((h) => Number(h.par) === 3).map((h) => (
+                  <QrCard key={h.n} small link={link(c.slug, 'par3', h.n)} title={`Hole ${h.n}`} line="Closest to the pin today? Log it here." />
+                ))}
+              </div>
+            </div>
+            <div className="kit-sheet stack" style={{ gap: 12 }}>
+              <strong className="no-print">Clubhouse TV</strong>
+              <QrCard link={`${base}#/tv/${c.slug}?ref=${club.ref}&p=tv`} title="On the clubhouse TV" line={`Open this on the TV’s browser: ${base}#/tv/${c.slug}`} />
+            </div>
+          </React.Fragment>
         ))}
       </div>
     </>

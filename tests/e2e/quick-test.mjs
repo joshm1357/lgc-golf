@@ -179,6 +179,7 @@ await page.getByRole('button', { name: /Send your mates the link/ }).waitFor({ t
 const sq = rpc('start_quick_round')[0]?.body;
 check(!!sq && sq.p_slug === 'bowral-golf-club' && sq.p_my_name === 'Josh' && sq.p_handicap === 18 && sq.p_format === 'stableford'
   && sq.p_ctp.join() === '3,12' && sq.p_ld.join() === '5' && sq.p_source.ref === 'BOWRAL1' && sq.p_source.placement === 'cart', 'starts the round with the club code and placement');
+await page.getByRole('img', { name: /QR code/ }).waitFor({ timeout: 8000 }).catch(() => {});
 check(await page.getByRole('img', { name: /QR code/ }).isVisible(), 'QR code for mates standing nearby');
 await page.screenshot({ path: `${SHOTS}/q3-ready.png`, fullPage: true });
 await page.getByRole('button', { name: 'Start scoring →' }).click();

@@ -95,11 +95,34 @@ function FindACourse() {
 // ---------------------------------------------------------------- The course and "Start a round"
 
 function Course({ slug }) {
+  const loc = useLocation();
+  const { status } = useSession() || {};
   const [course, setCourse] = useState(undefined);
   const [starting, setStarting] = useState(false);
+  const q = new URLSearchParams(loc.search);
+  const par3 = q.get('p') === 'par3' && Number(q.get('h')) > 0 ? Number(q.get('h')) : null;
   useEffect(() => {
     supabase.rpc('course_page', { p_slug: slug }).then(({ data, error }) => setCourse(error ? null : data || null));
   }, [slug]);
+  // A club's code: count the scan once per visit (no person attached — counts only).
+  useEffect(() => {
+    const ref = q.get('ref');
+    const key = `lgc-scan-${ref}-${q.get('p')}-${q.get('h') || ''}`;
+    if (!ref) return;
+    try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, '1'); } catch { /* fine */ }
+    supabase.rpc('log_scan', { p_ref: ref, p_placement: q.get('p') || 'cart', p_course_slug: slug, p_hole: par3 }).then(() => {}, () => {});
+  }, [loc.search, slug]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A par 3 sign: if this phone's group is playing this course right now, go straight to closest to the pin.
+  useEffect(() => {
+    if (!par3 || !course?.id || !status?.is_member) return;
+    (async () => {
+      const { data: mine } = await supabase.from('courses').select('id').eq('library_id', course.id);
+      const ids = (mine || []).map((c) => c.id);
+      if (!ids.length) return;
+      const { data: live } = await supabase.from('rounds').select('id').eq('status', 'live').in('course_id', ids).limit(1);
+      if (live?.[0]) window.location.hash = `#/comps?r=${live[0].id}&kind=ctp&hole=${par3}`;
+    })().catch(() => {});
+  }, [par3, course?.id, status?.is_member]);
   if (course === undefined) return <><Top title="…" /><div className="muted" style={{ padding: 16 }}>Loading the course…</div></>;
   if (!course) {
     return (
@@ -119,6 +142,7 @@ function Course({ slug }) {
       <div className="stack" style={{ maxWidth: 520, margin: '0 auto', padding: 16, gap: 12 }}>
         {!starting ? (
           <>
+            {par3 && <div className="card pad small" style={{ borderColor: 'var(--gold)' }}>🎯 Closest to the pin on hole {par3}? Start your round below (or open the app you’re scoring in) — then scan again to log it.</div>}
             <button type="button" className="btn gold block" style={{ minHeight: 64, fontSize: 20 }} onClick={() => setStarting(true)}>⛳ Start a round with your mates</button>
             <span className="small muted" style={{ textAlign: 'center' }}>Live scores and a leaderboard on everyone’s phone. No app store, no sign-up — your mates just tap a link.</span>
             {greens.length > 0 && (

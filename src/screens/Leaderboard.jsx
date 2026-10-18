@@ -3,7 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useData, useScores, useSession, useSideEntries, useFeature } from '../lib/store.jsx';
 import { roundBoard, headlines, compBonuses } from '../lib/board.js';
 import { formatToPar, strokesReceived, stablefordPoints } from '../lib/scoring.js';
-import { Header, Seg, AvatarStack, Icon, Sheet, Loading } from '../components/ui.jsx';
+import { Header, Seg, AvatarStack, Icon, Sheet, Loading, toast } from '../components/ui.jsx';
+import { supabase, friendlyError } from '../lib/supabase.js';
 import { TrophyArt } from '../components/TrophyArt.jsx';
 import { QuickRoundDone } from './QuickRound.jsx';
 import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
@@ -43,6 +44,7 @@ export default function Leaderboard() {
   const [drawing, setDrawing] = useState(false);
   const drawOn = useFeature('draw');
   const sideCompsOn = useFeature('side_comps');
+  const tvOn = useFeature('clubhouse_tv');
   const scores = useScores(round?.id);
   const sideEntries = useSideEntries(round?.id);
 
@@ -130,6 +132,7 @@ export default function Leaderboard() {
       )}
 
       {status?.quick && <QuickRoundDone round={round} board={board} course={course} />}
+      {tvOn && status?.is_admin && round.status !== 'locked' && <TvToggle round={round} />}
 
       {sideCompsOn && round.status === 'live' && ((round.ctp_holes || []).length > 0 || (round.ld_holes || []).length > 0) && (
         <div className="section">
@@ -287,6 +290,26 @@ export function Scorecard({ row, board }) {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Organiser: show this round on the clubhouse TV (the group's switch must be on too). First names only. */
+function TvToggle({ round }) {
+  const data = useData();
+  const [busy, setBusy] = useState(false);
+  const flip = async (on) => {
+    setBusy(true);
+    const { error } = await supabase.rpc('set_round_tv', { p_round: round.id, p_on: on });
+    if (error) toast(friendlyError(error)); else { toast(on ? 'On the clubhouse TV (first names only)' : 'Off the clubhouse TV'); data.reload(); }
+    setBusy(false);
+  };
+  return (
+    <div className="section">
+      <label className="card pad row between" style={{ gap: 10 }}>
+        <span className="small"><strong>📺 Show on the clubhouse TV</strong><div className="muted">Today only, first names only, no photos.</div></span>
+        <input type="checkbox" checked={!!round.tv} disabled={busy} onChange={(e) => flip(e.target.checked)} style={{ width: 24, height: 24, flex: 'none' }} aria-label="Show on the clubhouse TV" />
+      </label>
     </div>
   );
 }

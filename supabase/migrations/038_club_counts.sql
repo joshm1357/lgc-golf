@@ -5,6 +5,7 @@
 
 create table if not exists private.scan_salt (salt text not null);
 insert into private.scan_salt (salt) select encode(extensions.gen_random_bytes(24), 'hex') where not exists (select 1 from private.scan_salt);
+revoke all on private.scan_salt from public, anon, authenticated;
 
 create table if not exists public.scan_log (
   id bigint generated always as identity primary key,
@@ -16,6 +17,7 @@ create table if not exists public.scan_log (
   created_at timestamptz not null default now()
 );
 create index if not exists scan_log_club_idx on public.scan_log (club_id, created_at);
+create index if not exists scan_log_visitor_idx on public.scan_log (visitor, created_at);
 alter table public.scan_log enable row level security;
 revoke all on public.scan_log from anon, authenticated;
 

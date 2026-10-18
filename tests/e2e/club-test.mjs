@@ -33,7 +33,7 @@ const db = {
   ],
   trips: [{ id: TRIP, name: 'Test Trip', start_date: today, end_date: today, status: 'active', created_at: now }],
   trophies: [], teams: [], team_players: [], quick_results: [], honour_board: [],
-  courses: [{ id: COURSE, name: 'Test Links', holes, created_at: now }],
+  courses: [{ id: COURSE, name: 'Test Links', holes, library_id: 'aaaa0000-0000-4000-8000-0000000000a1', created_at: now }],
   rounds: [{ id: ROUND, trip_id: TRIP, course_id: COURSE, name: 'Saturday', play_date: today, format: 'stableford', status: 'live', ld_holes: [], ctp_holes: [], comp_bonus: 0, created_at: now }],
   round_players: [P1, P2, P3].map((p) => ({ round_id: ROUND, player_id: p, playing_handicap: 14 })),
   scores: [{ round_id: ROUND, subject_id: P1, subject_type: 'player', hole: 1, strokes: 4, picked_up: false, updated_at: now }],
@@ -107,6 +107,8 @@ async function fakeSupabase(route) {
     if (name === 'find_courses') return json(LIB);
     if (name === 'course_page') return json(PAGE.v);
     if (name === 'admin_club_claims') return json(CLAIMS);
+    if (name === 'club_stats') return json(STATS);
+    if (name === 'tv_board') return json(TV.v);
     return json(null); }
   if (url.pathname.startsWith('/rest/v1/')) {
     const table = url.pathname.split('/')[3];
@@ -143,6 +145,8 @@ const CLUB = { v: { signed_in: false, platform_admin: false, club: null, claims:
 const PAGE = { v: null };
 const CLAIMS = [{ id: 'cl000000-0000-4000-8000-000000000001', course: 'Bowral Golf Club', course_slug: 'bowral-golf-club', area: 'Bowral NSW', claimed: false, club_name: 'Bowral Golf Club',
   contact_name: 'Pat', contact_email: 'gm@bowral.example', contact_phone: '02 4800 0000', role_at_club: 'GM', note: null, status: 'pending', created_at: now, signed_in_as: 'gm@bowral.example' }];
+const STATS = { days: 90, scans: { cart: 41, par3: 12, counter: 3 }, rounds_started: 17, groups_created: 9, groups_by_placement: { cart: 7, counter: 2 }, groups_came_back: 2, trips_planned: 1, made_official: 3 };
+const TV = { v: null };
 STATUS.v = { is_member: false, is_admin: false, player_id: null, group_name: null, group_id: null, legacy: null, role: null, signed_in: false, look: null, groups: [] };
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
@@ -234,6 +238,88 @@ PAGE.v = { ...PAGE.v, club: null, verified: false };
 await page.reload();
 await page.getByText('Work at this club? Claim this page').waitFor({ timeout: 15000 });
 check(true, 'an unclaimed course page invites the club to claim it');
+
+
+// 6. The club's counts: numbers only.
+CLUB.v = { ...CLUB.v };
+await page.goto(`${BASE}#/club`);
+await page.reload();
+await page.getByText('How groups find you').waitFor({ timeout: 15000 });
+await page.getByText('Rounds started').waitFor({ timeout: 5000 });
+check(await page.getByText('56', { exact: true }).isVisible() && await page.getByText('17', { exact: true }).isVisible(), 'club sees scans (56) and rounds started (17)');
+check(await page.getByText(/Cart stickers 41 · Par 3 signs 12 · Counter card 3/).isVisible(), 'scans split by where the code is');
+await page.getByLabel('Period').selectOption('30');
+await page.waitForTimeout(500);
+check(rpc('club_stats').some((x) => x.body.p_days === 30), 'club can change the period');
+await page.screenshot({ path: `${SHOTS}/k6-counts.png`, fullPage: true });
+
+// 7. The QR kit: a draft, with cart, counter, par 3 and TV codes.
+await page.getByRole('link', { name: /Your QR kit/ }).click();
+await page.getByText('Draft — please don’t print yet.').waitFor({ timeout: 15000 });
+await page.getByAltText('QR code: Hole 12').waitFor({ timeout: 10000 });
+const alts = await page.locator('img[alt^="QR code"]').evaluateAll((els) => els.map((e) => e.alt));
+check(alts.includes('QR code: Live scores for your group') && alts.includes('QR code: Bringing a group?') && alts.includes('QR code: On the clubhouse TV'), 'kit has cart, counter and TV codes');
+check(alts.filter((a) => /Hole \d+/.test(a)).join(',') === 'QR code: Hole 3,QR code: Hole 12', 'kit has a sign for each par 3 (holes 3 and 12)');
+await page.screenshot({ path: `${SHOTS}/k7-kit.png`, fullPage: true });
+await noScroll('QR kit');
+
+// 8. A cart code is counted once a visit.
+PAGE.v = { id: LIB[0].id, slug: LIB[0].slug, name: LIB[0].name, area: 'Bowral NSW', osm: false, verified: false, club: null, holes: H };
+const before = rpc('log_scan').length;
+await page.goto(`${BASE}#/c/bowral-golf-club?ref=BOWRAL123&p=cart`);
+await page.getByText('Work at this club? Claim this page').waitFor({ timeout: 15000 });
+await page.waitForTimeout(500);
+await page.reload();
+await page.getByText('Work at this club? Claim this page').waitFor({ timeout: 15000 });
+await page.waitForTimeout(500);
+const scans = rpc('log_scan').slice(before);
+check(scans.length === 1 && scans[0].body.p_ref === 'BOWRAL123' && scans[0].body.p_placement === 'cart' && scans[0].body.p_hole === null, `a cart scan is counted once (${scans.length})`);
+
+// 9. A par 3 sign, scanned by a phone whose group is playing here: straight to closest to the pin.
+STATUS.v = NEW;
+await page.evaluate((g) => localStorage.setItem('lgc-group', g), GROUP);
+await page.goto(`${BASE}#/c/bowral-golf-club?ref=BOWRAL123&p=par3&h=3`);
+await page.reload();
+await page.waitForURL(/#\/comps\?r=.*kind=ctp&hole=3/, { timeout: 15000 }).catch(() => {});
+check(/#\/comps\?r=dddddddd-0000-4000-8000-000000000001&kind=ctp&hole=3/.test(page.url()), 'par 3 sign goes straight to closest to the pin for hole 3');
+check(rpc('log_scan').some((x) => x.body.p_placement === 'par3' && x.body.p_hole === 3), 'par 3 scan counted with its hole');
+await page.screenshot({ path: `${SHOTS}/k8-par3.png`, fullPage: true });
+
+// 10. The organiser puts the round on the clubhouse TV (switch on).
+db.group_features.push({ group_id: GROUP, feature_key: 'clubhouse_tv', enabled: true });
+await page.goto(`${BASE}#/leaderboard`);
+await page.reload();
+await page.getByLabel('Show on the clubhouse TV').waitFor({ timeout: 15000 });
+await page.getByLabel('Show on the clubhouse TV').click();
+await page.waitForTimeout(600);
+check(rpc('set_round_tv').some((x) => x.body.p_round === ROUND && x.body.p_on === true), 'organiser ticks “Show on the clubhouse TV”');
+await page.screenshot({ path: `${SHOTS}/k9-tv-toggle.png`, fullPage: true });
+db.group_features.pop();
+await page.reload();
+await page.getByText('Saturday').first().waitFor({ timeout: 15000 });
+await page.waitForTimeout(800);
+check(!(await page.getByLabel('Show on the clubhouse TV').count()), 'no TV tick when the group has the TV switched off');
+
+// 11. The TV itself: first names only, big screen and phone.
+TV.v = { course: 'Bowral Golf Club', rounds: [{ id: ROUND, format: 'stableford', status: 'live', holes: H,
+  round_players: [{ player_id: P1, playing_handicap: 14 }, { player_id: P2, playing_handicap: 18 }],
+  players: [{ id: P1, name: 'Josh' }, { id: P2, name: 'Mike' }], teams: [],
+  scores: [{ subject_id: P1, hole: 1, strokes: 4, picked_up: false }, { subject_id: P2, hole: 1, strokes: 5, picked_up: false }] }] };
+await page.goto(`${BASE}#/tv/bowral-golf-club?ref=BOWRAL123`);
+await page.reload();
+await page.getByText('Bowral Golf Club').first().waitFor({ timeout: 15000 });
+await page.getByRole('cell', { name: 'Josh' }).waitFor({ timeout: 10000 });
+check(await page.getByRole('cell', { name: 'Mike' }).isVisible() && !(await page.getByText('Morris').count()), 'TV shows first names only');
+check(await page.getByText('Group 1 · Stableford').isVisible(), 'TV labels the board “Group 1”, not by name');
+check(rpc('log_scan').some((x) => x.body.p_placement === 'tv'), 'TV page counted as a TV scan');
+await noScroll('TV on a phone');
+await page.setViewportSize({ width: 1280, height: 720 });
+await page.screenshot({ path: `${SHOTS}/k10-tv.png` });
+TV.v = { course: 'Bowral Golf Club', rounds: [] };
+await page.reload();
+await page.getByText('No groups on the TV yet today.').waitFor({ timeout: 15000 });
+check(true, 'TV says so when nobody is on it');
+await page.setViewportSize({ width: 375, height: 812 });
 
 check(errors.length === 0, `no page errors (${errors.join(' | ')})`);
 await browser.close();

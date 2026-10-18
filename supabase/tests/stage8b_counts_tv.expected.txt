@@ -1,0 +1,9 @@
+read the scan log = refused
+TV with the switch off = refused
+TV before opting in = 0
+a guest puts it on TV = refused
+TV shows (first names only) = Josh / scores 1 / round name sent: false / surname anywhere: false
+TV for a course nobody is playing = nothing
+club counts = {"cart": 1, "par3": 1} / rounds 1 / groups 1
+club counts carry no names = false
+someone else asks for club counts = nothing

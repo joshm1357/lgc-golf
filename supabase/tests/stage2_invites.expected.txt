@@ -1,4 +1,4 @@
-Expected (staging, after 027; 'remove a member' becomes '2' once 027b is applied). Guest 'refused' lines only count
+Expected (staging, after 027 + 028; 'remove a member' becomes '2' once 027b is applied). Guest 'refused' lines only count
 the guest rule or the row-level security rule as a refusal — any other error shows as 'other error: …'.
 
 player link is 12 characters = 12
@@ -19,13 +19,20 @@ admin PIN in a new group = refused
 my_status = player / legacy false / signed in false
 player votes on a rule = ok
 guest joined as = guest
+guest picks an existing name = refused
+guest hands themselves a name = refused
+organiser gives the guest a name = true
 guest votes on a rule = refused
 guest proposes a rule = refused
 guest votes in the Tribunal = refused
 guest posts in the feed = ok
 player opens guest link: still = player
 organiser makes guest a player = player
+role change posted to the feed = 1
 last organiser steps down = refused
 release a name = free
 remove a member (members left) = not yet — needs 027b
 E organiser changes an L.G.C role = refused
+L.G.C wrong admin PIN = false
+L.G.C right PIN after switching off = false
+player switches the admin PIN off = refused

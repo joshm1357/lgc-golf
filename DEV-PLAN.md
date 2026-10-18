@@ -52,11 +52,11 @@ Full brief: `the-golf-trip-full-build-prompt.md` (in the Claude project). Every 
 **Phase 2 — Make it theirs (release v2.1 with Phase 3)**
 4. ✅ on staging, reviewed, in `product` — Branding from the database (name, crest, colours, font; trophy names were
 already per group). 5. ✅ on staging, reviewed, in `product` — Rulebook per group with starter rulebooks.
-6. ✅ on staging (review next) — History import: past winners and handicaps, by hand or pasted from a list; honour board
+6. ✅ on staging, reviewed, in `product` — History import: past winners and handicaps, by hand or pasted from a list; honour board
 and Trophy Room mix history and app-made winners by year; past trips show their winners.
 
 **Phase 3 — Open the doors**
-7. Start-a-group wizard (under 10 minutes). 8. Shared course library (OpenStreetMap credit). 9. Launch basics:
+7. ✅ on staging (review next) — Start-a-group wizard (under 10 minutes). 8. Shared course library (OpenStreetMap credit). 9. Launch basics:
 move to Vercel with `<slug>.thegolftrip.club` (STOP — Josh buys the domain), Supabase Pro (STOP — Josh switches it on),
 DRAFT privacy policy and terms, delete-my-data, error alerts (ask first), share cards, basic usage numbers.
 

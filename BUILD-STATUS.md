@@ -445,6 +445,30 @@ handicap unchanged, 4 bad handicap lines refused, another group sees none, Troph
 tests (reading pasted lists, dates, plus handicaps, matching, repeats, the ordering keeps app-made order); phone width
 `tests/e2e/history-test.mjs` 18 checks. All other phone tests still pass.
 
+## v2.1 Stage 7 — Start a new group (branch `stage-7-start`, on staging only)
+
+**Built**
+- **Database (034, applied on staging):** `create_group(name, switches)` — anyone signed in (a phone-only session
+  works until sign-in providers are switched on); makes an empty group (nothing from L.G.C: no players, trips,
+  courses, rules, trophies or history), the plain look, a web-ready address made from the name (unique; names like
+  "lgc", "www", "admin" get "-golf"), its own join code, and the maker as organiser. Limits: 3 new groups a day per
+  person, 30 an hour across everyone. `set_features(switches)` sets all the feature switches at once (organisers).
+- **Public start page** (`#/start`, linked from the join screen and Group & invites): what The Golf Trip is, then
+  **Start your group**.
+- **The wizard** (`#/start/new`, 7 steps, about 9 minutes, progress bar and minutes left): sign in (or carry on while
+  sign-in isn't switched on) → group name + your name and handicap (the group is made here) → crest and colours (the
+  Look card, with its readability check; or skip) → starter Rulebook (or empty) → features preset (**Just scoring**,
+  **Full trip**, **Everything**, or **Custom** switches) → players (paste "Name, handicap" lines, or skip) → invite
+  link and QR → **Open your group**. Leaving half-way and coming back carries on at the same step and never makes a
+  second group.
+
+**Tested:** `supabase/tests/stage7_create_group.sql` 19 checks (made with the right address, role and switches,
+starts empty, plain look, set_features, starter, invite, same name → new address, 4th group in a day refused,
+outsiders can't change it or see it, reserved names, bad names and switches refused, not signed in refused, L.G.C
+untouched); unit tests (presets cover every switch, never a coming-soon one, never a child without its parent;
+players list reading; steps under 10 minutes); phone width `tests/e2e/start-test.mjs` 19 checks (join screen → start
+page → all 7 steps → invite, coming back mid-way, no sideways scroll).
+
 ## Known limits
 - GPS distances are approximate (±5–10 m) and straight-line; closest-to-pin distance is typed in.
 - Location sharing only works while the app is open.

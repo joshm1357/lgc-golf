@@ -217,13 +217,14 @@ STOP → live SQL below → merge `v1.5` into `main` (deploys) → check the liv
   the trip made at lock-in. More → Notifications: **When you hear about things** + iPhone Home Screen steps.
 
 **Tested (staging)**
-- `supabase/tests/stage1b_trips.sql` — 37 checks: a suggestion opens its two votes (once), only the suggester or
+- `supabase/tests/stage1b_trips.sql` — 39 checks: a suggestion opens its two votes (once), only the suggester or
   admin can, anyone adds options; organiser can't be handed over by a player; Chat lands in the right group; settings
   only your own; nobody reads the digest queue; with "admin" the organiser can't pick a winner, with "admin or
   organiser" they can (own trip only, not another player); a retry of the same pick is fine, changing a decided vote
   isn't; another group sees 0 trips/votes/options/chat/settings and can't comment, open votes or change the setting;
-  lock-in makes exactly one trip; dates follow; old-phone lock-in works; first day → current trip, old one closed;
-  a week later → Done.
+  lock-in makes exactly one trip; dates follow; scoring on it works; old-phone lock-in works; an old phone's setup after
+  lock-in leaves one trip; a missed first day is caught up, a round inside a running trip doesn't take over; a week
+  later → Done.
 - Digest end to end on the staging server: a job due tomorrow for a digest person is queued (not sent); at the wrong
   hour nothing goes; at their hour the 3 waiting items go as one; "only important": the job goes straight away, a
   vote closing tomorrow doesn't. (No real phone subscribed on staging, so "sent" is counted as 0 — the queue and the
@@ -231,7 +232,7 @@ STOP → live SQL below → merge `v1.5` into `main` (deploys) → check the liv
 - Phone width (375 px, `tests/e2e/trips-test.mjs`): 18 checks — Trips tab sections, Suggest sheet, idea's stage bar
   and votes, Chat, closing a vote via `decide_poll`, Lock it in, Admin setting, no sideways scroll, no page errors.
   The v1.5 browser checks (`tests/e2e/phone-test.mjs`) all still pass. 75 unit tests.
-- Regression after 024 + 025 (re-run on staging): isolation 47/47, Trips 37/37, L.G.C access checks 30/30.
+- Regression after 024–026 (re-run on staging): isolation 47/47, Trips 39/39, L.G.C access checks 30/30.
 
 **Independent review → fixes (026, 18 Oct)** — nothing leaked between groups; 2 must-fix, 5 should-fix, done:
 - An admin on an old phone who taps "Set it up in the app" after lock-in no longer leaves a stray empty trip (the

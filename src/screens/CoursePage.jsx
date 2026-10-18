@@ -4,8 +4,8 @@ import { supabase, friendlyError } from '../lib/supabase.js';
 import { useSession } from '../lib/store.jsx';
 import { setCurrentGroup } from '../lib/group.js';
 import { useRun, must } from '../lib/run.js';
-import { defaultComps, sourceFrom, rememberSource, rememberedSource, forgetSource } from '../lib/quick.js';
-import { readHandicap } from '../lib/history.js';
+import { defaultComps, sourceFrom, rememberSource, rememberedSource, forgetSource, countScan } from '../lib/quick.js';
+import { readHandicap, localToday } from '../lib/history.js';
 import { parTotal } from '../lib/scoring.js';
 import { paintLook, DEFAULT_LOOK } from '../lib/theme.js';
 import { GolfTripCrest } from '../components/Logo.jsx';
@@ -110,19 +110,21 @@ function Course({ slug }) {
     const key = `lgc-scan-${ref}-${q.get('p')}-${q.get('h') || ''}`;
     if (!ref) return;
     try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, '1'); } catch { /* fine */ }
-    supabase.rpc('log_scan', { p_ref: ref, p_placement: q.get('p') || 'cart', p_course_slug: slug, p_hole: par3 }).then(() => {}, () => {});
+    countScan(supabase, { ref, placement: q.get('p') || 'cart', slug, hole: par3 }).catch(() => {});
   }, [loc.search, slug]); // eslint-disable-line react-hooks/exhaustive-deps
-  // A par 3 sign: if this phone's group is playing this course right now, go straight to closest to the pin.
+  // A par 3 sign: if this phone's group is playing this course today, go straight to closest to the pin.
   useEffect(() => {
-    if (!par3 || !course?.id || !status?.is_member) return;
+    const gid = status?.group_id;
+    if (!par3 || !course?.id || !status?.is_member || !gid) return;
     (async () => {
-      const { data: mine } = await supabase.from('courses').select('id').eq('library_id', course.id);
+      const { data: mine } = await supabase.from('courses').select('id').eq('group_id', gid).eq('library_id', course.id);
       const ids = (mine || []).map((c) => c.id);
       if (!ids.length) return;
-      const { data: live } = await supabase.from('rounds').select('id').eq('status', 'live').in('course_id', ids).limit(1);
+      const { data: live } = await supabase.from('rounds').select('id').eq('group_id', gid).eq('status', 'live')
+        .eq('play_date', localToday()).in('course_id', ids).limit(1);
       if (live?.[0]) window.location.hash = `#/comps?r=${live[0].id}&kind=ctp&hole=${par3}`;
     })().catch(() => {});
-  }, [par3, course?.id, status?.is_member]);
+  }, [par3, course?.id, status?.is_member, status?.group_id]);
   if (course === undefined) return <><Top title="…" /><div className="muted" style={{ padding: 16 }}>Loading the course…</div></>;
   if (!course) {
     return (

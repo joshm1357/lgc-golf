@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase.js';
 import { roundBoard } from '../lib/board.js';
 import { formatToPar } from '../lib/scoring.js';
 import { GolfTripCrest } from '../components/Logo.jsx';
+import { countScan } from '../lib/quick.js';
 
 // Stage 8b: the clubhouse TV (#/tv/<course>). Read-only and big: today's leaderboards for groups that switched the
 // Clubhouse TV on and opted in for that round. First names or nicknames only, no photos. Refreshes every 30 seconds
@@ -28,17 +29,18 @@ export default function TvBoard() {
   const loc = useLocation();
   const [feed, setFeed] = useState(undefined);
   const [i, setI] = useState(0);
+  const key = new URLSearchParams(loc.search).get('k') || '';
   useEffect(() => {
     let live = true;
-    const load = () => supabase.rpc('tv_board', { p_slug: slug }).then(({ data }) => live && setFeed(data || null), () => {});
+    const load = () => supabase.rpc('tv_board', { p_slug: slug, p_key: key }).then(({ data }) => live && setFeed(data || null), () => {});
     load();
     const t = setInterval(load, 30000);
     return () => { live = false; clearInterval(t); };
-  }, [slug]);
+  }, [slug, key]);
   // Count the TV once (a club's code), like any other scan.
   useEffect(() => {
     const q = new URLSearchParams(loc.search);
-    if (q.get('ref')) supabase.rpc('log_scan', { p_ref: q.get('ref'), p_placement: 'tv', p_course_slug: slug, p_hole: null }).then(() => {}, () => {});
+    if (q.get('ref')) countScan(supabase, { ref: q.get('ref'), placement: 'tv', slug }).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const rounds = feed?.rounds || [];
   useEffect(() => {
@@ -61,7 +63,7 @@ export default function TvBoard() {
         {rounds.length > 1 && <div style={{ fontSize: 'clamp(14px, 1.6vw, 22px)', opacity: 0.7 }}>{(i % rounds.length) + 1} of {rounds.length}</div>}
       </div>
       {feed === undefined && <div style={{ marginTop: '10vh', fontSize: 28, opacity: 0.7 }}>Loading…</div>}
-      {feed === null && <div style={{ marginTop: '10vh', fontSize: 28 }}>This course isn’t on The Golf Trip.</div>}
+      {feed === null && <div style={{ marginTop: '10vh', fontSize: 28, lineHeight: 1.3 }}>This TV link isn’t right.<br /><span style={{ opacity: 0.7 }}>Use the TV link from your club’s QR kit (Club screen → Your QR kit).</span></div>}
       {feed && !rounds.length && (
         <div style={{ marginTop: '10vh', fontSize: 'clamp(20px, 3vw, 40px)', lineHeight: 1.3 }}>
           No groups on the TV yet today.<br /><span style={{ opacity: 0.7 }}>Playing here? Scan the code on your cart — and tick “Show on the clubhouse TV”.</span>

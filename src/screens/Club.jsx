@@ -266,6 +266,10 @@ function Claims() {
     if (!window.confirm(approve ? `Approve ${k.club_name} (${k.contact_name}, ${k.contact_email}) for ${k.course}? Only after you've checked with the club.` : `Turn down this claim for ${k.course}?`)) return;
     run(async () => { await must(supabase.rpc('decide_club_claim', { p_claim: k.id, p_approve: approve })); await load(); }, approve ? 'Approved — the club can sign in and edit its page' : 'Turned down');
   };
+  const unclaim = (k) => {
+    if (!window.confirm(`Unclaim ${k.course}? ${k.club_name} keeps its account but loses the course page, and the hole data goes back to unchecked.`)) return;
+    run(async () => { await must(supabase.rpc('admin_unclaim', { p_claim: k.id })); await load(); }, 'Unclaimed');
+  };
   return (
     <>
       <Top title="Club claims" sub="Check each one with the club before approving" />
@@ -280,6 +284,9 @@ function Claims() {
             <span className="small">{k.contact_email}{k.contact_phone ? ` · ${k.contact_phone}` : ''} · signed in as {k.signed_in_as || '?'}</span>
             {k.note && <span className="small muted">“{k.note}”</span>}
             <span className="small muted">{new Date(k.created_at).toLocaleDateString('en-AU')} · {k.status}{k.claimed && k.status === 'pending' ? ' · course already claimed' : ''}</span>
+            {k.status === 'approved' && k.claimed_by_this && (
+              <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} disabled={busy} onClick={() => unclaim(k)}>Unclaim this course</button>
+            )}
             {k.status === 'pending' && (
               <div className="row" style={{ gap: 8 }}>
                 <button type="button" className="btn sm" disabled={busy || k.claimed} onClick={() => decide(k, true)}>Approve</button>
@@ -314,11 +321,11 @@ function Counts() {
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
             {[['Scans', total], ['Rounds started', s.rounds_started], ['Groups started', s.groups_created], ['Came back', s.groups_came_back], ['Trips planned', s.trips_planned], ['Became a group', s.made_official]].map(([k, v]) => (
-              <div key={k} className="card" style={{ padding: '8px 6px', textAlign: 'center' }}><div className="num" style={{ fontSize: 24 }}>{v ?? 0}</div><div className="small muted">{k}</div></div>
+              <div key={k} className="card" style={{ padding: '8px 6px', textAlign: 'center' }}><div className="num" style={{ fontSize: 24 }}>{v === -1 ? '<5' : v ?? 0}</div><div className="small muted">{k}</div></div>
             ))}
           </div>
           {total > 0 && <span className="small muted">Scans by where the code is: {Object.entries(scans).map(([k, n]) => `${PLACES[k] || k} ${n}`).join(' · ')}</span>}
-          <span className="small muted">Counts only — you never see players’ names, scores or whereabouts.</span>
+          <span className="small muted">Counts only — you never see players’ names, scores or whereabouts. Fewer than 5 groups or rounds shows as “&lt;5”. Rounds are the ones played on your course.</span>
         </>
       )}
     </div>
@@ -351,6 +358,8 @@ function QrCard({ link, title, line, small }) {
 
 function Kit({ club }) {
   const [pages, setPages] = useState([]);
+  const [tvKey, setTvKey] = useState(null);
+  useEffect(() => { supabase.rpc('my_club_tv_key').then(({ data }) => setTvKey(data || null)); }, []);
   useEffect(() => {
     Promise.all(club.courses.map((c) => supabase.rpc('course_page', { p_slug: c.slug }).then(({ data }) => data))).then((r) => setPages(r.filter(Boolean)));
   }, [club.courses]);
@@ -387,7 +396,8 @@ function Kit({ club }) {
             </div>
             <div className="kit-sheet stack" style={{ gap: 12 }}>
               <strong className="no-print">Clubhouse TV</strong>
-              <QrCard link={`${base}#/tv/${c.slug}?ref=${club.ref}&p=tv`} title="On the clubhouse TV" line={`Open this on the TV’s browser: ${base}#/tv/${c.slug}`} />
+              {tvKey && <QrCard link={`${base}#/tv/${c.slug}?k=${tvKey}&ref=${club.ref}`} title="On the clubhouse TV" line={`Open this on the TV’s browser: ${base}#/tv/${c.slug}?k=${tvKey}`} />}
+              <span className="no-print small muted">Keep the TV link to the club — it has your club’s key in it. Groups only show up if they tick “Show on the clubhouse TV”.</span>
             </div>
           </React.Fragment>
         ))}

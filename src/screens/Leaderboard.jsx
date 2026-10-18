@@ -132,7 +132,7 @@ export default function Leaderboard() {
       )}
 
       {status?.quick && <QuickRoundDone round={round} board={board} course={course} />}
-      {tvOn && status?.is_admin && round.status !== 'locked' && <TvToggle round={round} />}
+      {status?.is_admin && ((tvOn && round.status !== 'locked') || round.tv) && <TvToggle round={round} />}
 
       {sideCompsOn && round.status === 'live' && ((round.ctp_holes || []).length > 0 || (round.ld_holes || []).length > 0) && (
         <div className="section">
@@ -307,7 +307,7 @@ function TvToggle({ round }) {
   return (
     <div className="section">
       <label className="card pad row between" style={{ gap: 10 }}>
-        <span className="small"><strong>📺 Show on the clubhouse TV</strong><div className="muted">Today only, first names only, no photos.</div></span>
+        <span className="small"><strong>📺 Show on the clubhouse TV</strong><div className="muted">On the club’s TV screen today — first names only, no photos. Anyone with the club’s TV link can see it.</div></span>
         <input type="checkbox" checked={!!round.tv} disabled={busy} onChange={(e) => flip(e.target.checked)} style={{ width: 24, height: 24, flex: 'none' }} aria-label="Show on the clubhouse TV" />
       </label>
     </div>

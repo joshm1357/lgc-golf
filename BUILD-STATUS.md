@@ -601,11 +601,29 @@ time next year); phone width `tests/e2e/quick-test.mjs` 21 checks. All other pho
 - **Not built yet:** club photos (logo only for now); seeding every Australian course from OpenStreetMap (next — a
   staging-only job, STOP before live).
 
+**Independent review — fixed (039b, applied on staging):**
+- **Clubs can upload their logo** (the old "group members only" upload rule blocked club accounts); nobody without a
+  club can put files in the clubs folder; the photos bucket now only takes pictures, up to 12 MB.
+- Saving checked hole data changes pars and stroke indexes only — the tee and green points stay.
+- **Club counts can't follow one group:** rounds are only those on the club's own courses in the period; the period
+  is 30, 90 or 365 days only; any count of groups or rounds under 5 shows as "<5".
+- **The TV link carries the club's key** (on the kit), so nobody can watch by guessing a course name; the old keyless
+  link shows no groups; the TV feed sends list positions, not database ids. The organiser's tick now says "Anyone with
+  the club's TV link can see it", and stays visible after the round is finished so it can be turned off.
+- Scans count per phone (a random mark the phone keeps), not per internet address, so a clubhouse wifi isn't one
+  person; days run on Sydney time; 20 a day per phone, 300 a day per address.
+- A par 3 sign only jumps to today's live round in the group you're using.
+- Checked courses can't be moved or have their area changed by a group; if a club is removed (or Josh unclaims — new
+  "Unclaim this course" button on the claims screen) the course goes back to unclaimed and unchecked.
+- Left as is (low): logos and crests are checked to be on a Supabase storage address, not ours specifically — revisit
+  when the app moves to thegolftrip.club (the object must exist in our bucket, so the risk is small).
+
 **Tested:** `supabase/tests/stage8b_clubs.sql` (claims, approval, club edits, verified hole data protected, partner
-search) and `supabase/tests/stage8b_counts_tv.sql` 9 checks (nobody can read the scan log, bad codes ignored, TV needs
-the group's switch, a guest can't put a round on TV, rounds not opted in stay off, the TV sends first names only with
-no surname anywhere, counts carry no names, only the club sees its counts); phone width `tests/e2e/club-test.mjs` 32
-checks (claim, approve, club edits, partner card, counts, the kit has every par 3, a scan counted once, par 3 sign to
+search) and `supabase/tests/stage8b_counts_tv.sql` 18 checks (nobody can read the scan log, bad codes ignored, two phones on one
+address count as two, TV needs the group's switch and the club's key, a guest can't put a round on TV, rounds not
+opted in stay off, first names only with no surname or ids, counts carry no names and show "<5", only 30/90/365 days,
+only the club sees its counts, upload rules, hole data keeps greens, checked courses can't be moved, removing a club
+unclaims); phone width `tests/e2e/club-test.mjs` 35 checks (claim, approve, club edits, partner card, counts, the kit has every par 3, a scan counted once, par 3 sign to
 closest-to-pin, the TV tick only when the switch is on, the TV page on a phone and a big screen). All other phone tests pass.
 
 ## Known limits

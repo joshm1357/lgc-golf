@@ -77,8 +77,8 @@ the public course page and shared courses)
   "Same time next year?" (a Trips idea with a dates vote), "Make it official" (the Stage 7 wizard, pre-filled); guests
   keep history by signing in later; every card and invite carries "Start your own group" with its source tracked.
   Quick groups get their own new-group limit.
-- **8b. Club partners** (✅ claims, club screen, QR kit draft, counts, Clubhouse TV on staging — review next; OSM
-  seeding and club photos still to come): every Australian course listed (seeded from OpenStreetMap with credit — STOP before seeding
+- **8b. Club partners** (✅ claims, club screen, QR kit draft, counts, Clubhouse TV — reviewed and merged; ✅ course
+  list seeded from OpenStreetMap on staging — STOP before live, licence question for Josh; club photos later): every Australian course listed (seeded from OpenStreetMap with credit — STOP before seeding
   live); "Claim your course" (Josh approves each claim by hand — STOP before the first real one; club accounts need
   real sign-in, so the Stage 2 STOP comes first); club role edits verified hole data, logo, booking contact, offers,
   photos; QR kit PDF (cart, par 3 signs, counter, TV; each code carries club ref and placement — STOP before any kit is

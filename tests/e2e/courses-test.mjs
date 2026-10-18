@@ -104,7 +104,7 @@ async function fakeSupabase(route) {
     if (name === 'invite_info') return json({ group_id: GROUP2, group_name: 'Test Group B', role: 'player', already_in: false });
     if (name === 'join_by_invite') return json(GROUP2);
     if (name === 'search_courses' || name === 'find_courses') return json(LIB.filter((c) => !body?.p_query || c.name.toLowerCase().includes(body.p_query.toLowerCase())));
-    if (name === 'library_course') return json({ ...LIB[0], mine: false, holes: holes.map(({ n, par, si }) => ({ n, par, si })) });
+    if (name === 'library_course') return json(body?.p_id === LIB[2].id ? { ...LIB[2], mine: false, holes: [] } : { ...LIB[0], mine: false, holes: holes.map(({ n, par, si }) => ({ n, par, si })) });
     if (name === 'copy_library_course') { db.courses.push({ id: 'cccccccc-0000-4000-8000-000000000009', name: LIB[0].name, holes, library_id: LIB[0].id, created_at: now }); return json('cccccccc-0000-4000-8000-000000000009'); }
     if (name === 'share_course') return json(LIB[0].id);
     return json(null); }
@@ -138,6 +138,7 @@ STATUS.v = NEW;
 const LIB = [
   { id: 'aaaa0000-0000-4000-8000-0000000000a1', slug: 'bowral-golf-club', name: 'Bowral Golf Club', area: 'Bowral NSW', holes: 18, greens: 18, osm: true, copies: 3, km: 2.4 },
   { id: 'aaaa0000-0000-4000-8000-0000000000a2', slug: 'moss-vale', name: 'Moss Vale Golf Club', area: 'Moss Vale NSW', holes: 18, greens: 0, osm: false, copies: 0, km: 9.8 },
+  { id: 'aaaa0000-0000-4000-8000-0000000000a3', slug: 'kangaroo-valley', name: 'Kangaroo Valley Golf Course', area: 'Kangaroo Valley NSW', holes: 0, greens: 0, osm: true, copies: 0, km: 30.2 },
 ];
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
@@ -167,7 +168,7 @@ await page.getByText(/^2\. Courses/).click();
 await page.getByRole('button', { name: '📚 Find a course in the library' }).click();
 await page.getByText('Bowral Golf Club').waitFor({ timeout: 10000 });
 check(await page.getByText(/used by 3 groups/).isVisible(), 'library lists courses with how many groups use them');
-check(await page.getByText('Greens © OpenStreetMap contributors').first().isVisible(), 'OpenStreetMap credit on courses with its greens');
+check(await page.getByText('Map data © OpenStreetMap contributors').first().isVisible(), 'OpenStreetMap credit on courses from it');
 await page.getByLabel('Search courses').fill('moss');
 await page.waitForTimeout(700);
 check(!(await page.getByText('Bowral Golf Club').count()) && await page.getByText('Moss Vale Golf Club').isVisible(), 'search by name');
@@ -180,6 +181,15 @@ check(await page.getByText('2.4 km').isVisible(), 'shows how far away');
 await page.screenshot({ path: `${SHOTS}/c1-library.png`, fullPage: true });
 let w = await page.evaluate(() => document.scrollingElement.scrollWidth);
 check(w <= 375, `library: no sideways scroll (${w}px)`);
+
+// A course that's only listed (from OpenStreetMap): no scorecard yet, can't be added.
+check(await page.getByText(/Kangaroo Valley NSW · no scorecard yet/).isVisible(), 'a listed course says “no scorecard yet”');
+await page.getByText('Kangaroo Valley Golf Course').click();
+await page.getByText(/nobody has added its scorecard yet/).waitFor({ timeout: 5000 });
+check(!(await page.getByRole('button', { name: 'Add to our courses' }).count()), 'a listed course can’t be added until it has a scorecard');
+check(await page.getByText(/Course details from OpenStreetMap/).isVisible(), 'listed course credits OpenStreetMap');
+await page.screenshot({ path: `${SHOTS}/c1b-listed.png`, fullPage: true });
+await page.getByRole('button', { name: 'OK' }).click();
 
 await page.getByText('Bowral Golf Club').click();
 await page.getByRole('button', { name: 'Add to our courses' }).waitFor({ timeout: 5000 });

@@ -7,3 +7,7 @@ verify_jwt = false
 # The L.G.C connector checks its own secret key (last part of the URL); Claude sends no Supabase token.
 [functions.lgc-mcp]
 verify_jwt = false
+
+# The course-list seeding job checks its own token (kept in the database); the database starts it with pg_net.
+[functions.seed-osm-courses]
+verify_jwt = false

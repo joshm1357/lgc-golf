@@ -1,0 +1,19 @@
+Expected (staging, after 035 and 036). Run as one script; it rolls itself back.
+
+course page without signing in = Zzqx Quick Links / 18 holes
+start a round with no session at all = refused
+quick group = Josh's round at Zzqx Quick Links / quick true
+the round = stableford / live / ctp {3,12} / ld {5} / true        (hole 99 dropped)
+on the round = Josh 14
+features: feed / side comps / trophies / tribunal = false / true / true / false
+my_status says quick = true
+mate joins as = guest
+mate approved and on the round = true / 1
+guest makes it official = refused
+bad quick round = refused   (no such course)
+bad quick round = refused   (no name)
+bad quick round = refused   (handicap 70)
+bad quick round = refused   (unknown format)
+made official = true
+where it came from (tidied) = {"ref": "BOWRAL1", "placement": "cart"}
+ordinary group unchanged = false / 0

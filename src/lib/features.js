@@ -29,6 +29,7 @@ export const FEATURES = [
   { key: 'connector', name: 'Claude connector', description: 'Run the group from a Claude chat (organisers).', newGroup: false },
   { key: 'scorecard_photo', name: 'Scorecard photo reading', description: 'Read a photo of a scorecard into scores (needs an API key).', newGroup: false, soon: true },
   { key: 'booking_links', name: 'Booking links', description: 'Links to find accommodation and book courses for a trip.', newGroup: false, soon: true },
+  { key: 'clubhouse_tv', name: 'Clubhouse TV leaderboard', description: 'Show your round on the clubhouse TV — first names only, and only for rounds you choose.', newGroup: false, soon: true },
 ].map((f) => ({ parent: null, tier: 'free', ...f }));
 
 export const FEATURE_BY_KEY = Object.fromEntries(FEATURES.map((f) => [f.key, f]));

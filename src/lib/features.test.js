@@ -24,8 +24,9 @@ describe('featureOn', () => {
 });
 
 describe('the database list matches this one', () => {
-  it('same keys, parents and defaults as migration 029', () => {
-    const sql = fs.readFileSync(new URL('../../supabase/migrations/029_features.sql', import.meta.url), 'utf8');
+  it('same keys, parents and defaults as the migrations (029, plus 036 for Clubhouse TV)', () => {
+    const sql = ['029_features.sql', '036_quick_round.sql']
+      .map((f) => fs.readFileSync(new URL(`../../supabase/migrations/${f}`, import.meta.url), 'utf8')).join('\n');
     const rows = [...sql.matchAll(/\('([a-z_]+)', (true|false), (null|'[a-z_]+'), 'free'\)/g)]
       .map((m) => ({ key: m[1], newGroup: m[2] === 'true', parent: m[3] === 'null' ? null : m[3].slice(1, -1) }));
     expect(rows).toEqual(FEATURES.map((f) => ({ key: f.key, newGroup: f.newGroup, parent: f.parent })));

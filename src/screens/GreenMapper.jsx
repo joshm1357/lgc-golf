@@ -92,7 +92,7 @@ export default function GreenMapper() {
         method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: `data=${encodeURIComponent(osmQuery(at))}`,
       });
       if (!res.ok) throw new Error('OpenStreetMap is busy — try again in a minute.');
-      const found = holesFromOsm(await res.json());
+      const found = holesFromOsm(await res.json(), at);
       const count = Object.keys(found).length;
       if (!count) throw new Error('This course isn’t drawn on OpenStreetMap near here — map it by tapping instead.');
       const overwrite = greensMapped(holes) > 0 && window.confirm(`OpenStreetMap has ${count} holes here. Replace the greens you've already mapped? (Cancel = only fill the empty holes.)`);

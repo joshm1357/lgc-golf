@@ -11,15 +11,13 @@ Kept up to date at the end of every build. The shared copy for comments is a Cla
 | 1.1 | Sun 18 Oct (morning) | Live lotto-style team draw, Sunday guide page, minimum 6 drives tracking, CTP/LD worth 2 strokes, confirmed comp winners, gold comp tags on the leaderboard, "New version ready" banner. |
 | 1.2 | Sun 18 Oct (afternoon) | Comps show the winner once every group is through; two-tap Tribunal voting; new screens open at the top. |
 | 1.3 | Sun 18 Oct (evening) | **Coming up** (any number of future trips and rounds): votes on dates/location/anything, Who's in + lock-in, details, day-by-day plan, bring list, jobs, shared costs with custom splits + who-pays-who + payment details, rooms & cars (live draw), organiser's checklist (suggestions only), anyone can suggest a trip or round. **The Rulebook** (rules, what they apply to, propose → vote → admin decides). **Phone notifications** + daily 9am reminders, Share-to-Messenger nudges, add-to-calendar. **Offline**: the app opens and scoring works with no signal. Bottom bar: Map moved into More; Coming up added. |
+| 1.4 | Sun 18 Oct (night) | **GPS distances** to the front/middle/back and today's pin (anyone can drop the pin while the round is live), **shot planner** (tap up to 3 targets — distance from you or the tee to each, then on to the pin), greens filled from OpenStreetMap or tapped in by the admin, course map saved for offline. **Rules drive round set-up** (CTP/LD value and minimum drives come from the Rulebook). **Plan → trip** (admin button). **More offline**: feed posts and comp entries (with photos) queue and send later. **L.G.C connector** for Claude (safe actions: leaderboard, enter scores, confirm comps, post, organise). |
 
-## Next — v1.4 (before the next trip)
+## Next — v1.5 (before the next trip)
 
-1. **Scorecard photo → scores.** Snap a paper card (or a screenshot from 18Birdies etc.), the app reads it, you check and save. Biggest time-saver (today's Fred & Paul card took a manual entry).
-2. **Rules drive the round set-up.** Pick CTP/LD value, minimum drives etc. from the Rulebook when creating a round instead of typing them.
-3. **Plan → trip in one tap (admin button, not automatic).** Turns a locked-in plan into the trip, rounds, courses and trophies.
-4. **More offline.** Side comp entries and feed posts queue with no signal; cache map tiles for the course.
-5. **Distance to the green.** Phone GPS (about ±5–10 m, same as 18Birdies) to the front/middle/back of each green. The admin taps each green once on the satellite map (about 5 minutes a course); today's pin can be dragged into place on CTP holes. Optionally pull greens from OpenStreetMap where the course is mapped.
-6. **Tidy-ups.** One-step save for rooms; move the `pg_net` database add-on; remove Josh's stray Tribunal vote (needs an approval that keeps getting auto-cancelled).
+1. **Scorecard photo → scores.** Snap a paper card (or a screenshot from 18Birdies etc.), the app reads it, you check and save. Needs a decision: an Anthropic API key for the app (small pay-per-use cost) — or keep doing it through the L.G.C connector in a Claude chat (free, works now).
+2. **Pins: clear today's pin.** Admin can remove a wrongly dropped pin (today you can only move it).
+3. **Tidy-ups.** One-step save for rooms; move the `pg_net` database add-on; Josh's stray Tribunal vote (change it in the app).
 
 ## Later — v2
 
@@ -51,7 +49,7 @@ Options: **A. Keep our own scoring** (recommended — already does Ambrose/Stabl
 - **B. Next — "Ask Claude" inside the app, admin only.** Photo of a scorecard → scores; "draft the next trip" → votes and jobs; weekend summary for the feed. Needs an Anthropic API key; a small pay-per-use cost.
 - **C. Later — an L.G.C connector** that lets any Claude chat do only safe app actions (enter scores, add jobs, post results) instead of full database access.
 
-**Decision (18 Oct): C — build the L.G.C connector.** Keep using A (this chat) until it's ready.
+**Decision (18 Oct): C — build the L.G.C connector.** Built and live in v1.4: Claude Settings → Connectors → Add custom connector → paste the private link (needs a paid Claude plan). Anyone with the link acts as admin; change `mcp_key` in `server_secrets` to cut it off.
 
 ## Known limits
 

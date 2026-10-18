@@ -47,20 +47,15 @@ function inside(pt, poly) {
  * Turn an OpenStreetMap (Overpass "out geom") answer into hole points.
  * Returns { [holeNumber]: { tee, green, front, back } } for the holes it could read.
  */
-export function holesFromOsm(osm) {
+export function holesFromOsm(osm, anchor = null) {
   const els = osm?.elements || [];
   const geom = (e) => (e.geometry || []).map((g) => ({ lat: g.lat, lng: g.lon }));
   const lines = els.filter((e) => e.type === 'way' && e.tags?.golf === 'hole' && e.geometry?.length >= 2);
   const greens = els.filter((e) => e.type === 'way' && e.tags?.golf === 'green' && e.geometry?.length >= 3).map(geom);
   const out = {};
-  for (const ln of lines) {
-    const n = parseInt(String(ln.tags.ref || '').trim(), 10);
-    if (!n || n < 1 || n > 27) continue;
-    const pts = geom(ln);
-    const tee = pts[0];
-    const end = pts[pts.length - 1];
-    const before = pts[pts.length - 2];
-    // The green this hole finishes on: the one the line ends inside, else the closest within 60 m.
+  const closeness = {};
+  // The green a point sits on: the one it's inside, else the closest within 60 m.
+  const greenAt = (end) => {
     let best = null;
     for (const g of greens) {
       const xy = g.map((p) => toXY(end, p));
@@ -72,6 +67,25 @@ export function holesFromOsm(osm) {
         if (!best || score < best.score) best = { g, xy, centre, score };
       }
     }
+    return best;
+  };
+  for (const ln of lines) {
+    const n = parseInt(String(ln.tags.ref || '').trim(), 10);
+    if (!n || n < 1 || n > 27) continue;
+    let pts = geom(ln);
+    // Holes are usually drawn tee → green; if the green is at the other end, flip it.
+    let best = greenAt(pts[pts.length - 1]);
+    if (!best && greenAt(pts[0])) { pts = [...pts].reverse(); best = greenAt(pts[pts.length - 1]); }
+    // Two courses in range (a 36-hole club) can both have a hole 7: keep the one nearest where we are.
+    if (anchor) {
+      const mid = pts[Math.floor(pts.length / 2)];
+      const d = distanceM(anchor, mid);
+      if (closeness[n] != null && closeness[n] <= d) continue;
+      closeness[n] = d;
+    } else if (out[n]) continue;
+    const tee = pts[0];
+    const end = pts[pts.length - 1];
+    const before = pts[pts.length - 2];
     if (!best) {
       out[n] = { tee: round6(tee), green: round6(end) };
       continue;
@@ -127,4 +141,15 @@ export function courseTiles(holes, { zooms = [15, 16, 17, 18], marginM = 150 } =
     }
   }
   return out;
+}
+
+/**
+ * Shot planning: the legs from where you start, through each target you tapped, to where you finish
+ * (today's pin, else the middle of the green). Returns { legs: [{ from, to, m }], total }.
+ */
+export function planLegs(start, targets = [], finish = null) {
+  const pts = [start, ...targets, finish].filter(Boolean);
+  const legs = [];
+  for (let i = 1; i < pts.length; i++) legs.push({ from: pts[i - 1], to: pts[i], m: Math.round(distanceM(pts[i - 1], pts[i])) });
+  return { legs, total: legs.reduce((s, l) => s + l.m, 0) };
 }

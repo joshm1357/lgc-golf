@@ -6,6 +6,7 @@ import { useRealtime, useSession } from '../lib/store.jsx';
 import { getFix, useWatchPosition } from '../lib/geo.js';
 import { greenDistances } from '../lib/greens.js';
 import { toast } from './ui.jsx';
+import ShotPlanner from './ShotPlanner.jsx';
 
 const KEY = 'lgc-distances-on';
 
@@ -26,10 +27,19 @@ export function useRoundPins(roundId) {
 export default function Distances({ round, course, hole }) {
   const { status } = useSession();
   const [on, setOn] = useState(() => { try { return localStorage.getItem(KEY) === '1'; } catch { return false; } });
-  const { pos, error } = useWatchPosition(on);
+  // GPS only while the screen is actually showing (saves battery over a whole round).
+  const [visible, setVisible] = useState(() => typeof document === 'undefined' || document.visibilityState === 'visible');
+  useEffect(() => {
+    const f = () => setVisible(document.visibilityState === 'visible');
+    document.addEventListener('visibilitychange', f);
+    return () => document.removeEventListener('visibilitychange', f);
+  }, []);
+  const { pos, error } = useWatchPosition(on && visible && round.status !== 'locked');
   const [pins, reloadPins] = useRoundPins(round.id);
   const [busy, setBusy] = useState(false);
+  const [planning, setPlanning] = useState(false);
   const pin = pins[hole.n];
+  const planner = planning && <ShotPlanner hole={hole} pin={pin} onClose={() => setPlanning(false)} />;
   const d = pos ? greenDistances(hole, pos, pin) : null;
   const mapped = !!(hole.green || pin);
   const toggle = () => {
@@ -41,6 +51,7 @@ export default function Distances({ round, course, hole }) {
     setBusy(true);
     try {
       const f = await getFix();
+      if (f.accuracy > 25) throw new Error(`GPS is only good to ±${Math.round(f.accuracy)} m right now — wait a few seconds in the open and try again.`);
       const { error: e } = await supabase.from('round_pins').upsert({ round_id: round.id, hole: hole.n, lat: f.lat, lng: f.lng, set_by: status.player_id, set_at: new Date().toISOString() });
       if (e) throw e;
       toast(`Today's pin on ${hole.n} set (±${Math.round(f.accuracy)} m) — everyone gets the distance`);
@@ -51,7 +62,11 @@ export default function Distances({ round, course, hole }) {
   if (!on) {
     return (
       <div className="section" style={{ paddingBottom: 0 }}>
-        <button type="button" className="btn ghost block" onClick={toggle}>📍 Show GPS distances to the green</button>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <button type="button" className="btn ghost" onClick={toggle}>📍 GPS distances</button>
+          <button type="button" className="btn ghost" onClick={() => setPlanning(true)}>🗺️ Plan my shots</button>
+        </div>
+        {planner}
       </div>
     );
   }
@@ -67,7 +82,10 @@ export default function Distances({ round, course, hole }) {
       <div className="card pad stack" style={{ gap: 8 }}>
         <div className="row between">
           <span className="label">📍 Distance to the green (m)</span>
-          <button type="button" className="btn ghost sm" onClick={toggle}>Hide</button>
+          <span className="row" style={{ gap: 6 }}>
+            <button type="button" className="btn ghost sm" onClick={() => setPlanning(true)}>🗺️ Plan shots</button>
+            <button type="button" className="btn ghost sm" onClick={toggle}>Hide</button>
+          </span>
         </div>
         {!mapped ? (
           <div className="small">
@@ -87,6 +105,7 @@ export default function Distances({ round, course, hole }) {
             <div className="small muted">GPS ±{Math.round(pos.accuracy)} m{far ? ` · you’re a long way from hole ${hole.n} — on the right hole?` : ''}</div>
           </>
         )}
+        {planner}
         {round.status === 'live' && (
           <button type="button" className="btn ghost sm" disabled={busy} onClick={setPin}>🚩 {pin ? 'Move' : 'Set'} today’s pin on {hole.n} — stand next to the flag</button>
         )}

@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { startOutbox, outboxCount, onOutboxChange } from './lib/outbox.js';
+import { startOutbox, outboxCount, onOutboxChange, onOutboxDrop } from './lib/outbox.js';
 import { HashRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { SessionProvider, DataProvider, useSession, useData } from './lib/store.jsx';
-import { TabBar, Toaster, Loading, UpdateBanner } from './components/ui.jsx';
+import { TabBar, Toaster, Loading, UpdateBanner, toast } from './components/ui.jsx';
 import Join from './screens/Join.jsx';
 import ProfileSetup, { AwaitingApproval } from './screens/ProfileSetup.jsx';
 import Leaderboard from './screens/Leaderboard.jsx';
@@ -46,7 +46,12 @@ function Inside() {
   // New screens open at the top, so a tap can't land on a button further down the next page.
   useEffect(() => { window.scrollTo(0, 0); }, [loc.pathname]);
   const [waiting, setWaiting] = useState(outboxCount());
-  useEffect(() => { startOutbox(); return onOutboxChange(setWaiting); }, []);
+  useEffect(() => {
+    startOutbox();
+    const a = onOutboxChange(setWaiting);
+    const b = onOutboxDrop((msg) => toast(msg));
+    return () => { a(); b(); };
+  }, []);
   if (!data.ready) {
     return data.error ? <div className="empty">Couldn't load: {data.error.message}. Pull down to refresh.</div> : <Loading />;
   }

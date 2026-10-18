@@ -15,7 +15,7 @@ async function saveCourseMap(course, setProgress) {
   if (!navigator.serviceWorker?.controller) { toast('Open the app from the Home Screen (or reload once) first, then try again.'); return; }
   let done = 0;
   for (let i = 0; i < tiles.length; i += 6) {
-    await Promise.all(tiles.slice(i, i + 6).map((t) => fetch(TILE(t), { mode: 'no-cors' }).catch(() => {})));
+    await Promise.all(tiles.slice(i, i + 6).map((t) => fetch(TILE(t), { mode: 'cors', credentials: 'omit' }).catch(() => {})));
     done = Math.min(tiles.length, i + 6);
     setProgress(Math.round((done / tiles.length) * 100));
   }

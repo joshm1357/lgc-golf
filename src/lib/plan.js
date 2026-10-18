@@ -275,12 +275,12 @@ export const money = (x) => `$${Number(x || 0).toLocaleString('en-AU', { minimum
 export function roundSettingsFromRules(rules, format) {
   const applies = (rules || []).filter((r) => r.status === 'active' && (r.applies_to || []).some((a) => a === 'all' || a === format));
   const num = (s, re) => { const m = String(s || '').match(re); return m ? Number(m[1]) : null; };
-  const comp = applies.find((r) => r.category === 'side_comp' && num(r.value, /(\d+(?:\.\d+)?)\s*stroke/i) != null);
+  const comp = applies.find((r) => r.category === 'side_comp' && num(r.value, /(\d+)\s*stroke/i) != null);
   const drives = format === 'ambrose' ? applies.find((r) => num(`${r.value} ${r.title}`, /(\d+)\s*drive/i) != null) : null;
   const text = applies.map((r) => `${r.title}${r.value ? ` (${r.value})` : ''}${r.detail ? `: ${r.detail}` : ''}`).join(' ');
   return {
     applies,
-    comp_bonus: comp ? num(comp.value, /(\d+(?:\.\d+)?)\s*stroke/i) : null,
+    comp_bonus: comp ? num(comp.value, /(\d+)\s*stroke/i) : null,
     min_drives: drives ? num(`${drives.value} ${drives.title}`, /(\d+)\s*drive/i) : null,
     text,
   };

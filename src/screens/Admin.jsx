@@ -278,11 +278,11 @@ function RoundRules({ round }) {
         {s.applies.map((r) => <div key={r.id} className="small"><strong>{r.title}</strong>{r.value ? ` · ${r.value}` : ''}</div>)}
         {isA && (
           <div className="row">
-            <label className="field grow"><span>Side comp worth (strokes off)</span><input className="input" inputMode="numeric" value={bonus} onChange={(e) => setBonus(e.target.value.replace(/[^0-9.]/g, ''))} /></label>
+            <label className="field grow"><span>Side comp worth (strokes off)</span><input className="input" inputMode="numeric" value={bonus} onChange={(e) => setBonus(e.target.value.replace(/[^0-9]/g, ''))} /></label>
             <label className="field grow"><span>Minimum drives each</span><input className="input" inputMode="numeric" value={drives} onChange={(e) => setDrives(e.target.value.replace(/[^0-9]/g, ''))} placeholder="none" /></label>
           </div>
         )}
-        {changed && <button type="button" className="btn sm" onClick={() => save({ comp_bonus: Number(bonus) || 0, min_drives: drives ? Number(drives) : null }, 'Round settings saved')}>Save these settings</button>}
+        {changed && <button type="button" className="btn sm" onClick={() => save({ comp_bonus: parseInt(bonus, 10) || 0, min_drives: drives ? Number(drives) : null }, 'Round settings saved')}>Save these settings</button>}
         {rules && s.applies.length > 0 && (
           <button type="button" className="btn ghost sm" onClick={() => {
             const patch = { rules: s.text };

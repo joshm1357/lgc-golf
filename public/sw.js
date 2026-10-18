@@ -54,13 +54,25 @@ self.addEventListener('fetch', (event) => {
   // Satellite map tiles: a saved copy first (so the course map works with no signal), else fetch and save.
   if (url.hostname === TILE_HOST && url.pathname.includes('/tile/')) {
     event.respondWith((async () => {
-      const c = await caches.open(TILES);
-      const saved = await c.match(req.url);
-      if (saved) return saved;
-      const fresh = await fetch(req);
-      if (fresh.ok || fresh.type === 'opaque') {
-        await c.put(req.url, fresh.clone());
-        if (Math.random() < 0.05) event.waitUntil(trimTiles());
+      let c = null;
+      try {
+        c = await caches.open(TILES);
+        const saved = await c.match(req.url);
+        if (saved) return saved;
+      } catch { /* storage unavailable — just fetch */ }
+      // Ask for a readable (CORS) copy so we only ever save real pictures, never error pages or
+      // unreadable "opaque" responses (Chrome counts each of those as ~7 MB of storage).
+      let fresh;
+      try {
+        fresh = await fetch(req.url, { mode: 'cors', credentials: 'omit' });
+      } catch {
+        return fetch(req); // CORS refused or no signal: let the browser try its own way, save nothing
+      }
+      if (fresh.ok && c) {
+        try {
+          await c.put(req.url, fresh.clone());
+          if (Math.random() < 0.05) event.waitUntil(trimTiles().catch(() => {}));
+        } catch { /* storage full: show the tile anyway */ }
       }
       return fresh;
     })());

@@ -150,7 +150,9 @@ export function DataProvider({ children }) {
     }
     const roundPlayers = {};
     for (const rp of data.round_players) (roundPlayers[rp.round_id] ||= []).push(rp);
-    const currentTrip = trips.find((t) => t.status === 'active') || trips[0] || null;
+    const todayIso = new Date().toISOString().slice(0, 10);
+    // The open trip; if none, the latest one that has started (not a future trip set up early).
+    const currentTrip = trips.find((t) => t.status === 'active') || trips.find((t) => !t.start_date || t.start_date <= todayIso) || trips[trips.length - 1] || null;
     const liveRound = [...rounds].reverse().find((r) => r.status === 'live') || null;
     const d = new Date();
     const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

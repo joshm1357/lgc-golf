@@ -58,16 +58,16 @@ function TripSetupSheet({ plan, onClose, onDone }) {
 
   const go = () => run(async () => {
     const { data: rules } = await supabase.from('rules').select('*').eq('status', 'active');
-    if (current) {
-      const others = data.trips.filter((t) => t.status === 'active').map((t) => t.id);
-      if (others.length) await must(supabase.from('trips').update({ status: 'locked' }).in('id', others));
-    }
+    // 1. The trip, linked to the plan straight away — so a retry after a hiccup can't make a second one.
     const trip = await must(supabase.from('trips').insert({ name: name.trim(), start_date: plan.start_date, end_date: plan.end_date || plan.start_date, status: current ? 'active' : 'locked' }).select().single());
+    await must(supabase.from('plans').update({ trip_id: trip.id, status: plan.status === 'planning' ? 'confirmed' : plan.status }).eq('id', plan.id));
+    const problems = [];
     if (copyTrophies && lastTrophies.length) {
-      await must(supabase.from('trophies').insert(lastTrophies.map((x) => ({ trip_id: trip.id, name: x.name, type: x.type, description: x.description }))));
+      const { error } = await supabase.from('trophies').insert(lastTrophies.map((x) => ({ trip_id: trip.id, name: x.name, type: x.type, description: x.description })));
+      if (error) problems.push('the trophies');
     }
     if (chosen.length) {
-      await must(supabase.from('rounds').insert(chosen.map((r) => {
+      const { error } = await supabase.from('rounds').insert(chosen.map((r) => {
         const course = data.coursesById[r.course_id];
         const s = roundSettingsFromRules(rules || [], r.format);
         return {
@@ -76,9 +76,18 @@ function TripSetupSheet({ plan, onClose, onDone }) {
           ...(r.format === 'ambrose' ? { comp_bonus: s.comp_bonus ?? 0, min_drives: s.min_drives } : {}),
           rules: s.text || null,
         };
-      })));
+      }));
+      if (error) problems.push('the rounds');
     }
-    await must(supabase.from('plans').update({ trip_id: trip.id, status: plan.status === 'planning' ? 'confirmed' : plan.status }).eq('id', plan.id));
+    // 2. Only now close the old trip (and any round still live in it), so there's never no current trip.
+    if (current) {
+      const others = data.trips.filter((t) => t.status === 'active' && t.id !== trip.id).map((t) => t.id);
+      if (others.length) {
+        await supabase.from('trips').update({ status: 'locked' }).in('id', others);
+        await supabase.from('rounds').update({ status: 'locked' }).in('trip_id', others).eq('status', 'live');
+      }
+    }
+    if (problems.length) toast(`Trip made, but ${problems.join(' and ')} didn't save — add them in Admin.`);
     await feedPost(status.player_id, plan, `🏌️ ${trip.name} is set up in the app${chosen.length ? ` — ${chosen.length} round${chosen.length === 1 ? '' : 's'} ready` : ''}. See you on the first tee.`);
     data.reload();
     onDone();
@@ -116,7 +125,7 @@ function TripSetupSheet({ plan, onClose, onDone }) {
         )}
         <label className="row" style={{ gap: 8, fontWeight: 600, alignItems: 'flex-start' }}>
           <input type="checkbox" checked={current} onChange={(e) => setCurrent(e.target.checked)} style={{ width: 20, height: 20, marginTop: 2 }} />
-          <span>Make it the current trip now<div className="small muted" style={{ fontWeight: 400 }}>{current ? 'The leaderboard and trophies switch to this trip; the current one is closed off.' : 'It waits, closed, until you reopen it in Admin → Trips.'}</div></span>
+          <span>Make it the current trip now<div className="small muted" style={{ fontWeight: 400 }}>{current ? 'The leaderboard and trophies switch to this trip; the current trip (and any round still live in it) is closed off.' : 'It waits, closed, until you reopen it in Admin → Trips.'}</div></span>
         </label>
         <button type="button" className="btn gold block" style={{ minHeight: 56 }} disabled={busy || !name.trim()} onClick={go}>
           Set it up{chosen.length ? ` — ${chosen.length} round${chosen.length === 1 ? '' : 's'}` : ''}

@@ -118,7 +118,7 @@ export default function ScoreEntry() {
       // Moment and photo go to the feed.
       if (moment || photo) {
         // Goes now, or waits on the phone (photo too) until there's signal.
-        await sendOrQueue('posts', {
+        sendOrQueue('posts', {
           kind: 'user', player_id: me, round_id: round.id, trip_id: round.trip_id, hole: hole.n, photo_url: null,
           body: moment ? `${moment} on ${hole.n}${isA ? ` (${subject.name})` : ''}` : null,
         }, { photo: photo ? { file: photo, field: 'photo_url', folder: 'feed' } : null }).catch(() => toast("Score saved, but the feed post was refused"));

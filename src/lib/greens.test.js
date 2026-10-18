@@ -41,6 +41,17 @@ describe('distance to the green', () => {
     expect(d.back).toBeGreaterThan(d.middle);
     expect(d.pin).toBeNull();
   });
+  it('flips a hole drawn green-to-tee, and keeps the nearer of two holes with the same number', () => {
+    const flipped = { elements: [
+      { type: 'way', tags: { golf: 'hole', ref: '3' }, geometry: [north(300), north(150, 5), north(0)] },
+      { type: 'way', tags: { golf: 'green' }, geometry: greenOutline },
+      { type: 'way', tags: { golf: 'hole', ref: '3' }, geometry: [north(3000), north(3300)] },
+    ] };
+    const h = holesFromOsm(flipped, { lat: north(100).lat, lng: north(100).lon });
+    const tee = { lat: north(0).lat, lng: north(0).lon };
+    expect(Math.round(distanceM(tee, h[3].tee))).toBeLessThan(2);
+    expect(h[3].front).toBeTruthy();
+  });
   it('fills only empty holes unless told to overwrite', () => {
     const holes = [{ n: 3, par: 4, si: 6, green: { lat: 1, lng: 1 } }, { n: 4, par: 4, si: 2 }];
     const found = holesFromOsm(osm);
@@ -67,5 +78,19 @@ describe('saving the course map for offline', () => {
     expect(t.length).toBeLessThan(400);
     expect(new Set(t.map((x) => `${x.z}/${x.x}/${x.y}`)).size).toBe(t.length);
     expect(courseTiles([{ n: 1 }])).toEqual([]);
+  });
+});
+
+import { planLegs } from './greens.js';
+describe('shot planning', () => {
+  const p = (m) => ({ lat: -34.85 + m / 111195, lng: 150.75 });
+  it('measures each shot from you, through the targets, to the green', () => {
+    const r = planLegs(p(0), [p(210), p(330)], p(400));
+    expect(r.legs.map((l) => l.m)).toEqual([210, 120, 70]);
+    expect(r.total).toBe(400);
+  });
+  it('works with no finish point and with no start (planning from the first target)', () => {
+    expect(planLegs(p(0), [p(150)]).legs.map((l) => l.m)).toEqual([150]);
+    expect(planLegs(null, [p(100), p(250)], p(300)).legs.map((l) => l.m)).toEqual([150, 50]);
   });
 });

@@ -6,7 +6,9 @@
 // Groups: every request works inside ONE group — the group the app names (if the person is in it)
 // or else their first group. Every id in the request must belong to that group, and messages only
 // go to phones of people in that group. The daily reminders run group by group.
-// The daily reminders are triggered by the database scheduler with a secret header.
+// The daily reminders and the hourly digest are triggered by the database scheduler with a secret header.
+// Each person picks, per group (notify_prefs): straight away (default), a daily digest at an hour they choose, or
+// only important things. Digest messages wait in notify_queue. "The draw room is open" always goes straight away.
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 import webpush from 'npm:web-push@3.6.7';
 
@@ -36,18 +38,13 @@ async function loadKeys() {
 
 type Msg = { title: string; body: string; url: string; tag?: string };
 
-/** Send to some players of group `g` (or 'all' of them), skipping player `except`.
- *  Phones are found through who is in the group, so nothing ever reaches another group.
- *  Cleans up phones that have unsubscribed. */
-async function send(g: string, to: string[] | 'all', msg: Msg, except?: string | null) {
-  let mq = db.from('group_members').select('user_id,player_id').eq('group_id', g);
-  if (to !== 'all') {
-    const ids = [...new Set(to)].filter((x) => x && x !== except);
-    if (!ids.length) return 0;
-    mq = mq.in('player_id', ids);
-  }
-  const { data: people } = await mq;
-  const users = [...new Set((people || []).filter((m) => !except || m.player_id !== except).map((m) => m.user_id))];
+/** Always straight away, whatever someone picked. */
+const ALWAYS_NOW = new Set(['draw_open', 'test']);
+/** What "only important" people still get: the draw room, a job given to them or due, money, their trip tomorrow. */
+const IMPORTANT = new Set(['draw_open', 'test', 'job_assigned', 'job_due', 'payment_recorded', 'nudge_kitty', 'trip_tomorrow']);
+
+/** Push to these people's phones now. Cleans up phones that have unsubscribed. */
+async function pushTo(users: string[], msg: Msg) {
   if (!users.length) return 0;
   const { data: subs } = await db.from('push_subscriptions').select('*').in('user_id', users);
   let sent = 0;
@@ -60,6 +57,81 @@ async function send(g: string, to: string[] | 'all', msg: Msg, except?: string |
       if (code === 404 || code === 410) await db.from('push_subscriptions').delete().eq('endpoint', s.endpoint);
     }
   }));
+  return sent;
+}
+
+/** Send to some players of group `g` (or 'all' of them), skipping player `except`, as each person chose:
+ *  straight away, into their daily digest, or (for "only important") not at all unless it matters.
+ *  Phones are found through who is in the group, so nothing ever reaches another group.
+ *  Returns how many phones got it now. */
+async function send(g: string, to: string[] | 'all', msg: Msg, except: string | null | undefined, kind: string) {
+  let mq = db.from('group_members').select('user_id,player_id').eq('group_id', g);
+  if (to !== 'all') {
+    const ids = [...new Set(to)].filter((x) => x && x !== except);
+    if (!ids.length) return 0;
+    mq = mq.in('player_id', ids);
+  }
+  const { data: people } = await mq;
+  const users = [...new Set((people || []).filter((m) => !except || m.player_id !== except).map((m) => m.user_id))];
+  if (!users.length) return 0;
+  const { data: prefs } = await db.from('notify_prefs').select('user_id,mode').eq('group_id', g).in('user_id', users);
+  const mode = new Map((prefs || []).map((p) => [p.user_id, p.mode as string]));
+  const now: string[] = [];
+  const later: string[] = [];
+  for (const u of users) {
+    const m = mode.get(u) || 'instant';
+    if (ALWAYS_NOW.has(kind) || m === 'instant' || (m === 'important' && IMPORTANT.has(kind))) now.push(u);
+    else if (m === 'digest') later.push(u);
+  }
+  if (later.length) {
+    await db.from('notify_queue').insert(later.map((u) => ({ group_id: g, user_id: u, kind, title: msg.title, body: msg.body, url: msg.url })));
+  }
+  return pushTo(now, msg);
+}
+
+/** The local hour and date for someone's chosen time zone (Sydney if it's not one we know). */
+function localNow(tz: string) {
+  const at = (zone: string) => {
+    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' }).formatToParts(new Date());
+    const v = (t: string) => parts.find((p) => p.type === t)?.value || '';
+    return { hour: Number(v('hour')), date: `${v('year')}-${v('month')}-${v('day')}` };
+  };
+  try { return at(tz || 'Australia/Sydney'); } catch { return at('Australia/Sydney'); }
+}
+
+/** Hourly: anyone whose digest hour it is gets one message with what's waiting. Someone who has switched back to
+ *  "straight away" gets whatever was still waiting, at once. */
+async function digest() {
+  let sent = 0;
+  const { data: waiting } = await db.from('notify_queue').select('id,group_id,user_id,title,url,created_at').is('sent_at', null).order('created_at').limit(5000);
+  if (!waiting?.length) return 0;
+  const byPerson = new Map<string, typeof waiting>();
+  for (const w of waiting) {
+    const k = `${w.group_id}|${w.user_id}`;
+    byPerson.set(k, [...(byPerson.get(k) || []), w]);
+  }
+  const groupIds = [...new Set(waiting.map((w) => w.group_id))];
+  const [{ data: prefs }, { data: groups }] = await Promise.all([
+    db.from('notify_prefs').select('group_id,user_id,mode,digest_hour,tz').in('group_id', groupIds),
+    db.from('groups').select('id,name').in('id', groupIds),
+  ]);
+  for (const [k, items] of byPerson) {
+    const [g, user] = k.split('|');
+    const p = (prefs || []).find((x) => x.group_id === g && x.user_id === user);
+    const local = localNow(p?.tz || 'Australia/Sydney');
+    if (p?.mode === 'digest' && local.hour !== p.digest_hour) continue;
+    if (p?.mode === 'digest' && !(await once(`digest:${g}:${user}:${local.date}:${local.hour}`))) continue;
+    const gname = (groups || []).find((x) => x.id === g)?.name || 'Your golf group';
+    const shown = items.slice(0, 3).map((i) => i.title).join(' · ');
+    const more = items.length > 3 ? ` · +${items.length - 3} more` : '';
+    const msg = items.length === 1
+      ? { title: items[0].title, body: gname, url: items[0].url || APP }
+      : { title: `📬 ${gname}: ${items.length} things since your last update`, body: shown + more, url: `${APP}#/plan`, tag: `digest-${g}` };
+    if (p?.mode === 'important') { /* switched to "only important": drop what was waiting */ } else sent += await pushTo([user], msg);
+    await db.from('notify_queue').update({ sent_at: new Date().toISOString() }).in('id', items.map((i) => i.id));
+  }
+  // Keep the queue small: forget what went out more than a month ago.
+  await db.from('notify_queue').delete().lt('sent_at', new Date(Date.now() - 30 * 86400000).toISOString());
   return sent;
 }
 
@@ -157,7 +229,7 @@ async function dailyFor(g: string) {
   const { data: closing } = await db.from('plan_polls').select('id,plan_id,question').eq('group_id', g).eq('status', 'open').eq('closes_on', tomorrow);
   for (const p of closing || []) {
     if (!(await once(`poll-closing:${p.id}:${today}`))) continue;
-    sent += await send(g, await openPollNonVoters(g, p.plan_id, p.id), { title: '⏰ Vote closes tomorrow', body: p.question, url: planUrl(p.plan_id, 'vote'), tag: `poll-${p.id}` });
+    sent += await send(g, await openPollNonVoters(g, p.plan_id, p.id), { title: '⏰ Vote closes tomorrow', body: p.question, url: planUrl(p.plan_id, 'vote'), tag: `poll-${p.id}` }, null, 'poll_closing');
   }
   // RSVP deadline tomorrow → people who haven't replied.
   const { data: dl } = await db.from('plans').select('*').eq('group_id', g).eq('rsvp_deadline', tomorrow).eq('rsvp_locked', false).eq('proposed', false).neq('status', 'cancelled');
@@ -166,7 +238,7 @@ async function dailyFor(g: string) {
     const { data: rs } = await db.from('plan_rsvps').select('player_id').eq('plan_id', pl.id);
     const replied = new Set((rs || []).map((r) => r.player_id));
     const missing = (await players(g)).filter((p) => !replied.has(p.id)).map((p) => p.id);
-    sent += await send(g, missing, { title: `🙋 Last day: are you in for ${pl.name}?`, body: 'Tap to say In, Maybe or Out.', url: planUrl(pl.id, 'people') });
+    sent += await send(g, missing, { title: `🙋 Last day: are you in for ${pl.name}?`, body: 'Tap to say In, Maybe or Out.', url: planUrl(pl.id, 'people') }, null, 'rsvp_deadline');
   }
   // A week out and the day before → everyone who's in.
   for (const [day, label] of [[week, 'is a week away'], [tomorrow, 'is tomorrow']] as const) {
@@ -174,14 +246,14 @@ async function dailyFor(g: string) {
     for (const pl of soon || []) {
       if (!(await once(`countdown:${pl.id}:${day}:${label}`))) continue;
       const { data: rs } = await db.from('plan_rsvps').select('player_id').eq('plan_id', pl.id).eq('status', 'in');
-      sent += await send(g, (rs || []).map((r) => r.player_id), { title: `⛳ ${pl.name} ${label}`, body: [pl.location_name, 'Check the details and what to bring.'].filter(Boolean).join(' · '), url: planUrl(pl.id, 'details') });
+      sent += await send(g, (rs || []).map((r) => r.player_id), { title: `⛳ ${pl.name} ${label}`, body: [pl.location_name, 'Check the details and what to bring.'].filter(Boolean).join(' · '), url: planUrl(pl.id, 'details') }, null, day === tomorrow ? 'trip_tomorrow' : 'trip_week');
     }
   }
   // Jobs due tomorrow → their owner.
   const { data: jobs } = await db.from('plan_items').select('*').eq('group_id', g).eq('kind', 'job').eq('done', false).eq('due', tomorrow).not('owner_id', 'is', null);
   for (const j of jobs || []) {
     if (!(await once(`job-due:${j.id}:${today}`))) continue;
-    sent += await send(g, [j.owner_id], { title: '📋 Job due tomorrow', body: j.title, url: planUrl(j.plan_id, 'jobs') });
+    sent += await send(g, [j.owner_id], { title: '📋 Job due tomorrow', body: j.title, url: planUrl(j.plan_id, 'jobs') }, null, 'job_due');
   }
   return sent;
 }
@@ -192,9 +264,9 @@ Deno.serve(async (req) => {
     await loadKeys();
     const body = await req.json().catch(() => ({}));
 
-    if (body.type === 'daily') {
+    if (body.type === 'daily' || body.type === 'digest') {
       if (!cronSecret || req.headers.get('x-cron-secret') !== cronSecret) return json({ error: 'Not allowed' }, 401);
-      return json({ sent: await daily() });
+      return json({ sent: body.type === 'daily' ? await daily() : await digest() });
     }
 
     // Everyone else must be a signed-in member of the group.
@@ -208,31 +280,41 @@ Deno.serve(async (req) => {
     if (!m) return json({ error: 'Join the group first' }, 403);
     const g = m.group_id as string;
     const me = { player_id: m.player_id as string | null, is_admin: m.role === 'organiser' };
-    const adminOnly = ['plan_new', 'poll_open', 'poll_decided', 'rsvp_locked', 'nudge_votes', 'nudge_rsvp', 'nudge_kitty', 'groups_set', 'draw_open'];
+    const adminOnly = ['plan_new', 'rsvp_locked', 'nudge_votes', 'nudge_rsvp', 'nudge_kitty', 'groups_set', 'draw_open'];
     if (adminOnly.includes(body.type) && !me.is_admin) return json({ error: 'Admin only' }, 403);
     const from = me.player_id as string | null;
 
     let sent = 0;
     switch (body.type) {
       case 'test':
-        sent = await send(g, [from!], { title: '🔔 Notifications are on', body: 'You’ll get trip votes, reminders and jobs here.', url: `${APP}#/plan` });
+        sent = await send(g, [from!], { title: '🔔 Notifications are on', body: 'You’ll get trip votes, reminders and jobs here.', url: `${APP}#/plan` }, null, 'test');
         break;
       case 'plan_new': {
         const pl = await plan(g, body.plan_id);
-        sent = await send(g, 'all', { title: `🗓️ ${pl.name}`, body: `A new ${pl.kind === 'round' ? 'round' : 'trip'} is being planned — say if you’re in and have your say.`, url: planUrl(pl.id) }, from);
+        sent = await send(g, 'all', { title: `🗓️ ${pl.name}`, body: `A new ${pl.kind === 'round' ? 'round' : 'trip'} is being planned — say if you’re in and have your say.`, url: planUrl(pl.id) }, from, 'plan_new');
         break;
       }
       case 'poll_open': {
         const p = await mine(g, 'plan_polls', body.poll_id);
+        // The admin, or whoever opened this vote (a suggestion opens its own dates and place votes). Once per vote.
+        if (!me.is_admin && p.created_by !== from) return json({ error: 'Not your vote' }, 403);
+        if (!(await once(`poll-open:${p.id}`))) break;
         const pl = await plan(g, p.plan_id);
-        sent = await send(g, 'all', { title: `🗳️ Vote: ${p.question}`, body: `${pl.name}${p.closes_on ? ` · closes ${fmt(p.closes_on)}` : ''}`, url: planUrl(pl.id, 'vote'), tag: `poll-${p.id}` }, from);
+        sent = await send(g, 'all', { title: `🗳️ Vote: ${p.question}`, body: `${pl.name}${p.closes_on ? ` · closes ${fmt(p.closes_on)}` : ''}`, url: planUrl(pl.id, 'vote'), tag: `poll-${p.id}` }, from, 'poll_open');
         break;
       }
       case 'poll_decided': {
         const p = await mine(g, 'plan_polls', body.poll_id);
+        if (p.status !== 'closed') break;
+        if (!me.is_admin) {
+          // The trip's organiser may pick winners when the group allows it.
+          const [{ data: gr }, pl0] = await Promise.all([db.from('groups').select('vote_decider').eq('id', g).single(), plan(g, p.plan_id)]);
+          if (gr?.vote_decider !== 'admin_or_organiser' || !from || pl0.organiser_id !== from) return json({ error: 'Admin only' }, 403);
+        }
+        if (!(await once(`poll-decided:${p.id}`))) break;
         const { data: o } = p.winner_option_id ? await db.from('plan_options').select('label').eq('id', p.winner_option_id).single() : { data: null };
         const pl = await plan(g, p.plan_id);
-        sent = await send(g, 'all', { title: `✅ ${pl.name}: ${o?.label || 'decided'}`, body: p.question, url: planUrl(pl.id), tag: `poll-${p.id}` }, from);
+        sent = await send(g, 'all', { title: `✅ ${pl.name}: ${o?.label || 'decided'}`, body: p.question, url: planUrl(pl.id), tag: `poll-${p.id}` }, from, 'poll_decided');
         break;
       }
       case 'rsvp_locked': {
@@ -240,25 +322,25 @@ Deno.serve(async (req) => {
         const { data: rs } = await db.from('plan_rsvps').select('player_id').eq('plan_id', pl.id).eq('status', 'in');
         const ppl = await players(g);
         const names = (rs || []).map((r) => name(ppl.find((p) => p.id === r.player_id))).join(', ');
-        sent = await send(g, 'all', { title: `🔒 ${pl.name}: the list is locked`, body: `${(rs || []).length} in — ${names}`, url: planUrl(pl.id, 'people') }, from);
+        sent = await send(g, 'all', { title: `🔒 ${pl.name}: the list is locked`, body: `${(rs || []).length} in — ${names}`, url: planUrl(pl.id, 'people') }, from, 'rsvp_locked');
         break;
       }
       case 'nudge_votes': {
         const pl = await plan(g, body.plan_id);
-        sent = await send(g, await openPollNonVoters(g, pl.id), { title: '🗳️ Still need your vote', body: pl.name, url: planUrl(pl.id, 'vote') }, from);
+        sent = await send(g, await openPollNonVoters(g, pl.id), { title: '🗳️ Still need your vote', body: pl.name, url: planUrl(pl.id, 'vote') }, from, 'nudge_votes');
         break;
       }
       case 'nudge_rsvp': {
         const pl = await plan(g, body.plan_id);
         const { data: rs } = await db.from('plan_rsvps').select('player_id').eq('plan_id', pl.id);
         const replied = new Set((rs || []).map((r) => r.player_id));
-        sent = await send(g, (await players(g)).filter((p) => !replied.has(p.id)).map((p) => p.id), { title: `🙋 Are you in for ${pl.name}?`, body: 'Tap to say In, Maybe or Out.', url: planUrl(pl.id, 'people') }, from);
+        sent = await send(g, (await players(g)).filter((p) => !replied.has(p.id)).map((p) => p.id), { title: `🙋 Are you in for ${pl.name}?`, body: 'Tap to say In, Maybe or Out.', url: planUrl(pl.id, 'people') }, from, 'nudge_rsvp');
         break;
       }
       case 'nudge_kitty': {
         const pl = await plan(g, body.plan_id);
         for (const o of await kittyOwing(pl.id)) {
-          sent += await send(g, [o.pid], { title: `💰 ${pl.name}: you owe $${o.owes.toFixed(2).replace(/\.00$/, '')}`, body: pl.kitty_note || 'Tap to see your share.', url: planUrl(pl.id, 'kitty') }, from);
+          sent += await send(g, [o.pid], { title: `💰 ${pl.name}: you owe $${o.owes.toFixed(2).replace(/\.00$/, '')}`, body: pl.kitty_note || 'Tap to see your share.', url: planUrl(pl.id, 'kitty') }, from, 'nudge_kitty');
         }
         break;
       }
@@ -266,7 +348,7 @@ Deno.serve(async (req) => {
         const pl = await plan(g, body.plan_id);
         const { data: rs } = await db.from('plan_rsvps').select('player_id').eq('plan_id', pl.id).eq('status', 'in');
         const label = body.kind === 'car' ? '🚗 Cars are sorted' : '🛏️ Rooms are set';
-        sent = await send(g, (rs || []).map((r) => r.player_id), { title: `${label} — ${pl.name}`, body: 'Tap to see who you’re with.', url: planUrl(pl.id, 'groups') }, from);
+        sent = await send(g, (rs || []).map((r) => r.player_id), { title: `${label} — ${pl.name}`, body: 'Tap to see who you’re with.', url: planUrl(pl.id, 'groups') }, from, 'groups_set');
         break;
       }
       case 'job_assigned': {
@@ -277,7 +359,7 @@ Deno.serve(async (req) => {
         if (!(await once(`job-assigned:${j.id}:${j.owner_id}`))) break;
         const pl = await plan(g, j.plan_id);
         const ppl = await players(g);
-        sent = await send(g, [j.owner_id], { title: `📋 New job: ${j.title}`, body: `${pl.name} — from ${name(ppl.find((p) => p.id === from))}`, url: planUrl(pl.id, 'jobs') }, from);
+        sent = await send(g, [j.owner_id], { title: `📋 New job: ${j.title}`, body: `${pl.name} — from ${name(ppl.find((p) => p.id === from))}`, url: planUrl(pl.id, 'jobs') }, from, 'job_assigned');
         break;
       }
       case 'plan_proposed': {
@@ -285,7 +367,10 @@ Deno.serve(async (req) => {
         if (!pl?.proposed || (pl.created_by !== from && !me.is_admin)) return json({ error: 'Not your proposal' }, 403);
         if (!(await once(`plan-proposed:${pl.id}`))) break;
         const ppl = await players(g);
-        sent = await send(g, await admins(g), { title: `💡 ${name(ppl.find((p) => p.id === from))} proposed: ${pl.name}`, body: 'Approve it to start planning, or decline.', url: planUrl(pl.id) }, from);
+        // Everyone can have their say on an idea straight away (dates and place votes open with it).
+        const who = name(ppl.find((p) => p.id === from));
+        const { count } = await db.from('plan_polls').select('id', { count: 'exact', head: true }).eq('plan_id', pl.id).eq('status', 'open');
+        sent = await send(g, 'all', { title: `💡 ${who} has an idea: ${pl.name}`, body: count ? 'Vote on when and where, and say if you’d be in.' : 'Say if you’d be in.', url: planUrl(pl.id, count ? 'vote' : 'people') }, from, 'plan_proposed');
         break;
       }
       case 'rule_proposed': {
@@ -295,7 +380,7 @@ Deno.serve(async (req) => {
         const ppl = await players(g);
         // The admin putting a rule up goes to everyone; a member's proposal goes to the admin first.
         const msg = { title: `📜 Rule up for a vote: ${r.title}`, body: r.value ? `${r.value} — have your say` : 'Have your say', url: `${APP}#/rules` };
-        sent = me.is_admin ? await send(g, 'all', msg, from) : await send(g, await admins(g), { ...msg, title: `📜 ${name(ppl.find((p) => p.id === from))} proposed a rule: ${r.title}` }, from);
+        sent = me.is_admin ? await send(g, 'all', msg, from, 'rule_proposed') : await send(g, await admins(g), { ...msg, title: `📜 ${name(ppl.find((p) => p.id === from))} proposed a rule: ${r.title}` }, from, 'rule_proposed');
         break;
       }
       case 'rule_decided': {
@@ -303,7 +388,7 @@ Deno.serve(async (req) => {
         const r = await mine(g, 'rules', body.rule_id);
         if (!r || !['active', 'rejected', 'retired'].includes(r.status)) break;
         const verb = { active: '✅ New rule', rejected: '❌ Rule rejected', retired: '🗄️ Rule retired' }[r.status as 'active'];
-        sent = await send(g, 'all', { title: `${verb}: ${r.title}`, body: r.decision_note || r.value || '', url: `${APP}#/rules` }, from);
+        sent = await send(g, 'all', { title: `${verb}: ${r.title}`, body: r.decision_note || r.value || '', url: `${APP}#/rules` }, from, 'rule_decided');
         break;
       }
       case 'payment_recorded': {
@@ -312,11 +397,27 @@ Deno.serve(async (req) => {
         if (!(await once(`payment:${t.id}`))) break;
         const pl = await plan(g, t.plan_id);
         const ppl = await players(g);
-        sent = await send(g, [t.to_id], { title: `💸 ${name(ppl.find((p) => p.id === t.from_id))} says they paid you $${Number(t.amount).toFixed(2).replace(/\.00$/, '')}`, body: `${pl.name} — tap to confirm you got it.`, url: planUrl(pl.id, 'kitty') }, from);
+        sent = await send(g, [t.to_id], { title: `💸 ${name(ppl.find((p) => p.id === t.from_id))} says they paid you $${Number(t.amount).toFixed(2).replace(/\.00$/, '')}`, body: `${pl.name} — tap to confirm you got it.`, url: planUrl(pl.id, 'kitty') }, from, 'payment_recorded');
+        break;
+      }
+      case 'comment_added': {
+        const c = await mine(g, 'plan_comments', body.comment_id);
+        if (c.player_id !== from) return json({ error: 'Not your comment' }, 403);
+        if (!(await once(`comment:${c.id}`))) break;
+        const pl = await plan(g, c.plan_id);
+        // Whoever's in or maybe, the organiser, and anyone already in the conversation.
+        const [{ data: rs }, { data: earlier }, ppl] = await Promise.all([
+          db.from('plan_rsvps').select('player_id').eq('plan_id', pl.id).in('status', ['in', 'maybe']),
+          db.from('plan_comments').select('player_id').eq('plan_id', pl.id),
+          players(g),
+        ]);
+        const to = [...(rs || []).map((r) => r.player_id), ...(earlier || []).map((r) => r.player_id), pl.organiser_id, pl.created_by].filter(Boolean);
+        const text = String(c.body || '');
+        sent = await send(g, to, { title: `💬 ${name(ppl.find((p) => p.id === from))} on ${pl.name}`, body: text.length > 120 ? `${text.slice(0, 117)}…` : text, url: planUrl(pl.id, 'chat'), tag: `chat-${pl.id}` }, from, 'comment');
         break;
       }
       case 'draw_open':
-        sent = await send(g, 'all', { title: '🎲 The draw room is open', body: 'Open the app to watch it live.', url: APP }, from);
+        sent = await send(g, 'all', { title: '🎲 The draw room is open', body: 'Open the app to watch it live.', url: APP }, from, 'draw_open');
         break;
       default:
         return json({ error: 'Unknown notification' }, 400);

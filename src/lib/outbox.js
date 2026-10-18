@@ -10,6 +10,7 @@
 //     has been locked, the photo can't be read) drops that one item and says so; the rest carry on.
 import { supabase } from './supabase.js';
 import { uploadPhoto } from './images.js';
+import { groupFolder } from './group.js';
 
 const KEY = 'lgc-outbox';
 const MAX_AGE = 7 * 24 * 3600 * 1000;
@@ -97,7 +98,9 @@ async function insert(table, row) {
 export async function sendOrQueue(table, row, opts = {}) {
   const id = row.id || uuid();
   const item = { id, table, row: { ...row, id }, queued_at: new Date().toISOString() };
-  const photo = opts.photo?.file ? { field: opts.photo.field || 'photo_url', folder: opts.photo.folder || 'feed' } : null;
+  // The photo's folder is fixed now (with this group), so it lands in the right group even if it
+  // only sends after the phone has switched to another group.
+  const photo = opts.photo?.file ? { field: opts.photo.field || 'photo_url', folder: groupFolder(opts.photo.folder || 'feed') } : null;
   try {
     if (photo) item.row[photo.field] = await upload(opts.photo.file, photo.folder);
     await insert(table, item.row);

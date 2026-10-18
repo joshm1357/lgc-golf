@@ -6,6 +6,7 @@
 //     and opened from there, on iOS 16.4 or newer. Apple's rule, not ours.
 //   - The app tells the 'notify' server function what happened; the server writes
 //     the message and sends it, so nobody can send made-up notifications.
+import { currentGroup } from './group.js';
 import { supabase } from './supabase.js';
 
 export const VAPID_PUBLIC = 'BCfEi9CqrSZi7EMNXBjBvwjPYsy-EPe4uM9BCqx7showM-O8MUOQBPQeCtnBDZDwKWDlUQpU-JVR2aqR6tz-H9I';
@@ -62,7 +63,7 @@ export async function disablePush() {
 /** Tell the server something happened. Never throws — a failed notification shouldn't block the action. */
 export async function notify(type, payload = {}) {
   try {
-    const { data, error } = await supabase.functions.invoke('notify', { body: { type, ...payload } });
+    const { data, error } = await supabase.functions.invoke('notify', { body: { type, group_id: currentGroup() || undefined, ...payload } });
     if (error) return { sent: 0, error };
     return data || { sent: 0 };
   } catch (error) {

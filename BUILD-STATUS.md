@@ -133,6 +133,205 @@ STOP → live SQL below → merge `v1.5` into `main` (deploys) → check the liv
 6. Merge `v1.5` into `main` → GitHub Pages deploys → open the app, check the "New version ready" banner, leaderboard,
    a score, Coming up → Rooms, More → Tribunal, and airplane mode.
 
+
+## v2.0 Stage 1 — Groups (branch `stage-1-groups`, on staging only)
+
+**Built**
+- **Database (022, 023).** `groups` (L.G.C = the `legacy` group, copied from `settings`) and `group_members`
+  (copied from `members`; the 2 admins are organisers). `group_id` on 33 tables, filled in for L.G.C without touching
+  anything else (score times unchanged), indexed, then required. A trigger fills it on every new row from the row's
+  parent (a score from its round, a post from its round/trip/player…) or from the person's current group; a row can't
+  point at another group's parent and can't be moved between groups. Every existing access rule was rewritten in
+  place to mean "of this row's group" (same names, same meaning — the 30 L.G.C access checks give identical answers),
+  plus a second lock on every table: "same group only". The old function names work as before, answering for the
+  person's current group (the group the new app names in the `x-group-id` header, else their first). Photos: new
+  uploads go to `<group id>/<folder>/…`; old phones' folders only work for L.G.C. Claude connector keys live in
+  `connector_keys` (hashed, one group each; L.G.C keeps its current key). `join_group_id(pin)` tells the app which
+  group a PIN opened.
+- **Deviation:** `plan_group_members` (rooms & cars) already has a column called `group_id` — its room/car — so it
+  gets its golf group through the room/car instead of a column of its own. Its rules and the "same group only" lock
+  go through the room/car.
+- **Server.** `notify` works inside one group: the group the app names (if you're in it) or your first; every id in a
+  request must be that group's; messages only reach phones of people in that group; the daily reminders run group by
+  group. `lgc-mcp`: each key reaches one group only.
+- **App.** `src/lib/group.js`: every database request carries the group and every read of a group's table is filtered
+  to it, centrally, so no screen can show another group's rows. Offline copy and live updates per group; photo folders
+  per group (fixed when queued); join opens the joined group. Old offline copy carried over once.
+
+**Tested (staging)**
+- Isolation (`supabase/tests/stage1_isolation.sql`): a second group with players, a live round, a score, a plan,
+  a cost, a room, a rule, a post and a Tribunal case. An L.G.C player sees **0** of Group B's rows across all tables
+  and can't edit, delete, score, post, say In, take a room, claim a player, lodge or vote on a case, or upload into
+  B's photo folder; Group B sees **0** L.G.C rows; B's organiser can't touch L.G.C rounds or handicaps; the handicap
+  guard works per group and logs in the right group; a person in both groups gets the right group from the header.
+- Access checks within L.G.C: 30/30 identical to v1.5.
+- Claude connector (called from the database): Group B's key sees only Group B; L.G.C round/plan ids → "No such
+  round/plan in this group"; can't score L.G.C players; wrong key → 404.
+- Daily reminders: processed per group (both groups' "trip is tomorrow" reminders logged separately); wrong cron
+  secret → 401; notify without sign-in → 401.
+- App: 63 unit tests; phone-width browser check (all v1.5 checks plus: every group-table read carries this group's
+  filter and header; rooms & cars reads are left alone).
+
+**Not yet tested — needs Josh:** notify refusing another group's ids for a *signed-in* caller, and the old-version
+(v1.5 build) browser test against staging, both need **anonymous sign-ins switched on in `lgc-golf-staging`**
+(Authentication → Sign In / Providers). The old-app behaviour (no header) is covered by the SQL tests.
+**Independent review → fixes (migration 024, 18 Oct)** — 3 must-fix, 6 should-fix, all done on staging:
+- The old `members` list is L.G.C's only (an organiser of another group could read and change it); nobody can write
+  to `members` or `group_members` directly any more.
+- A score can't name another group's player or team (the birdie post could leak a name).
+- Every link to another row must stay in the group — a round's course, a job's owner, a cost's payer, a vote's option,
+  a room's people… (one automatic check per table, rebuilt by later migrations), and a row with two parents is checked
+  against both.
+- Joining and admin PINs: 10 wrong tries an hour per sign-in (30 per internet address), then "wait an hour". New
+  groups get a 10-character joining code made by the app (`reset_group_code()`), so there's nothing to guess and no
+  "that PIN is taken" hint; L.G.C keeps choosing its own PIN. Empty PINs refused.
+- `group_members` taken off live updates (its delete events reached every phone); notify and the connector read
+  options/courses through the group too; the connector no longer remembers wrong keys.
+- Tested: isolation test now 47 checks (members list, cross-group job owner, direct membership insert, own-PIN on a
+  new group, new joining code, cross-group birdie, the 11th wrong PIN).
+- Not done (notes): the photos bucket is public (links are unguessable; a private bucket with signed links is a later
+  job); the draw room's live "who's here" channel is public (as in v1.5).
+
+## v2.0 Stage 1b — Trips (branch `stage-1b-trips`, on staging only)
+
+**Built** (spec: `docs/TRIPS-SPEC.md`)
+- **Database (025).** `plans.organiser_id` (whoever suggested it; only the admin can change it) and `budget_pp`;
+  `groups.vote_decider` (`admin` | `admin_or_organiser`, set in Admin → 8); `start_trip_votes()` — whoever suggested a
+  trip opens its first dates and place votes with their options; `decide_poll()` / `can_decide()` — the admin, or the
+  trip's organiser if the group allows it, closes a vote and the winner fills in the trip's dates or place;
+  `plan_comments` (Chat); `notify_prefs` and `notify_queue`. **Lock-in makes the trip in the app**: when a plan is set
+  to Locked in with dates (new button, or the old Edit sheet on an old phone) its `trips` row is made once, and later
+  date changes follow it. **Trips start and finish on their own**: on its first day a locked-in trip becomes the
+  current trip (the old one closes, and any round still live in it); a week after the last day it's marked Done.
+  Past trips with no plan (e.g. the 2026 South Coast trip) got one, so every trip is in one list.
+- **Server.** `notify`: each person's choice per group — straight away (default, so nothing changes for L.G.C), a
+  daily digest at their hour, or only important (draw room, a job for you, money, your trip tomorrow). "The draw
+  room is open" always goes straight away. Hourly digest job (`lgc-hourly-digest`, 3 past each hour). New messages:
+  Chat, "locked in"; a suggestion now goes to everyone (they can vote straight away); the suggester can send their
+  own vote's message; the organiser can send "decided" when allowed.
+- **App.** Bottom bar **Trips** (was Coming up): the trip that's on or next (big card; Leaderboard button while on),
+  other locked-in trips, **Ideas and voting** (what's still to decide: "Dates: 3 options, closes Fri"), **Past trips**
+  (dates, place, rounds played, first photo; called-off greyed). **Suggest a trip or round**: 2–3 date options or
+  "roughly…", 1–3 places with rough cost, budget each, vote closing date. Each trip: stage bar
+  (Idea → Deciding → Locked in → On now → Done), organiser, **Chat** tab, **Lock it in** (admin), "Add the rounds" to
+  the trip made at lock-in. More → Notifications: **When you hear about things** + iPhone Home Screen steps.
+
+**Tested (staging)**
+- `supabase/tests/stage1b_trips.sql` — 39 checks: a suggestion opens its two votes (once), only the suggester or
+  admin can, anyone adds options; organiser can't be handed over by a player; Chat lands in the right group; settings
+  only your own; nobody reads the digest queue; with "admin" the organiser can't pick a winner, with "admin or
+  organiser" they can (own trip only, not another player); a retry of the same pick is fine, changing a decided vote
+  isn't; another group sees 0 trips/votes/options/chat/settings and can't comment, open votes or change the setting;
+  lock-in makes exactly one trip; dates follow; scoring on it works; old-phone lock-in works; an old phone's setup after
+  lock-in leaves one trip; a missed first day is caught up, a round inside a running trip doesn't take over; a week
+  later → Done.
+- Digest end to end on the staging server: a job due tomorrow for a digest person is queued (not sent); at the wrong
+  hour nothing goes; at their hour the 3 waiting items go as one; "only important": the job goes straight away, a
+  vote closing tomorrow doesn't. (No real phone subscribed on staging, so "sent" is counted as 0 — the queue and the
+  once-a-day log show what happened.)
+- Phone width (375 px, `tests/e2e/trips-test.mjs`): 18 checks — Trips tab sections, Suggest sheet, idea's stage bar
+  and votes, Chat, closing a vote via `decide_poll`, Lock it in, Admin setting, no sideways scroll, no page errors.
+  The v1.5 browser checks (`tests/e2e/phone-test.mjs`) all still pass. 75 unit tests.
+- Regression after 024–026 (re-run on staging): isolation 47/47, Trips 39/39, L.G.C access checks 30/30.
+
+**Independent review → fixes (026, 18 Oct)** — nothing leaked between groups; 2 must-fix, 5 should-fix, done:
+- An admin on an old phone who taps "Set it up in the app" after lock-in no longer leaves a stray empty trip (the
+  empty one lock-in made is tidied away); a trip deleted by hand doesn't come back by itself.
+- The new app works before 025 is applied (budget only sent when given; the admin closes votes the old way).
+- No flooding: at most 3 "new idea" buzzes a day from one person; one Chat buzz per trip every 10 minutes; people who
+  haven't picked their name can't send anything.
+- The midnight job never swaps trips in the middle of one that's on (a one-day round inside a long weekend stays
+  put), and catches up a missed first day. The hourly digest job is checked to really ask for the digest.
+- Trips added in Admin → Trips (no plan) still show on the Trips tab; Trips keeps an offline copy; switching to
+  "only important" still delivers waiting important items; the vote-closing button says "Pick this winner".
+- "Trusted server" in the lock-in guard is now the request's database role, not "nobody signed in".
+- Left as notes: past trips don't show winners yet (the honour board isn't linked to trips — Stage 6 history import
+  links them); Chat delete events, like other tables', carry only the deleted row's id to every phone.
+
+### Live order for v2.0 (at the release STOP — not before)
+022 → 023 → 024 → 025 → 026 → 027 → 028 → 029 → 030 → 027b on live, then deploy `notify` and `lgc-mcp`, then the app. (On staging 024 ran after 025;
+025 calls the same-group check builder again, so the order above is the one for live.)
+
+## v2.0 Stage 2 — Proper login, roles and invites (branch `stage-2-login`, on staging only)
+
+**Decided (18 Oct):** no Apple sign-in for now; Google + emailed code; Facebook later if wanted.
+**STOP:** no sign-in provider is switched on. Josh's steps are in `docs/SIGN-IN-SETUP.md` (note: email to anyone needs a
+domain, or Gmail SMTP for now).
+
+**Built** (no new sign-in setting needed)
+- **Invite links + QR codes (027).** One player link and one guest link per group, 12 letters/numbers made by the
+  server; organiser can make a new one (old stops working). Joining by link works before you're in any group, from
+  inside the app for another group, while still picking your name, and — for the iPhone Home Screen app, which can't
+  open links from chats — by **pasting the link** into the PIN box or Group → "Join another group". Wrong links count
+  toward the wrong-PIN limit. L.G.C's group PIN keeps working.
+- **Roles:** organiser / player / guest. Guests play, score, post and chat, but don't vote on rules, propose rules, or
+  vote or lodge in the Tribunal (the database refuses; the screens hide the buttons) and add themselves rather than
+  taking an existing name. Organisers change roles (never zero organisers, even if two act at once), give a nameless
+  member a name, free a name, and take people out (027b). Role changes and removals are posted on the feed.
+- **Names:** you can only pick a name nobody else has ("taken" shows on the list); an organiser hands it over.
+- **Admin PIN:** L.G.C only. An organiser can switch it off in Group & invites; after that it answers like a wrong PIN
+  (old phones show their usual message). Using it posts on the feed.
+- **Wrong-PIN limits (028):** per person, per real address (checked on staging: the first `x-forwarded-for` entry can
+  be faked, so the platform's own address header is used), and 60 an hour across everyone for PINs.
+- **Group & invites screen** (More): switch group (fresh start in the other group), invite + guest links with QR and
+  share, people and roles. **Sign-in** buttons (Google; email with a 6-digit code, which works inside the Home Screen
+  app) are built but hidden until `VITE_SIGN_IN` is set; a phone-only player adds a sign-in to the *same* user (keeps
+  scores). Sign-in problems coming back from Google are shown; a Google sign-in that made a new empty account is
+  explained and can sign out.
+
+**Tested (staging)**
+- `supabase/tests/stage2_invites.sql` — 35 checks pass (links, reset, guessing limit, join, names, roles, guests,
+  feed posts, L.G.C admin PIN off). Regression after 027/028: isolation 47/47, Trips 39/39, access 30/30.
+- Phone width (`tests/e2e/stage2-test.mjs`, 19 checks): group screen, QR, new link, roles, switching group, joining by
+  link and by pasting it, players see no invite controls, new groups have no admin PIN entry. Trips and v1.5 phone
+  checks still pass. 78 unit tests.
+
+**Independent review → fixes (028 + app):** iPhone Home Screen joining (must-fix); admin PIN switch-off; faked-address
+and fresh-user limit holes; guests taking unclaimed names; New link failures; guest buttons; own-row detection,
+confirms; two organisers demoting each other; sign-in traps (silent link failure, empty new Google accounts, email
+links opening Safari). Left as notes: invite codes stored plainly (server-only table); duplicate display names allowed.
+
+**Josh's paste list for staging (approvals time out from here):** `020`, `021`, `027b_remove_member.sql`, and
+`drop function public.tmp_echo_headers();` (a test helper, already emptied and locked).
+
+## v2.0 Stage 3 — Feature switches (branch `stage-3-features`, on staging only)
+
+**Built**
+- **One list** (`src/lib/features.js`): 17 switchable features with name, description, new-group default, what each
+  needs (side comp bonus needs side comps; votes/jobs, shared costs, rooms and cars need the Trips planner) and a tier
+  (`free` for all — ready for premium later, no billing). Scoring, leaderboard, players, rounds and courses can't be
+  switched off. A unit test checks the database's copy matches.
+- **Database (029):** `feature_catalogue`, `group_features` (live updates), `feature_on(group, key)` (the group's choice,
+  else the default; off when its parent is off), `set_feature` (organisers). **Enforced:** every feature's tables refuse
+  adds, changes and removals while it's off — from any app version or the connector — reads still work; plus rule
+  proposals, side comp bonus strokes, Tribunal cases and votes, and trip votes in the server functions. Birdie posts
+  aren't made with the Feed off. **L.G.C:** everything on apart from scorecard photos and booking links.
+- **App:** `useFeature(key)`; switched-off features disappear cleanly — bottom bar (Feed, Comps, Trips), More (map,
+  Trophy Room, Tribunal, notifications), the draw, distances and shot planner, side comp prompts, trip tabs (Vote, Jobs,
+  Kitty, Rooms & cars) and the job checklist, rule proposing/voting, bonus strokes. Trips without votes take the first
+  date and place straight away. **Features** switches for organisers in Group & invites (dependants greyed out; a
+  warning when switching off a parent).
+- **Server:** `notify` sends nothing for a switched-off feature (or when notifications are off); the Claude connector's
+  link stops working when the connector is off.
+
+**Tested:** 83 unit tests; `supabase/tests/stage3_features.sql`; phone width `tests/e2e/features-test.mjs` (9 checks:
+3-tab bar, hidden menu items, greyed dependants, switching, no sideways scroll).
+
+**Independent review → fixes (030 + app + server):** the Claude connector now checks each tool's feature (and hides
+tools that are off); every Tribunal step (defence, chair's close, verdict) checks the Tribunal is on; automatic posts
+(verdicts, "wants to join", role changes, admin PIN, removals) only when the Feed is on; bonus strokes refuse only a
+*change* to the bonus (a round that already has one can still be started and locked); the trip-vote checks are
+verified; L.G.C's 17 switches written out; a mistyped feature key fails closed; digest and daily reminders skip
+switched-off features (checked before marking anything sent); screens of a switched-off feature say so instead of
+half-working (old links, bookmarks); side comp prompts, feed moments/photos, admin trophy/draw/side-comp editors,
+the room draw, trophy copying and the draw overlay hidden when off; Trips without votes asks for one date and place;
+scorecard photos and booking links show as "coming soon".
+**Tested after fixes:** Stage 3 test 27 checks; isolation 47/47, Trips 39/39, Stage 2 35/35, access 30/30 unchanged;
+connector on the staging server: L.G.C's link works, a group with the connector off gets "Not found"; all four phone
+tests pass (features, Stage 2, Trips, v1.5 regression).
+
+**Release:** see `docs/RELEASE-v2.0.md` — **RELEASE v2.0 is a STOP**.
+
 ## Known limits
 - GPS distances are approximate (±5–10 m) and straight-line; closest-to-pin distance is typed in.
 - Location sharing only works while the app is open.

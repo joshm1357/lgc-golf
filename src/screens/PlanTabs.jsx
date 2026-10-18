@@ -1,7 +1,7 @@
 // The Planner's other tabs: Details (where/when, day plan, info, bring list), Jobs, Kitty, Rooms & cars.
 import React, { useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
-import { useData, useSession, playerName } from '../lib/store.jsx';
+import { useData, useSession, playerName, useFeature } from '../lib/store.jsx';
 import { Avatar, Sheet, Icon, toast } from '../components/ui.jsx';
 import { fmtRange, countdown, icsFor, nudgeText, mapsLink, kitty, money, DEFAULT_BRING, todayISO, daysUntil } from '../lib/plan.js';
 import { REVEAL_MS } from '../lib/draw.js';
@@ -522,6 +522,7 @@ function PaySheet({ pd, person, onClose }) {
 
 export function GroupsTab({ pd }) {
   const data = useData();
+  const drawOn = useFeature('draw');
   const { status } = useSession();
   const [kind, setKind] = useState(pd.plan.kind === 'round' ? 'car' : 'room');
   const [editing, setEditing] = useState(null); // {} new
@@ -564,7 +565,7 @@ export function GroupsTab({ pd }) {
       {status.is_admin && (
         <div className="stack" style={{ gap: 8 }}>
           <button type="button" className="btn ghost block" onClick={() => setEditing({})}>+ Add a {word.one}</button>
-          {groups.length > 0 && inIds.length > 0 && <button type="button" className="btn gold block" style={{ minHeight: 56 }} onClick={() => setDrawing(true)}>🎲 Draw the {word.many} live</button>}
+          {drawOn && groups.length > 0 && inIds.length > 0 && <button type="button" className="btn gold block" style={{ minHeight: 56 }} onClick={() => setDrawing(true)}>🎲 Draw the {word.many} live</button>}
           {groups.length > 0 && <span className="small muted">Tap a {word.one} to put people in, rename it or remove it — one Save does the lot.</span>}
         </div>
       )}

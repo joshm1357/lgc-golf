@@ -1,20 +1,22 @@
-// The Planner: organise any number of future trips and one-day rounds.
-//   /plan           → Coming up (every plan)
-//   /plan/:planId   → one plan: Vote · Who's in · Details · Jobs · Kitty · Rooms & cars
-// Anyone can suggest options, vote, say if they're in and add jobs; the admin decides.
+// One trip (or one-day round), from idea to the record afterwards.
+//   /plan           → the Trips tab (Trips.jsx)
+//   /plan/:planId   → one trip: Vote · Chat · Who's in · Details · Jobs · Kitty · Rooms & cars
+// Anyone can suggest options, vote, chat, say if they're in and add jobs. The admin picks vote winners (or the trip's
+// organiser too, if the group allows it) and locks the trip in, which makes it a trip in the app.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { supabase, friendlyError } from '../lib/supabase.js';
-import { useData, useRealtime, useSession, playerName, cacheGet, cacheSet } from '../lib/store.jsx';
+import { useData, useRealtime, useSession, playerName, cacheGet, cacheSet, useFeature } from '../lib/store.jsx';
 import { Header, Avatar, AvatarStack, Sheet, Loading, Icon, toast } from '../components/ui.jsx';
 import {
-  tallyPoll, nonVoters, suggestions, fmtRange, countdown, nudgeText, RSVP_LABEL, DEFAULT_BRING, todayISO,
+  tallyPoll, nonVoters, suggestions, fmtRange, countdown, nudgeText, RSVP_LABEL, DEFAULT_BRING, todayISO, money,
 } from '../lib/plan.js';
 import { notify, shareText, appLink, pushState, enablePush, disablePush, isIOS } from '../lib/push.js';
 import { DetailsTab, JobsTab, KittyTab, GroupsTab } from './PlanTabs.jsx';
 import { TripSetupCard } from './TripSetup.jsx';
+import { STAGES, STAGE_LABEL, tripStage, canDecide } from '../lib/trips.js';
 
-const PLAN_TABLES = ['plans', 'plan_polls', 'plan_options', 'plan_votes', 'plan_rsvps', 'plan_items', 'plan_costs', 'plan_payments', 'plan_groups', 'plan_group_members', 'plan_transfers'];
+const PLAN_TABLES = ['plans', 'plan_polls', 'plan_options', 'plan_votes', 'plan_rsvps', 'plan_items', 'plan_costs', 'plan_payments', 'plan_groups', 'plan_group_members', 'plan_transfers', 'plan_comments'];
 const STATUS_LABEL = { planning: 'Planning', confirmed: 'Locked in', done: 'Done', cancelled: 'Called off' };
 
 export { useRun, must } from '../lib/run.js';
@@ -38,75 +40,6 @@ export async function shareNudge(text) {
   else if (r === 'failed') toast('Couldn’t share from this phone');
 }
 
-// ---------------------------------------------------------------- Coming up (list)
-
-export default function Planner() {
-  const data = useData();
-  const { status } = useSession();
-  const nav = useNavigate();
-  const [rows, setRows] = useState(null);
-  const [creating, setCreating] = useState(false);
-  const load = useCallback(async () => {
-    const [{ data: plans }, { data: rsvps }] = await Promise.all([
-      supabase.from('plans').select('*').order('start_date', { ascending: true, nullsFirst: false }),
-      supabase.from('plan_rsvps').select('plan_id,player_id,status'),
-    ]);
-    setRows({ plans: plans || [], rsvps: rsvps || [] });
-  }, []);
-  useEffect(() => { load(); }, [load]);
-  useRealtime(['plans', 'plan_rsvps'], load);
-
-  if (!rows) return <div className="page"><Header logo title="Coming up" /><Loading /></div>;
-  const today = todayISO();
-  const isPast = (p) => p.status === 'done' || p.status === 'cancelled' || (p.end_date || p.start_date) < today;
-  const upcoming = rows.plans.filter((p) => !isPast(p)).sort((a, b) => (a.start_date || '9999').localeCompare(b.start_date || '9999'));
-  const past = rows.plans.filter(isPast).sort((a, b) => String(b.start_date).localeCompare(String(a.start_date)));
-
-  return (
-    <div className="page">
-      <Header logo title="Coming up" sub="Trips and rounds being organised" />
-      <div className="section stack">
-        <NotifyCard compact />
-        {upcoming.length === 0 && <div className="empty">Nothing being organised yet. Start one below.</div>}
-        {upcoming.map((p) => <PlanCard key={p.id} plan={p} rsvps={rows.rsvps.filter((r) => r.plan_id === p.id)} me={status.player_id} />)}
-        <button type="button" className="btn gold block" style={{ minHeight: 56 }} onClick={() => setCreating(true)}>
-          {status.is_admin ? '+ Plan a trip or round' : '💡 Suggest a trip or round'}
-        </button>
-        {!status.is_admin && <span className="small muted" style={{ textAlign: 'center' }}>The lads can say if they’d be in; the admin approves it.</span>}
-        {past.length > 0 && (
-          <details>
-            <summary className="label" style={{ padding: '10px 0', cursor: 'pointer' }}>Past & called off ({past.length})</summary>
-            <div className="stack">{past.map((p) => <PlanCard key={p.id} plan={p} rsvps={rows.rsvps.filter((r) => r.plan_id === p.id)} me={status.player_id} />)}</div>
-          </details>
-        )}
-      </div>
-      {creating && <PlanSheet onClose={() => setCreating(false)} onSaved={(p) => nav(`/plan/${p.id}`)} />}
-    </div>
-  );
-}
-
-function PlanCard({ plan, rsvps, me }) {
-  const data = useData();
-  const ins = rsvps.filter((r) => r.status === 'in');
-  const mine = rsvps.find((r) => r.player_id === me);
-  return (
-    <Link to={`/plan/${plan.id}`} className="card pad stack" style={{ gap: 6, textDecoration: 'none', color: 'inherit' }}>
-      <div className="row between" style={{ alignItems: 'flex-start' }}>
-        <div>
-          <div className="small muted" style={{ fontWeight: 700 }}>{plan.kind === 'round' ? '⛳ ONE-DAY ROUND' : '🧳 TRIP'} · {plan.proposed ? (plan.status === 'cancelled' ? 'Declined' : '💡 Proposed') : STATUS_LABEL[plan.status]}</div>
-          <div style={{ fontSize: 19, fontWeight: 800 }}>{plan.name}</div>
-        </div>
-        {plan.start_date && <span className="small" style={{ flex: 'none', padding: '4px 10px', borderRadius: 999, background: 'var(--gold-soft)', border: '1px solid var(--gold)', fontWeight: 700, whiteSpace: 'nowrap' }}>{countdown(plan.start_date)}</span>}
-      </div>
-      <div style={{ fontSize: 15 }}>{plan.start_date ? fmtRange(plan.start_date, plan.end_date) : 'Dates to be voted on'} · {plan.location_name || 'Location TBC'}</div>
-      <div className="row between">
-        <span className="row" style={{ gap: 8 }}><AvatarStack players={ins.map((r) => data.playersById[r.player_id]).filter(Boolean)} /><span className="small muted">{ins.length} in</span></span>
-        <span className="small" style={{ fontWeight: 700, color: mine ? 'var(--navy)' : 'var(--under)' }}>{mine ? `You: ${RSVP_LABEL[mine.status]}` : 'You haven’t replied'}</span>
-      </div>
-    </Link>
-  );
-}
-
 // ---------------------------------------------------------------- One plan
 
 export function usePlanData(planId) {
@@ -119,12 +52,12 @@ export function usePlanData(planId) {
         supabase.from('plans').select('*').eq('id', planId).maybeSingle(),
         by('plan_polls').order('created_at'), by('plan_rsvps'), by('plan_items').order('sort').order('created_at'),
         by('plan_costs').order('created_at'), by('plan_payments'), by('plan_groups').order('sort').order('created_at'),
-        by('plan_transfers').order('created_at'),
+        by('plan_transfers').order('created_at'), by('plan_comments').order('created_at'),
       ]);
     } catch {
       res = [{ error: true }];
     }
-    const [plan, polls, rsvps, items, costs, payments, groups, transfers] = res;
+    const [plan, polls, rsvps, items, costs, payments, groups, transfers, comments] = res;
     if (plan.error) {
       // No signal: show the copy saved on this phone last time.
       const c = cacheGet(`plan-${planId}`);
@@ -133,15 +66,18 @@ export function usePlanData(planId) {
     }
     const pollIds = (polls.data || []).map((p) => p.id);
     const groupIds = (groups.data || []).map((g) => g.id);
-    const [options, votes, members] = await Promise.all([
+    const [options, votes, members, group] = await Promise.all([
       pollIds.length ? supabase.from('plan_options').select('*').in('poll_id', pollIds).order('start_date', { nullsFirst: false }).order('created_at') : { data: [] },
       pollIds.length ? supabase.from('plan_votes').select('*').in('poll_id', pollIds) : { data: [] },
       groupIds.length ? supabase.from('plan_group_members').select('*').in('group_id', groupIds) : { data: [] },
+      plan.data ? supabase.from('groups').select('vote_decider').eq('id', plan.data.group_id).maybeSingle() : { data: null },
     ]);
     const next = {
       plan: plan.data, polls: polls.data || [], rsvps: rsvps.data || [], items: items.data || [], costs: costs.data || [],
       payments: payments.data || [], groups: groups.data || [], options: options.data || [], votes: votes.data || [], members: members.data || [],
-      transfers: transfers.data || [],
+      transfers: transfers.data || [], comments: comments?.data || [],
+      // Older databases (before 025) have no vote_decider: the admin decides.
+      voteDecider: group?.data?.vote_decider || 'admin',
     };
     cacheSet(`plan-${planId}`, next);
     setD({ ...next, reload: load });
@@ -152,12 +88,13 @@ export function usePlanData(planId) {
 }
 
 const TABS = [
-  { value: 'vote', label: '🗳️ Vote' },
+  { value: 'vote', label: '🗳️ Vote', feature: 'planner_tasks' },
+  { value: 'chat', label: '💬 Chat' },
   { value: 'people', label: '🙋 Who’s in' },
   { value: 'details', label: '📍 Details' },
-  { value: 'jobs', label: '📋 Jobs' },
-  { value: 'kitty', label: '💰 Kitty' },
-  { value: 'groups', label: '🛏️ Rooms & cars' },
+  { value: 'jobs', label: '📋 Jobs', feature: 'planner_tasks' },
+  { value: 'kitty', label: '💰 Kitty', feature: 'planner_costs' },
+  { value: 'groups', label: '🛏️ Rooms & cars', feature: 'planner_rooms' },
 ];
 
 export function PlanDetail() {
@@ -166,22 +103,25 @@ export function PlanDetail() {
   const { status } = useSession();
   const pd = usePlanData(planId);
   const [editing, setEditing] = useState(false);
-  const tab = TABS.some((t) => t.value === params.get('tab')) ? params.get('tab') : null;
+  // Tabs for switched-off features (Group & invites → Features) aren't shown.
+  const on = { planner_tasks: useFeature('planner_tasks'), planner_costs: useFeature('planner_costs'), planner_rooms: useFeature('planner_rooms') };
+  const tabs = TABS.filter((t) => !t.feature || on[t.feature]);
+  const tab = tabs.some((t) => t.value === params.get('tab')) ? params.get('tab') : null;
   const setTab = (t) => setParams((p) => { const n = new URLSearchParams(p); n.set('tab', t); return n; }, { replace: true });
 
-  if (!pd) return <div className="page"><Header back="Coming up" title="Loading…" /><Loading /></div>;
-  if (!pd.plan) return <div className="page"><Header back="Coming up" title="Not found" /><div className="empty">This plan has been removed.</div></div>;
+  if (!pd) return <div className="page"><Header back="Trips" title="Loading…" /><Loading /></div>;
+  if (!pd.plan) return <div className="page"><Header back="Trips" title="Not found" /><div className="empty">This trip has been removed.</div></div>;
   const { plan } = pd;
   // Open on the most useful tab: vote while a vote is open, otherwise the details.
-  const current = tab || (pd.polls.some((p) => p.status === 'open') ? 'vote' : plan.start_date ? 'details' : 'people');
+  const current = tab || (on.planner_tasks && pd.polls.some((p) => p.status === 'open') ? 'vote' : plan.start_date ? 'details' : 'people');
   const sub = [plan.start_date ? `${fmtRange(plan.start_date, plan.end_date)} · ${countdown(plan.start_date)}` : 'Dates TBC', plan.location_name || 'Location TBC'].join(' · ');
 
   return (
     <div className="page">
-      <Header back="Coming up" title={plan.name} sub={sub}
+      <Header back="Trips" title={plan.name} sub={sub}
         right={(status.is_admin || (plan.proposed && plan.created_by === status.player_id)) && <button type="button" className="btn ghost sm" style={{ color: '#fff', background: 'transparent', borderColor: 'rgba(255,255,255,.45)' }} onClick={() => setEditing(true)}>Edit</button>}>
         <div className="chips" role="tablist" aria-label="Sections" style={{ margin: '4px -16px 0', padding: '0 16px' }}>
-          {TABS.map((t) => (
+          {tabs.map((t) => (
             <button key={t.value} type="button" role="tab" className="chip" aria-selected={t.value === current} onClick={() => setTab(t.value)}
               style={t.value === current ? { background: 'var(--gold)', borderColor: 'var(--gold)', color: 'var(--navy)' } : { background: 'rgba(255,255,255,.08)', borderColor: 'rgba(255,255,255,.35)', color: '#fff' }}>{t.label}</button>
           ))}
@@ -189,10 +129,13 @@ export function PlanDetail() {
       </Header>
       <div className="section stack">
         {plan.status === 'cancelled' && <div className="err">{plan.proposed ? 'The admin passed on this one.' : 'This one’s been called off.'}</div>}
+        {plan.status !== 'cancelled' && <StageBar pd={pd} />}
         {plan.proposed && plan.status !== 'cancelled' && <ProposalBanner plan={plan} reload={pd.reload} />}
-        <Checklist pd={pd} onGo={setTab} />
+        <LockInCard pd={pd} />
+        {on.planner_tasks && <Checklist pd={pd} onGo={setTab} />}
         <TripSetupCard plan={plan} reload={pd.reload} />
         {current === 'vote' && <VoteTab pd={pd} />}
+        {current === 'chat' && <ChatTab pd={pd} />}
         {current === 'people' && <PeopleTab pd={pd} />}
         {current === 'details' && <DetailsTab pd={pd} />}
         {current === 'jobs' && <JobsTab pd={pd} />}
@@ -269,12 +212,12 @@ function VoteTab({ pd }) {
   const closed = pd.polls.filter((p) => p.status === 'closed');
   return (
     <>
-      {pd.polls.length === 0 && <div className="empty">No votes yet.{status.is_admin ? ' Put one up — dates, location, or anything else.' : ' The admin will put one up.'}</div>}
+      {pd.polls.length === 0 && <div className="empty">No votes yet.{status.is_admin ? ' Put one up — dates, place, or anything else.' : ' The admin will put one up.'}</div>}
       {open.map((p) => <PollCard key={p.id} poll={p} pd={pd} />)}
       {status.is_admin && <button type="button" className="btn gold block" onClick={() => setCreating(true)}>+ New vote</button>}
       {closed.length > 0 && <span className="label">Decided</span>}
       {closed.map((p) => <PollCard key={p.id} poll={p} pd={pd} />)}
-      <p className="note" style={{ margin: 0 }}>Mark every option ✓ Can, ? Maybe or ✗ Can’t. ✓ = 2 points, ? = 1. The admin closes the vote and picks the winner.</p>
+      <p className="note" style={{ margin: 0 }}>Mark every option ✓ Can, ? Maybe or ✗ Can’t. ✓ = 2 points, ? = 1. Anyone can add an option. {pd.voteDecider === 'admin_or_organiser' ? 'The admin or the trip’s organiser' : 'The admin'} closes the vote and picks the winner.</p>
       {creating && <PollSheet pd={pd} onClose={() => setCreating(false)} />}
     </>
   );
@@ -327,7 +270,6 @@ function PollCard({ poll, pd }) {
                   {winner && '✅ '}{optionTitle(poll, o)}
                   {!winner && r.leading && isOpen && <span className="small" style={{ marginLeft: 6, color: '#7A5A00', fontWeight: 800 }}>LEADING</span>}
                 </div>
-                {poll.kind === 'dates' && o.label && o.label !== optionTitle(poll, o) && <div className="small muted">{o.label}</div>}
                 {(o.address || o.cost_pp != null || o.notes) && (
                   <div className="small muted">{[o.address, o.cost_pp != null ? `~$${Number(o.cost_pp)} pp` : null, o.notes].filter(Boolean).join(' · ')}</div>
                 )}
@@ -364,8 +306,8 @@ function PollCard({ poll, pd }) {
             {status.is_admin && <button type="button" className="btn ghost sm" disabled={busy} onClick={() => run(async () => { const r = await notify('nudge_votes', { plan_id: pd.plan.id }); toast(`Reminder sent to ${r.sent || 0} phone${r.sent === 1 ? '' : 's'}`); })}>🔔 Send reminder</button>}
           </div>
         )}
-        {status.is_admin && (isOpen
-          ? <button type="button" className="btn sm" onClick={() => setClosing(true)}>Close the vote & pick the winner</button>
+        {isOpen && canDecide({ isAdmin: status.is_admin, me, plan: pd.plan, voteDecider: pd.voteDecider }) && <button type="button" className="btn sm" onClick={() => setClosing(true)}>Close the vote & pick the winner</button>}
+        {status.is_admin && (isOpen ? null
           : <button type="button" className="btn ghost sm" onClick={() => run(async () => { await must(supabase.from('plan_polls').update({ status: 'open', winner_option_id: null }).eq('id', poll.id)); pd.reload(); }, 'Vote reopened')}>Reopen this vote</button>)}
       </div>
       {suggesting && <OptionSheet poll={poll} onClose={() => setSuggesting(false)} onSaved={pd.reload} />}
@@ -485,18 +427,23 @@ function CloseSheet({ poll, rows, pd, onClose }) {
         {poll.kind !== 'other' && (
           <label className="row" style={{ gap: 8, fontWeight: 600 }}>
             <input type="checkbox" checked={apply} onChange={(e) => setApply(e.target.checked)} style={{ width: 20, height: 20 }} />
-            <span>Set the {poll.kind === 'dates' ? 'trip dates' : 'location'} to the winner</span>
+            <span>Set the {poll.kind === 'dates' ? 'trip dates' : 'place'} to the winner</span>
           </label>
         )}
         <button type="button" className="btn gold block" disabled={busy || !pick} onClick={() => run(async () => {
           const o = rows.find((r) => r.option.id === pick).option;
-          await must(supabase.from('plan_polls').update({ status: 'closed', winner_option_id: pick }).eq('id', poll.id));
-          if (apply && poll.kind === 'dates') await must(supabase.from('plans').update({ start_date: o.start_date, end_date: o.end_date }).eq('id', pd.plan.id));
-          if (apply && poll.kind === 'location') await must(supabase.from('plans').update({ location_name: o.label, address: o.address || pd.plan.address, link: o.link || pd.plan.link }).eq('id', pd.plan.id));
+          // One step on the server: closes the vote, records the winner and (if ticked) sets the trip's dates or place.
+          const { error } = await supabase.rpc('decide_poll', { p_poll: poll.id, p_option: pick, p_apply: apply && poll.kind !== 'other' });
+          if (error && /decide_poll|PGRST202|function/i.test(`${error.code} ${error.message}`) && status.is_admin) {
+            // A database from before Stage 1b: the admin closes it the old way.
+            await must(supabase.from('plan_polls').update({ status: 'closed', winner_option_id: pick }).eq('id', poll.id));
+            if (apply && poll.kind === 'dates' && o.start_date) await must(supabase.from('plans').update({ start_date: o.start_date, end_date: o.end_date || o.start_date }).eq('id', pd.plan.id));
+            if (apply && poll.kind === 'location') await must(supabase.from('plans').update({ location_name: o.label, address: o.address || pd.plan.address, link: o.link || pd.plan.link }).eq('id', pd.plan.id));
+          } else if (error) throw error;
           await feedPost(status.player_id, pd.plan, `✅ ${pd.plan.name} — ${poll.question} ${optionTitle(poll, o)}.`);
           await notify('poll_decided', { poll_id: poll.id });
           pd.reload(); onClose();
-        }, 'Decided — everyone’s been told')}>Lock it in</button>
+        }, 'Decided — everyone’s been told')}>Pick this winner</button>
       </div>
     </Sheet>
   );
@@ -619,7 +566,7 @@ function ProposalBanner({ plan, reload }) {
   const by = data.playersById[plan.created_by];
   return (
     <div className="card pad stack" style={{ gap: 8, background: 'var(--gold-soft)', borderColor: 'var(--gold)' }}>
-      <div><strong>💡 Suggested by {by ? playerName(by) : 'one of the lads'}.</strong> <span className="small">Say if you’d be in on the Who’s in tab — the admin decides whether it goes ahead.</span></div>
+      <div><strong>💡 An idea from {by ? playerName(by) : 'one of the lads'}.</strong> <span className="small">Vote on when and where, say if you’d be in, and talk it over on Chat — the admin decides whether it goes ahead.</span></div>
       {status.is_admin && (
         <div className="row" style={{ gap: 8 }}>
           <button type="button" className="btn gold sm" disabled={busy} onClick={() => run(async () => {
@@ -639,6 +586,7 @@ function ProposalBanner({ plan, reload }) {
 
 function PlanSheet({ plan, onClose, onSaved }) {
   const { status } = useSession();
+  const data = useData();
   const nav = useNavigate();
   const [v, set] = useState(() => plan || { kind: 'trip', name: '', status: 'planning' });
   const [busy, run] = useRun();
@@ -649,6 +597,7 @@ function PlanSheet({ plan, onClose, onSaved }) {
       start_date: v.start_date || null, end_date: v.kind === 'round' ? v.start_date || null : v.end_date || v.start_date || null,
       location_name: v.location_name?.trim() || null, address: v.address?.trim() || null, link: v.link?.trim() || null,
       brief: v.brief?.trim() || null, rsvp_deadline: v.rsvp_deadline || null, kitty_note: v.kitty_note?.trim() || null,
+      ...(plan && status.is_admin && 'organiser_id' in plan ? { organiser_id: v.organiser_id || null } : {}),
     };
     if (plan) {
       await must(supabase.from('plans').update(row).eq('id', plan.id));
@@ -692,6 +641,14 @@ function PlanSheet({ plan, onClose, onSaved }) {
             <label className="field"><span>Reply by (reminder goes out the day before)</span><input className="input" type="date" {...f('rsvp_deadline')} /></label>
             <label className="field"><span>How to pay the kitty (shown on the Kitty tab)</span><input className="input" {...f('kitty_note')} placeholder="e.g. PayID 04xx xxx xxx — Josh" /></label>
             {status.is_admin && (
+              <label className="field"><span>Organiser (can pick vote winners if the group allows it)</span>
+                <select className="select" value={v.organiser_id || ''} onChange={(e) => set({ ...v, organiser_id: e.target.value || null })}>
+                  <option value="">Nobody</option>
+                  {everyone(data).map((p) => <option key={p.id} value={p.id}>{playerName(p)}</option>)}
+                </select>
+              </label>
+            )}
+            {status.is_admin && (
               <label className="field"><span>Status</span>
                 <select className="select" {...f('status')}>{Object.entries(STATUS_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
               </label>
@@ -711,3 +668,107 @@ function PlanSheet({ plan, onClose, onSaved }) {
   );
 }
 
+
+// ---------------------------------------------------------------- Where the trip is up to
+
+function StageBar({ pd }) {
+  const data = useData();
+  const { plan } = pd;
+  const trip = plan.trip_id && data.trips.find((t) => t.id === plan.trip_id);
+  const stage = tripStage(plan, trip);
+  const at = STAGES.indexOf(stage);
+  const org = data.playersById[plan.organiser_id || plan.created_by];
+  return (
+    <div className="stack" style={{ gap: 6 }}>
+      <div role="list" aria-label="Where this trip is up to" style={{ display: 'grid', gridTemplateColumns: `repeat(${STAGES.length}, 1fr)`, gap: 4 }}>
+        {STAGES.map((s, i) => (
+          <div key={s} role="listitem" aria-current={i === at ? 'step' : undefined} className="small"
+            style={{ textAlign: 'center', padding: '6px 2px', borderRadius: 8, fontWeight: i === at ? 800 : 600, fontSize: 12, lineHeight: 1.2,
+              background: i === at ? 'var(--navy)' : i < at ? 'var(--gold-soft)' : 'transparent', color: i === at ? '#fff' : i < at ? 'var(--navy)' : 'var(--muted)',
+              border: `1px solid ${i <= at ? 'var(--navy)' : 'var(--line)'}` }}>
+            {STAGE_LABEL[s].replace(/^\S+\s/, '')}
+          </div>
+        ))}
+      </div>
+      {org && <span className="small muted">Organiser: <strong style={{ color: 'var(--ink, inherit)' }}>{playerName(org)}</strong>{plan.budget_pp ? ` · rough budget ${money(plan.budget_pp)} each` : ''}</span>}
+    </div>
+  );
+}
+
+function LockInCard({ pd }) {
+  const { status } = useSession();
+  const [busy, run] = useRun();
+  const { plan } = pd;
+  if (!status.is_admin || plan.proposed || plan.status !== 'planning') return null;
+  const openVotes = pd.polls.filter((p) => p.status === 'open' && p.kind !== 'other').length;
+  if (!plan.start_date) {
+    return <div className="small muted" style={{ fontWeight: 600 }}>🔒 Once the dates are picked you can lock it in{openVotes ? ' — close the dates vote first' : ' (Edit → dates)'}.</div>;
+  }
+  return (
+    <button type="button" className="card pad row" disabled={busy} style={{ textAlign: 'left', color: 'inherit', width: '100%', borderColor: 'var(--navy)', gap: 12 }}
+      onClick={() => {
+        if (openVotes && !window.confirm(`${openVotes} vote${openVotes === 1 ? ' is' : 's are'} still open. Lock it in anyway?`)) return;
+        run(async () => {
+          await must(supabase.from('plans').update({ status: 'confirmed' }).eq('id', plan.id));
+          await feedPost(status.player_id, plan, `🔒 ${plan.name} is locked in: ${fmtRange(plan.start_date, plan.end_date)}${plan.location_name ? ` at ${plan.location_name}` : ''}. Say if you’re in.`);
+          await notify('trip_locked', { plan_id: plan.id });
+          pd.reload();
+        }, 'Locked in — it’s a trip in the app now');
+      }}>
+      <span style={{ fontSize: 26 }}>🔒</span>
+      <span className="grow"><strong>Lock it in</strong><div className="small muted">{fmtRange(plan.start_date, plan.end_date)} · {plan.location_name || 'place TBC'} — makes it a trip in the app, ready for rounds.</div></span>
+      <span className="btn sm">Lock in</span>
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------- Chat (the back-and-forth on a trip)
+
+function ChatTab({ pd }) {
+  const data = useData();
+  const { status } = useSession();
+  const me = status.player_id;
+  const [text, setText] = useState('');
+  const [busy, run] = useRun();
+  const send = () => run(async () => {
+    const body = text.trim();
+    if (!body) return;
+    const c = await must(supabase.from('plan_comments').insert({ plan_id: pd.plan.id, body }).select().single());
+    setText('');
+    pd.reload();
+    notify('comment_added', { comment_id: c.id }).catch(() => {});
+  });
+  const when = (iso) => new Date(iso).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+  return (
+    <div className="stack">
+      {pd.comments.length === 0 && <div className="empty">No chat yet. Got a thought on the dates, the place or the budget? Kick it off.</div>}
+      {pd.comments.map((c) => {
+        const p = data.playersById[c.player_id];
+        const mine = c.player_id === me;
+        return (
+          <div key={c.id} className="row" style={{ alignItems: 'flex-start', gap: 10 }}>
+            <Avatar player={p} size={32} />
+            <div className="grow card" style={{ padding: '8px 12px', background: mine ? 'var(--gold-soft)' : '#fff' }}>
+              <div className="row between" style={{ gap: 8 }}>
+                <strong className="small">{p ? playerName(p) : 'Someone'}</strong>
+                <span className="small muted">{when(c.created_at)}</span>
+              </div>
+              <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{c.body}</div>
+              {(mine || status.is_admin) && (
+                <button type="button" className="small" style={{ border: 0, background: 'none', padding: 0, color: 'var(--muted)', marginTop: 2 }}
+                  onClick={() => { if (window.confirm('Delete this message?')) run(async () => { await must(supabase.from('plan_comments').delete().eq('id', c.id)); pd.reload(); }); }}>Delete</button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+      {me && (
+        <div className="stack" style={{ gap: 6 }}>
+          <textarea className="textarea" rows={2} maxLength={2000} style={{ padding: 12 }} value={text} onChange={(e) => setText(e.target.value)} placeholder="Say something about this trip…" aria-label="Message" />
+          <button type="button" className="btn gold" disabled={busy || !text.trim()} onClick={send}>Send</button>
+        </div>
+      )}
+      <span className="small muted">Goes to everyone who’s in or maybe, the organiser, and anyone already in the chat.</span>
+    </div>
+  );
+}

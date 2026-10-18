@@ -38,10 +38,15 @@ Full brief: `the-golf-trip-full-build-prompt.md` (in the Claude project). Every 
 1. **Groups** — `groups` and `group_members` tables, `group_id` on every table (filled in automatically so old phones
    keep working), access rules per group, notifications/reminders/connector/photos/phone storage per group,
    isolation tests (no group can see or change another's data), old-version test.
-2. **Proper login, roles and invites** — Apple, Google and emailed link; guests stay anonymous and can upgrade
+1b. ✅ on staging — **Trips** (decided 18 Oct — spec in `docs/TRIPS-SPEC.md`) — one Trip from idea → votes on dates and place with
+   discussion → locked in → on the trip → done (the record). The Trips tab replaces Coming up: now/next, ideas and
+   voting, past trips. Admin picks vote winners (group setting can let the trip's organiser too). Rules, players,
+   handicaps, Tribunal, courses and trophies stay group-wide. Plus **notification choices** per person: straight away,
+   daily digest at a chosen time, or only important; iPhone Home Screen guide.
+2. ✅ on staging, sign-in providers not yet on (STOP) — **Proper login, roles and invites** — Apple, Google and emailed link; guests stay anonymous and can upgrade
    without losing scores; organiser / player / guest; invite link + QR code; group switcher. STOP before switching
    any sign-in provider on.
-3. **Feature switches** — `src/lib/features.js`, `group_features` table, `feature_on()` checked by the database
+3. ✅ on staging — **Feature switches** — `src/lib/features.js`, `group_features` table, `feature_on()` checked by the database
    (not just hidden), Group settings → Features screen, L.G.C has everything on except scorecard photo and booking links.
 
 **Phase 2 — Make it theirs (release v2.1 with Phase 3)**

@@ -2,7 +2,7 @@
 // Anyone proposes; the lads vote (two taps, so no accidental votes); the admin decides.
 import React, { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
-import { useData, useRealtime, useSession, playerName } from '../lib/store.jsx';
+import { useData, useRealtime, useSession, playerName, useFeature } from '../lib/store.jsx';
 import { Header, Sheet, Loading, toast } from '../components/ui.jsx';
 import { notify } from '../lib/push.js';
 import { useRun, must } from './Planner.jsx';
@@ -33,6 +33,7 @@ function useRules() {
 
 export default function Rulebook() {
   const { status } = useSession();
+  const votingOn = useFeature('rule_voting');
   const rb = useRules();
   const [filter, setFilter] = useState('all');
   const [editing, setEditing] = useState(null); // {} = new
@@ -69,7 +70,7 @@ export default function Rulebook() {
         })}
         {active.length === 0 && <div className="empty">No rules for this comp yet.</div>}
 
-        <button type="button" className="btn gold block" onClick={() => setEditing({})}>+ Propose a rule</button>
+        {(status.is_admin || (votingOn && status.role !== 'guest')) && <button type="button" className="btn gold block" onClick={() => setEditing({})}>{votingOn ? '+ Propose a rule' : '+ Add a rule'}</button>}
 
         {old.length > 0 && (
           <details>
@@ -111,6 +112,7 @@ function RuleCard({ rule, onEdit }) {
 function ProposedCard({ rule, votes, reload, onEdit }) {
   const data = useData();
   const { status } = useSession();
+  const votingOn = useFeature('rule_voting');
   const me = status.player_id;
   const [pick, setPick] = useState(null);
   const [comment, setComment] = useState('');
@@ -139,7 +141,9 @@ function ProposedCard({ rule, votes, reload, onEdit }) {
       <div className="small muted">Proposed by {by ? playerName(by) : 'the admin'}</div>
       <div className="row" style={{ gap: 14, fontWeight: 800 }}><span>👍 {count('for')}</span><span>👎 {count('against')}</span><span className="muted">Abstain {count('abstain')}</span></div>
       {votes.length > 0 && <div className="small muted">{votes.map((v) => `${playerName(data.playersById[v.player_id])}: ${VOTE[v.vote].replace(/^\S+ /, '')}${v.comment ? ` — “${v.comment}”` : ''}`).join(' · ')}</div>}
-      {me && (
+      {status.role === 'guest' && <div className="small muted">Guests don’t vote on rules.</div>}
+      {!votingOn && <div className="small muted">Voting on rules is switched off for this group.</div>}
+      {me && status.role !== 'guest' && votingOn && (
         <>
           {mine && <div className="small"><strong>Your vote: {VOTE[mine.vote]}.</strong> <span className="muted">Pick another and confirm to change it.</span></div>}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>

@@ -280,7 +280,7 @@ Deno.serve(async (req) => {
     if (!m) return json({ error: 'Join the group first' }, 403);
     const g = m.group_id as string;
     const me = { player_id: m.player_id as string | null, is_admin: m.role === 'organiser' };
-    const adminOnly = ['plan_new', 'rsvp_locked', 'nudge_votes', 'nudge_rsvp', 'nudge_kitty', 'groups_set', 'draw_open'];
+    const adminOnly = ['plan_new', 'trip_locked', 'rsvp_locked', 'nudge_votes', 'nudge_rsvp', 'nudge_kitty', 'groups_set', 'draw_open'];
     if (adminOnly.includes(body.type) && !me.is_admin) return json({ error: 'Admin only' }, 403);
     const from = me.player_id as string | null;
 
@@ -315,6 +315,13 @@ Deno.serve(async (req) => {
         const { data: o } = p.winner_option_id ? await db.from('plan_options').select('label').eq('id', p.winner_option_id).eq('group_id', g).maybeSingle() : { data: null };
         const pl = await plan(g, p.plan_id);
         sent = await send(g, 'all', { title: `✅ ${pl.name}: ${o?.label || 'decided'}`, body: p.question, url: planUrl(pl.id), tag: `poll-${p.id}` }, from, 'poll_decided');
+        break;
+      }
+      case 'trip_locked': {
+        const pl = await plan(g, body.plan_id);
+        if (pl.status !== 'confirmed' || !(await once(`trip-locked:${pl.id}`))) break;
+        const when = pl.start_date ? `${fmt(pl.start_date)}${pl.end_date && pl.end_date !== pl.start_date ? ` – ${fmt(pl.end_date)}` : ''}` : '';
+        sent = await send(g, 'all', { title: `🔒 ${pl.name} is locked in`, body: [when, pl.location_name, 'say if you’re in'].filter(Boolean).join(' · '), url: planUrl(pl.id, 'people') }, from, 'trip_locked');
         break;
       }
       case 'rsvp_locked': {

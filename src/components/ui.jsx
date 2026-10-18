@@ -97,7 +97,7 @@ export function TabBar() {
     { to: '/', label: 'Leaderboard', icon: Icon.board, end: true },
     { to: '/feed', label: 'Feed', icon: Icon.feed },
     { to: '/comps', label: 'Comps', icon: Icon.flag },
-    { to: '/plan', label: 'Coming up', icon: Icon.calendar },
+    { to: '/plan', label: 'Trips', icon: Icon.calendar },
     { to: '/more', label: 'More', icon: Icon.more },
   ];
   return (

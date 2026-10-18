@@ -22,7 +22,7 @@ const Trophies = lazyScreen(() => import('./screens/Trophies.jsx'));
 const Tribunal = lazyScreen(() => import('./screens/Tribunal.jsx'));
 const TribunalCase = lazyScreen(() => import('./screens/Tribunal.jsx'), 'TribunalCase');
 const Courses = lazyScreen(() => import('./screens/Courses.jsx'));
-const Planner = lazyScreen(() => import('./screens/Planner.jsx'));
+const Planner = lazyScreen(() => import('./screens/Trips.jsx'));
 const PlanDetail = lazyScreen(() => import('./screens/Planner.jsx'), 'PlanDetail');
 const Rulebook = lazyScreen(() => import('./screens/Rulebook.jsx'));
 const GreenMapper = lazyScreen(() => import('./screens/GreenMapper.jsx'));

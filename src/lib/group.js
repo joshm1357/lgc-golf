@@ -11,13 +11,15 @@
 const KEY = 'lgc-group';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Tables that belong to a group (they have a group_id column). Same list as migration 022. */
+/** Tables that belong to a group (they have a group_id column). Same list as migrations 022 and 025. */
 export const GROUP_TABLES = new Set([
   'players', 'trips', 'courses', 'honour_board', 'rules', 'tribunal_cases', 'tribunal_votes',
   'location_pings', 'handicap_history', 'trophies', 'rounds', 'teams', 'team_players', 'round_players',
   'scores', 'quick_results', 'side_entries', 'round_pins', 'draws', 'posts', 'comments', 'reactions',
   'plans', 'plan_polls', 'plan_options', 'plan_votes', 'plan_rsvps', 'plan_items', 'plan_costs',
   'plan_payments', 'plan_groups', 'plan_transfers', 'rule_votes',
+  // Stage 1b (migration 025)
+  'plan_comments', 'notify_prefs',
 ]);
 
 let current = (() => {

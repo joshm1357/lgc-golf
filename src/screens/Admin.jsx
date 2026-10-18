@@ -67,6 +67,7 @@ export default function Admin() {
         <TrophiesAdmin />
         <HonourAdmin />
         <PinsAdmin />
+        <VotesAdmin />
       </div>
     </div>
   );
@@ -543,6 +544,32 @@ function PinsAdmin() {
         <input className="input" value={a} onChange={(e) => setA(e.target.value)} placeholder="New admin PIN" inputMode="numeric" required />
         <button className="btn">Change both PINs</button>
       </form>
+    </Section>
+  );
+}
+
+// ---------- Who picks vote winners (group-wide) ----------
+function VotesAdmin() {
+  const { status } = useSession();
+  const [value, setValue] = useState(null);
+  useEffect(() => {
+    if (!status?.group_id) return;
+    supabase.from('groups').select('vote_decider').eq('id', status.group_id).maybeSingle()
+      .then(({ data, error }) => setValue(error ? 'unavailable' : data?.vote_decider || 'admin'));
+  }, [status?.group_id]);
+  if (value === 'unavailable') return null;
+  const pick = async (v) => {
+    if (await run(() => supabase.rpc('set_vote_decider', { p_group: status.group_id, p_value: v }), 'Saved')) setValue(v);
+  };
+  return (
+    <Section title="8. Trip votes — who picks the winner">
+      <span className="small muted">Everyone votes on when and where. This decides who closes a vote and picks the winner. It applies to every trip in the group.</span>
+      {[['admin', 'The admin', 'Only admins pick winners (as now).'], ['admin_or_organiser', 'The admin or the trip’s organiser', 'Whoever suggested a trip (or who you make its organiser) can pick its winners too.']].map(([v, label, help]) => (
+        <button key={v} type="button" className="chip" aria-pressed={value === v} disabled={value == null}
+          style={{ textAlign: 'left', whiteSpace: 'normal', minHeight: 48, display: 'block' }} onClick={() => pick(v)}>
+          <strong>{value === v ? '● ' : '○ '}{label}</strong><div className="small muted">{help}</div>
+        </button>
+      ))}
     </Section>
   );
 }

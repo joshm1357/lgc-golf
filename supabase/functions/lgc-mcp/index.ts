@@ -121,7 +121,7 @@ const TOOLS: Tool[] = [
         for (const s of subs) lines.push(`    ${s.name} (hcp ${s.handicap})${s.type === 'team' ? `: ${s.members.map(pname).join(', ')}` : ''}`);
       }
       const plans = await must(db.from('plans').select('id,name,kind,status,start_date,end_date,location_name,proposed').eq('group_id', c.g).neq('status', 'cancelled').order('start_date', { nullsFirst: false })) as Record<string, any>[];
-      lines.push('Coming up:');
+      lines.push('Trips (ideas, being decided, locked in, past):');
       for (const p of plans) lines.push(`- ${p.proposed ? '[suggested] ' : ''}${p.name} id=${p.id} · ${p.kind} · ${p.status} · ${p.start_date || 'dates TBC'} · ${p.location_name || 'location TBC'}`);
       lines.push(`Players: ${all.map((p) => `${pname(p)} (${p.handicap})`).join(', ')}`);
       return lines.join('\n');
@@ -312,7 +312,7 @@ const TOOLS: Tool[] = [
       const poll = await must(db.from('plan_polls').insert({ plan_id: a.plan_id, kind: a.kind, question: a.question, closes_on: a.closes_on || null, created_by: c.author }).select().single()) as Record<string, any>;
       const opts = (a.options || []).map((o: Record<string, any>) => ({ poll_id: poll.id, label: o.label || (o.start_date ? `${o.start_date}${o.end_date && o.end_date !== o.start_date ? ` – ${o.end_date}` : ''}` : 'Option'), start_date: o.start_date || null, end_date: o.end_date || o.start_date || null, notes: o.notes || null, cost_pp: o.cost_pp ?? null, created_by: c.author }));
       if (opts.length) await must(db.from('plan_options').insert(opts));
-      await post(c, `🗳️ New vote: ${a.question} — have your say in Coming up.`);
+      await post(c, `🗳️ New vote: ${a.question} — have your say in Trips.`);
       return `Vote "${a.question}" is up with ${opts.length} options (id=${poll.id}) and posted to the feed. Push notifications go out when the admin opens votes from the app.`;
     },
   },

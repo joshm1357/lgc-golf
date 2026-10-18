@@ -89,7 +89,19 @@ do $$ begin perform set_config('request.headers', '{}', true); end $$;
 select public.join_by_invite(v) from t_tok where k = 'guest';
 do $$ begin perform set_config('request.headers', '{"x-group-id":"00000000-0000-4000-8000-00000000e000"}', true); end $$;
 insert into t_results (label, result) select 'guest joined as', role from public.group_members where user_id = auth.uid();
-select public.claim_player('00000000-0000-4000-8000-0000000e0b03');
+do $$ begin
+  perform public.claim_player('00000000-0000-4000-8000-0000000e0b03');
+  insert into t_results (label, result) values ('guest picks an existing name', 'ok');
+exception when others then insert into t_results (label, result) values ('guest picks an existing name', 'refused'); end $$;
+do $$ begin
+  perform public.assign_player('00000000-0000-4000-8000-0000000e0a03', '00000000-0000-4000-8000-0000000e0b03');
+  insert into t_results (label, result) values ('guest hands themselves a name', 'ok');
+exception when others then insert into t_results (label, result) values ('guest hands themselves a name', 'refused'); end $$;
+-- The organiser gives the guest their name.
+set local request.jwt.claims to '{"sub":"00000000-0000-4000-8000-0000000e0a01","role":"authenticated"}';
+select public.assign_player('00000000-0000-4000-8000-0000000e0a03', '00000000-0000-4000-8000-0000000e0b03');
+insert into t_results (label, result) select 'organiser gives the guest a name', (player_id = '00000000-0000-4000-8000-0000000e0b03')::text from public.group_members where user_id = '00000000-0000-4000-8000-0000000e0a03';
+set local request.jwt.claims to '{"sub":"00000000-0000-4000-8000-0000000e0a03","role":"authenticated"}';
 do $$ begin
   insert into public.rule_votes (rule_id, player_id, vote) values ('00000000-0000-4000-8000-0000000e0c01', '00000000-0000-4000-8000-0000000e0b03', 'for');
   insert into t_results (label, result) values ('guest votes on a rule', 'ok');
@@ -115,6 +127,7 @@ insert into t_results (label, result) select 'player opens guest link: still', r
 set local request.jwt.claims to '{"sub":"00000000-0000-4000-8000-0000000e0a01","role":"authenticated"}';
 select public.set_member_role('00000000-0000-4000-8000-0000000e0a03', 'player');
 insert into t_results (label, result) select 'organiser makes guest a player', role from public.group_members where user_id = '00000000-0000-4000-8000-0000000e0a03';
+insert into t_results (label, result) select 'role change posted to the feed', count(*)::text from public.posts where group_id = '00000000-0000-4000-8000-00000000e000' and body like '👥 %';
 do $$ begin
   perform public.set_member_role('00000000-0000-4000-8000-0000000e0a01', 'player');
   insert into t_results (label, result) values ('last organiser steps down', 'ok');
@@ -129,6 +142,19 @@ do $$ begin
   perform public.set_member_role((select user_id from public.group_members where group_id = private.legacy_group() limit 1), 'guest');
   insert into t_results (label, result) values ('E organiser changes an L.G.C role', 'ok');
 exception when others then insert into t_results (label, result) values ('E organiser changes an L.G.C role', 'refused'); end $$;
+
+-- ================= L.G.C admin PIN: wrong → false; switched off → even the right PIN is false (old phones' normal message)
+set local request.jwt.claims to '{"sub":"10000000-0000-4000-8000-000000000002","role":"authenticated"}';
+do $$ begin perform set_config('request.headers', json_build_object('x-group-id', private.legacy_group())::text, true); end $$;
+insert into t_results (label, result) values ('L.G.C wrong admin PIN', coalesce(public.claim_admin('nope-nope')::text, 'null'));
+set local request.jwt.claims to '{"sub":"10000000-0000-4000-8000-000000000001","role":"authenticated"}';
+select public.turn_off_admin_pin();
+set local request.jwt.claims to '{"sub":"10000000-0000-4000-8000-000000000002","role":"authenticated"}';
+insert into t_results (label, result) values ('L.G.C right PIN after switching off', coalesce(public.claim_admin('stage-admin-9999')::text, 'null'));
+do $$ begin
+  perform public.turn_off_admin_pin();
+  insert into t_results (label, result) values ('player switches the admin PIN off', 'ok');
+exception when others then insert into t_results (label, result) values ('player switches the admin PIN off', 'refused'); end $$;
 
 reset role;
 do $$ begin

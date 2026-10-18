@@ -18,9 +18,23 @@ Database: Supabase project `lgc-golf` (Sydney), migrations in `supabase/migratio
   real trophy, Handicap Tribunal (lodge, evidence, defence, vote, chair overrule, verdict applies handicap),
   courses page.
 
+- **Planner (Coming up):** any number of future trips and one-day rounds. Votes on dates/location/anything
+  (✓ 2 pts / ? 1 pt / ✗, anyone suggests options, admin closes and picks the winner, winner can set the
+  dates/location), Who's in (In/Maybe/Out + note, admin can lock the list), Details (where/when, Maps link,
+  add-to-calendar file, the details text, info cards, day-by-day plan, personal bring checklist), Jobs (owner,
+  due date, "I'll do it"), Kitty (costs as total or per head, who fronted, payments, balances), Rooms & cars
+  (by hand or the live lotto draw), Organiser's checklist (timed suggestions, never automatic).
+  Logic in `src/lib/plan.js` with 15 tests; permissions checked with 20 SQL tests as a non-admin member.
+- **Notifications:** Web Push via the `notify` Edge Function (it writes every message itself from an event
+  type; admin-only types checked server-side). Daily 9am reminders by pg_cron: votes closing tomorrow,
+  reply-by deadline, a week out / day before, jobs due. Push keys live in `server_secrets` (no app access).
+  Share-to-Messenger nudges and calendar files need no setup.
+
 ## Known limits
 - GPS distances are approximate (±5–10 m); closest-to-pin distance is typed in.
 - Location sharing only works while the app is open.
+- iPhone notifications only work once the app is added to the Home Screen and opened from there (iOS 16.4+).
+- `pg_net` sits in the public schema (Supabase advisor warning, harmless; moving it needs a drop/recreate).
 - Supabase free plan pauses after 7 days without use — restore it from the dashboard before the next trip.
 
 ## Later

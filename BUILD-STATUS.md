@@ -249,8 +249,50 @@ STOP → live SQL below → merge `v1.5` into `main` (deploys) → check the liv
   links them); Chat delete events, like other tables', carry only the deleted row's id to every phone.
 
 ### Live order for v2.0 (at the release STOP — not before)
-022 → 023 → 024 → 025 → 026 on live, then deploy `notify` and `lgc-mcp`, then the app. (On staging 024 ran after 025;
+022 → 023 → 024 → 025 → 026 → 027 → 028 → 027b on live, then deploy `notify` and `lgc-mcp`, then the app. (On staging 024 ran after 025;
 025 calls the same-group check builder again, so the order above is the one for live.)
+
+## v2.0 Stage 2 — Proper login, roles and invites (branch `stage-2-login`, on staging only)
+
+**Decided (18 Oct):** no Apple sign-in for now; Google + emailed code; Facebook later if wanted.
+**STOP:** no sign-in provider is switched on. Josh's steps are in `docs/SIGN-IN-SETUP.md` (note: email to anyone needs a
+domain, or Gmail SMTP for now).
+
+**Built** (no new sign-in setting needed)
+- **Invite links + QR codes (027).** One player link and one guest link per group, 12 letters/numbers made by the
+  server; organiser can make a new one (old stops working). Joining by link works before you're in any group, from
+  inside the app for another group, while still picking your name, and — for the iPhone Home Screen app, which can't
+  open links from chats — by **pasting the link** into the PIN box or Group → "Join another group". Wrong links count
+  toward the wrong-PIN limit. L.G.C's group PIN keeps working.
+- **Roles:** organiser / player / guest. Guests play, score, post and chat, but don't vote on rules, propose rules, or
+  vote or lodge in the Tribunal (the database refuses; the screens hide the buttons) and add themselves rather than
+  taking an existing name. Organisers change roles (never zero organisers, even if two act at once), give a nameless
+  member a name, free a name, and take people out (027b). Role changes and removals are posted on the feed.
+- **Names:** you can only pick a name nobody else has ("taken" shows on the list); an organiser hands it over.
+- **Admin PIN:** L.G.C only. An organiser can switch it off in Group & invites; after that it answers like a wrong PIN
+  (old phones show their usual message). Using it posts on the feed.
+- **Wrong-PIN limits (028):** per person, per real address (checked on staging: the first `x-forwarded-for` entry can
+  be faked, so the platform's own address header is used), and 60 an hour across everyone for PINs.
+- **Group & invites screen** (More): switch group (fresh start in the other group), invite + guest links with QR and
+  share, people and roles. **Sign-in** buttons (Google; email with a 6-digit code, which works inside the Home Screen
+  app) are built but hidden until `VITE_SIGN_IN` is set; a phone-only player adds a sign-in to the *same* user (keeps
+  scores). Sign-in problems coming back from Google are shown; a Google sign-in that made a new empty account is
+  explained and can sign out.
+
+**Tested (staging)**
+- `supabase/tests/stage2_invites.sql` — see its expected file (links, reset, guessing limit, join, names, roles, guests,
+  feed posts, L.G.C admin PIN off).
+- Phone width (`tests/e2e/stage2-test.mjs`, 19 checks): group screen, QR, new link, roles, switching group, joining by
+  link and by pasting it, players see no invite controls, new groups have no admin PIN entry. Trips and v1.5 phone
+  checks still pass. 78 unit tests.
+
+**Independent review → fixes (028 + app):** iPhone Home Screen joining (must-fix); admin PIN switch-off; faked-address
+and fresh-user limit holes; guests taking unclaimed names; New link failures; guest buttons; own-row detection,
+confirms; two organisers demoting each other; sign-in traps (silent link failure, empty new Google accounts, email
+links opening Safari). Left as notes: invite codes stored plainly (server-only table); duplicate display names allowed.
+
+**Josh's paste list for staging (approvals time out from here):** `020`, `021`, `027b_remove_member.sql`, and
+`drop function public.tmp_echo_headers();` (a test helper, already emptied and locked).
 
 ## Known limits
 - GPS distances are approximate (±5–10 m) and straight-line; closest-to-pin distance is typed in.

@@ -20,6 +20,7 @@ export default function Trips() {
   const [rows, setRows] = useState(null);
   const [suggesting, setSuggesting] = useState(false);
   const notifyOn = useFeature('notifications');
+  const votesOn = useFeature('planner_tasks');
   const load = useCallback(async () => {
     try {
       const [plans, rsvps, polls] = await Promise.all([
@@ -63,14 +64,14 @@ export default function Trips() {
           : <div className="empty">Nothing locked in yet. Suggest a trip below and let the lads vote on when and where.</div>}
         {later.map((x) => <TripCard key={x.plan.id} plan={x.plan} stage={x.stage} rsvps={rsvpsOf(x.plan.id)} me={status.player_id} />)}
 
-        <span className="label" style={{ marginTop: 6 }}>Ideas and voting</span>
+        <span className="label" style={{ marginTop: 6 }}>{votesOn ? 'Ideas and voting' : 'Ideas'}</span>
         {ideas.length === 0 && <div className="small muted">No ideas on the go.</div>}
         {ideas.map((x) => (
           <TripCard key={x.plan.id} plan={x.plan} stage={x.stage} rsvps={rsvpsOf(x.plan.id)} me={status.player_id}
             decide={stillToDecide(x.plan, rows.polls, rows.options, today)} suggestedBy={data.playersById[x.plan.organiser_id || x.plan.created_by]} />
         ))}
         <button type="button" className="btn gold block" style={{ minHeight: 56 }} onClick={() => setSuggesting(true)}>💡 Suggest a trip or round</button>
-        <span className="small muted" style={{ textAlign: 'center' }}>Everyone votes on when and where; {status.is_admin ? 'you lock it in' : 'the admin locks it in'}.</span>
+        <span className="small muted" style={{ textAlign: 'center' }}>{votesOn ? 'Everyone votes on when and where; ' : 'Everyone says if they’re in; '}{status.is_admin ? 'you lock it in' : 'the admin locks it in'}.</span>
 
         {past.length > 0 && <span className="label" style={{ marginTop: 6 }}>Past trips</span>}
         {past.map((x) => <PastCard key={x.plan.id} plan={x.plan} stage={x.stage} photo={photos[x.plan.trip_id]} rounds={data.rounds.filter((r) => x.plan.trip_id && r.trip_id === x.plan.trip_id).length} />)}
@@ -240,32 +241,32 @@ export function SuggestSheet({ onClose, onSaved }) {
         </div>
         <label className="field"><span>Name</span><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={kind === 'trip' ? 'e.g. Autumn trip 2027' : 'e.g. Xmas Ambrose'} /></label>
 
-        <span className="label">When? (2–3 options to vote on)</span>
-        {dates.map((d, i) => (
+        <span className="label">{votesOn ? 'When? (2–3 options to vote on)' : 'When?'}</span>
+        {(votesOn ? dates : dates.slice(0, 1)).map((d, i) => (
           <div key={i} style={{ display: 'grid', gridTemplateColumns: kind === 'trip' ? '1fr 1fr' : '1fr', gap: 8 }}>
-            <label className="field"><span>{kind === 'trip' ? `Option ${i + 1}: from` : `Option ${i + 1}`}</span>
+            <label className="field"><span>{votesOn ? (kind === 'trip' ? `Option ${i + 1}: from` : `Option ${i + 1}`) : (kind === 'trip' ? 'From' : 'Date')}</span>
               <input className="input" type="date" value={d.start_date} min={todayISO()} onChange={(e) => setDate(i, { start_date: e.target.value, end_date: d.end_date && d.end_date >= e.target.value ? d.end_date : e.target.value })} /></label>
             {kind === 'trip' && <label className="field"><span>to</span><input className="input" type="date" value={d.end_date} min={d.start_date || undefined} onChange={(e) => setDate(i, { end_date: e.target.value })} /></label>}
           </div>
         ))}
-        {dates.length < 3 && <button type="button" className="btn ghost sm" onClick={() => setDates([...dates, blankDate()])}>+ Another date option</button>}
-        <label className="field"><span>…or roughly (optional)</span><input className="input" value={rough} onChange={(e) => setRough(e.target.value)} placeholder="e.g. A long weekend in March" /></label>
+        {votesOn && dates.length < 3 && <button type="button" className="btn ghost sm" onClick={() => setDates([...dates, blankDate()])}>+ Another date option</button>}
+        {votesOn && <label className="field"><span>…or roughly (optional)</span><input className="input" value={rough} onChange={(e) => setRough(e.target.value)} placeholder="e.g. A long weekend in March" /></label>}
 
-        <span className="label">Where? (1–3 places)</span>
-        {places.map((p, i) => (
+        <span className="label">{votesOn ? 'Where? (1–3 places)' : 'Where?'}</span>
+        {(votesOn ? places : places.slice(0, 1)).map((p, i) => (
           <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 8 }}>
             <label className="field"><span>Place {i + 1}</span><input className="input" value={p.label} onChange={(e) => setPlace(i, { label: e.target.value })} placeholder={i === 0 ? 'e.g. Port Macquarie' : ''} /></label>
             <label className="field"><span>~$ each</span><input className="input" inputMode="decimal" value={p.cost_pp} onChange={(e) => setPlace(i, { cost_pp: e.target.value })} /></label>
           </div>
         ))}
-        {places.length < 3 && <button type="button" className="btn ghost sm" onClick={() => setPlaces([...places, { label: '', cost_pp: '' }])}>+ Another place</button>}
+        {votesOn && places.length < 3 && <button type="button" className="btn ghost sm" onClick={() => setPlaces([...places, { label: '', cost_pp: '' }])}>+ Another place</button>}
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <label className="field"><span>Rough budget each $</span><input className="input" inputMode="decimal" value={budget} onChange={(e) => setBudget(e.target.value)} /></label>
-          <label className="field"><span>Votes close</span><input className="input" type="date" value={closes} min={todayISO()} onChange={(e) => setCloses(e.target.value)} /></label>
+          {votesOn && <label className="field"><span>Votes close</span><input className="input" type="date" value={closes} min={todayISO()} onChange={(e) => setCloses(e.target.value)} /></label>}
         </div>
         <label className="field"><span>Pitch it (optional)</span><textarea className="textarea" rows={3} style={{ padding: 12 }} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Why it’d be great, who’s keen…" /></label>
-        <span className="small muted">Anyone can add more options once it’s up. {status.is_admin ? 'You lock it in when it’s decided.' : 'The admin picks the winners and locks it in.'}</span>
+        <span className="small muted">{votesOn ? `Anyone can add more options once it’s up. ${status.is_admin ? 'You lock it in when it’s decided.' : 'The admin picks the winners and locks it in.'}` : (status.is_admin ? 'You lock it in when it’s sorted.' : 'The admin locks it in.')}</span>
         <button type="button" className="btn gold block" disabled={busy || !name.trim()} onClick={save}>Put it to the group</button>
       </div>
     </Sheet>

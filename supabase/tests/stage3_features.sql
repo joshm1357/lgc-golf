@@ -94,6 +94,50 @@ insert into t_results (label, result) select 'comp bonus on: set bonus strokes',
 select public.set_feature('side_comps', false);
 insert into t_results (label, result) values ('parent off switches the child off', public.feature_on('00000000-0000-4000-8000-00000000f000', 'comp_bonus')::text);
 
+-- A round that already has bonus strokes keeps working when bonus strokes are off (only changing the bonus is refused).
+update public.rounds set status = 'locked' where id = '00000000-0000-4000-8000-0000000f0c03';
+insert into t_results (label, result) select 'bonus off: lock a round that has a bonus', status from public.rounds where id = '00000000-0000-4000-8000-0000000f0c03';
+do $$ begin
+  update public.rounds set comp_bonus = 3 where id = '00000000-0000-4000-8000-0000000f0c03';
+  insert into t_results (label, result) values ('bonus off: change the bonus', 'ok');
+exception when others then insert into t_results (label, result) values ('bonus off: change the bonus', 'refused'); end $$;
+
+-- Tribunal off: every step refuses (an open case from before it was switched off).
+reset role;
+insert into public.tribunal_cases (id, group_id, accused_id, lodged_by, proposed_change, case_text) values
+  ('00000000-0000-4000-8000-0000000f0c06', '00000000-0000-4000-8000-00000000f000', '00000000-0000-4000-8000-0000000f0b02', '00000000-0000-4000-8000-0000000f0b01', 2, 'F case');
+set local role authenticated;
+do $$ begin
+  perform public.chair_close_case('00000000-0000-4000-8000-0000000f0c06', 'upheld', 'x');
+  insert into t_results (label, result) values ('tribunal off: chair closes a case', 'ok');
+exception when others then insert into t_results (label, result) values ('tribunal off: chair closes a case', 'refused'); end $$;
+set local request.jwt.claims to '{"sub":"00000000-0000-4000-8000-0000000f0a02","role":"authenticated"}';
+do $$ begin
+  perform public.set_defence('00000000-0000-4000-8000-0000000f0c06', 'innocent');
+  insert into t_results (label, result) values ('tribunal off: accused writes a defence', 'ok');
+exception when others then insert into t_results (label, result) values ('tribunal off: accused writes a defence', 'refused'); end $$;
+set local request.jwt.claims to '{"sub":"00000000-0000-4000-8000-0000000f0a01","role":"authenticated"}';
+do $$ begin
+  perform public.cast_vote('00000000-0000-4000-8000-0000000f0c06', 'guilty', null);
+  insert into t_results (label, result) values ('tribunal off: vote', 'ok');
+exception when others then insert into t_results (label, result) values ('tribunal off: vote', 'refused'); end $$;
+insert into t_results (label, result) select 'tribunal off: handicap unchanged', handicap::text from public.players where id = '00000000-0000-4000-8000-0000000f0b02';
+
+-- Trip votes off (planner on): the suggestion's votes and picking a winner refuse.
+select public.set_feature('planner', true), public.set_feature('planner_tasks', false);
+do $$ begin
+  perform public.start_trip_votes('00000000-0000-4000-8000-0000000f0c04', '[{"label":"March"}]', '[]', null);
+  insert into t_results (label, result) values ('votes off: open trip votes', 'ok');
+exception when others then insert into t_results (label, result) values ('votes off: open trip votes', 'refused'); end $$;
+reset role;
+insert into public.plan_polls (id, plan_id, kind, question) values ('00000000-0000-4000-8000-0000000f0c07', '00000000-0000-4000-8000-0000000f0c04', 'other', 'F?');
+insert into public.plan_options (id, poll_id, label) values ('00000000-0000-4000-8000-0000000f0c08', '00000000-0000-4000-8000-0000000f0c07', 'Yes');
+set local role authenticated;
+do $$ begin
+  perform public.decide_poll('00000000-0000-4000-8000-0000000f0c07', '00000000-0000-4000-8000-0000000f0c08', false);
+  insert into t_results (label, result) values ('votes off: pick a winner', 'ok');
+exception when others then insert into t_results (label, result) values ('votes off: pick a winner', 'refused'); end $$;
+
 -- ================= another group can't see F's switches =================
 set local request.jwt.claims to '{"sub":"10000000-0000-4000-8000-000000000002","role":"authenticated"}';
 do $$ begin perform set_config('request.headers', '{}', true); end $$;

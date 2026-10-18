@@ -45,6 +45,7 @@ export function TripSetupCard({ plan, reload }) {
 function TripSetupSheet({ plan, onClose, onDone }) {
   const data = useData();
   const bonusOn = useFeature('comp_bonus');
+  const trophiesOn = useFeature('trophies');
   const { status } = useSession();
   const [busy, run] = useRun();
   const days = useMemo(() => planDays(plan), [plan]);
@@ -72,7 +73,7 @@ function TripSetupSheet({ plan, onClose, onDone }) {
       await must(supabase.from('plans').update({ trip_id: trip.id, status: plan.status === 'planning' ? 'confirmed' : plan.status }).eq('id', plan.id));
     }
     const problems = [];
-    if (copyTrophies && lastTrophies.length) {
+    if (trophiesOn && copyTrophies && lastTrophies.length) {
       const { error } = await supabase.from('trophies').insert(lastTrophies.map((x) => ({ trip_id: trip.id, name: x.name, type: x.type, description: x.description })));
       if (error) problems.push('the trophies');
     }
@@ -127,7 +128,7 @@ function TripSetupSheet({ plan, onClose, onDone }) {
         ))}
         {!data.courses.length && <span className="small muted">Add the courses in Admin first (par and stroke index), then come back.</span>}
         <span className="small muted">New course? Add it in Admin → Courses, then pick it here. Ambrose rounds take the side comp and drive rules from the Rulebook. Teams and side comp holes are set nearer the day.</span>
-        {lastTrophies.length > 0 && (
+        {trophiesOn && lastTrophies.length > 0 && (
           <label className="row" style={{ gap: 8, fontWeight: 600 }}>
             <input type="checkbox" checked={copyTrophies} onChange={(e) => setCopyTrophies(e.target.checked)} style={{ width: 20, height: 20 }} />
             <span>Play for the same trophies ({lastTrophies.map((x) => x.name).join(', ')})</span>

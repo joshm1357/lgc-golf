@@ -51,6 +51,7 @@ const KIND_FEATURE: Record<string, string> = {
   nudge_rsvp: 'planner', trip_week: 'planner', trip_tomorrow: 'planner', comment: 'planner',
   nudge_kitty: 'planner_costs', payment_recorded: 'planner_costs', groups_set: 'planner_rooms',
   rule_proposed: 'rule_voting', draw_open: 'draw',
+  // rule_decided: not tied to voting — organisers deciding rules is part of the Rulebook itself.
 };
 /** Is a feature on for group g? (An older database without switches: everything on.) */
 async function featureOn(g: string, key: string) {
@@ -136,8 +137,12 @@ async function digest() {
     const [g, user] = k.split('|');
     const p = (prefs || []).find((x) => x.group_id === g && x.user_id === user);
     const local = localNow(p?.tz || 'Australia/Sydney');
-    // Switched to "only important": the important ones still go; the rest are dropped.
-    const items = p?.mode === 'important' ? all.filter((i) => IMPORTANT.has(i.kind)) : all;
+    // Switched to "only important": the important ones still go; the rest are dropped. So are items for a feature
+    // (or notifications) switched off since they were queued.
+    const notifOn = await featureOn(g, 'notifications');
+    const kept = [];
+    for (const i of all) if (notifOn && (!KIND_FEATURE[i.kind] || await featureOn(g, KIND_FEATURE[i.kind]))) kept.push(i);
+    const items = p?.mode === 'important' ? kept.filter((i) => IMPORTANT.has(i.kind)) : kept;
     if (p?.mode === 'digest' && local.hour !== p.digest_hour) continue;
     if (p?.mode === 'digest' && !(await once(`digest:${g}:${user}:${local.date}:${local.hour}`))) continue;
     const gname = (groups || []).find((x) => x.id === g)?.name || 'Your golf group';
@@ -241,18 +246,22 @@ async function daily() {
 }
 async function dailyFor(g: string) {
   let sent = 0;
+  // Checked before anything is marked as sent, so switching a feature back on the same day still gets its reminders.
+  if (!(await featureOn(g, 'notifications'))) return 0;
+  const tasksOn = await featureOn(g, 'planner_tasks');
+  const plannerOn = await featureOn(g, 'planner');
   const today = sydneyDate(0);
   const tomorrow = sydneyDate(1);
   const week = sydneyDate(7);
   // Votes closing tomorrow → people who haven't voted.
   const { data: closing } = await db.from('plan_polls').select('id,plan_id,question').eq('group_id', g).eq('status', 'open').eq('closes_on', tomorrow);
-  for (const p of closing || []) {
+  for (const p of tasksOn ? closing || [] : []) {
     if (!(await once(`poll-closing:${p.id}:${today}`))) continue;
     sent += await send(g, await openPollNonVoters(g, p.plan_id, p.id), { title: '⏰ Vote closes tomorrow', body: p.question, url: planUrl(p.plan_id, 'vote'), tag: `poll-${p.id}` }, null, 'poll_closing');
   }
   // RSVP deadline tomorrow → people who haven't replied.
   const { data: dl } = await db.from('plans').select('*').eq('group_id', g).eq('rsvp_deadline', tomorrow).eq('rsvp_locked', false).eq('proposed', false).neq('status', 'cancelled');
-  for (const pl of dl || []) {
+  for (const pl of plannerOn ? dl || [] : []) {
     if (!(await once(`rsvp-deadline:${pl.id}:${today}`))) continue;
     const { data: rs } = await db.from('plan_rsvps').select('player_id').eq('plan_id', pl.id);
     const replied = new Set((rs || []).map((r) => r.player_id));
@@ -262,7 +271,7 @@ async function dailyFor(g: string) {
   // A week out and the day before → everyone who's in.
   for (const [day, label] of [[week, 'is a week away'], [tomorrow, 'is tomorrow']] as const) {
     const { data: soon } = await db.from('plans').select('*').eq('group_id', g).eq('start_date', day).neq('status', 'cancelled').eq('proposed', false);
-    for (const pl of soon || []) {
+    for (const pl of plannerOn ? soon || [] : []) {
       if (!(await once(`countdown:${pl.id}:${day}:${label}`))) continue;
       const { data: rs } = await db.from('plan_rsvps').select('player_id').eq('plan_id', pl.id).eq('status', 'in');
       sent += await send(g, (rs || []).map((r) => r.player_id), { title: `⛳ ${pl.name} ${label}`, body: [pl.location_name, 'Check the details and what to bring.'].filter(Boolean).join(' · '), url: planUrl(pl.id, 'details') }, null, day === tomorrow ? 'trip_tomorrow' : 'trip_week');
@@ -270,7 +279,7 @@ async function dailyFor(g: string) {
   }
   // Jobs due tomorrow → their owner.
   const { data: jobs } = await db.from('plan_items').select('*').eq('group_id', g).eq('kind', 'job').eq('done', false).eq('due', tomorrow).not('owner_id', 'is', null);
-  for (const j of jobs || []) {
+  for (const j of tasksOn ? jobs || [] : []) {
     if (!(await once(`job-due:${j.id}:${today}`))) continue;
     sent += await send(g, [j.owner_id], { title: '📋 Job due tomorrow', body: j.title, url: planUrl(j.plan_id, 'jobs') }, null, 'job_due');
   }

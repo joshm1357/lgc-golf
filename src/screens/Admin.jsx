@@ -33,6 +33,7 @@ function Section({ title, children, open: startOpen = false }) {
 export default function Admin() {
   const { status, refresh } = useSession();
   const data = useData();
+  const trophiesOn = useFeature('trophies');
   const [pin, setPin] = useState('');
 
   if (!data.ready) return <Loading />;
@@ -64,8 +65,8 @@ export default function Admin() {
         <CoursesAdmin />
         <PlayersAdmin />
         <RoundsAdmin />
-        <TrophiesAdmin />
-        <HonourAdmin />
+        {trophiesOn && <TrophiesAdmin />}
+        {trophiesOn && <HonourAdmin />}
         <PinsAdmin />
         <VotesAdmin />
       </div>
@@ -302,6 +303,8 @@ function RoundRules({ round }) {
 
 function RoundCard({ round }) {
   const data = useData();
+  const sideCompsOn = useFeature('side_comps');
+  const drawOn = useFeature('draw');
   const [ld, setLd] = useState(round.ld_holes.join(' '));
   const [ctp, setCtp] = useState(round.ctp_holes.join(' '));
   const course = data.coursesById[round.course_id];
@@ -312,15 +315,15 @@ function RoundCard({ round }) {
         <div><strong>{round.name}</strong><div className="small muted">{course?.name} · {round.format} · {round.status}</div></div>
         <button type="button" className={'btn sm' + (round.status === 'setup' ? ' gold' : ' ghost')} onClick={() => run(() => supabase.from('rounds').update({ status: next[0] }).eq('id', round.id), 'Round updated').then(data.reload)}>{next[1]}</button>
       </div>
-      <div className="row">
+      {sideCompsOn && <div className="row">
         <label className="field grow"><span>Longest drive holes</span><input className="input" value={ld} onChange={(e) => setLd(e.target.value)} placeholder="e.g. 5" inputMode="numeric" /></label>
         <label className="field grow"><span>Closest to pin holes</span><input className="input" value={ctp} onChange={(e) => setCtp(e.target.value)} placeholder="e.g. 3 7" inputMode="numeric" /></label>
-      </div>
-      {(ld !== round.ld_holes.join(' ') || ctp !== round.ctp_holes.join(' ')) && (
+      </div>}
+      {sideCompsOn && (ld !== round.ld_holes.join(' ') || ctp !== round.ctp_holes.join(' ')) && (
         <button type="button" className="btn sm" onClick={() => run(() => supabase.from('rounds').update({ ld_holes: parseNums(ld).filter((n) => n >= 1 && n <= 18), ctp_holes: parseNums(ctp).filter((n) => n >= 1 && n <= 18) }).eq('id', round.id), 'Side comps saved').then(data.reload)}>Save side comp holes</button>
       )}
       <RoundRules round={round} />
-      {round.format === 'ambrose' && <DrawButton round={round} />}
+      {round.format === 'ambrose' && drawOn && <DrawButton round={round} />}
       {round.format === 'ambrose' ? <TeamsEditor round={round} /> : <StablefordPlayers round={round} />}
       <details>
         <summary className="small muted">Delete this round</summary>

@@ -41,6 +41,7 @@ export default function Leaderboard() {
   const [open, setOpen] = useState(null);
   const [drawing, setDrawing] = useState(false);
   const drawOn = useFeature('draw');
+  const sideCompsOn = useFeature('side_comps');
   const scores = useScores(round?.id);
   const sideEntries = useSideEntries(round?.id);
 
@@ -127,7 +128,7 @@ export default function Leaderboard() {
         </div>
       )}
 
-      {round.status === 'live' && ((round.ctp_holes || []).length > 0 || (round.ld_holes || []).length > 0) && (
+      {sideCompsOn && round.status === 'live' && ((round.ctp_holes || []).length > 0 || (round.ld_holes || []).length > 0) && (
         <div className="section">
           <Link to={`/comps?r=${round.id}`} className="card pad row" style={{ background: 'var(--gold-soft)', borderColor: 'var(--gold)', textDecoration: 'none', color: 'inherit' }}>
             <span className="grow small" style={{ lineHeight: 1.4 }}>

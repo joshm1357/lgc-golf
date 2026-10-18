@@ -9,6 +9,7 @@
 // parent     — needs this feature on (switching the parent off switches this off too)
 // newGroup   — default for a new group
 // tier       — 'free' for everything now; a later premium plan can check it
+// soon       — not built yet: shown as "coming soon", can't be switched on
 
 export const FEATURES = [
   { key: 'feed', name: 'Feed, photos and auto-posts', description: 'The Feed tab: posts, photos, comments and the automatic birdie/result posts.', newGroup: true },
@@ -26,8 +27,8 @@ export const FEATURES = [
   { key: 'rule_voting', name: 'Rulebook voting', description: 'Anyone proposes rule changes and the group votes.', newGroup: true },
   { key: 'notifications', name: 'Phone notifications and reminders', description: 'Buzzes for votes, jobs, reminders and the draw room.', newGroup: true },
   { key: 'connector', name: 'Claude connector', description: 'Run the group from a Claude chat (organisers).', newGroup: false },
-  { key: 'scorecard_photo', name: 'Scorecard photo reading', description: 'Read a photo of a scorecard into scores (needs an API key).', newGroup: false },
-  { key: 'booking_links', name: 'Booking links', description: 'Links to find accommodation and book courses for a trip.', newGroup: false },
+  { key: 'scorecard_photo', name: 'Scorecard photo reading', description: 'Read a photo of a scorecard into scores (needs an API key).', newGroup: false, soon: true },
+  { key: 'booking_links', name: 'Booking links', description: 'Links to find accommodation and book courses for a trip.', newGroup: false, soon: true },
 ].map((f) => ({ parent: null, tier: 'free', ...f }));
 
 export const FEATURE_BY_KEY = Object.fromEntries(FEATURES.map((f) => [f.key, f]));

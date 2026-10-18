@@ -81,6 +81,7 @@ export default function ScoreEntry() {
 
   const sideCompsOn = useFeature('side_comps');
   const gpsOn = useFeature('gps');
+  const feedOn = useFeature('feed');
   if (!data.ready) return <Loading />;
   if (!round || !course) return <div className="empty">Round not found.</div>;
   if (!subjects.length) return <div className="empty">No {isA ? 'teams' : 'players'} in this round yet.</div>;
@@ -236,7 +237,7 @@ export default function ScoreEntry() {
         </div>
       )}
 
-      <div className="section stack">
+      {feedOn && <div className="section stack">
         <span className="label">Moment (optional — goes to the feed)</span>
         <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
           {MOMENTS.map((m) => (
@@ -244,7 +245,7 @@ export default function ScoreEntry() {
           ))}
         </div>
         <PhotoButtons onPick={setPhoto} picked={!!photo} cameraLabel={photo ? 'Retake' : 'Photo for feed'} libraryLabel="Choose photo" />
-      </div>
+      </div>}
 
       <div className="section" style={{ paddingBottom: 28 }}>
         {editor && <p className="note" style={{ textAlign: 'center', margin: '0 0 10px' }}>Last edited by {playerName(editor)}</p>}

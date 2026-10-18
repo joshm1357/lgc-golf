@@ -239,6 +239,13 @@ function FeaturesCard() {
       {FEATURES.map((f) => {
         const own = f.key in settings ? !!settings[f.key] : f.newGroup;
         const parentOff = f.parent && !featureOn(f.parent, settings);
+        if (f.soon) {
+          return (
+            <div key={f.key} className="row" style={{ gap: 10, padding: '10px 14px', borderTop: '1px solid var(--line-soft)', opacity: 0.55 }}>
+              <span className="grow"><strong style={{ fontSize: 15 }}>{f.name}</strong><div className="small muted">Coming soon. {f.description}</div></span>
+            </div>
+          );
+        }
         return (
           <label key={f.key} className="row" style={{ gap: 10, padding: '10px 14px', paddingLeft: f.parent ? 34 : 14, borderTop: '1px solid var(--line-soft)', opacity: parentOff ? 0.5 : 1 }}>
             <span className="grow" style={{ minWidth: 0 }}>

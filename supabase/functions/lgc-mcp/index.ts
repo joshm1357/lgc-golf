@@ -100,7 +100,18 @@ function findSubject(subs: Awaited<ReturnType<typeof subjectsOf>>, who: string) 
   if (part.length === 1) return part[0];
   return fail(part.length ? `"${who}" matches ${part.map((s) => s.name).join(' and ')}.` : `No team or player "${who}" in this round. In it: ${subs.map((s) => s.name).join(', ')}.`);
 }
+/** Feature switches (Stage 3). The connector uses the server key, which skips the database's rules, so it checks
+ *  here: a tool for a switched-off feature isn't offered and refuses to run. (An older database: everything on.) */
+async function featureOn(c: Ctx, key: string) {
+  const { data, error } = await db.rpc('feature_on', { p_group: c.g, p_key: key });
+  return error ? true : data !== false;
+}
+const TOOL_FEATURE: Record<string, string> = {
+  confirm_side_comp: 'side_comps', post_to_feed: 'feed', plan_details: 'planner', set_rsvp: 'planner',
+  add_job: 'planner_tasks', create_poll: 'planner_tasks', add_cost: 'planner_costs',
+};
 async function post(c: Ctx, text: string) {
+  if (!(await featureOn(c, 'feed'))) return; // no feed: nothing to post to
   await must(db.from('posts').insert({ group_id: c.g, kind: 'user', player_id: c.author, body: text }));
 }
 
@@ -344,10 +355,17 @@ async function handle(msg: Record<string, any>, c: Ctx) {
       return ok({ protocolVersion: v, capabilities: { tools: {} }, serverInfo: { name: 'lgc-golf', version: '1.0.0' }, instructions: `${c.groupName} golf app (The Golf Trip). Everything here is this group only. Call lgc_overview first to get round, team and plan ids. Scores go in with enter_scores; check names against lgc_overview.` });
     }
     case 'ping': return ok({});
-    case 'tools/list': return ok({ tools: TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })) });
+    case 'tools/list': {
+      const offered = [];
+      for (const t of TOOLS) if (!TOOL_FEATURE[t.name] || await featureOn(c, TOOL_FEATURE[t.name])) offered.push(t);
+      return ok({ tools: offered.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })) });
+    }
     case 'tools/call': {
       const tool = TOOLS.find((t) => t.name === params?.name);
       if (!tool) return err(-32602, `Unknown tool ${params?.name}`);
+      if (TOOL_FEATURE[tool.name] && !(await featureOn(c, TOOL_FEATURE[tool.name]))) {
+        return ok({ content: [{ type: 'text', text: `That's switched off for ${c.groupName} (Group & invites → Features).` }], isError: true });
+      }
       try {
         return ok({ content: [{ type: 'text', text: await tool.run(params?.arguments || {}, c) }] });
       } catch (e) {

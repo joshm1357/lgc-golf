@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { startOutbox, outboxCount, onOutboxChange, onOutboxDrop } from './lib/outbox.js';
 import { HashRouter, Routes, Route, useLocation, useParams } from 'react-router-dom';
-import { SessionProvider, DataProvider, useSession, useData } from './lib/store.jsx';
+import { SessionProvider, DataProvider, useSession, useData, useFeature } from './lib/store.jsx';
 import { TabBar, Toaster, Loading, UpdateBanner, toast } from './components/ui.jsx';
 import { lazyScreen, LazyArea } from './lib/lazy.jsx';
 import { DrawOverlay } from './components/DrawOverlay.jsx';
@@ -45,6 +45,16 @@ function JoinInsideRoute({ code: given }) {
       {c ? <InviteJoin code={c} inside /> : <div>That invite link isn’t right.</div>}
     </div>
   );
+}
+
+// Screens of a switched-off feature (opened from an old post, a bookmark or a notification) say so instead of half-working.
+function FeatureRoute({ feature, label, children }) {
+  return useFeature(feature) ? children : (
+    <div className="page"><div className="empty" style={{ marginTop: 40 }}>{label} is switched off for this group.<div className="small muted" style={{ marginTop: 6 }}>An organiser can switch it on in More → Group & invites → Features.</div></div></div>
+  );
+}
+function DrawOverlayIfOn() {
+  return useFeature('draw') ? <DrawOverlay /> : null;
 }
 
 function Gate() {
@@ -94,18 +104,18 @@ function Inside() {
       <Routes>
         <Route path="/" element={<Leaderboard />} />
         <Route path="/score/:roundId" element={<ScoreEntry />} />
-        <Route path="/feed" element={<Feed />} />
-        <Route path="/comps" element={<Comps />} />
-        <Route path="/map" element={<MapScreen />} />
+        <Route path="/feed" element={<FeatureRoute feature="feed" label="The Feed"><Feed /></FeatureRoute>} />
+        <Route path="/comps" element={<FeatureRoute feature="side_comps" label="Side comps"><Comps /></FeatureRoute>} />
+        <Route path="/map" element={<FeatureRoute feature="location" label="Where’s everyone"><MapScreen /></FeatureRoute>} />
         <Route path="/more" element={<More />} />
-        <Route path="/trophies" element={<Trophies />} />
-        <Route path="/tribunal" element={<Tribunal />} />
-        <Route path="/tribunal/:caseId" element={<TribunalCase />} />
+        <Route path="/trophies" element={<FeatureRoute feature="trophies" label="The Trophy Room"><Trophies /></FeatureRoute>} />
+        <Route path="/tribunal" element={<FeatureRoute feature="tribunal" label="The Handicap Tribunal"><Tribunal /></FeatureRoute>} />
+        <Route path="/tribunal/:caseId" element={<FeatureRoute feature="tribunal" label="The Handicap Tribunal"><TribunalCase /></FeatureRoute>} />
         <Route path="/player/:playerId" element={<Profile />} />
         <Route path="/courses" element={<Courses />} />
         <Route path="/admin" element={<Admin />} />
-        <Route path="/plan" element={<Planner />} />
-        <Route path="/plan/:planId" element={<PlanDetailRoute />} />
+        <Route path="/plan" element={<FeatureRoute feature="planner" label="The Trips planner"><Planner /></FeatureRoute>} />
+        <Route path="/plan/:planId" element={<FeatureRoute feature="planner" label="The Trips planner"><PlanDetailRoute /></FeatureRoute>} />
         <Route path="/rules" element={<Rulebook />} />
         <Route path="/courses/:courseId/greens" element={<GreenMapper />} />
         <Route path="/group" element={<Group />} />
@@ -114,7 +124,7 @@ function Inside() {
       </Routes>
       </LazyArea>
       {!hideTabs && <TabBar />}
-      <DrawOverlay />
+      <DrawOverlayIfOn />
       <UpdateBanner />
       <Toaster />
     </div>

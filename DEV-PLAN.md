@@ -92,16 +92,25 @@ the public course page and shared courses)
   by Josh from the admin screen. Share cards are built once in 7b and reused.
 - **Stage 10 addition:** "Ask about a group booking" on claimed course pages and in trip place votes (form → email to
   the club, logged against its code). No money changes hands yet; any future payment goes to the club itself, never to
-  staff, and is disclosed.
+  staff, and is disclosed. (✅ on staging: the email goes from the person's own mail app — no email service.)
 
 **Phase 4 — Earn later (release v2.2)**
 10. Planner per group + booking links (switched off, one redirect so referral codes can be added later).
+    ✅ on staging (planner was already per group from Stage 1).
 11. `group_plan` field (`free` for everyone) and the tier check in `feature_on`; list of possible premium features. No payments.
+    ✅ on staging: only Josh can change a group's plan; a feature marked premium is off for free groups.
 
-### Ideas that could be premium later (no payments built)
-- Multi-trip seasons and season-long ladders.
+### Ideas that could be premium later (no payments built; nothing marked premium yet)
+Rule of thumb: everything a group needs to run a trip stays free. Premium is extras for keen organisers.
+- Multi-trip seasons and season-long ladders (order of merit across trips).
 - In-app scorecard photo reading (needs an Anthropic API key — a pay-per-use cost).
-- Extra crest/branding options.
+- Extra crest/branding options (custom fonts, own colours beyond the presets, a printed honour board poster).
+- Player stats: scoring vs handicap, best and worst holes, head-to-heads.
+- History import beyond a few years / bulk import from spreadsheets.
+- More than one Clubhouse TV board at once, or a branded TV page for a club (club-side, not player-side).
+- Trip extras: weather on the plan, automatic reminders by text message (would cost per message).
+- Not premium (stays free): scoring, leaderboard, side comps, trophies, Rulebook, Tribunal, Trips planner, invites,
+  share pictures, privacy and delete-my-data.
 
 ## Later — ideas not yet in a stage
 

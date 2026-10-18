@@ -720,6 +720,32 @@ L.G.C safe, clean-up scheduled); unit tests (problem filter, share-card content)
    the authorised origins. Switch on **Pro** (US$25/month) before the first outside group.
 4. Make the repo private once the move is done.
 
+## v2.2 Stage 10–11 — Booking links, group booking enquiries, premium-ready (branch `stage-10-booking`, on staging only)
+
+**Built**
+- **Trips planner per group:** already done in Stage 1 (every planner table is per group; the isolation test covers it).
+- **Booking links (042; switch "Booking links", off by default):** a trip's Details shows 🏨 Find accommodation,
+  ⛳ Find a course and 🚗 Getting there, with the place, dates and how many are "in" filled in. Each tap goes through
+  the database (`booking_go`), which builds the address from a template in `booking_targets` — so a referral code can be
+  added later without an app update. Taps are counted per group. No referral accounts; the screen says the app earns
+  nothing from them.
+- **Group booking enquiries (042):** "📨 Ask about a group booking" on a partner course page (when the club has a
+  bookings email or phone) and from a trip's place vote when a place is a partner course. A short form (name, email or
+  phone, dates, golfers, rounds, note) is logged against the club's code, then the person's own email app opens
+  addressed to the club with it written out (no email service needed); the club's phone is shown too. The club sees its
+  enquiries on its screen. At most 5 a day per person. **No money changes hands; any future payment goes to the club
+  itself, never to staff, and is disclosed.**
+- **Premium-ready, all free (043):** `groups.group_plan` (`free` for everyone); the tier check in `feature_on` now means
+  a feature marked premium is only on for premium groups (none are marked); only Josh can change a group's plan. The
+  list of ideas that could be premium later is in DEV-PLAN.
+- **Josh's numbers:** enquiries per club and booking-link taps.
+
+**Tested:** `supabase/tests/stage10_booking.sql` 19 checks (links refused with the switch off, the addresses with place/
+dates/people/rooms, made-up kinds refused, templates and enquiries unreadable, taps counted, enquiry email text with the
+club's ref, unclaimed course / no way to reply / silly group sizes refused, the club sees only its own, place-vote match,
+every group free, organisers can't make their group premium, a premium feature follows the plan, Josh's numbers);
+phone width `tests/e2e/stage10-test.mjs`.
+
 ## Known limits
 - GPS distances are approximate (±5–10 m) and straight-line; closest-to-pin distance is typed in.
 - Location sharing only works while the app is open.

@@ -223,7 +223,8 @@ function Enquiry({ course, club, onClose }) {
         <div className="stack" style={{ gap: 8 }}>
           <span className="small muted">Goes to the club with your contact details so they can reply. Nothing to pay here.</span>
           <label className="field"><span>Your name</span><input className="input" value={f.name} maxLength={80} onChange={set('name')} /></label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div className="enquiry-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
+            <style>{'.enquiry-grid .field, .enquiry-grid .input { min-width: 0; width: 100%; box-sizing: border-box; }'}</style>
             <label className="field"><span>Email</span><input className="input" type="email" value={f.email} onChange={set('email')} /></label>
             <label className="field"><span>Phone</span><input className="input" type="tel" value={f.phone} onChange={set('phone')} /></label>
             <label className="field"><span>From</span><input className="input" type="date" value={f.start} onChange={set('start')} /></label>

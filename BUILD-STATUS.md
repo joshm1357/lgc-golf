@@ -249,7 +249,7 @@ STOP → live SQL below → merge `v1.5` into `main` (deploys) → check the liv
   links them); Chat delete events, like other tables', carry only the deleted row's id to every phone.
 
 ### Live order for v2.0 (at the release STOP — not before)
-022 → 023 → 024 → 025 → 026 → 027 → 028 → 027b on live, then deploy `notify` and `lgc-mcp`, then the app. (On staging 024 ran after 025;
+022 → 023 → 024 → 025 → 026 → 027 → 028 → 029 → 027b on live, then deploy `notify` and `lgc-mcp`, then the app. (On staging 024 ran after 025;
 025 calls the same-group check builder again, so the order above is the one for live.)
 
 ## v2.0 Stage 2 — Proper login, roles and invites (branch `stage-2-login`, on staging only)
@@ -293,6 +293,31 @@ links opening Safari). Left as notes: invite codes stored plainly (server-only t
 
 **Josh's paste list for staging (approvals time out from here):** `020`, `021`, `027b_remove_member.sql`, and
 `drop function public.tmp_echo_headers();` (a test helper, already emptied and locked).
+
+## v2.0 Stage 3 — Feature switches (branch `stage-3-features`, on staging only)
+
+**Built**
+- **One list** (`src/lib/features.js`): 17 switchable features with name, description, new-group default, what each
+  needs (side comp bonus needs side comps; votes/jobs, shared costs, rooms and cars need the Trips planner) and a tier
+  (`free` for all — ready for premium later, no billing). Scoring, leaderboard, players, rounds and courses can't be
+  switched off. A unit test checks the database's copy matches.
+- **Database (029):** `feature_catalogue`, `group_features` (live updates), `feature_on(group, key)` (the group's choice,
+  else the default; off when its parent is off), `set_feature` (organisers). **Enforced:** every feature's tables refuse
+  adds, changes and removals while it's off — from any app version or the connector — reads still work; plus rule
+  proposals, side comp bonus strokes, Tribunal cases and votes, and trip votes in the server functions. Birdie posts
+  aren't made with the Feed off. **L.G.C:** everything on apart from scorecard photos and booking links.
+- **App:** `useFeature(key)`; switched-off features disappear cleanly — bottom bar (Feed, Comps, Trips), More (map,
+  Trophy Room, Tribunal, notifications), the draw, distances and shot planner, side comp prompts, trip tabs (Vote, Jobs,
+  Kitty, Rooms & cars) and the job checklist, rule proposing/voting, bonus strokes. Trips without votes take the first
+  date and place straight away. **Features** switches for organisers in Group & invites (dependants greyed out; a
+  warning when switching off a parent).
+- **Server:** `notify` sends nothing for a switched-off feature (or when notifications are off); the Claude connector's
+  link stops working when the connector is off.
+
+**Tested:** 83 unit tests; `supabase/tests/stage3_features.sql`; phone width `tests/e2e/features-test.mjs` (9 checks:
+3-tab bar, hidden menu items, greyed dependants, switching, no sideways scroll).
+
+**Release:** see `docs/RELEASE-v2.0.md` — **RELEASE v2.0 is a STOP**.
 
 ## Known limits
 - GPS distances are approximate (±5–10 m) and straight-line; closest-to-pin distance is typed in.

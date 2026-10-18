@@ -46,7 +46,7 @@ Full brief: `the-golf-trip-full-build-prompt.md` (in the Claude project). Every 
 2. ✅ on staging, sign-in providers not yet on (STOP) — **Proper login, roles and invites** — Apple, Google and emailed link; guests stay anonymous and can upgrade
    without losing scores; organiser / player / guest; invite link + QR code; group switcher. STOP before switching
    any sign-in provider on.
-3. **Feature switches** — `src/lib/features.js`, `group_features` table, `feature_on()` checked by the database
+3. ✅ on staging — **Feature switches** — `src/lib/features.js`, `group_features` table, `feature_on()` checked by the database
    (not just hidden), Group settings → Features screen, L.G.C has everything on except scorecard photo and booking links.
 
 **Phase 2 — Make it theirs (release v2.1 with Phase 3)**

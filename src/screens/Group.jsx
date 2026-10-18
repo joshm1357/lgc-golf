@@ -274,12 +274,12 @@ function LookCard() {
   const problems = lookProblems(v);
   const preview = themeVars(v);
   const pickCrest = (file) => file && run(async () => {
-    const url = await uploadPhoto(file, 'crest', { maxDim: 512, square: true, quality: 0.85 });
+    const url = await uploadPhoto(file, 'crest', { maxDim: 512, square: true, png: true, strict: true });
     set((x) => ({ ...x, crest_url: url }));
   }, 'Crest ready — save to use it');
   const save = () => run(async () => {
     await must(supabase.rpc('set_group_look', { p_name: v.name, p_short_name: v.short_name || null, p_primary: v.primary, p_accent: v.accent, p_font: v.font, p_crest_url: v.crest_url || null }));
-    applyLook({ short_name: v.short_name || null, crest_url: v.crest_url || null, primary: v.primary, accent: v.accent, font: v.font });
+    applyLook({ short_name: v.short_name || null, crest_url: v.crest_url || null, primary: v.primary, accent: v.accent, font: v.font }, v.name);
     await refresh();
   }, 'Saved — everyone sees the new look');
   return (
@@ -293,7 +293,8 @@ function LookCard() {
             <div style={{ fontSize: 13, color: preview['--on-navy-muted'] }}>Leaderboard</div></span>
         </div>
         <div style={{ padding: 10, background: '#fff' }}>
-          <span className="btn sm" style={{ background: preview['--gold'], color: preview['--navy'], borderColor: preview['--gold'] }}>A gold button</span>
+          <span className="btn sm" style={{ background: preview['--gold'], color: 'var(--text)', borderColor: preview['--gold'] }}>A gold button</span>
+          <span className="small" style={{ marginLeft: 10, padding: '4px 8px', borderRadius: 6, background: preview['--navy'], color: preview['--gold'], fontWeight: 700 }}>2026</span>
         </div>
       </div>
       <label className="field"><span>Group name</span><input className="input" value={v.name} maxLength={40} onChange={(e) => set({ ...v, name: e.target.value })} /></label>

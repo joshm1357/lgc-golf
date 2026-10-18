@@ -83,7 +83,7 @@ export default function Leaderboard() {
   if (!round) {
     return (
       <div className="page">
-        <Header logo title={trip?.name || status?.group_name || 'The Golf Trip'} sub="No rounds set up yet" />
+        <Header logo title={trip?.name || (status?.legacy ? 'L.G.C Golf' : status?.group_name) || 'The Golf Trip'} sub="No rounds set up yet" />
         <div className="empty">
           Nothing to show yet.{status?.is_admin ? <> Set up the course, teams and round in <Link to="/admin">Admin</Link>.</> : ' The admin is setting things up.'}
         </div>
@@ -141,7 +141,7 @@ export default function Leaderboard() {
         </div>
       )}
       {round.rules && round.status !== 'locked' && (
-        <div className="section"><div className="card pad small" style={{ lineHeight: 1.45 }}><strong>Today's rules:</strong> {round.rules} <a href="?guide" style={{ fontWeight: 700 }}>How it works</a></div></div>
+        <div className="section"><div className="card pad small" style={{ lineHeight: 1.45 }}><strong>Today's rules:</strong> {round.rules}{status?.legacy && <> <a href="?guide" style={{ fontWeight: 700 }}>How it works</a></>}</div></div>
       )}
 
       {heads.length > 0 && round.status !== 'locked' && (

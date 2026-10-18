@@ -38,7 +38,7 @@ export default function More() {
           ))}
         </div>
         {on.notifications && <div style={{ marginTop: 12 }}><NotifyCard /></div>}
-        <a href="?guide" className="btn ghost block" style={{ marginTop: 12 }}>How the app works</a>
+        {status?.legacy && <a href="?guide" className="btn ghost block" style={{ marginTop: 12 }}>How the app works</a>}
         <p className="note">Tip: add this app to your home screen — Share → Add to Home Screen (iPhone) or ⋮ → Add to Home screen (Android).</p>
       </div>
     </div>

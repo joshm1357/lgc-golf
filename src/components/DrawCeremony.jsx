@@ -283,7 +283,7 @@ function Ceremony({ draw, onClose, actions, header, busy, run, isAdmin, me, grou
               {/* the lotto ball */}
               <div style={{ width: 176, height: 176, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'radial-gradient(circle at 35% 30%, #FFFFFF 0%, #E9EDF2 45%, #B9C2CC 100%)', boxShadow: spinning ? `0 0 0 6px rgba(255,255,255,.08), 0 0 40px rgba(235,212,150,.35)` : `0 0 0 6px ${colour}, 0 0 48px ${colour}`, transform: spinning ? `rotate(${(within / 6) % 360}deg)` : 'scale(1.04)', transition: spinning ? 'none' : 'transform .25s, box-shadow .25s' }}>
                 {waitingForClick && !current ? (
-                  <span style={{ fontFamily: "'Pirata One', serif", fontSize: 64, color: '#1C2B3F' }}>?</span>
+                  <span style={{ fontFamily: "'Pirata One', serif", fontSize: 64, color: 'var(--navy)' }}>?</span>
                 ) : (
                   <div style={{ transform: spinning ? `rotate(${-(within / 6) % 360}deg)` : 'none' }}><Avatar player={face} size={140} /></div>
                 )}

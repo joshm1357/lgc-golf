@@ -154,6 +154,10 @@ check((await cssVar('--display')).includes('Georgia'), 'new group heading font')
 check(await page.getByRole('img', { name: 'The Golf Trip' }).first().isVisible(), 'plain The Golf Trip crest in the header');
 check(!(await page.getByRole('img', { name: /L\.G\.C/ }).count()), 'no L.G.C crest anywhere');
 check(!(await page.locator('body').innerText()).includes('BD, Putt Buddies'), 'no L.G.C trophy names in More');
+check(!(await page.getByText('How the app works').count()), 'no L.G.C guide link for a new group');
+const head = () => page.evaluate(() => ({ title: document.title, apple: document.querySelector('meta[name="apple-mobile-web-app-title"]')?.content, icon: document.querySelector('link[rel="apple-touch-icon"]')?.getAttribute('href') }));
+let h = await head();
+check(!/L\.G\.C/.test(h.title + h.apple) && /trip-192\.png$/.test(h.icon), `new group: own app name and plain icon (${JSON.stringify(h)})`);
 await page.screenshot({ path: `${SHOTS}/l1-new-group.png` });
 
 // The Look card: a pale main colour is refused before saving.
@@ -181,6 +185,15 @@ await page.reload();
 await page.getByText('Group & invites').waitFor({ timeout: 15000 });
 check((await cssVar('--navy-2')).toUpperCase() === '#2E4561' && (await cssVar('--gold')).toUpperCase() === '#D9A521', 'L.G.C keeps exactly its colours');
 check(await page.getByRole('img', { name: /L\.G\.C/ }).first().isVisible(), 'L.G.C keeps its crest');
+h = await head();
+check(h.title === 'L.G.C Golf' && h.apple === 'L.G.C' && /icon-192\.png$/.test(h.icon), `L.G.C keeps its app name and icon (${JSON.stringify(h)})`);
+
+// No longer in a group: the old group's look is forgotten (an invite to another group shouldn't show L.G.C).
+STATUS.v = { is_member: false, is_admin: false, player_id: null, group_name: null, group_id: null, legacy: null, role: null, signed_in: false, look: null, groups: [] };
+await page.reload();
+await page.waitForTimeout(1500);
+check((await cssVar('--navy')).toUpperCase() === '#1F4B33' && !(await page.evaluate(() => localStorage.getItem('lgc-look'))), 'not in a group: plain look, saved look cleared');
+check(!(await page.getByRole('img', { name: /L\.G\.C/ }).count()), 'not in a group: no L.G.C crest on the join screen');
 
 check(errors.length === 0, `no page errors (${errors.join(' | ')})`);
 await browser.close();

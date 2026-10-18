@@ -349,10 +349,33 @@ tests pass (features, Stage 2, Trips, v1.5 regression).
   now use the group's name or "The Golf Trip". (L.G.C's one-off Sunday guide page is unchanged; the home-screen app
   name and icon per group come with Stage 9's hosting move.)
 
-**Tested:** `supabase/tests/stage4_branding.sql` 9 checks (L.G.C's look kept, new-group default, only organisers,
-crest folder, L.G.C crest only for L.G.C, bad colour/font refused, no reading another group's look); 91 unit tests
-(theme colour maths and readability); phone width `tests/e2e/look-test.mjs` 12 checks (new group's colours/font/plain
-crest, no L.G.C artwork, pale colour blocked, save, L.G.C exact colours and crest).
+**Independent review — fixed (031b, applied on staging):**
+- L.G.C leftovers: the Sunday guide link only shows for L.G.C; the tab title, iPhone Home Screen name and icon now
+  follow the group (its name / short name, its uploaded crest or a new plain The Golf Trip icon — L.G.C keeps "L.G.C
+  Golf", "L.G.C" and its icon); trophy examples, the notification fallback title and share titles no longer say L.G.C;
+  the last hard-coded L.G.C colours use the group's colours.
+- Readability check now tests the pairs the app really draws: dark writing on the accent (buttons, finished holes),
+  accent writing on the main colour (years on the honour board), white on the lightest in-between shade (badges, 3:1);
+  the muted header text is worked out so it always passes. The Look preview shows the real button.
+- Crests are saved as PNG (see-through logos stay see-through; photos get a white, not black, background) and must be
+  shrunk on the phone — an iPhone HEIC or a huge file is refused with a plain message instead of uploaded as-is.
+- The server checks the whole crest address: this project's storage, this group's crest folder, a file that was
+  really uploaded, no "..", 300 characters max.
+- Signing out, or no longer being in a group, forgets the old group's look; an invite shows the inviting group's
+  crest and colours (`invite_info` returns the look).
+- Colours: the server checks only their format (an organiser calling it directly only affects their own group); the app
+  refuses unreadable pairs. Deliberate.
+- "Trophy names" in the brief: trophies already have their own names per group (set in Admin), so nothing else needed.
+- Known gaps: Android's installed-app name and icon come from the fixed manifest (still L.G.C) until the hosting move
+  (Stage 9) gives each group its own; a first open after the update shows L.G.C colours for a moment until the look
+  loads; an iPhone shows a see-through crest's background as black on the Home Screen icon.
+
+**Tested:** `supabase/tests/stage4_branding.sql` 14 checks (L.G.C's look kept, new-group default, only organisers,
+crest folder and address checks, L.G.C crest only for L.G.C, bad colour/font refused, invite shows the look, no reading
+another group's look); unit tests (theme colour maths, every passing look readable on buttons, header and badges, app
+name and icon); phone width `tests/e2e/look-test.mjs` 17 checks (new group's colours/font/plain crest/app name and icon,
+no L.G.C artwork or guide link, pale colour blocked, save, L.G.C exact colours, crest, name and icon, look forgotten
+when not in a group).
 
 ## v2.1 Stage 5 — Rulebook per group (branch `stage-5-rulebook`, on staging only)
 

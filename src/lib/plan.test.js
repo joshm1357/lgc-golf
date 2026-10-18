@@ -53,13 +53,20 @@ describe('kitty', () => {
     expect(by.fred).toBe(-60);
   });
   it('counts person-to-person payments and works out who pays who', () => {
-    const k = kitty([{ amount: 400, per_head: false, paid_by: 'josh' }], [], ['josh', 'hamish', 'al', 'cam'], [{ from_id: 'hamish', to_id: 'josh', amount: 100 }]);
+    const k = kitty([{ amount: 400, per_head: false, paid_by: 'josh' }], [], ['josh', 'hamish', 'al', 'cam'], [{ from_id: 'hamish', to_id: 'josh', amount: 100, confirmed: true }, { from_id: 'al', to_id: 'josh', amount: 100, confirmed: false }]);
     const by = Object.fromEntries(k.people.map((p) => [p.player_id, p.balance]));
     expect(by.hamish).toBe(0);
     expect(by.josh).toBe(-200);
     expect(k.settle).toEqual(expect.arrayContaining([{ from: 'al', to: 'josh', amount: 100 }, { from: 'cam', to: 'josh', amount: 100 }]));
     expect(k.settle).toHaveLength(2);
     expect(k.toCollect).toBe(200);
+  });
+  it('puts a cost on the payer when nobody is in, and ignores a name picked twice', () => {
+    const k = kitty([{ amount: 300, per_head: false, paid_by: 'josh' }, { amount: 60, per_head: false, paid_by: 'al', split_between: ['al', 'cam', 'cam'] }], [], []);
+    const by = Object.fromEntries(k.people.map((p) => [p.player_id, p.balance]));
+    expect(by.josh).toBe(0);
+    expect(by.cam).toBe(30);
+    expect(k.total).toBe(360);
   });
   it('settles with the fewest payments', () => {
     const t = settleUp([{ id: 'a', balance: 50 }, { id: 'b', balance: 30 }, { id: 'c', balance: -80 }]);

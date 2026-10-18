@@ -2,7 +2,7 @@
 // Everything re-loads automatically when the database changes (Supabase Realtime).
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from './supabase.js';
-import { pendingScores, onQueueChange } from './offline.js';
+import { pendingScores, onQueueChange, freeCacheSpace } from './offline.js';
 
 const SessionCtx = createContext(null);
 
@@ -11,8 +11,22 @@ export function cacheGet(key) {
   try { return JSON.parse(localStorage.getItem(`lgc-cache-${key}`) || 'null'); } catch { return null; }
 }
 export function cacheSet(key, value) {
-  try { localStorage.setItem(`lgc-cache-${key}`, JSON.stringify(value)); } catch { /* full or blocked: fine */ }
+  const text = JSON.stringify(value);
+  try {
+    localStorage.setItem(`lgc-cache-${key}`, text);
+  } catch {
+    // Full: clear the old offline copies and try once more. Never touches the score queue.
+    freeCacheSpace();
+    try { localStorage.setItem(`lgc-cache-${key}`, text); } catch { /* fine — just no offline copy */ }
+  }
 }
+// Old multi-round score copies (one per screen) from the first offline version: no longer used.
+try {
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('lgc-cache-scores-') && k.includes(',')) localStorage.removeItem(k);
+  }
+} catch { /* ignore */ }
 const DataCtx = createContext(null);
 
 export function SessionProvider({ children }) {
@@ -39,7 +53,10 @@ export function SessionProvider({ children }) {
   useEffect(() => {
     refresh();
     const { data: sub } = supabase.auth.onAuthStateChange((evt) => {
-      if (evt === 'SIGNED_OUT') refresh();
+      if (evt === 'SIGNED_OUT') {
+        freeCacheSpace(); // the saved offline copies belong to whoever was signed in
+        refresh();
+      }
     });
     return () => sub.subscription.unsubscribe();
   }, [refresh]);
@@ -158,7 +175,9 @@ export const useData = () => useContext(DataCtx);
 export function useScores(roundIds) {
   const ids = (Array.isArray(roundIds) ? roundIds : [roundIds]).filter(Boolean);
   const idKey = ids.join(',');
-  const [rows, setRows] = useState(() => cacheGet(`scores-${idKey}`) || []);
+  // Offline copy only for one-round screens (leaderboard, score entry) — small, and what's needed on a course.
+  const cacheKey = ids.length === 1 ? `scores-${ids[0]}` : null;
+  const [rows, setRows] = useState(() => (cacheKey && cacheGet(cacheKey)) || []);
   const [queue, setQueue] = useState(pendingScores());
 
   const load = useCallback(async () => {
@@ -170,11 +189,11 @@ export function useScores(roundIds) {
       const { data, error } = await supabase.from('scores').select('*').in('round_id', ids);
       if (error || !data) {
         // No signal: show the last copy saved for these rounds (plus anything queued on this phone).
-        const c = cacheGet(`scores-${idKey}`);
+        const c = cacheKey && cacheGet(cacheKey);
         if (c) setRows(c);
         return;
       }
-      cacheSet(`scores-${idKey}`, data);
+      if (cacheKey) cacheSet(cacheKey, data);
       setRows(data);
     } catch {
       /* keep what we have */

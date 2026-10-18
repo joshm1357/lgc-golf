@@ -269,7 +269,9 @@ export function KittyTab({ pd }) {
   const label = (b) => (b > 0.5 ? { t: `owes ${money(b)}`, c: 'var(--under)' } : b < -0.5 ? { t: `owed ${money(-b)}`, c: '#1F7A4D' } : { t: 'square ✓', c: 'var(--navy)' });
   const myPays = k.settle.filter((s) => s.from === me);
   const myGets = k.settle.filter((s) => s.to === me);
-  const toConfirm = pd.transfers.filter((t) => t.to_id === me && !t.confirmed);
+  // Waiting for a tick: payments to me, and (for the admin) money paid into the kitty.
+  const toConfirm = pd.transfers.filter((t) => !t.confirmed && (t.to_id === me || (!t.to_id && status.is_admin)));
+  const pendingTo = (to) => pd.transfers.filter((t) => !t.confirmed && t.from_id === me && (t.to_id || 'kitty') === to).reduce((s, t) => s + Number(t.amount), 0);
   const splitLabel = (c) => (c.split_between?.length ? c.split_between.map((id) => playerName(data.playersById[id])).join(', ') : `everyone in (${inIds.length})`);
 
   const paid = (s) => run(async () => {
@@ -291,7 +293,9 @@ export function KittyTab({ pd }) {
               {payInfo(s.to)
                 ? <button type="button" className="btn ghost sm" onClick={() => shareNudge(payInfo(s.to))} style={{ justifyContent: 'flex-start' }}>📋 {payInfo(s.to)}</button>
                 : <span className="small muted">{who(s.to)} hasn’t added payment details yet.</span>}
-              <button type="button" className="btn gold sm" disabled={busy} onClick={() => paid(s)}>I’ve paid {money(s.amount)}</button>
+              {pendingTo(s.to) >= s.amount - 0.5
+                ? <span className="small" style={{ fontWeight: 700 }}>⏳ You said you paid {money(pendingTo(s.to))} — waiting for {who(s.to)} to confirm.</span>
+                : <button type="button" className="btn gold sm" disabled={busy} onClick={() => paid(s)}>I’ve paid {money(s.amount)}</button>}
             </div>
           ))}
           {myGets.length > 0 && <div className="small"><strong>Owed to you:</strong> {myGets.map((s) => `${who(s.from)} ${money(s.amount)}`).join(' · ')}</div>}
@@ -299,7 +303,7 @@ export function KittyTab({ pd }) {
       )}
       {toConfirm.map((t) => (
         <div key={t.id} className="card pad stack" style={{ gap: 6, borderColor: 'var(--gold)' }}>
-          <div><strong>{who(t.from_id)}</strong> says they paid you <strong>{money(t.amount)}</strong>.</div>
+          <div><strong>{who(t.from_id)}</strong> says they paid {t.to_id ? 'you' : 'into the kitty'} <strong>{money(t.amount)}</strong>.</div>
           <div className="row" style={{ gap: 8 }}>
             <button type="button" className="btn gold sm" disabled={busy} onClick={() => run(async () => { await must(supabase.from('plan_transfers').update({ confirmed: true }).eq('id', t.id)); pd.reload(); }, 'Confirmed ✓')}>✓ Got it</button>
             <button type="button" className="btn ghost sm" disabled={busy} onClick={() => { if (window.confirm('Remove this payment? Their balance goes back up.')) run(async () => { await must(supabase.from('plan_transfers').delete().eq('id', t.id)); pd.reload(); }, 'Removed'); }}>Not received</button>
@@ -340,9 +344,17 @@ export function KittyTab({ pd }) {
           <span className="label">Who pays who</span>
           <div className="card">
             {k.settle.map((s) => (
-              <div key={`${s.from}-${s.to}`} className="row between" style={{ padding: '8px 14px', borderBottom: '1px solid var(--line-soft)' }}>
-                <span><strong>{who(s.from)}</strong> → <strong>{who(s.to)}</strong>{payInfo(s.to) && <div className="small muted">{payInfo(s.to)}</div>}</span>
+              <div key={`${s.from}-${s.to}`} className="row between" style={{ padding: '8px 14px', borderBottom: '1px solid var(--line-soft)', gap: 8 }}>
+                <span className="grow"><strong>{who(s.from)}</strong> → <strong>{who(s.to)}</strong>{payInfo(s.to) && <div className="small muted">{payInfo(s.to)}</div>}</span>
                 <span className="num" style={{ fontSize: 18 }}>{money(s.amount)}</span>
+                {s.from === 'kitty' && status.is_admin && (
+                  <button type="button" className="btn ghost sm" disabled={busy} onClick={() => run(async () => {
+                    // A refund from the kitty = that person has that much less in the kitty.
+                    const cur = Number(pd.payments.find((x) => x.player_id === s.to)?.paid || 0);
+                    await must(supabase.from('plan_payments').upsert({ plan_id: pd.plan.id, player_id: s.to, paid: Math.round((cur - s.amount) * 100) / 100, updated_at: new Date().toISOString() }));
+                    pd.reload();
+                  }, 'Refund recorded')}>Refunded</button>
+                )}
               </div>
             ))}
           </div>

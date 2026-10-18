@@ -97,15 +97,18 @@ async function kittyOwing(planId: string) {
     db.from('plan_costs').select('*').eq('plan_id', planId),
     db.from('plan_payments').select('*').eq('plan_id', planId),
     db.from('plan_rsvps').select('*').eq('plan_id', planId).eq('status', 'in'),
-    db.from('plan_transfers').select('*').eq('plan_id', planId),
+    db.from('plan_transfers').select('*').eq('plan_id', planId).eq('confirmed', true),
   ]);
   const inIds = (rsvps || []).map((r) => r.player_id);
   const transfers = tr || [];
   type Cost = { per_head: boolean; amount: number; paid_by: string | null; split_between: string[] | null };
-  const group = (c: Cost) => (c.split_between && c.split_between.length ? c.split_between : inIds);
+  const group = (c: Cost) => {
+    const g = [...new Set(c.split_between && c.split_between.length ? c.split_between : inIds)];
+    return g.length ? g : c.paid_by ? [c.paid_by] : [];
+  };
   const totalOf = (c: Cost) => (c.per_head ? Number(c.amount) * group(c).length : Number(c.amount));
   const shareOf = (c: Cost, pid: string) => (!group(c).includes(pid) ? 0 : c.per_head ? Number(c.amount) : Number(c.amount) / group(c).length);
-  const ids = [...new Set([...inIds, ...(costs || []).flatMap((c: Cost) => c.split_between || [])])];
+  const ids = [...new Set([...inIds, ...(costs || []).flatMap((c: Cost) => c.split_between || []), ...transfers.flatMap((t) => [t.from_id, t.to_id]).filter(Boolean)])];
   return ids.map((pid) => {
     const share = (costs || []).reduce((s: number, c: Cost) => s + shareOf(c, pid), 0);
     const fronted = (costs || []).filter((c: Cost) => c.paid_by === pid).reduce((s: number, c: Cost) => s + totalOf(c), 0);
@@ -135,7 +138,7 @@ async function daily() {
     sent += await send(await openPollNonVoters(p.plan_id, p.id), { title: '⏰ Vote closes tomorrow', body: p.question, url: planUrl(p.plan_id, 'vote'), tag: `poll-${p.id}` });
   }
   // RSVP deadline tomorrow → people who haven't replied.
-  const { data: dl } = await db.from('plans').select('*').eq('rsvp_deadline', tomorrow).eq('rsvp_locked', false);
+  const { data: dl } = await db.from('plans').select('*').eq('rsvp_deadline', tomorrow).eq('rsvp_locked', false).eq('proposed', false).neq('status', 'cancelled');
   for (const pl of dl || []) {
     if (!(await once(`rsvp-deadline:${pl.id}:${today}`))) continue;
     const { data: rs } = await db.from('plan_rsvps').select('player_id').eq('plan_id', pl.id);
@@ -145,7 +148,7 @@ async function daily() {
   }
   // A week out and the day before → everyone who's in.
   for (const [day, label] of [[week, 'is a week away'], [tomorrow, 'is tomorrow']] as const) {
-    const { data: soon } = await db.from('plans').select('*').eq('start_date', day).neq('status', 'cancelled');
+    const { data: soon } = await db.from('plans').select('*').eq('start_date', day).neq('status', 'cancelled').eq('proposed', false);
     for (const pl of soon || []) {
       if (!(await once(`countdown:${pl.id}:${day}:${label}`))) continue;
       const { data: rs } = await db.from('plan_rsvps').select('player_id').eq('plan_id', pl.id).eq('status', 'in');

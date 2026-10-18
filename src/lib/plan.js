@@ -96,7 +96,8 @@ const cents = (x) => Math.round(x * 100) / 100;
  * costs:     [{ amount, per_head, paid_by, split_between }]  split_between null/empty = everyone who's in
  * payments:  [{ player_id, paid }]            money put into the kitty (recorded by the admin)
  * inIds:     players who are in
- * transfers: [{ from_id, to_id, amount }]     person-to-person payments (to_id null = into the kitty)
+ * transfers: [{ from_id, to_id, amount, confirmed }]  person-to-person payments (to_id null = into the kitty);
+ *            only CONFIRMED ones count — a payment waiting for the receiver's tick shows as pending
  * Returns { total, people, kitty, settle }
  *   share    = this person's part of the costs they're in on
  *   fronted  = what they paid on the group's behalf
@@ -106,8 +107,13 @@ const cents = (x) => Math.round(x * 100) / 100;
  *   kitty    = money held in the kitty that isn't spent (negative = the kitty is short)
  *   settle   = the fewest payments that square everyone up: [{ from, to, amount }] ('kitty' = the kitty)
  */
-export function kitty(costs, payments, inIds, transfers = []) {
-  const groupOf = (c) => (c.split_between && c.split_between.length ? c.split_between : inIds);
+export function kitty(costs, payments, inIds, allTransfers = []) {
+  const transfers = allTransfers.filter((t) => t.confirmed);
+  // Who shares a cost: the people picked, else everyone in; if that's nobody, the payer carries it all.
+  const groupOf = (c) => {
+    const g = [...new Set(c.split_between && c.split_between.length ? c.split_between : inIds)];
+    return g.length ? g : c.paid_by ? [c.paid_by] : [];
+  };
   const totalOf = (c) => (c.per_head ? Number(c.amount) * groupOf(c).length : Number(c.amount));
   const shareOf = (c, pid) => {
     const g = groupOf(c);

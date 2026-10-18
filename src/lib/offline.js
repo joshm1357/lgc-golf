@@ -4,18 +4,36 @@ import { supabase } from './supabase.js';
 const KEY = 'lgc-score-queue';
 const listeners = new Set();
 
+// The queue is kept in memory as well as on the phone, so a save is never lost even if
+// phone storage is full or blocked (it then lasts until the app is closed).
+let mem = null;
 function read() {
+  if (mem) return mem;
   try {
-    return JSON.parse(localStorage.getItem(KEY) || '[]');
+    mem = JSON.parse(localStorage.getItem(KEY) || '[]');
   } catch {
-    return [];
+    mem = [];
   }
+  return mem;
 }
+
+/** Storage full? Throw away the saved offline copies (they refill on the next load) — never the score queue. */
+export function freeCacheSpace() {
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('lgc-cache-')) localStorage.removeItem(k);
+    }
+  } catch { /* ignore */ }
+}
+
 function write(q) {
+  mem = q;
   try {
     localStorage.setItem(KEY, JSON.stringify(q));
   } catch {
-    /* storage unavailable */
+    freeCacheSpace();
+    try { localStorage.setItem(KEY, JSON.stringify(q)); } catch { /* still kept in memory */ }
   }
   listeners.forEach((fn) => fn(q));
 }

@@ -141,7 +141,8 @@ await ctx.addInitScript(([uid]) => {
   if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated', is_anonymous: true } }));
 }, ['99999999-9999-4999-8999-999999999999']);
 const page = await ctx.newPage();
-page.on('dialog', (d) => d.accept());
+let dialogs = 0;
+page.on('dialog', (d) => { dialogs++; d.accept(); });
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
 const cssVar = (n) => page.evaluate((x) => getComputedStyle(document.documentElement).getPropertyValue(x).trim(), n);
@@ -157,6 +158,24 @@ writes.length = 0;
 await page.getByRole('button', { name: 'Use these rules' }).nth(1).click();
 await page.waitForTimeout(800);
 check(writes.some((x) => x.method === 'RPC' && x.table === 'use_starter_rulebook' && x.body.p_starter === 'ambrose_stableford'), 'picking one asks the server for those rules');
+check(dialogs === 1, 'asks “are you sure” before adding a starter');
+check(!(await page.getByText('No rules for this comp yet.').count()), 'no “no rules” message under the picker');
+check(await page.getByText(/only come off once side comp bonus strokes are switched on/).isVisible(), 'Ambrose starter says the strokes need bonus strokes switched on');
+
+// A player sees no picker, just a hint.
+STATUS.v = { ...NEW, is_admin: false, role: 'player', groups: [{ id: GROUP, name: 'The Mulligans', slug: 'mull', role: 'player' }] };
+await page.reload();
+await page.getByText('The Rulebook').first().waitFor({ timeout: 15000 });
+await page.waitForTimeout(800);
+check(!(await page.getByText('Start your Rulebook').count()), 'a player sees no starter picker');
+check(await page.getByText(/Your organiser can start from a ready-made Rulebook/).isVisible(), 'a player is told the organiser can start one');
+
+// Once there are rules, no picker.
+STATUS.v = NEW;
+db.rules = [{ id: 'r1', group_id: GROUP, title: 'Our rule', detail: 'x', category: 'format', applies_to: ['all'], status: 'active', sort: 1 }];
+await page.reload();
+await page.getByText('Our rule').waitFor({ timeout: 15000 });
+check(!(await page.getByText('Start your Rulebook').count()), 'no picker once the Rulebook has rules');
 check(errors.length === 0, `no page errors (${errors.join(' | ')})`);
 await browser.close();
 console.log(fails.length ? `\n${fails.length} FAILED` : '\nALL PASSED');

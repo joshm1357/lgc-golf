@@ -43,6 +43,7 @@ export default function Rulebook() {
   const active = rb.rules.filter((r) => r.status === 'active' && fits(r));
   const proposed = rb.rules.filter((r) => r.status === 'proposed');
   const old = rb.rules.filter((r) => r.status === 'rejected' || r.status === 'retired');
+  const showPicker = status.is_admin && rb.rules.filter((r) => r.status === 'active' || r.status === 'proposed').length === 0;
 
   return (
     <div className="page">
@@ -52,7 +53,7 @@ export default function Rulebook() {
           {[['all', 'All'], ['stableford', 'Stableford'], ['ambrose', 'Ambrose']].map(([k, l]) => <button key={k} type="button" aria-pressed={filter === k} onClick={() => setFilter(k)}>{l}</button>)}
         </div>
 
-        {status.is_admin && rb.rules.filter((r) => r.status === 'active' || r.status === 'proposed').length === 0 && <StarterPicker reload={rb.reload} />}
+        {showPicker && <StarterPicker reload={rb.reload} />}
 
         {proposed.length > 0 && (
           <>
@@ -71,7 +72,7 @@ export default function Rulebook() {
             </div>
           );
         })}
-        {active.length === 0 && <div className="empty">No rules for this comp yet.</div>}
+        {active.length === 0 && !showPicker && <div className="empty">No rules for this comp yet.{!status.is_admin && rb.rules.length === 0 ? ' Your organiser can start from a ready-made Rulebook.' : ''}</div>}
 
         {(status.is_admin || (votingOn && status.role !== 'guest')) && <button type="button" className="btn gold block" onClick={() => setEditing({})}>{votingOn ? '+ Propose a rule' : '+ Add a rule'}</button>}
 
@@ -238,6 +239,7 @@ function RuleSheet({ rule, onClose, onSaved }) {
 /** A group with no rules yet: start from one of the starter rulebooks (organisers). */
 function StarterPicker({ reload }) {
   const [busy, run] = useRun();
+  const bonusOn = useFeature('comp_bonus');
   return (
     <div className="card pad stack" style={{ gap: 10, borderColor: 'var(--gold)' }}>
       <div><strong>📖 Start your Rulebook</strong><div className="small muted">Pick a starting point — you can change, add or remove any rule afterwards.</div></div>
@@ -246,7 +248,8 @@ function StarterPicker({ reload }) {
           <strong>{s.name}</strong>
           <span className="small">{s.blurb}</span>
           <span className="small muted">{s.rules.join(' · ')}</span>
-          <button type="button" className="btn sm gold" disabled={busy} onClick={() => run(async () => {
+          {s.key === 'ambrose_stableford' && !bonusOn && <span className="small muted">The −2 strokes only come off once side comp bonus strokes are switched on (Group &amp; invites → Features).</span>}
+          <button type="button" className="btn gold block" disabled={busy} onClick={() => window.confirm(`Add the ${s.name} rules? You can edit or retire any of them afterwards.`) && run(async () => {
             await must(supabase.rpc('use_starter_rulebook', { p_starter: s.key }));
             reload();
           }, `${s.name} rules added`)}>Use these rules</button>

@@ -3,6 +3,7 @@ import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useSession, playerName } from '../lib/store.jsx';
 import { teamSizes, REVEAL_MS } from '../lib/draw.js';
 import { Avatar, Sheet, toast } from './ui.jsx';
+import { notify } from '../lib/push.js';
 
 /** Admin: choose who's in and how many teams, then start the live draw for everyone. */
 export default function DrawSetup({ round, onClose }) {
@@ -38,6 +39,7 @@ export default function DrawSetup({ round, onClose }) {
       });
       if (error) throw error;
       await supabase.from('posts').insert({ kind: 'user', player_id: me, round_id: round.id, trip_id: round.trip_id, body: `🎲 The draw room is open for ${round.name} — open the app to watch the teams drawn live.` });
+      notify('draw_open', {});
       onClose();
     } catch (e) {
       toast(friendlyError(e));

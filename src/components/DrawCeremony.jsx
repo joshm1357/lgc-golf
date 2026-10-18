@@ -8,7 +8,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useRealtime, useSession, playerName } from '../lib/store.jsx';
-import { REVEAL_MS, SPIN_MS, makeDraw } from '../lib/draw.js';
+import { REVEAL_MS, SPIN_MS, makeDraw, makeGroupDraw } from '../lib/draw.js';
+import { notify } from '../lib/push.js';
 import { Avatar, toast } from './ui.jsx';
 
 export const TEAM_COLOURS = ['#D9A521', '#5FB3E0', '#E0705F', '#7FD1AE', '#C79BE6', '#F2F4F6'];
@@ -45,7 +46,9 @@ export function DrawOverlay() {
 /** Real actions: write to the database so every phone follows along. */
 const liveActions = {
   async start(draw, field) {
-    const d = makeDraw(field, draw.payload.k, { balance: draw.payload.balance });
+    const d = draw.payload.mode === 'groups'
+      ? makeGroupDraw(field.map((f) => f.id), draw.payload.groups)
+      : makeDraw(field, draw.payload.k, { balance: draw.payload.balance });
     const { error } = await supabase.from('draws').update({
       status: 'running',
       payload: { ...draw.payload, ...d, step: 0 },
@@ -63,6 +66,7 @@ const liveActions = {
     await supabase.from('draws').update({ status: 'done' }).eq('id', draw.id).eq('status', 'running');
   },
   async lock(draw, data, me, startRound) {
+    if (draw.payload.mode === 'groups') return lockGroups(draw, data, me);
     const round = draw.round_id;
     let { error } = await supabase.from('teams').delete().eq('round_id', round);
     if (error) throw error;
@@ -88,6 +92,25 @@ const liveActions = {
     await supabase.from('draws').update({ status: 'lobby', payload: rest }).eq('id', draw.id);
   },
 };
+
+/** Rooms/cars draw: write who's in each room or car to the plan. */
+async function lockGroups(draw, data, me) {
+  const { teams, groups, keep, kind, title } = draw.payload;
+  if (!keep) {
+    const { error } = await supabase.from('plan_group_members').delete().in('group_id', groups.map((g) => g.id));
+    if (error) throw error;
+  }
+  const rows = teams.flatMap((tm) => tm.players.map((pid) => ({ group_id: tm.group_id, player_id: pid })));
+  if (rows.length) {
+    const { error } = await supabase.from('plan_group_members').insert(rows);
+    if (error) throw error;
+  }
+  const { error } = await supabase.from('draws').update({ status: 'locked' }).eq('id', draw.id);
+  if (error) throw error;
+  const summary = teams.filter((tm) => tm.players.length).map((tm) => `${tm.name}: ${tm.players.map((id) => playerName(data.playersById[id])).join(', ')}`).join(' · ');
+  await supabase.from('posts').insert({ kind: 'user', player_id: me, link: `/plan/${draw.plan_id}?tab=groups`, body: `${kind === 'car' ? '🚗' : '🛏️'} ${title} are drawn! ${summary}` });
+  await notify('groups_set', { plan_id: draw.plan_id, kind });
+}
 
 function useNow(active) {
   const [now, setNow] = useState(Date.now());
@@ -122,7 +145,8 @@ export default function DrawCeremony({ draw, onClose, actions = liveActions, dem
   const { status } = useSession();
   const me = status.player_id;
   const isAdmin = status.is_admin;
-  const roundName = data.rounds.find((r) => r.id === draw.round_id)?.name || 'Ambrose';
+  const groupsMode = draw.payload.mode === 'groups';
+  const roundName = groupsMode ? draw.payload.title : data.rounds.find((r) => r.id === draw.round_id)?.name || 'Ambrose';
   const fieldIds = draw.payload.field || draw.payload.teams?.flatMap((t) => t.players) || [];
   const watchers = useWatchers(draw.id, me, !demo && (draw.status === 'lobby' || draw.status === 'running'));
   const [busy, setBusy] = useState(false);
@@ -135,7 +159,7 @@ export default function DrawCeremony({ draw, onClose, actions = liveActions, dem
   const header = (
     <div style={{ textAlign: 'center' }}>
       <div style={{ fontFamily: "'Pirata One', serif", fontSize: 46, color: '#EBD496', lineHeight: 1 }}>The Draw</div>
-      <div style={sub}>{roundName} · {draw.payload.k} teams · {draw.payload.balance ? 'random, kept close' : 'truly random'} · {draw.payload.pace === 'click' ? 'admin clicks through' : 'timed'}</div>
+      <div style={sub}>{roundName} · {groupsMode ? `${draw.payload.groups.length} ${draw.payload.kind === 'car' ? 'cars' : 'rooms'}` : `${draw.payload.k} teams · ${draw.payload.balance ? 'random, kept close' : 'truly random'}`} · {draw.payload.pace === 'click' ? 'admin clicks through' : 'timed'}</div>
     </div>
   );
 
@@ -157,7 +181,7 @@ export default function DrawCeremony({ draw, onClose, actions = liveActions, dem
                   <div key={id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, opacity: here ? 1 : 0.55 }}>
                     <div style={{ borderRadius: '50%', padding: 3, background: here ? '#7FD1AE' : 'transparent' }}><Avatar player={p} size={50} /></div>
                     <span style={{ fontSize: 12, fontWeight: 600, textAlign: 'center' }}>{playerName(p)}</span>
-                    <span style={{ fontSize: 11, color: '#AFC0D4' }}>off {Number(p?.handicap)}</span>
+                    {!groupsMode && <span style={{ fontSize: 11, color: '#AFC0D4' }}>off {Number(p?.handicap)}</span>}
                   </div>
                 );
               })}
@@ -178,10 +202,11 @@ export default function DrawCeremony({ draw, onClose, actions = liveActions, dem
     );
   }
 
-  return <Ceremony draw={draw} onClose={onClose} actions={actions} demo={demo} header={header} busy={busy} run={run} isAdmin={isAdmin} me={me} />;
+  return <Ceremony draw={draw} onClose={onClose} actions={actions} demo={demo} header={header} busy={busy} run={run} isAdmin={isAdmin} me={me} groupsMode={groupsMode} />;
 }
 
-function Ceremony({ draw, onClose, actions, header, busy, run, isAdmin, me }) {
+function Ceremony({ draw, onClose, actions, header, busy, run, isAdmin, me, groupsMode }) {
+  const things = draw.payload.kind === 'car' ? 'cars' : 'rooms';
   const data = useData();
   const { teams, picks } = draw.payload;
   const clickMode = draw.payload.pace === 'click';
@@ -286,13 +311,13 @@ function Ceremony({ draw, onClose, actions, header, busy, run, isAdmin, me }) {
             <div style={{ fontFamily: 'var(--display)', fontSize: 36, fontWeight: 700, minHeight: 44, opacity: spinning ? 0.5 : 1, filter: spinning ? 'blur(1.5px)' : 'none' }}>
               {waitingForClick && !current ? '' : face ? playerName(face) : ''}
             </div>
-            {!spinning && current && <div style={{ ...sub, fontSize: 15 }}>Off {Number(data.playersById[current.player_id]?.handicap)} · {teams[current.team].name}</div>}
+            {!spinning && current && <div style={{ ...sub, fontSize: 15 }}>{groupsMode ? '' : `Off ${Number(data.playersById[current.player_id]?.handicap)} · `}{teams[current.team].name}</div>}
             {spinning && <div style={sub}>Drawing…</div>}
             <div style={{ ...sub, fontSize: 12 }}>Name {Math.max(1, triggered)} of {picks.length}</div>
           </div>
         ) : (
           <div style={{ textAlign: 'center', fontFamily: 'var(--display)', fontSize: 26, fontWeight: 700 }}>
-            {draw.status === 'locked' ? 'Teams locked in. Good luck.' : 'The teams are set.'}
+            {groupsMode ? (draw.status === 'locked' ? `The ${things} are locked in.` : `The ${things} are drawn.`) : draw.status === 'locked' ? 'Teams locked in. Good luck.' : 'The teams are set.'}
           </div>
         )}
 
@@ -308,7 +333,7 @@ function Ceremony({ draw, onClose, actions, header, busy, run, isAdmin, me }) {
             <div key={tm.name} style={{ border: `2px solid ${tm.colour}`, borderRadius: 14, padding: 10, background: tm.drawing ? 'rgba(255,255,255,.09)' : 'rgba(255,255,255,.03)', boxShadow: tm.drawing ? `0 0 18px ${tm.colour}55` : 'none' }}>
               <div style={{ fontFamily: 'var(--display)', fontSize: 20, fontWeight: 700, color: tm.colour }}>{tm.name}</div>
               <div style={{ fontSize: 13, color: '#AFC0D4', marginBottom: 6 }}>
-                {finished ? <>Team handicap <strong style={{ color: '#F4EFE3', fontSize: 16 }}>{tm.handicap}</strong></> : tm.hcpSoFar != null ? `Team handicap so far ${tm.hcpSoFar}` : 'Waiting…'}
+                {groupsMode ? `${tm.got.length} drawn · ${tm.capacity || tm.players.length} ${draw.payload.kind === 'car' ? 'seats' : 'beds'} free` : finished ? <>Team handicap <strong style={{ color: '#F4EFE3', fontSize: 16 }}>{tm.handicap}</strong></> : tm.hcpSoFar != null ? `Team handicap so far ${tm.hcpSoFar}` : 'Waiting…'}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {tm.players.map((pid, i) => {
@@ -318,7 +343,7 @@ function Ceremony({ draw, onClose, actions, header, busy, run, isAdmin, me }) {
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 32, opacity: shown ? 1 : 0.35 }}>
                       {shown ? <Avatar player={p} size={28} /> : <span style={{ width: 28, height: 28, borderRadius: '50%', border: '2px dashed #5C6B7E', display: 'inline-block' }} />}
                       <span style={{ fontWeight: 600, fontSize: 15 }}>{shown ? playerName(p) : '?'}</span>
-                      {shown && <span style={{ marginLeft: 'auto', fontSize: 12, color: '#AFC0D4' }}>{Number(p?.handicap)}</span>}
+                      {shown && !groupsMode && <span style={{ marginLeft: 'auto', fontSize: 12, color: '#AFC0D4' }}>{Number(p?.handicap)}</span>}
                     </div>
                   );
                 })}
@@ -327,7 +352,7 @@ function Ceremony({ draw, onClose, actions, header, busy, run, isAdmin, me }) {
           ))}
         </div>
 
-        {finished && <p style={{ fontSize: 12.5, color: '#AFC0D4', lineHeight: 1.45, margin: 0 }}>Team handicap = combined handicaps ÷ (2 × team size): 4-player ÷ 8, 3-player ÷ 6.{draw.payload.balance ? ' "Keep it close" only used random line-ups where the team handicaps were within a shot of each other.' : ''}</p>}
+        {finished && !groupsMode && <p style={{ fontSize: 12.5, color: '#AFC0D4', lineHeight: 1.45, margin: 0 }}>Team handicap = combined handicaps ÷ (2 × team size): 4-player ÷ 8, 3-player ÷ 6.{draw.payload.balance ? ' "Keep it close" only used random line-ups where the team handicaps were within a shot of each other.' : ''}</p>}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {isAdmin && !finished && !countdown && !clickMode && <button type="button" className="btn ghost" onClick={() => setSkipped(true)}>Skip to the result (just my screen)</button>}
@@ -339,8 +364,8 @@ function Ceremony({ draw, onClose, actions, header, busy, run, isAdmin, me }) {
                   <span>…and start the round (scoring opens)</span>
                 </label>
               )}
-              <button type="button" className="btn gold" disabled={busy} onClick={() => run(async () => { await actions.lock(draw, data, me, startRound && round?.status === 'setup'); toast(startRound ? 'Teams locked — round is live' : 'Teams locked in'); })}>Lock in these teams</button>
-              <button type="button" className="btn ghost" disabled={busy} onClick={() => { if (window.confirm('Scrap these teams and go back to the draw room?')) run(() => actions.reopen(draw)); }}>Scrap it — back to the draw room</button>
+              <button type="button" className="btn gold" disabled={busy} onClick={() => run(async () => { await actions.lock(draw, data, me, startRound && round?.status === 'setup'); toast(groupsMode ? `The ${things} are locked in` : startRound && round?.status === 'setup' ? 'Teams locked — round is live' : 'Teams locked in'); })}>{groupsMode ? `Lock in these ${things}` : 'Lock in these teams'}</button>
+              <button type="button" className="btn ghost" disabled={busy} onClick={() => { if (window.confirm(`Scrap these ${groupsMode ? things : 'teams'} and go back to the draw room?`)) run(() => actions.reopen(draw)); }}>Scrap it — back to the draw room</button>
             </>
           )}
           {!isAdmin && finished && draw.status !== 'locked' && <div style={{ textAlign: 'center', color: '#AFC0D4' }}>Waiting for the admin to lock it in…</div>}

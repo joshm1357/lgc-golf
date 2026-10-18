@@ -15,6 +15,7 @@ import MapScreen from './screens/MapScreen.jsx';
 import Trophies from './screens/Trophies.jsx';
 import Tribunal, { TribunalCase } from './screens/Tribunal.jsx';
 import Courses from './screens/Courses.jsx';
+import Planner, { PlanDetail } from './screens/Planner.jsx';
 import { DrawOverlay } from './components/DrawCeremony.jsx';
 
 function Gate() {
@@ -57,6 +58,8 @@ function Inside() {
         <Route path="/player/:playerId" element={<Profile />} />
         <Route path="/courses" element={<Courses />} />
         <Route path="/admin" element={<Admin />} />
+        <Route path="/plan" element={<Planner />} />
+        <Route path="/plan/:planId" element={<PlanDetail />} />
         <Route path="*" element={<Leaderboard />} />
       </Routes>
       {!hideTabs && <TabBar />}

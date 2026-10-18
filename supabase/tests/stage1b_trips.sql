@@ -107,7 +107,7 @@ insert into t_results (label, result) select 'c2 sees only own notification sett
 set local request.jwt.claims to '{"sub":"00000000-0000-4000-8000-0000000d0a01","role":"authenticated"}';
 do $$ begin perform set_config('request.headers', '{}', true); end $$;
 insert into t_results (label, result)
-  select 'D sees C trip / votes / options / comments',
+  select 'D sees C trip / votes / options / comments / settings',
     (select count(*) from public.plans where group_id = '00000000-0000-4000-8000-00000000c000') || '/' ||
     (select count(*) from public.plan_polls where group_id = '00000000-0000-4000-8000-00000000c000') || '/' ||
     (select count(*) from public.plan_options where group_id = '00000000-0000-4000-8000-00000000c000') || '/' ||
@@ -174,9 +174,26 @@ update public.plans set start_date = '2031-03-15', end_date = '2031-03-17' where
 insert into t_results (label, result) select 'date change follows to the trip', start_date || '..' || end_date from public.trips where name = 'C autumn trip!';
 update public.plans set organiser_id = '00000000-0000-4000-8000-0000000c0b03' where id = '00000000-0000-4000-8000-0000000c0d01';
 insert into t_results (label, result) select 'admin hands over organiser', (organiser_id = '00000000-0000-4000-8000-0000000c0b03')::text from public.plans where id = '00000000-0000-4000-8000-0000000c0d01';
+-- Scoring on the trip made at lock-in works as today.
+insert into public.courses (id, name, holes) values ('00000000-0000-4000-8000-0000000c0e01', 'C links', '[{"n":1,"par":4,"si":1}]');
+insert into public.rounds (id, trip_id, course_id, name, format, status)
+  select '00000000-0000-4000-8000-0000000c0e02', trip_id, '00000000-0000-4000-8000-0000000c0e01', 'C round 1', 'stableford', 'live'
+  from public.plans where id = '00000000-0000-4000-8000-0000000c0d01';
+insert into public.scores (round_id, subject_id, subject_type, hole, strokes)
+  values ('00000000-0000-4000-8000-0000000c0e02', '00000000-0000-4000-8000-0000000c0b02', 'player', 1, 3);
+insert into t_results (label, result) select 'score on the locked-in trip (birdie post in group C)', count(*)::text
+  from public.posts where round_id = '00000000-0000-4000-8000-0000000c0e02' and group_id = '00000000-0000-4000-8000-00000000c000';
 -- An old phone: the admin plans something with dates and sets it straight to Locked in.
 insert into public.plans (id, kind, name, status, start_date) values ('00000000-0000-4000-8000-0000000c0d02', 'round', 'C xmas round', 'confirmed', (now() at time zone 'Australia/Sydney')::date);
 insert into t_results (label, result) select 'old-phone lock-in makes the trip', (trip_id is not null)::text from public.plans where id = '00000000-0000-4000-8000-0000000c0d02';
+-- A long weekend that started yesterday (the midnight job missed it) — the xmas round falls inside it.
+insert into public.plans (id, kind, name, status, start_date, end_date) values ('00000000-0000-4000-8000-0000000c0d04', 'trip', 'C long weekend', 'confirmed',
+  (now() at time zone 'Australia/Sydney')::date - 1, (now() at time zone 'Australia/Sydney')::date + 1);
+-- An old phone's "Set it up in the app" after lock-in: it makes its own trip and links it; the empty one goes.
+insert into public.plans (id, kind, name, status, start_date) values ('00000000-0000-4000-8000-0000000c0d05', 'trip', 'C spring', 'confirmed', '2031-09-01');
+insert into public.trips (id, name, start_date, status) values ('00000000-0000-4000-8000-0000000c0c05', 'C spring (old phone)', '2031-09-01', 'locked');
+update public.plans set trip_id = '00000000-0000-4000-8000-0000000c0c05' where id = '00000000-0000-4000-8000-0000000c0d05';
+insert into t_results (label, result) select 'old-phone setup after lock-in: trips for it', count(*)::text from public.trips where name like 'C spring%';
 -- A finished trip from a fortnight ago.
 insert into public.plans (id, kind, name, status, start_date, end_date) values ('00000000-0000-4000-8000-0000000c0d03', 'trip', 'C winter trip', 'confirmed', current_date - 16, current_date - 14);
 
@@ -184,7 +201,8 @@ insert into public.plans (id, kind, name, status, start_date, end_date) values (
 reset role;
 select private.trips_daily();
 insert into t_results (label, result)
-  select 'first day: new trip is current, old one closed',
+  select 'missed first day: long weekend is current / round inside it / old trip',
+    (select status from public.trips where id = (select trip_id from public.plans where id = '00000000-0000-4000-8000-0000000c0d04')) || ' / ' ||
     (select status from public.trips where id = (select trip_id from public.plans where id = '00000000-0000-4000-8000-0000000c0d02')) || ' / ' ||
     (select status from public.trips where id = '00000000-0000-4000-8000-0000000c0c01');
 insert into t_results (label, result) select 'a week after: Done', status from public.plans where id = '00000000-0000-4000-8000-0000000c0d03';

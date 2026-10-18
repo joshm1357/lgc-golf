@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
-import { useData, useRealtime, useSession, playerName } from '../lib/store.jsx';
+import { useData, useRealtime, useSession, playerName, cacheGet, cacheSet } from '../lib/store.jsx';
 import { Header, AvatarStack, Sheet, Loading, toast } from '../components/ui.jsx';
 import { fmtRange, countdown, RSVP_LABEL, todayISO, money } from '../lib/plan.js';
 import { STAGE_LABEL, sortTrips, stillToDecide, suggestionOptions, defaultCloses } from '../lib/trips.js';
@@ -20,20 +20,30 @@ export default function Trips() {
   const [rows, setRows] = useState(null);
   const [suggesting, setSuggesting] = useState(false);
   const load = useCallback(async () => {
-    const [{ data: plans }, { data: rsvps }, { data: polls }] = await Promise.all([
-      supabase.from('plans').select('*'),
-      supabase.from('plan_rsvps').select('plan_id,player_id,status'),
-      supabase.from('plan_polls').select('id,plan_id,kind,question,status,closes_on').eq('status', 'open'),
-    ]);
-    const pollIds = (polls || []).map((p) => p.id);
-    const { data: options } = pollIds.length ? await supabase.from('plan_options').select('id,poll_id').in('poll_id', pollIds) : { data: [] };
-    setRows({ plans: plans || [], rsvps: rsvps || [], polls: polls || [], options: options || [] });
+    try {
+      const [plans, rsvps, polls] = await Promise.all([
+        supabase.from('plans').select('*'),
+        supabase.from('plan_rsvps').select('plan_id,player_id,status'),
+        supabase.from('plan_polls').select('id,plan_id,kind,question,status,closes_on').eq('status', 'open'),
+      ]);
+      if (plans.error) throw plans.error;
+      const pollIds = (polls.data || []).map((p) => p.id);
+      const { data: options } = pollIds.length ? await supabase.from('plan_options').select('id,poll_id').in('poll_id', pollIds) : { data: [] };
+      const next = { plans: plans.data || [], rsvps: rsvps.data || [], polls: polls.data || [], options: options || [] };
+      cacheSet('trips-list', next);
+      setRows(next);
+    } catch {
+      // No signal: show the copy saved on this phone last time.
+      const c = cacheGet('trips-list');
+      setRows((cur) => cur || (c ? { ...c, offline: true } : { plans: [], rsvps: [], polls: [], options: [], failed: true }));
+    }
   }, []);
   useEffect(() => { load(); }, [load]);
   useRealtime(TABLES, load);
 
   const today = todayISO();
-  const sorted = useMemo(() => (rows ? sortTrips(rows.plans, data.trips, today) : null), [rows, data.trips, today]);
+  // Trips added in Admin → Trips (no plan behind them) still belong in the list.
+  const sorted = useMemo(() => (rows ? sortTrips([...rows.plans, ...tripsWithoutPlan(data.trips, rows.plans)], data.trips, today) : null), [rows, data.trips, today]);
   const photos = usePastPhotos(sorted?.past);
 
   if (!rows) return <div className="page"><Header logo title="Trips" /><Loading /></div>;
@@ -45,6 +55,8 @@ export default function Trips() {
       <Header logo title="Trips" sub="What’s on, what’s being decided, and every trip so far" />
       <div className="section stack">
         <NotifyCard compact />
+        {rows.offline && <div className="small muted">No signal — showing the list from last time.</div>}
+        {rows.failed && <div className="err">Couldn’t load the trips — check your signal and open Trips again.</div>}
 
         {now ? <NowCard plan={now.plan} stage={now.stage} rsvps={rsvpsOf(now.plan.id)} me={status.player_id} />
           : <div className="empty">Nothing locked in yet. Suggest a trip below and let the lads vote on when and where.</div>}
@@ -101,7 +113,7 @@ function NowCard({ plan, stage, rsvps, me }) {
   const on = stage === 'on';
   return (
     <div className="card" style={{ overflow: 'hidden', borderColor: 'var(--navy)' }}>
-      <Link to={`/plan/${plan.id}`} className="stack" style={{ gap: 6, padding: 16, textDecoration: 'none', color: '#fff', background: 'var(--navy)' }}>
+      <Link to={plan.tripOnly ? '/' : `/plan/${plan.id}`} className="stack" style={{ gap: 6, padding: 16, textDecoration: 'none', color: '#fff', background: 'var(--navy)' }}>
         <div className="row between" style={{ alignItems: 'flex-start' }}>
           <span className="small" style={{ fontWeight: 800, letterSpacing: '.04em', color: 'var(--gold)' }}>{on ? '⛳ ON NOW' : '🔒 NEXT UP'} · {plan.kind === 'round' ? 'ONE-DAY ROUND' : 'TRIP'}</span>
           {plan.start_date && !on && <Chip strong>{countdown(plan.start_date)}</Chip>}
@@ -128,7 +140,7 @@ function TripCard({ plan, stage, rsvps, me, decide, suggestedBy }) {
   const ins = rsvps.filter((r) => r.status === 'in');
   const mine = rsvps.find((r) => r.player_id === me);
   return (
-    <Link to={`/plan/${plan.id}`} className="card pad stack" style={{ gap: 6, textDecoration: 'none', color: 'inherit' }}>
+    <Link to={plan.tripOnly ? '/' : `/plan/${plan.id}`} className="card pad stack" style={{ gap: 6, textDecoration: 'none', color: 'inherit' }}>
       <div className="row between" style={{ alignItems: 'flex-start', gap: 8 }}>
         <div>
           <div className="small muted" style={{ fontWeight: 700 }}>{STAGE_LABEL[stage]} · {plan.kind === 'round' ? 'One-day round' : 'Trip'}{suggestedBy && stage === 'idea' ? ` · from ${playerName(suggestedBy)}` : ''}</div>
@@ -150,10 +162,21 @@ function TripCard({ plan, stage, rsvps, me, decide, suggestedBy }) {
   );
 }
 
+/** A trip in the app with no plan behind it (e.g. added in Admin → Trips), shaped like a plan for the list. */
+export function tripsWithoutPlan(trips, plans) {
+  const linked = new Set(plans.map((p) => p.trip_id).filter(Boolean));
+  const today = todayISO();
+  return (trips || []).filter((t) => !linked.has(t.id)).map((t) => ({
+    id: `trip-${t.id}`, tripOnly: true, kind: 'trip', name: t.name, start_date: t.start_date, end_date: t.end_date, trip_id: t.id,
+    proposed: false, created_at: t.created_at,
+    status: t.status === 'active' || ((t.end_date || t.start_date) && (t.end_date || t.start_date) >= today) ? 'confirmed' : 'done',
+  }));
+}
+
 function PastCard({ plan, stage, photo, rounds }) {
   const cancelled = stage === 'cancelled';
   return (
-    <Link to={`/plan/${plan.id}`} className="card row" style={{ gap: 12, padding: 10, textDecoration: 'none', color: 'inherit', opacity: cancelled ? 0.55 : 1 }}>
+    <Link to={plan.tripOnly ? '/trophies' : `/plan/${plan.id}`} className="card row" style={{ gap: 12, padding: 10, textDecoration: 'none', color: 'inherit', opacity: cancelled ? 0.55 : 1 }}>
       <div style={{ width: 64, height: 64, flex: 'none', borderRadius: 10, overflow: 'hidden', background: 'var(--gold-soft)', display: 'grid', placeItems: 'center', fontSize: 26 }}>
         {photo ? <img src={photo} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (cancelled ? '✖️' : '⛳')}
       </div>
@@ -184,9 +207,10 @@ export function SuggestSheet({ onClose, onSaved }) {
   const opts = suggestionOptions({ dates, rough, places });
 
   const save = () => run(async () => {
+    const each = budget === '' ? null : Number(String(budget).replace(/[^0-9.]/g, '')) || null;
     const created = await must(supabase.from('plans').insert({
-      kind, name: name.trim(), status: 'planning', proposed: !status.is_admin,
-      brief: note.trim() || null, budget_pp: budget === '' ? null : Number(String(budget).replace(/[^0-9.]/g, '')) || null,
+      kind, name: name.trim(), status: 'planning', proposed: !status.is_admin, brief: note.trim() || null,
+      ...(each ? { budget_pp: each } : {}), // only sent when given, so the form works on a database without it
     }).select().single());
     if (opts.dates.length || opts.places.length) {
       const { error } = await supabase.rpc('start_trip_votes', { p_plan: created.id, p_dates: opts.dates, p_places: opts.places, p_closes_on: closes || null });

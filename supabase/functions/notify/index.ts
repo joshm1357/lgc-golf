@@ -103,7 +103,7 @@ function localNow(tz: string) {
  *  "straight away" gets whatever was still waiting, at once. */
 async function digest() {
   let sent = 0;
-  const { data: waiting } = await db.from('notify_queue').select('id,group_id,user_id,title,url,created_at').is('sent_at', null).order('created_at').limit(5000);
+  const { data: waiting } = await db.from('notify_queue').select('id,group_id,user_id,kind,title,url,created_at').is('sent_at', null).order('created_at').limit(5000);
   if (!waiting?.length) return 0;
   const byPerson = new Map<string, typeof waiting>();
   for (const w of waiting) {
@@ -115,10 +115,12 @@ async function digest() {
     db.from('notify_prefs').select('group_id,user_id,mode,digest_hour,tz').in('group_id', groupIds),
     db.from('groups').select('id,name').in('id', groupIds),
   ]);
-  for (const [k, items] of byPerson) {
+  for (const [k, all] of byPerson) {
     const [g, user] = k.split('|');
     const p = (prefs || []).find((x) => x.group_id === g && x.user_id === user);
     const local = localNow(p?.tz || 'Australia/Sydney');
+    // Switched to "only important": the important ones still go; the rest are dropped.
+    const items = p?.mode === 'important' ? all.filter((i) => IMPORTANT.has(i.kind)) : all;
     if (p?.mode === 'digest' && local.hour !== p.digest_hour) continue;
     if (p?.mode === 'digest' && !(await once(`digest:${g}:${user}:${local.date}:${local.hour}`))) continue;
     const gname = (groups || []).find((x) => x.id === g)?.name || 'Your golf group';
@@ -127,8 +129,8 @@ async function digest() {
     const msg = items.length === 1
       ? { title: items[0].title, body: gname, url: items[0].url || APP }
       : { title: `📬 ${gname}: ${items.length} things since your last update`, body: shown + more, url: `${APP}#/plan`, tag: `digest-${g}` };
-    if (p?.mode === 'important') { /* switched to "only important": drop what was waiting */ } else sent += await pushTo([user], msg);
-    await db.from('notify_queue').update({ sent_at: new Date().toISOString() }).in('id', items.map((i) => i.id));
+    if (items.length) sent += await pushTo([user], msg);
+    await db.from('notify_queue').update({ sent_at: new Date().toISOString() }).in('id', all.map((i) => i.id));
   }
   // Keep the queue small: forget what went out more than a month ago.
   await db.from('notify_queue').delete().lt('sent_at', new Date(Date.now() - 30 * 86400000).toISOString());
@@ -283,6 +285,8 @@ Deno.serve(async (req) => {
     const adminOnly = ['plan_new', 'trip_locked', 'rsvp_locked', 'nudge_votes', 'nudge_rsvp', 'nudge_kitty', 'groups_set', 'draw_open'];
     if (adminOnly.includes(body.type) && !me.is_admin) return json({ error: 'Admin only' }, 403);
     const from = me.player_id as string | null;
+    // Someone who hasn't picked their name yet can't send anything to others (only the test buzz to themselves).
+    if (!from && !me.is_admin && body.type !== 'test') return json({ error: 'Pick your name first' }, 403);
 
     let sent = 0;
     switch (body.type) {
@@ -373,6 +377,10 @@ Deno.serve(async (req) => {
         const pl = await plan(g, body.plan_id);
         if (!pl?.proposed || (pl.created_by !== from && !me.is_admin)) return json({ error: 'Not your proposal' }, 403);
         if (!(await once(`plan-proposed:${pl.id}`))) break;
+        // Everyone gets these, so at most 3 a day from one person.
+        let room = false;
+        for (let i = 1; i <= 3 && !room; i++) room = await once(`proposed-by:${g}:${from}:${sydneyDate(0)}:${i}`);
+        if (!room) break;
         const ppl = await players(g);
         // Everyone can have their say on an idea straight away (dates and place votes open with it).
         const who = name(ppl.find((p) => p.id === from));
@@ -411,6 +419,8 @@ Deno.serve(async (req) => {
         const c = await mine(g, 'plan_comments', body.comment_id);
         if (c.player_id !== from) return json({ error: 'Not your comment' }, 403);
         if (!(await once(`comment:${c.id}`))) break;
+        // One chat buzz per trip every 10 minutes; the rest are on the Chat tab.
+        if (!(await once(`chat-buzz:${c.plan_id}:${Math.floor(Date.now() / 600000)}`))) break;
         const pl = await plan(g, c.plan_id);
         // Whoever's in or maybe, the organiser, and anyone already in the conversation.
         const [{ data: rs }, { data: earlier }, ppl] = await Promise.all([

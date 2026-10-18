@@ -176,7 +176,7 @@ await noSideScroll('Chat tab');
 await page.getByRole('tab', { name: /Vote/ }).click();
 await page.getByRole('button', { name: /Close the vote/ }).first().click();
 writes.length = 0;
-await page.getByRole('button', { name: 'Lock it in' }).click();
+await page.getByRole('button', { name: 'Pick this winner' }).click();
 await page.waitForTimeout(800);
 check(writes.some((w) => w.method === 'RPC' && w.table === 'decide_poll' && w.body.p_poll === POLL1), 'closing a vote uses decide_poll');
 

@@ -430,11 +430,17 @@ function CloseSheet({ poll, rows, pd, onClose }) {
         <button type="button" className="btn gold block" disabled={busy || !pick} onClick={() => run(async () => {
           const o = rows.find((r) => r.option.id === pick).option;
           // One step on the server: closes the vote, records the winner and (if ticked) sets the trip's dates or place.
-          await must(supabase.rpc('decide_poll', { p_poll: poll.id, p_option: pick, p_apply: apply && poll.kind !== 'other' }));
+          const { error } = await supabase.rpc('decide_poll', { p_poll: poll.id, p_option: pick, p_apply: apply && poll.kind !== 'other' });
+          if (error && /decide_poll|PGRST202|function/i.test(`${error.code} ${error.message}`) && status.is_admin) {
+            // A database from before Stage 1b: the admin closes it the old way.
+            await must(supabase.from('plan_polls').update({ status: 'closed', winner_option_id: pick }).eq('id', poll.id));
+            if (apply && poll.kind === 'dates' && o.start_date) await must(supabase.from('plans').update({ start_date: o.start_date, end_date: o.end_date || o.start_date }).eq('id', pd.plan.id));
+            if (apply && poll.kind === 'location') await must(supabase.from('plans').update({ location_name: o.label, address: o.address || pd.plan.address, link: o.link || pd.plan.link }).eq('id', pd.plan.id));
+          } else if (error) throw error;
           await feedPost(status.player_id, pd.plan, `✅ ${pd.plan.name} — ${poll.question} ${optionTitle(poll, o)}.`);
           await notify('poll_decided', { poll_id: poll.id });
           pd.reload(); onClose();
-        }, 'Decided — everyone’s been told')}>Lock it in</button>
+        }, 'Decided — everyone’s been told')}>Pick this winner</button>
       </div>
     </Sheet>
   );

@@ -6,6 +6,7 @@ import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useSession, playerName, useFeature } from '../lib/store.jsx';
 import { Header, Avatar, Loading, toast } from '../components/ui.jsx';
 import DrawSetup from '../components/DrawSetup.jsx';
+import { FindCourse, ShareCourse } from '../components/CourseLibrary.jsx';
 
 async function run(fn, okMsg) {
   try {
@@ -115,15 +116,27 @@ function parseNums(s) {
 function CoursesAdmin() {
   const data = useData();
   const [editing, setEditing] = useState(null);
+  const [finding, setFinding] = useState(!data.courses.length);
   return (
     <Section title={`2. Courses (${data.courses.length})`} open={!data.courses.length}>
       {data.courses.map((c) => (
-        <div key={c.id} className="row between">
-          <span><strong>{c.name}</strong> <span className="muted small">par {c.holes.reduce((s, h) => s + h.par, 0)}</span></span>
-          <button type="button" className="btn ghost sm" onClick={() => setEditing(c)}>Edit</button>
+        <div key={c.id} className="row between" style={{ gap: 6 }}>
+          <span style={{ minWidth: 0 }}><strong>{c.name}</strong> <span className="muted small">par {c.holes.reduce((s, h) => s + h.par, 0)}</span></span>
+          <span className="row" style={{ gap: 6, flex: 'none' }}>
+            <ShareCourse course={c} />
+            <button type="button" className="btn ghost sm" onClick={() => setEditing(c)}>Edit</button>
+          </span>
         </div>
       ))}
-      {editing ? <CourseForm course={editing} onDone={() => setEditing(null)} /> : <button type="button" className="btn" onClick={() => setEditing({})}>Add a course</button>}
+      {finding ? (
+        <div className="card pad stack" style={{ gap: 8 }}>
+          <strong>📚 Find it in the course library</strong>
+          <span className="small muted">Courses other groups have set up — pars, stroke index and often the greens for GPS. You get your own copy.</span>
+          <FindCourse onAdded={() => setFinding(false)} />
+          <button type="button" className="btn ghost sm" onClick={() => setFinding(false)}>Close</button>
+        </div>
+      ) : <button type="button" className="btn ghost" onClick={() => setFinding(true)}>📚 Find a course in the library</button>}
+      {editing ? <CourseForm course={editing} onDone={() => setEditing(null)} /> : <button type="button" className="btn" onClick={() => setEditing({})}>Add a course by hand</button>}
     </Section>
   );
 }

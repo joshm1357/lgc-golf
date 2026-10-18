@@ -47,7 +47,7 @@ export default function ShotPlanner({ hole, pin, onClose }) {
         </div>
         {from === 'me' && !pos && <span className="small muted">{error || 'Getting your GPS position…'}</span>}
         <span className="small muted">Tap the map where you want the ball to finish — up to {MAX_TARGETS} shots. Drag a target to adjust it.</span>
-        <CourseMap className="map tall" markers={markers} fit={fit.length ? fit : undefined} onTap={add}
+        <CourseMap className="map tall" markers={markers} fit={fit.length ? fit : undefined} onTap={add} osm={!!hole.osm}
           lines={linePts.length > 1 ? [{ id: 'plan', points: linePts }] : []} />
         <div className="card">
           {plan.legs.length === 0 && <div className="small muted" style={{ padding: 12 }}>{finish ? 'Tap the map to add your first target.' : 'This green isn’t mapped yet — tap targets to measure between them.'}</div>}

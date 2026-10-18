@@ -88,7 +88,7 @@ export default function Comps() {
             })}
           </div>
 
-          {markers.length > 0 && <CourseMap markers={markers} />}
+          {markers.length > 0 && <CourseMap markers={markers} osm={!!holeInfo?.osm} />}
 
           <div className="section stack">
             {leader ? (

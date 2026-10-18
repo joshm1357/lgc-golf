@@ -485,6 +485,47 @@ group refused, bad names, switches and handicaps refused, not signed in refused,
 players list, plus handicaps, steps under 10 minutes); phone width `tests/e2e/start-test.mjs` 20 checks (join screen →
 start page → all 7 steps → invite, coming back mid-way, someone already on the list skipped, no sideways scroll).
 
+## v2.1 Stage 8 — Shared course library (branch `stage-8-courses`, on staging only)
+
+**Built**
+- **Database (035, applied on staging):** a `course_library` shared by every group — name, town, where it is, pars,
+  stroke indexes, tees and greens (nothing else: no pins, rounds, scores, players, or which group shared it). Each
+  group still plays its own copy in `courses` (rounds don't change, so old phones are unaffected).
+  `share_course` (organisers: put one of your courses in the library, or update the entry you shared; a copy of a
+  library course can't be shared twice), `search_courses` (by name or town, nearest first when you give a location,
+  with distance, holes, greens mapped and how many groups use it), `library_course` (preview), `copy_library_course`
+  (your own copy to adjust — tees, greens — without changing the shared one; asking twice gives the same copy).
+  The library table itself can't be read or changed directly.
+- **App:** Admin → Courses: **📚 Find a course in the library** (search box, **📍 Near me**, preview with the
+  scorecard, **Add to our courses**) and **Share** on each course (with town and state). Trip set-up offers the
+  library when a course isn't listed.
+- **OpenStreetMap credit:** greens filled from OpenStreetMap are marked, and every map showing them (green mapper,
+  shot planner, side comps) carries "Greens © OpenStreetMap contributors"; the library and preview say so too.
+  (L.G.C's earlier OpenStreetMap fills weren't marked; re-filling a course marks it.)
+
+**Independent review — fixed (035b, applied on staging):**
+- Every hole needs a par (3–6) and stroke index; map points must be real places; 18 holes only for now (handicap
+  maths is 18-hole).
+- **The library can't be wrecked:** phone-only (not signed-in) organisers can't share; 10 shares a day per group; once
+  another group has copied an entry, sharing again only fills in missing tees and greens (name, pars and stroke index
+  stay); Josh can hide a junk entry (`hidden`).
+- **Groups give greens back:** sharing a course that came from the library fills holes the library is missing — never
+  overwriting anything — so "one group maps it, the next gets it" works both ways.
+- No duplicates when two people share or copy at once; the library link on a course can't be changed from the app.
+- OpenStreetMap credit now also on the score screen (distances), and the credits link to openstreetmap.org/copyright.
+- Search: % and _ are searched literally, replies can't arrive out of order, "no signal" isn't shown as "no
+  courses"; a course you already added by hand is pointed out; adding from trip set-up puts it on the first round.
+- Left for Josh: L.G.C's earlier OpenStreetMap greens aren't marked (say which courses were filled from it and they'll
+  be marked, adding the credit); the OSM licence question for a public library (see the club-partners note) before the
+  public course page and seeding.
+
+**Tested:** `supabase/tests/stage8_courses.sql` 23 checks (phone-only and players can't share, 17 holes / no pars / 9
+holes refused, table not readable, search with area/holes/greens/credit, distance, only course details kept, copy is
+the group's own, copying twice gives the same course, the link can't be removed from the app, changing a copy leaves the
+library alone, use count, a copy gives tees back without changing pars, can't share or see another group's course,
+sharing again fills only once others use it, % searched literally, hidden entries, not signed in sees nothing);
+unit test (OpenStreetMap marking); phone width `tests/e2e/courses-test.mjs` 11 checks. All other phone tests pass.
+
 ## Known limits
 - GPS distances are approximate (±5–10 m) and straight-line; closest-to-pin distance is typed in.
 - Location sharing only works while the app is open.

@@ -118,6 +118,7 @@ export default function Distances({ round, course, hole }) {
               {pin && big('🚩 Pin', d.pin, true)}
             </div>
             <div className="small muted">GPS ±{Math.round(pos.accuracy)} m{far ? ` · you’re a long way from hole ${hole.n} — on the right hole?` : ''}</div>
+            {hole.osm && <div className="small muted">Green © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors</div>}
           </>
         )}
         {planner}

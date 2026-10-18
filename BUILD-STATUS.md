@@ -462,12 +462,28 @@ tests (reading pasted lists, dates, plus handicaps, matching, repeats, the order
   link and QR → **Open your group**. Leaving half-way and coming back carries on at the same step and never makes a
   second group.
 
-**Tested:** `supabase/tests/stage7_create_group.sql` 19 checks (made with the right address, role and switches,
-starts empty, plain look, set_features, starter, invite, same name → new address, 4th group in a day refused,
-outsiders can't change it or see it, reserved names, bad names and switches refused, not signed in refused, L.G.C
-untouched); unit tests (presets cover every switch, never a coming-soon one, never a child without its parent;
-players list reading; steps under 10 minutes); phone width `tests/e2e/start-test.mjs` 19 checks (join screen → start
-page → all 7 steps → invite, coming back mid-way, no sideways scroll).
+**Independent review — fixed (034b, applied on staging):**
+- **Never made twice:** the group and the organiser's own player are made in one step on the server, and the wizard
+  saves the new group before anything else — a dropped signal or a reload carries on, it never makes a second group.
+- **Nothing lands in L.G.C:** the steps after the group is made only run while the phone is really working in the new
+  group ("Reconnecting…" otherwise), and the Features step tells the server which group it's for (refused if the phone
+  has drifted). Close / "Back to my group" goes back to the group you came from.
+- **Limits:** 3 new groups a day per person; phone-only (not signed-in) makers share 10 an hour, so a script can't
+  block signed-in organisers. Web addresses never look like L.G.C's ("lgc", "l-g-c", "lgc-2" → "group-N"), never end
+  in a dash, and two at the same instant both work. The first version of the function is retired (refuses politely).
+- Players step skips names already on the list (you, or ones added before a dropped signal); the Rulebook step says
+  you've already got one when you come back to it; "+2" is a plus handicap everywhere; the start page shows The Golf
+  Trip's look, not the last group's; sign-in comes back to the wizard; a tip about adding a sign-in or a second
+  organiser; "Under 10 minutes".
+- Left as notes: notification links don't carry their group yet (Stage 9); the Features step doesn't re-show the
+  preset you picked if you go back to it.
+
+**Tested:** `supabase/tests/stage7_create_group.sql` 22 checks (made with the right address, role and switches, the
+organiser on it, starts empty, plain look, set_features, starter, invite, same name → new address, 4th group in a day
+refused, outsiders can't change or see it, L.G.C look-alike names, old version refused, set_features for another
+group refused, bad names, switches and handicaps refused, not signed in refused, L.G.C untouched); unit tests (presets,
+players list, plus handicaps, steps under 10 minutes); phone width `tests/e2e/start-test.mjs` 20 checks (join screen →
+start page → all 7 steps → invite, coming back mid-way, someone already on the list skipped, no sideways scroll).
 
 ## Known limits
 - GPS distances are approximate (±5–10 m) and straight-line; closest-to-pin distance is typed in.

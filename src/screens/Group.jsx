@@ -59,7 +59,7 @@ function MyGroups() {
   );
 }
 
-export function SignInCard() {
+export function SignInCard({ returnHash = '' } = {}) {
   const { status } = useSession();
   const [email, setEmail] = useState('');
   const [busy, run] = useRun();
@@ -69,10 +69,10 @@ export function SignInCard() {
     <div className="card pad stack" style={{ gap: 8, borderColor: 'var(--gold)' }}>
       <strong>🔐 Keep your scores if you change phones</strong>
       <span className="small">Right now you’re only signed in on this phone. Add a sign-in and everything stays with you — same name, same scores.</span>
-      {SIGN_IN.includes('google') && <button type="button" className="btn block" disabled={busy} onClick={() => run(() => linkProvider('google'))}>Add Google sign-in</button>}
-      {SIGN_IN.includes('facebook') && <button type="button" className="btn block" disabled={busy} onClick={() => run(() => linkProvider('facebook'))}>Add Facebook sign-in</button>}
+      {SIGN_IN.includes('google') && <button type="button" className="btn block" disabled={busy} onClick={() => run(() => linkProvider('google', returnHash))}>Add Google sign-in</button>}
+      {SIGN_IN.includes('facebook') && <button type="button" className="btn block" disabled={busy} onClick={() => run(() => linkProvider('facebook', returnHash))}>Add Facebook sign-in</button>}
       {SIGN_IN.includes('email') && (
-        <form className="row" style={{ gap: 6 }} onSubmit={(e) => { e.preventDefault(); run(() => linkEmail(email), 'Check your email to confirm'); }}>
+        <form className="row" style={{ gap: 6 }} onSubmit={(e) => { e.preventDefault(); run(() => linkEmail(email, returnHash), 'Check your email to confirm'); }}>
           <input className="input grow" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Your email" />
           <button className="btn" disabled={busy || !email.includes('@')}>Add email</button>
         </form>

@@ -1,0 +1,11 @@
+Expected (staging, after 031).
+
+L.G.C look = L.G.C / builtin:lgc / #1C2B3F / #D9A521 / condensed
+new group look = - / plain / #1F4B33 / #E0B84A / condensed
+player changes the look = refused
+organiser sets the look = The Mulligans / MULL / #123456 / serif
+crest from another group's folder = refused
+L.G.C crest in another group = refused
+colour that isn't a colour = refused
+font that isn't offered = refused
+G sees L.G.C's look = 0

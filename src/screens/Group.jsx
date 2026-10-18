@@ -9,6 +9,9 @@ import { inviteLink, inviteCode, ROLE_LABEL, ROLE_HELP } from '../lib/invite.js'
 import { SIGN_IN, linkProvider, linkEmail } from '../lib/auth.js';
 import { shareText } from '../lib/push.js';
 import { FEATURES, featureOn, children } from '../lib/features.js';
+import { FONTS, DEFAULT_LOOK, LGC_LOOK, lookProblems, themeVars, applyLook } from '../lib/theme.js';
+import { uploadPhoto } from '../lib/images.js';
+import { GroupCrest } from '../components/Logo.jsx';
 import { useRun, must } from '../lib/run.js';
 
 export default function Group() {
@@ -22,6 +25,7 @@ export default function Group() {
         {status.is_admin && <InviteCard role="player" />}
         {status.is_admin && <InviteCard role="guest" />}
         {status.is_admin && <Members />}
+        {status.is_admin && <LookCard />}
         {status.is_admin && <FeaturesCard />}
         {status.is_admin && status.legacy && <AdminPinCard />}
         <JoinAnother />
@@ -257,6 +261,63 @@ function FeaturesCard() {
           </label>
         );
       })}
+    </div>
+  );
+}
+
+/** The group's look: name, short name, crest, two colours (checked for readability in the sun) and heading font. */
+function LookCard() {
+  const { status, refresh } = useSession();
+  const start = status.look || (status.legacy === false ? DEFAULT_LOOK : LGC_LOOK);
+  const [v, set] = useState(() => ({ name: status.group_name || '', short_name: start.short_name || '', primary: start.primary, accent: start.accent, font: start.font, crest_url: start.crest_url }));
+  const [busy, run] = useRun();
+  const problems = lookProblems(v);
+  const preview = themeVars(v);
+  const pickCrest = (file) => file && run(async () => {
+    const url = await uploadPhoto(file, 'crest', { maxDim: 512, square: true, quality: 0.85 });
+    set((x) => ({ ...x, crest_url: url }));
+  }, 'Crest ready — save to use it');
+  const save = () => run(async () => {
+    await must(supabase.rpc('set_group_look', { p_name: v.name, p_short_name: v.short_name || null, p_primary: v.primary, p_accent: v.accent, p_font: v.font, p_crest_url: v.crest_url || null }));
+    applyLook({ short_name: v.short_name || null, crest_url: v.crest_url || null, primary: v.primary, accent: v.accent, font: v.font });
+    await refresh();
+  }, 'Saved — everyone sees the new look');
+  return (
+    <div className="card pad stack" style={{ gap: 10 }}>
+      <div><strong>🎨 Look</strong><div className="small muted">How the app looks for everyone in {status.group_name}.</div></div>
+      {/* Preview: a header and a button in the chosen colours */}
+      <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid var(--line)' }}>
+        <div className="row" style={{ gap: 10, padding: 12, background: preview['--navy'], color: '#fff' }}>
+          <GroupCrest size={40} look={v} name={v.name} />
+          <span><div style={{ fontFamily: preview['--display'], fontSize: 22, fontWeight: 700, lineHeight: 1 }}>{v.name || 'Group name'}</div>
+            <div style={{ fontSize: 13, color: preview['--on-navy-muted'] }}>Leaderboard</div></span>
+        </div>
+        <div style={{ padding: 10, background: '#fff' }}>
+          <span className="btn sm" style={{ background: preview['--gold'], color: preview['--navy'], borderColor: preview['--gold'] }}>A gold button</span>
+        </div>
+      </div>
+      <label className="field"><span>Group name</span><input className="input" value={v.name} maxLength={40} onChange={(e) => set({ ...v, name: e.target.value })} /></label>
+      <label className="field"><span>Short name (on small screens, up to 12)</span><input className="input" value={v.short_name} maxLength={12} onChange={(e) => set({ ...v, short_name: e.target.value })} placeholder="e.g. L.G.C" /></label>
+      <div className="stack" style={{ gap: 6 }}>
+        <span className="label">Crest</span>
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          <label className="btn ghost sm" style={{ cursor: 'pointer' }}>Upload a crest<input type="file" accept="image/*" hidden onChange={(e) => pickCrest(e.target.files?.[0])} /></label>
+          {v.crest_url && <button type="button" className="btn ghost sm" onClick={() => set({ ...v, crest_url: null })}>Use the plain crest</button>}
+          {status.legacy && v.crest_url !== 'builtin:lgc' && <button type="button" className="btn ghost sm" onClick={() => set({ ...v, crest_url: 'builtin:lgc' })}>L.G.C crest</button>}
+        </div>
+        <span className="small muted">Square works best; it’s shrunk on the phone to 512 px before uploading.</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <label className="field"><span>Main colour</span><input type="color" value={v.primary} onChange={(e) => set({ ...v, primary: e.target.value.toUpperCase() })} style={{ width: '100%', height: 44, border: 0, background: 'none' }} /></label>
+        <label className="field"><span>Accent colour</span><input type="color" value={v.accent} onChange={(e) => set({ ...v, accent: e.target.value.toUpperCase() })} style={{ width: '100%', height: 44, border: 0, background: 'none' }} /></label>
+      </div>
+      {problems.map((p) => <div key={p} className="err" style={{ margin: 0 }}>{p}</div>)}
+      <label className="field"><span>Heading font</span>
+        <select className="select" value={v.font} onChange={(e) => set({ ...v, font: e.target.value })}>
+          {Object.entries(FONTS).map(([k, f]) => <option key={k} value={k}>{f.label}</option>)}
+        </select>
+      </label>
+      <button type="button" className="btn gold block" disabled={busy || problems.length > 0 || v.name.trim().length < 2} onClick={save}>Save the look</button>
     </div>
   );
 }

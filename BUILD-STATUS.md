@@ -332,6 +332,28 @@ tests pass (features, Stage 2, Trips, v1.5 regression).
 
 **Release:** see `docs/RELEASE-v2.0.md` — **RELEASE v2.0 is a STOP**.
 
+## v2.1 Stage 4 — Branding from the database (branch `stage-4-branding`, on staging only)
+
+**Built**
+- **Database (031):** each group has a name, short name, crest (an uploaded photo in its own folder, or L.G.C's
+  built-in one — L.G.C only), main and accent colours, and a heading font (4 set choices). L.G.C's row holds exactly
+  today's look; a new group gets the plain The Golf Trip look. `set_group_look` (organisers) checks the colours'
+  format, the font, and that a crest comes from the group's own folder. `my_status` returns the look.
+- **App:** `src/lib/theme.js` turns a look into the app's colour settings (L.G.C's hand-picked in-between shades kept
+  exactly) and paints it at start-up from the last look, so there's no flash. The header and join screen show the
+  group's crest (uploaded / L.G.C's / plain). **Look** card for organisers (Group & invites): live preview, crest upload
+  (shrunk to 512 px on the phone), colour pickers with a **readability check** (white on the main colour and the main
+  colour on the accent must both reach 4.5:1 — readable in the sun), font choice.
+- **No L.G.C artwork or wording in other groups:** L.G.C's crest, trophy artwork (BD, Putt Buddies, Noodle Cup) and
+  trophy names in menus are L.G.C only; other groups get a plain cup; "L.G.C Golf" / share titles / calendar files
+  now use the group's name or "The Golf Trip". (L.G.C's one-off Sunday guide page is unchanged; the home-screen app
+  name and icon per group come with Stage 9's hosting move.)
+
+**Tested:** `supabase/tests/stage4_branding.sql` 9 checks (L.G.C's look kept, new-group default, only organisers,
+crest folder, L.G.C crest only for L.G.C, bad colour/font refused, no reading another group's look); 91 unit tests
+(theme colour maths and readability); phone width `tests/e2e/look-test.mjs` 12 checks (new group's colours/font/plain
+crest, no L.G.C artwork, pale colour blocked, save, L.G.C exact colours and crest).
+
 ## Known limits
 - GPS distances are approximate (±5–10 m) and straight-line; closest-to-pin distance is typed in.
 - Location sharing only works while the app is open.

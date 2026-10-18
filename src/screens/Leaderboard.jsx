@@ -83,7 +83,7 @@ export default function Leaderboard() {
   if (!round) {
     return (
       <div className="page">
-        <Header logo title={trip?.name || 'L.G.C Golf'} sub="No rounds set up yet" />
+        <Header logo title={trip?.name || status?.group_name || 'The Golf Trip'} sub="No rounds set up yet" />
         <div className="empty">
           Nothing to show yet.{status?.is_admin ? <> Set up the course, teams and round in <Link to="/admin">Admin</Link>.</> : ' The admin is setting things up.'}
         </div>

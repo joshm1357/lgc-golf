@@ -32,7 +32,7 @@ export function NotifyCard({ compact }) {
       </>
     ),
     unsupported: 'This browser can’t do notifications. On Android use Chrome; on iPhone add the app to your Home Screen.',
-    blocked: <>Notifications are blocked for this app. Turn them on in your phone’s settings{isIOS() ? ' (Settings → Notifications → L.G.C)' : ' (tap the ⓘ or 🔒 next to the address → Notifications)'}.</>,
+    blocked: <>Notifications are blocked for this app. Turn them on in your phone’s settings{isIOS() ? ' (Settings → Notifications → this app)' : ' (tap the ⓘ or 🔒 next to the address → Notifications)'}.</>,
     off: 'Get a buzz when a vote opens, a reminder before it closes, when you’re given a job, and a heads-up before each trip.',
     on: 'You’ll get votes, reminders, jobs and trip countdowns on this phone.',
   }[state];

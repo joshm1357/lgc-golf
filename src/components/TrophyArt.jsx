@@ -1,3 +1,4 @@
+import { useSession } from '../lib/store.jsx';
 // Illustrations for the Trophy Room. Each is a self-contained SVG (viewBox 200×200).
 import React from 'react';
 
@@ -5,9 +6,9 @@ const BRASS = '#C9A24A';
 const BRASS_LT = '#EBD496';
 
 /** The BD — silver cup on a black plinth with a brass plate, like the real one. */
-export function BDCup({ size = 120 }) {
+export function BDCup({ size = 120, plate = 'BD', label = 'The BD trophy' }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 200 200" role="img" aria-label="The BD trophy" style={{ display: 'block' }}>
+    <svg width={size} height={size} viewBox="0 0 200 200" role="img" aria-label={label} style={{ display: 'block' }}>
       <defs>
         <linearGradient id="bd-silver" x1="0" x2="1">
           <stop offset="0" stopColor="#8E979F" /><stop offset=".35" stopColor="#F4F6F8" /><stop offset=".6" stopColor="#B9C1C8" /><stop offset="1" stopColor="#6F777E" />
@@ -22,7 +23,7 @@ export function BDCup({ size = 120 }) {
       <path d="M78 118 h44 l6 14 h-56 z" fill="url(#bd-silver)" stroke="#5B6168" strokeWidth="1.5" />
       <rect x="54" y="132" width="92" height="46" rx="3" fill="#15110E" />
       <rect x="62" y="139" width="76" height="32" rx="2" fill="url(#bd-brass)" />
-      <text x="100" y="162" textAnchor="middle" fontFamily="'Pirata One', serif" fontSize="24" fill="#4A3510" textLength="30" lengthAdjust="spacingAndGlyphs">BD</text>
+      <text x="100" y="162" textAnchor="middle" fontFamily="'Pirata One', serif" fontSize="24" fill="#4A3510" textLength="30" lengthAdjust="spacingAndGlyphs">{plate}</text>
       <path d="M70 40 c4 20 12 34 22 40" fill="none" stroke="#FFFFFF" strokeOpacity=".6" strokeWidth="3" strokeLinecap="round" />
     </svg>
   );
@@ -99,6 +100,9 @@ export function NoodleCup({ size = 120 }) {
 }
 
 export function TrophyArt({ name, type, size }) {
+  const { status } = useSession();
+  // L.G.C's own trophy artwork is for L.G.C only; other groups get a plain cup.
+  if (status?.legacy === false) return <BDCup size={size} plate="" label={`${name || 'Trophy'}`} />;
   const n = String(name || '').toLowerCase();
   if (n.includes('noodle')) return <NoodleCup size={size} />;
   if (n.includes('putt') || type === 'ambrose') return <PuttBuddiesBadge size={size} />;

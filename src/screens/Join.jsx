@@ -4,7 +4,8 @@ import { useSession } from '../lib/store.jsx';
 import { setCurrentGroup } from '../lib/group.js';
 import { inviteCode } from '../lib/invite.js';
 import { SIGN_IN, signInWith, signInWithEmail, verifyEmailCode, isEmptyNewAccount } from '../lib/auth.js';
-import { Crest } from '../components/Logo.jsx';
+import { GroupCrest } from '../components/Logo.jsx';
+import { savedLook } from '../lib/theme.js';
 
 async function ensureSignedIn() {
   const { data: { session } } = await supabase.auth.getSession();
@@ -114,7 +115,7 @@ export default function Join() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--navy)', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 18 }}>
-      <Crest size={code ? 120 : 170} />
+      <GroupCrest size={code ? 120 : 170} look={savedLook()} />
       {isEmptyNewAccount(status, user) && (
         <div className="stack" style={{ width: '100%', maxWidth: 340, gap: 8, textAlign: 'center' }}>
           <div className="err" style={{ color: '#FFB4AB' }}>No account found for that sign-in. If you’ve used the app before, open it on your old phone and add this sign-in there first (More → Group & invites). Or join with an invite link below.</div>
@@ -123,7 +124,7 @@ export default function Join() {
       )}
       {code ? <><InviteJoin code={code} />{SIGN_IN.length > 0 && <ReturningSignIn />}</> : (
         <>
-          <div style={{ fontFamily: 'var(--display)', fontSize: 34, fontWeight: 700 }}>L.G.C Golf</div>
+          <div style={{ fontFamily: 'var(--display)', fontSize: 34, fontWeight: 700 }}>{savedLook()?.short_name ? `${savedLook().short_name} Golf` : 'The Golf Trip'}</div>
           <form onSubmit={submit} style={{ width: '100%', maxWidth: 340, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <label className="field">
               <span style={{ color: 'var(--on-navy-muted)' }}>Group PIN or invite link</span>

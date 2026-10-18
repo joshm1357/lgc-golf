@@ -2,9 +2,13 @@ import React, { Suspense, lazy } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 import App from './App.jsx';
+import { applyLook, savedLook } from './lib/theme.js';
 // The Sunday guide and the draw demo are separate pages; they load only when asked for.
 const DrawDemo = lazy(() => import('./screens/DrawDemo.jsx'));
 const Guide = lazy(() => import('./screens/Guide.jsx'));
+
+// Paint the group's look from last time straight away, so there's no flash of other colours.
+if (savedLook()) applyLook(savedLook());
 
 const q = new URLSearchParams(window.location.search);
 const page = q.has('guide') ? <Guide /> : q.get('demo') === 'draw' ? <DrawDemo /> : <App />;

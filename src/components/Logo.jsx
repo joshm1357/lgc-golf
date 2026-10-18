@@ -49,3 +49,29 @@ export function IconBDE({ size = 48 }) {
     </svg>
   );
 }
+
+/** The Golf Trip's own plain crest: for a group that hasn't uploaded one (never L.G.C's artwork). */
+export function GolfTripCrest({ size = 48, title = 'The Golf Trip' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 400 400" role="img" aria-label={title} style={{ display: 'block', flex: 'none' }}>
+      <circle cx="200" cy="200" r="186" fill="#FFFFFF" stroke="var(--navy, #1F4B33)" strokeWidth="12" />
+      <circle cx="200" cy="200" r="170" fill="none" stroke="var(--navy, #1F4B33)" strokeWidth="2" />
+      <ellipse cx="200" cy="300" rx="120" ry="26" fill="var(--navy, #1F4B33)" opacity="0.14" />
+      <line x1="200" y1="96" x2="200" y2="300" stroke="var(--navy, #1F4B33)" strokeWidth="10" strokeLinecap="round" />
+      <path d="M205 100 L290 128 L205 156 Z" fill="var(--gold, #E0B84A)" stroke="var(--navy, #1F4B33)" strokeWidth="5" strokeLinejoin="round" />
+      <circle cx="232" cy="292" r="14" fill="#FFFFFF" stroke="var(--navy, #1F4B33)" strokeWidth="5" />
+      <text x="200" y="344" textAnchor="middle" fontFamily="'Barlow Condensed', sans-serif" fontSize="28" fontWeight="700" fill="var(--navy, #1F4B33)" letterSpacing="2" textLength="190" lengthAdjust="spacingAndGlyphs">THE GOLF TRIP</text>
+    </svg>
+  );
+}
+
+/** The current group's crest: its uploaded one, L.G.C's own, or the plain The Golf Trip one. */
+export function GroupCrest({ size = 48, look, name }) {
+  const url = look?.crest_url;
+  if (url === 'builtin:lgc') return <Crest size={size} />;
+  if (url) {
+    return <img src={url} alt={`${name || 'Group'} crest`} width={size} height={size}
+      style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', background: '#fff', flex: 'none', display: 'block' }} />;
+  }
+  return <GolfTripCrest size={size} />;
+}

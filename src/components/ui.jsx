@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Crest } from './Logo.jsx';
-import { useFeature } from '../lib/store.jsx';
+import { GroupCrest } from './Logo.jsx';
+import { useFeature, useSession } from '../lib/store.jsx';
 
 // ---------- Icons (simple stroke icons) ----------
 const P = { fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' };
@@ -71,7 +71,7 @@ export function Header({ title, sub, right, back, court, children, logo }) {
         </div>
       )}
       <div className="hdr-row">
-        {logo && <Crest size={46} />}
+        {logo && <HeaderCrest />}
         <div className="hdr-grow">
           <div className="hdr-title">{title}</div>
           {sub && <div className="hdr-sub">{sub}</div>}
@@ -215,4 +215,9 @@ export function UpdateBanner() {
       New version ready — tap to update
     </button>
   );
+}
+
+function HeaderCrest() {
+  const { status } = useSession() || {};
+  return <GroupCrest size={46} look={status?.look || (status?.legacy !== false ? { crest_url: 'builtin:lgc' } : null)} name={status?.group_name} />;
 }

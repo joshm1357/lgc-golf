@@ -9,7 +9,7 @@ import { readHandicap, localToday } from '../lib/history.js';
 import { parTotal } from '../lib/scoring.js';
 import { paintLook, DEFAULT_LOOK } from '../lib/theme.js';
 import { GolfTripCrest } from '../components/Logo.jsx';
-import { Toaster, toast } from '../components/ui.jsx';
+import { Toaster, toast, Sheet } from '../components/ui.jsx';
 import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
 
 // Stage 7b: the public course page (#/c/<course>) — works without signing in — and the quick round.
@@ -154,7 +154,7 @@ function Course({ slug }) {
                 <CourseMap className="map" markers={greens.map((h) => ({ id: `g${h.n}`, lat: h.green.lat, lng: h.green.lng, popup: `Hole ${h.n} · par ${h.par}` }))} osm={course.holes.some((h) => h.osm)} animate={false} />
               </LazyArea>
             )}
-            {course.club && <PartnerCard club={course.club} />}
+            {course.club && <PartnerCard club={course.club} course={course} />}
             <Scorecard holes={course.holes} />
             {course.verified && <span className="small muted">✓ Hole data checked by the club.</span>}
             {course.osm && <span className="small muted">Course details © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors.</span>}
@@ -174,7 +174,7 @@ function ListedOnly({ course }) {
     <>
       <Top title={course.name} sub={course.area || 'Golf course'} />
       <div className="stack" style={{ maxWidth: 520, margin: '0 auto', padding: 16, gap: 12 }}>
-        {course.club && <PartnerCard club={course.club} />}
+        {course.club && <PartnerCard club={course.club} course={course} />}
         <div className="card pad stack" style={{ gap: 6 }}>
           <strong>No scorecard yet</strong>
           <span className="small">This course is listed, but nobody has added its pars yet, so rounds can’t start from here.</span>
@@ -192,8 +192,58 @@ function ListedOnly({ course }) {
   );
 }
 
+/** Stage 10: "Ask about a group booking" — logged against the club's code (the club sees it on its screen), then the
+ * phone's own email app opens, addressed to the club, with the details filled in. No money changes hands. */
+function Enquiry({ course, club, onClose }) {
+  const [busy, run] = useRun();
+  const [f, setF] = useState({ name: '', email: '', phone: '', start: '', end: '', size: '', rounds: '', note: '' });
+  const [sent, setSent] = useState(null);
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const ok = f.name.trim().length >= 2 && (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.trim()) || f.phone.trim().length >= 6);
+  const send = () => run(async () => {
+    await ensureSignedIn();
+    const r = await must(supabase.rpc('send_booking_enquiry', {
+      p_course_slug: course.slug, p_name: f.name.trim(), p_email: f.email.trim() || null, p_phone: f.phone.trim() || null,
+      p_start: f.start || null, p_end: f.end || null, p_size: f.size ? Number(f.size) : null, p_rounds: f.rounds ? Number(f.rounds) : null, p_note: f.note.trim() || null,
+    }));
+    setSent(r);
+    if (r?.to) window.location.href = `mailto:${r.to}?subject=${encodeURIComponent(r.subject)}&body=${encodeURIComponent(r.body)}`;
+  });
+  return (
+    <Sheet title={`Group booking — ${club.name}`} onClose={onClose}>
+      {sent ? (
+        <div className="stack" style={{ gap: 8 }}>
+          <strong>Sent to {sent.club}.</strong>
+          {sent.to && <span className="small">Your email app should have opened with it ready to send. If it didn’t: <a href={`mailto:${sent.to}?subject=${encodeURIComponent(sent.subject)}&body=${encodeURIComponent(sent.body)}`}>email {sent.to}</a>.</span>}
+          {sent.phone && <span className="small">Or call them: <a href={`tel:${sent.phone.replace(/\s/g, '')}`}>{sent.phone}</a></span>}
+          <span className="small muted">The club also sees your enquiry on its page in The Golf Trip.</span>
+          <button type="button" className="btn ghost block" onClick={onClose}>Done</button>
+        </div>
+      ) : (
+        <div className="stack" style={{ gap: 8 }}>
+          <span className="small muted">Goes to the club with your contact details so they can reply. Nothing to pay here.</span>
+          <label className="field"><span>Your name</span><input className="input" value={f.name} maxLength={80} onChange={set('name')} /></label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <label className="field"><span>Email</span><input className="input" type="email" value={f.email} onChange={set('email')} /></label>
+            <label className="field"><span>Phone</span><input className="input" type="tel" value={f.phone} onChange={set('phone')} /></label>
+            <label className="field"><span>From</span><input className="input" type="date" value={f.start} onChange={set('start')} /></label>
+            <label className="field"><span>To</span><input className="input" type="date" value={f.end} min={f.start || undefined} onChange={set('end')} /></label>
+            <label className="field"><span>How many golfers</span><input className="input" inputMode="numeric" value={f.size} onChange={set('size')} placeholder="e.g. 12" /></label>
+            <label className="field"><span>Rounds</span><input className="input" inputMode="numeric" value={f.rounds} onChange={set('rounds')} placeholder="e.g. 2" /></label>
+          </div>
+          <label className="field"><span>Anything else (optional)</span><textarea className="input" rows={2} value={f.note} maxLength={600} onChange={set('note')} placeholder="e.g. carts, a meal after, stay and play" /></label>
+          <button type="button" className="btn gold block" disabled={busy || !ok} onClick={send}>Send to the club</button>
+        </div>
+      )}
+    </Sheet>
+  );
+}
+
 /** A partner course: the club's logo, offers for groups and who to ask about a group booking. Clearly labelled. */
-function PartnerCard({ club }) {
+function PartnerCard({ club, course }) {
+  const loc = useLocation();
+  const [asking, setAsking] = useState(() => new URLSearchParams(loc.search).get('enquire') === '1');
+  const canAsk = !!(club.booking_email || club.booking_phone);
   return (
     <div className="card pad stack" style={{ gap: 6 }}>
       <div className="row" style={{ gap: 10 }}>
@@ -205,6 +255,8 @@ function PartnerCard({ club }) {
       {(club.booking_email || club.booking_phone) && (
         <span className="small">Group bookings: {club.booking_email && <a href={`mailto:${club.booking_email}`}>{club.booking_email}</a>}{club.booking_email && club.booking_phone ? ' · ' : ''}{club.booking_phone && <a href={`tel:${club.booking_phone.replace(/\s/g, '')}`}>{club.booking_phone}</a>}</span>
       )}
+      {canAsk && <button type="button" className="btn block" onClick={() => setAsking(true)}>📨 Ask about a group booking</button>}
+      {canAsk && asking && <Enquiry course={course} club={club} onClose={() => setAsking(false)} />}
     </div>
   );
 }

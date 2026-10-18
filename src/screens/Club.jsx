@@ -213,6 +213,7 @@ function ClubHome({ club, reload, admin }) {
           ))}
         </div>
         <Counts />
+        <Enquiries />
         <a href="#/club/kit" className="btn block">🖨️ Your QR kit (carts, par 3 signs, counter card, TV)</a>
       </div>
       {editing && <HoleData course={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload(); }} />}
@@ -310,6 +311,28 @@ function Claims() {
 // ---------------------------------------------------------------- Counts (never names)
 
 const PLACES = { cart: 'Cart stickers', par3: 'Par 3 signs', counter: 'Counter card', tv: 'Clubhouse TV', stay: 'Stay cards', card: 'Results cards', invite: 'Invites' };
+
+/** Stage 10: group booking enquiries people sent to this club (they chose to send their contact details). */
+function Enquiries() {
+  const [rows, setRows] = useState(null);
+  useEffect(() => { supabase.rpc('club_enquiries', { p_days: 90 }).then(({ data }) => setRows(data || []), () => setRows([])); }, []);
+  const d = (x) => (x ? new Date(`${x}T00:00:00`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : '');
+  return (
+    <div className="card pad stack" style={{ gap: 8 }}>
+      <strong>Group booking enquiries <span className="small muted">(last 90 days)</span></strong>
+      {rows == null && <span className="small muted">Loading…</span>}
+      {rows && !rows.length && <span className="small muted">None yet. Groups see “Ask about a group booking” on your course page once you’ve added a bookings email or phone.</span>}
+      {rows?.map((e) => (
+        <div key={e.id} className="stack" style={{ gap: 2, borderTop: '1px solid var(--line-soft, #E3E6EA)', paddingTop: 6 }}>
+          <span><strong>{e.contact_name}</strong>{e.group_size ? ` · ${e.group_size} golfers` : ''}{e.rounds ? ` · ${e.rounds} round${e.rounds === 1 ? '' : 's'}` : ''}{e.start_date ? ` · ${d(e.start_date)}${e.end_date && e.end_date !== e.start_date ? `–${d(e.end_date)}` : ''}` : ''}</span>
+          <span className="small">{e.contact_email && <a href={`mailto:${e.contact_email}`}>{e.contact_email}</a>}{e.contact_email && e.contact_phone ? ' · ' : ''}{e.contact_phone && <a href={`tel:${e.contact_phone.replace(/\s/g, '')}`}>{e.contact_phone}</a>}</span>
+          {e.note && <span className="small muted">“{e.note}”</span>}
+          <span className="small muted">{new Date(e.created_at).toLocaleDateString('en-AU')}{e.course ? ` · ${e.course}` : ''}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function Counts() {
   const [days, setDays] = useState(90);

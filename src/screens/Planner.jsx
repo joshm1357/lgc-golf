@@ -242,6 +242,16 @@ function PollCard({ poll, pd }) {
   const people = everyone(data);
   const waiting = nonVoters(options, votes, people.map((p) => p.id));
   const kindLabel = { dates: '📅 Dates', location: '📍 Location', other: '🗳️ Vote' }[poll.kind];
+  // A place that's a partner course (with a bookings contact) offers "Ask about a group booking".
+  const [partners, setPartners] = useState({});
+  const placeNames = poll.kind === 'location' ? options.map((o) => o.label).filter(Boolean).join('|') : '';
+  useEffect(() => {
+    if (!placeNames) return undefined;
+    let live = true;
+    supabase.rpc('partner_courses_for', { p_names: placeNames.split('|') })
+      .then(({ data: m }) => live && setPartners(Object.fromEntries((m || []).map((x) => [x.name, x.slug]))), () => {});
+    return () => { live = false; };
+  }, [placeNames]);
 
   const respond = (o, r) => run(async () => {
     const mine = votes.find((v) => v.option_id === o.id && v.player_id === me);
@@ -274,6 +284,7 @@ function PollCard({ poll, pd }) {
                   <div className="small muted">{[o.address, o.cost_pp != null ? `~$${Number(o.cost_pp)} pp` : null, o.notes].filter(Boolean).join(' · ')}</div>
                 )}
                 {o.link && <a href={o.link} target="_blank" rel="noreferrer" className="small">Have a look ↗</a>}
+                {partners[o.label] && <a href={`#/c/${partners[o.label]}?enquire=1`} className="small" style={{ display: 'block', fontWeight: 700 }}>Partner course · Ask about a group booking →</a>}
               </div>
               <div style={{ textAlign: 'right', flex: 'none' }}>
                 <div className="num" style={{ fontSize: 20 }}>{r.score}</div>

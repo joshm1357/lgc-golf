@@ -12,8 +12,32 @@ const canEdit = (item, me, isAdmin) => isAdmin || item.created_by === me || item
 
 // ---------------------------------------------------------------- Details
 
+/** Stage 10: booking links (switch: Booking links). Each one goes through the database, which builds the address from
+ * the trip's place, dates and how many are in — so a referral code can be added later without an app update. */
+function BookingLinks({ plan }) {
+  const [busy, setBusy] = useState(null);
+  const go = async (kind) => {
+    setBusy(kind);
+    const { data: url, error } = await supabase.rpc('booking_go', { p_kind: kind, p_plan: plan.id });
+    setBusy(null);
+    if (error || !url) { toast(error?.message || 'Couldn’t open that link'); return; }
+    window.location.href = url;
+  };
+  return (
+    <div className="stack" style={{ gap: 6, borderTop: '1px solid var(--line-soft)', paddingTop: 8 }}>
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+        {[['stay', '🏨 Find accommodation'], ['golf', '⛳ Find a course'], ['transport', '🚗 Getting there']].map(([k, label]) => (
+          <button key={k} type="button" className="btn ghost sm" disabled={!!busy} onClick={() => go(k)}>{busy === k ? 'Opening…' : label}</button>
+        ))}
+      </div>
+      <span className="small muted">Opens the booking site with your place and dates filled in. The Golf Trip doesn’t earn anything from these.</span>
+    </div>
+  );
+}
+
 export function DetailsTab({ pd }) {
   const { status } = useSession();
+  const bookingOn = useFeature('booking_links');
   const { plan } = pd;
   const [adding, setAdding] = useState(null); // 'day' | 'info' | 'bring'
   const [editing, setEditing] = useState(null);
@@ -60,6 +84,7 @@ export function DetailsTab({ pd }) {
           {plan.start_date && <button type="button" className="btn ghost sm" onClick={() => downloadFile(`${plan.name.replace(/[^a-z0-9]+/gi, '-')}.ics`, icsFor(plan, appLink(`/plan/${plan.id}`)))}>📅 Add to calendar</button>}
           <button type="button" className="btn ghost sm" onClick={() => shareNudge(nudgeText('details', { plan, url: appLink(`/plan/${plan.id}?tab=details`) }))}>💬 Share</button>
         </div>
+        {bookingOn && plan.location_name && <BookingLinks plan={plan} />}
       </div>
 
       {plan.brief && <div className="card pad" style={{ whiteSpace: 'pre-wrap', fontSize: 15, lineHeight: 1.5 }}><div className="label" style={{ marginBottom: 4 }}>The details</div>{plan.brief}</div>}

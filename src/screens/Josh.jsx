@@ -40,7 +40,12 @@ function Stat({ label, value }) {
 function Numbers() {
   const [days, setDays] = useState(90);
   const [u, setU] = useState(null);
-  useEffect(() => { setU(null); supabase.rpc('admin_usage', { p_days: days }).then(({ data }) => setU(data || {})); }, [days]);
+  const [b, setB] = useState(null);
+  useEffect(() => {
+    setU(null);
+    supabase.rpc('admin_usage', { p_days: days }).then(({ data }) => setU(data || {}));
+    supabase.rpc('admin_booking_numbers', { p_days: days }).then(({ data }) => setB(data || null), () => setB(null));
+  }, [days]);
   const grid = { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 };
   return (
     <div className="stack" style={{ gap: 12 }}>
@@ -80,6 +85,13 @@ function Numbers() {
                 </tbody>
               </table>
             </div>
+          )}
+          {b && (
+            <>
+              <strong>Bookings (no money changes hands)</strong>
+              <span className="small">Group booking enquiries: {(b.enquiries || []).length ? b.enquiries.map((e) => `${e.name} ${e.n}`).join(' · ') : 'none yet'}</span>
+              <span className="small">Booking-link taps: {Object.keys(b.link_taps || {}).length ? Object.entries(b.link_taps).map(([k, n]) => `${{ stay: 'accommodation', golf: 'courses', transport: 'getting there' }[k] || k} ${n}`).join(' · ') : 'none yet'}</span>
+            </>
           )}
           <span className="small muted">Scans count each phone once a day. Groups = started from that code; Played = scored a round; Back / trip = came back or planned a trip.</span>
         </>

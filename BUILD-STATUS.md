@@ -550,12 +550,31 @@ unit test (OpenStreetMap marking); phone width `tests/e2e/courses-test.mjs` 11 c
 - **Waiting on Josh:** stroke play (STOP: the round-format rule needs a DROP to widen); share cards as images come in
   Stage 9 (text results now).
 
-**Tested:** `supabase/tests/stage7b_quick_round.sql` 17 checks (public course page, no session refused, the quick
-group/round/players/features, my_status, a mate joins as a guest, approved and in the round, guests can't make it
-official, bad inputs refused, made official, source tidied, ordinary groups unchanged); unit tests (side comps
-pre-fill, where-from, results text, same time next year); phone width `tests/e2e/quick-test.mjs` 19 checks (course
-page → start → share/QR → scoring, a mate joins with a name, finish → honour board → next year → make it official).
-All other phone tests pass.
+**Independent review — fixed (036b, applied on staging):**
+- **No fake players:** in a quick round each person adds themselves once; a round tops out at 40 players.
+- A quick round no longer counts as "using" a library course (so phone-only rounds can't push a course up the search
+  or lock its details); making the group official does. The phone-only limit is per course (20 an hour), so one script
+  can't stop quick rounds everywhere.
+- **Make it official:** the mates become players; the wizard starts with signing in if the organiser hasn't; its step
+  is "Name and crest"; the button only appears once the round is finished (so finishing isn't lost).
+- The organiser can finish once anyone has played 18 or the day is over (one mate who never scored can't hold it up);
+  "📤 Invite more mates" while playing; guests are asked to add a sign-in to keep the round on their record.
+- **Same time next year** names the course as the place and, once saved, opens the share sheet so everyone who played
+  gets the vote.
+- Where a group came from: the newest code or card, kept 30 days and forgotten once used; mates who join from an
+  invite are counted as coming from that group if they start their own.
+- **Quick rounds are Stableford for now** — Ambrose is shown as coming soon (it needs a teams step), as is stroke play
+  (a STOP).
+- Left for Josh (settings — STOP): turn on CAPTCHA for phone-only sign-ins and check Supabase's per-address limit for
+  them (30 an hour by default; phones on 4G often share an address) before any QR kit goes out.
+- Notes: each quick round makes a new group (a "play with your last group" shortcut can come later); an iPhone that
+  scans a code opens Safari, not the Home Screen app.
+
+**Tested:** `supabase/tests/stage7b_quick_round.sql` 20 checks (public course page, no session refused, the quick
+group/round/players/features, my_status, a mate joins as a guest, approved and in the round, can't add a second player,
+guests can't make it official, bad inputs refused, made official, mates become players, library use counted only then,
+source tidied, ordinary groups unchanged); unit tests (side comps pre-fill, where-from incl. expiry, results text, same
+time next year); phone width `tests/e2e/quick-test.mjs` 21 checks. All other phone tests pass.
 
 ## Known limits
 - GPS distances are approximate (±5–10 m) and straight-line; closest-to-pin distance is typed in.

@@ -7,7 +7,7 @@ import { useData, useRealtime, useSession, playerName, cacheGet, cacheSet, useFe
 import { Header, AvatarStack, Sheet, Loading, toast } from '../components/ui.jsx';
 import { fmtRange, countdown, RSVP_LABEL, todayISO, money } from '../lib/plan.js';
 import { STAGE_LABEL, sortTrips, stillToDecide, suggestionOptions, defaultCloses } from '../lib/trips.js';
-import { notify } from '../lib/push.js';
+import { notify, shareText } from '../lib/push.js';
 import { useRun, must } from '../lib/run.js';
 import { NotifyCard } from '../components/NotifyCard.jsx';
 
@@ -24,7 +24,8 @@ export default function Trips() {
     const q = new URLSearchParams(loc.search);
     if (!q.get('suggest')) return false;
     const d = q.get('date');
-    return { kind: q.get('kind') === 'trip' ? 'trip' : 'round', name: (q.get('name') || '').slice(0, 60), dates: d ? [{ start_date: d, end_date: d }] : [] };
+    return { kind: q.get('kind') === 'trip' ? 'trip' : 'round', name: (q.get('name') || '').slice(0, 60), dates: d ? [{ start_date: d, end_date: d }] : [],
+      place: (q.get('place') || '').slice(0, 80) || null, share: q.get('share') === '1' };
   });
   const notifyOn = useFeature('notifications');
   const votesOn = useFeature('planner_tasks');
@@ -213,7 +214,7 @@ export function SuggestSheet({ onClose, onSaved, initial = null }) {
   const [name, setName] = useState(initial?.name || '');
   const [dates, setDates] = useState(() => (initial?.dates?.length ? [...initial.dates, blankDate()] : [blankDate(), blankDate()]));
   const [rough, setRough] = useState('');
-  const [places, setPlaces] = useState([{ label: '', cost_pp: '' }, { label: '', cost_pp: '' }]);
+  const [places, setPlaces] = useState(() => (initial?.place ? [{ label: initial.place, cost_pp: '' }, { label: '', cost_pp: '' }] : [{ label: '', cost_pp: '' }, { label: '', cost_pp: '' }]));
   const [budget, setBudget] = useState('');
   const [note, setNote] = useState('');
   const [closes, setCloses] = useState(defaultCloses());
@@ -238,6 +239,8 @@ export function SuggestSheet({ onClose, onSaved, initial = null }) {
     await supabase.from('posts').insert({ kind: 'user', player_id: status.player_id, link: `/plan/${created.id}`,
       body: `💡 New ${kind === 'round' ? 'round' : 'trip'} idea: ${created.name}. ${opts.dates.length || opts.places.length ? 'Vote on when and where, and say if you’re in.' : 'Say if you’re in.'}` });
     const r = await notify(status.is_admin ? 'plan_new' : 'plan_proposed', { plan_id: created.id });
+    // From a finished quick round: send the vote to everyone who played (they may not have notifications).
+    if (initial?.share) await shareText(`📅 ${created.name}? Vote on the date and say if you’re in: ${window.location.origin}${import.meta.env.BASE_URL}#/plan/${created.id}`);
     onClose(); onSaved?.(created);
     toast(`Up for a vote${r?.sent ? ` — ${r.sent} phone${r.sent === 1 ? '' : 's'} told` : ''}`);
   });

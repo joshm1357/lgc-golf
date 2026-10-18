@@ -171,11 +171,11 @@ await page.getByRole('button', { name: '⛳ Start a round with your mates' }).cl
 await page.getByLabel('Your name').fill('Josh');
 check(await page.getByRole('button', { name: 'Hole 3' }).getAttribute('aria-pressed') === 'true' && await page.getByRole('button', { name: 'Hole 12' }).getAttribute('aria-pressed') === 'true', 'closest to the pin pre-filled on the par 3s');
 check(await page.getByRole('button', { name: 'Hole 5' }).getAttribute('aria-pressed') === 'true', 'longest drive pre-filled on a par 5');
-check(await page.getByRole('button', { name: 'Stroke play (soon)' }).isDisabled(), 'stroke play shown as coming soon');
+check(await page.getByRole('button', { name: 'Stroke play (soon)' }).isDisabled() && await page.getByRole('button', { name: 'Ambrose (soon)' }).isDisabled(), 'Ambrose and stroke play shown as coming soon');
 await page.screenshot({ path: `${SHOTS}/q2-start.png`, fullPage: true });
 await noScroll('Quick start');
 await page.getByRole('button', { name: 'Start the round' }).click();
-await page.getByRole('button', { name: /Send the link/ }).waitFor({ timeout: 15000 });
+await page.getByRole('button', { name: /Send your mates the link/ }).waitFor({ timeout: 15000 });
 const sq = rpc('start_quick_round')[0]?.body;
 check(!!sq && sq.p_slug === 'bowral-golf-club' && sq.p_my_name === 'Josh' && sq.p_handicap === 18 && sq.p_format === 'stableford'
   && sq.p_ctp.join() === '3,12' && sq.p_ld.join() === '5' && sq.p_source.ref === 'BOWRAL1' && sq.p_source.placement === 'cart', 'starts the round with the club code and placement');
@@ -198,6 +198,13 @@ await page.waitForTimeout(800);
 const cp = rpc('create_my_player').at(-1)?.body;
 check(cp?.p_name === 'Mike' && cp?.p_handicap === 18, 'mate joins with just a name (handicap 18 if blank)');
 await page.screenshot({ path: `${SHOTS}/q4-join.png`, fullPage: true });
+
+// While playing, the organiser can invite more.
+STATUS.v = { ...QUICK_ORG };
+await page.goto(`${BASE}#/`);
+await page.reload();
+await page.getByText('📤 Invite more mates').waitFor({ timeout: 15000 });
+check(true, 'organiser can invite more mates from the leaderboard');
 
 // 4. After the last hole.
 STATUS.v = { ...QUICK_ORG };
@@ -223,7 +230,10 @@ await page.getByRole('button', { name: /Make it official/ }).waitFor({ timeout: 
 await page.getByRole('button', { name: /Make it official/ }).click();
 await page.waitForTimeout(1500);
 check(rpc('make_group_official').length === 1 && /#\/start\/new/.test(page.url()), 'make it official opens the wizard');
-check(await page.getByLabel('Group name').isVisible().catch(() => false), 'the wizard asks for the group’s proper name');
+check(await page.getByText('Step 1 of 7').isVisible(), 'not signed in yet: the wizard starts with signing in');
+await page.getByRole('button', { name: 'Next' }).click();
+await page.getByText('Name and crest').waitFor({ timeout: 10000 });
+check(await page.getByLabel('Group name').isVisible(), 'then straight to the group’s proper name and crest');
 
 check(errors.length === 0, `no page errors (${errors.join(' | ')})`);
 await browser.close();

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { defaultComps, sourceFrom, resultsText, sameTimeNextYear, startOwnLink } from './quick.js';
+import { defaultComps, sourceFrom, resultsText, sameTimeNextYear, startOwnLink, rememberSource, rememberedSource, forgetSource } from './quick.js';
 
 const holes = Array.from({ length: 18 }, (_, i) => ({ n: i + 1, par: [3, 12].includes(i + 1) ? 3 : [5, 14].includes(i + 1) ? 5 : 4, si: i + 1 }));
 
@@ -38,5 +38,19 @@ describe('results', () => {
   it('same time next year is the same day of the week', () => {
     expect(sameTimeNextYear('2026-10-17')).toBe('2027-10-16');
     expect(new Date('2027-10-16T00:00:00Z').getUTCDay()).toBe(new Date('2026-10-17T00:00:00Z').getUTCDay());
+  });
+});
+
+describe('remembered source', () => {
+  it('keeps the newest for 30 days, then forgets it', () => {
+    const store = {};
+    globalThis.localStorage = { getItem: (k) => store[k] ?? null, setItem: (k, v) => { store[k] = v; }, removeItem: (k) => { delete store[k]; } };
+    rememberSource({ ref: 'OLD1', placement: 'cart' }, 0);
+    rememberSource({ from_group: 'g', placement: 'invite' }, 1000);
+    expect(rememberedSource(2000)).toEqual({ from_group: 'g', placement: 'invite' });
+    expect(rememberedSource(1000 + 31 * 864e5)).toBe(null);
+    forgetSource();
+    expect(rememberedSource(2000)).toBe(null);
+    delete globalThis.localStorage;
   });
 });

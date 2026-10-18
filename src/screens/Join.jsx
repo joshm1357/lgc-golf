@@ -6,6 +6,7 @@ import { inviteCode } from '../lib/invite.js';
 import { SIGN_IN, signInWith, signInWithEmail, verifyEmailCode, isEmptyNewAccount } from '../lib/auth.js';
 import { GroupCrest } from '../components/Logo.jsx';
 import { savedLook, paintLook } from '../lib/theme.js';
+import { rememberSource } from '../lib/quick.js';
 
 async function ensureSignedIn() {
   const { data: { session } } = await supabase.auth.getSession();
@@ -29,6 +30,8 @@ export function InviteJoin({ code, inside = false, onLook }) {
         const { data, error } = await supabase.rpc('invite_info', { p_token: code });
         if (error) throw error;
         if (live) setInfo(data || { bad: true });
+        // If they start their own group later, it's counted as coming from this one.
+        if (live && data?.group_id && !data.already_in) rememberSource({ from_group: data.group_id, placement: 'invite' });
         // Show the group's own crest and colours (not when already inside another group's app).
         if (live && data?.look && !inside) { paintLook(data.look, data.group_name); onLook?.(data.look); }
       } catch (e) {

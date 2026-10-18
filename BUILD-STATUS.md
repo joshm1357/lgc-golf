@@ -249,7 +249,7 @@ STOP → live SQL below → merge `v1.5` into `main` (deploys) → check the liv
   links them); Chat delete events, like other tables', carry only the deleted row's id to every phone.
 
 ### Live order for v2.0 (at the release STOP — not before)
-022 → 023 → 024 → 025 → 026 → 027 → 028 → 029 → 027b on live, then deploy `notify` and `lgc-mcp`, then the app. (On staging 024 ran after 025;
+022 → 023 → 024 → 025 → 026 → 027 → 028 → 029 → 030 → 027b on live, then deploy `notify` and `lgc-mcp`, then the app. (On staging 024 ran after 025;
 025 calls the same-group check builder again, so the order above is the one for live.)
 
 ## v2.0 Stage 2 — Proper login, roles and invites (branch `stage-2-login`, on staging only)
@@ -316,6 +316,19 @@ links opening Safari). Left as notes: invite codes stored plainly (server-only t
 
 **Tested:** 83 unit tests; `supabase/tests/stage3_features.sql`; phone width `tests/e2e/features-test.mjs` (9 checks:
 3-tab bar, hidden menu items, greyed dependants, switching, no sideways scroll).
+
+**Independent review → fixes (030 + app + server):** the Claude connector now checks each tool's feature (and hides
+tools that are off); every Tribunal step (defence, chair's close, verdict) checks the Tribunal is on; automatic posts
+(verdicts, "wants to join", role changes, admin PIN, removals) only when the Feed is on; bonus strokes refuse only a
+*change* to the bonus (a round that already has one can still be started and locked); the trip-vote checks are
+verified; L.G.C's 17 switches written out; a mistyped feature key fails closed; digest and daily reminders skip
+switched-off features (checked before marking anything sent); screens of a switched-off feature say so instead of
+half-working (old links, bookmarks); side comp prompts, feed moments/photos, admin trophy/draw/side-comp editors,
+the room draw, trophy copying and the draw overlay hidden when off; Trips without votes asks for one date and place;
+scorecard photos and booking links show as "coming soon".
+**Tested after fixes:** Stage 3 test 27 checks; isolation 47/47, Trips 39/39, Stage 2 35/35, access 30/30 unchanged;
+connector on the staging server: L.G.C's link works, a group with the connector off gets "Not found"; all four phone
+tests pass (features, Stage 2, Trips, v1.5 regression).
 
 **Release:** see `docs/RELEASE-v2.0.md` — **RELEASE v2.0 is a STOP**.
 

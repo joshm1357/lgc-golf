@@ -15,7 +15,7 @@ All built and tested on **staging** only. L.G.C on live has not been touched.
 
 ## The release (in this order, after your OK)
 1. Live database, in the SQL editor on `lgc-golf` (live): migrations `022` → `023` → `024` → `025` → `026` → `027` →
-   `028` → `029`, then `027b`. Each is additive; L.G.C becomes the first group with everything as it is today
+   `028` → `029` → `030`, then `027b`. Each is additive; L.G.C becomes the first group with everything as it is today
    (every feature on apart from scorecard photos and booking links, which it doesn't use).
 2. Re-run the test files' read-only checks I'll give you for live (counts of L.G.C rows before/after, no other groups).
 3. Deploy the server functions `notify` and `lgc-mcp` to live (I do this once the database is done).

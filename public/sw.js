@@ -22,19 +22,30 @@ async function allParts() {
   } catch { return []; }
 }
 
-/** Save the page and every code/style file the app uses; drop code files from older versions. */
+/** Save the page and every code/style file the app uses; drop code files from older versions.
+ *  Careful rules, because a bad save here is what leaves a phone with a blank app on the course:
+ *   - only a real copy of this app is saved (not a Wi-Fi login page that answered instead);
+ *   - the page is saved only once its own code and styles are saved;
+ *   - old files are only cleared when the full list of parts loaded and every part was saved. */
 async function saveShell(pageResponse) {
   const c = await caches.open(CACHE);
   const page = pageResponse || (await fetch(BASE, { cache: 'no-store' }));
   if (!page.ok) return;
   const html = await page.clone().text();
-  await c.put(BASE, page);
-  const fromPage = (html.match(/\/lgc-golf\/assets\/[^"'\s)]+/g) || []);
-  // The list only counts if it belongs to the same version as the page (it names the page's main file).
+  if (!/\/lgc-golf\/assets\/index-[^"'\s)]+\.js/.test(html)) return; // not our app
+  const fromPage = [...new Set(html.match(/\/lgc-golf\/assets\/[^"'\s)]+/g) || [])];
+  // The list only counts if it belongs to the same version as the page (it names the page's files).
   const parts = await allParts();
-  const listed = fromPage.every((u) => parts.includes(u)) ? parts : [];
-  const used = [...new Set([...fromPage, ...listed])];
-  await Promise.all(used.map(async (u) => { if (!(await c.match(u))) { try { await c.add(u); } catch { /* next time */ } } }));
+  const complete = parts.length > 0 && fromPage.every((u) => parts.includes(u));
+  const used = [...new Set([...fromPage, ...(complete ? parts : [])])];
+  const saved = await Promise.all(used.map(async (u) => {
+    if (await c.match(u)) return true;
+    try { await c.add(u); return true; } catch { return false; }
+  }));
+  const ok = (u) => saved[used.indexOf(u)];
+  if (!fromPage.every(ok)) return; // try again next time; keep the old copy meanwhile
+  await c.put(BASE, page);
+  if (!complete || !saved.every(Boolean)) return;
   for (const req of await c.keys()) {
     const p = new URL(req.url).pathname;
     if (p.startsWith(`${BASE}assets/`) && !used.includes(p)) await c.delete(req);
@@ -98,14 +109,27 @@ self.addEventListener('fetch', (event) => {
   const isPage = req.mode === 'navigate' || url.pathname === BASE || url.pathname.endsWith('/index.html');
   if (isPage) {
     // The "new version" check asks for a fresh copy — never answer it from the cache unless offline.
+    // Opening the app: if the network hasn't answered in 4 seconds (one bar of signal), open the
+    // saved copy; the fresh copy is still saved in the background when it arrives.
+    const opening = req.mode === 'navigate';
+    let saving = Promise.resolve();
+    const net = fetch(req, { cache: 'no-store' }).then((fresh) => {
+      if (fresh.ok && opening) saving = saveShell(fresh.clone()).catch(() => {});
+      return fresh;
+    });
+    event.waitUntil(net.then(() => saving, () => {}));
     event.respondWith((async () => {
+      const saved = opening ? await caches.match(BASE) : null;
+      if (saved) {
+        const slow = new Promise((resolve) => setTimeout(() => resolve(null), 4000));
+        const fresh = await Promise.race([net.catch(() => null), slow]);
+        return fresh && fresh.ok ? fresh : saved;
+      }
       try {
-        const fresh = await fetch(req, { cache: 'no-store' });
-        if (fresh.ok && req.mode === 'navigate') event.waitUntil(saveShell(fresh.clone()).catch(() => {}));
-        return fresh;
+        return await net;
       } catch {
-        const saved = await caches.match(BASE);
-        if (saved) return saved;
+        const copy = await caches.match(BASE);
+        if (copy) return copy;
         throw new Error('offline');
       }
     })());

@@ -10,7 +10,8 @@ grant all on sequence t_results_n_seq to authenticated;
 
 insert into auth.users (id, instance_id, aud, role) values
   ('00000000-0000-4000-8000-0000000000a1', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated'),
-  ('00000000-0000-4000-8000-0000000000a2', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated');
+  ('00000000-0000-4000-8000-0000000000a2', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated'),
+  ('00000000-0000-4000-8000-0000000000a3', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated');
 insert into public.players (id, name, handicap) values
   ('00000000-0000-4000-8000-0000000000b1', 'Test Josh', 14),
   ('00000000-0000-4000-8000-0000000000b2', 'Test Mike', 18);
@@ -27,13 +28,15 @@ insert into public.round_pins (round_id, hole, lat, lng, set_by) values
 insert into public.plans (id, name, created_by) values ('00000000-0000-4000-8000-0000000000d1', 'Admin plan', '00000000-0000-4000-8000-0000000000b1');
 insert into public.plans (id, name, created_by, proposed) values ('00000000-0000-4000-8000-0000000000d2', 'Mike idea', '00000000-0000-4000-8000-0000000000b2', true);
 insert into public.plans (id, name, created_by, proposed) values ('00000000-0000-4000-8000-0000000000d3', 'Mike idea 2', '00000000-0000-4000-8000-0000000000b2', true);
+insert into public.plans (id, name, created_by, proposed, status) values ('00000000-0000-4000-8000-0000000000d4', 'Mike passed idea', '00000000-0000-4000-8000-0000000000b2', true, 'cancelled');
 insert into public.plan_costs (id, plan_id, title, amount, paid_by, created_by) values
   ('00000000-0000-4000-8000-0000000000e1', '00000000-0000-4000-8000-0000000000d1', 'Josh cost', 100, '00000000-0000-4000-8000-0000000000b1', '00000000-0000-4000-8000-0000000000b1'),
   ('00000000-0000-4000-8000-0000000000e2', '00000000-0000-4000-8000-0000000000d1', 'Mike cost', 50, '00000000-0000-4000-8000-0000000000b2', '00000000-0000-4000-8000-0000000000b2');
 insert into public.plan_items (id, plan_id, kind, title, created_by, owner_id) values
   ('00000000-0000-4000-8000-0000000000f1', '00000000-0000-4000-8000-0000000000d1', 'job', 'Unowned job', '00000000-0000-4000-8000-0000000000b1', null),
   ('00000000-0000-4000-8000-0000000000f2', '00000000-0000-4000-8000-0000000000d1', 'info', 'Josh info', '00000000-0000-4000-8000-0000000000b1', null),
-  ('00000000-0000-4000-8000-0000000000f3', '00000000-0000-4000-8000-0000000000d1', 'job', 'Mike job', '00000000-0000-4000-8000-0000000000b1', '00000000-0000-4000-8000-0000000000b2');
+  ('00000000-0000-4000-8000-0000000000f3', '00000000-0000-4000-8000-0000000000d1', 'job', 'Mike job', '00000000-0000-4000-8000-0000000000b1', '00000000-0000-4000-8000-0000000000b2'),
+  ('00000000-0000-4000-8000-0000000000f4', '00000000-0000-4000-8000-0000000000d1', 'job', 'Another unowned job', '00000000-0000-4000-8000-0000000000b1', null);
 
 -- ================= As Mike (ordinary player) =================
 set local role authenticated;
@@ -84,6 +87,15 @@ do $$ declare n int; begin
   insert into t_results (label, result) values ('mike withdraws own suggestion (rows)', n);
 end $$;
 
+do $$ declare n int; begin
+  with u as (update public.plans set status = 'planning' where id = '00000000-0000-4000-8000-0000000000d4' returning 1) select count(*) into n from u;
+  insert into t_results (label, result) values ('mike revives passed suggestion (rows)', n);
+end $$;
+do $$ begin
+  update public.plans set rsvp_locked = true where id = '00000000-0000-4000-8000-0000000000d2';
+  insert into t_results (label, result) values ('mike locks own suggestion list', 'ok');
+exception when others then insert into t_results (label, result) values ('mike locks own suggestion list', 'refused'); end $$;
+
 -- plan_costs
 do $$ begin
   insert into public.plan_costs (plan_id, title, amount, paid_by) values ('00000000-0000-4000-8000-0000000000d1', 'Mike fuel', 20, '00000000-0000-4000-8000-0000000000b2');
@@ -122,6 +134,16 @@ end $$;
 do $$ declare n int; begin
   with u as (update public.plan_items set done = true where id = '00000000-0000-4000-8000-0000000000f3' returning 1) select count(*) into n from u;
   insert into t_results (label, result) values ('mike ticks own job (rows)', n);
+end $$;
+
+-- ================= As a stranger (signed in, never joined) =================
+reset role;
+set local role authenticated;
+set local request.jwt.claims to '{"sub":"00000000-0000-4000-8000-0000000000a3","role":"authenticated"}';
+insert into t_results (label, result) select 'stranger sees players', count(*)::text from public.players;
+do $$ declare n int; begin
+  with u as (update public.plan_items set done = true where id = '00000000-0000-4000-8000-0000000000f4' returning 1) select count(*) into n from u;
+  insert into t_results (label, result) values ('stranger claims/changes an unowned job (rows)', n);
 end $$;
 
 -- ================= As Josh (admin) =================

@@ -9,7 +9,7 @@ import { toast } from './ui.jsx';
 import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
 
 // The shot planner brings the map library with it, so it only loads when opened.
-const ShotPlanner = lazyScreen(() => import('./ShotPlanner.jsx'));
+const ShotPlanner = lazyScreen(() => import('./ShotPlanner.jsx'), 'default', { inline: true });
 
 const KEY = 'lgc-distances-on';
 
@@ -42,7 +42,7 @@ export default function Distances({ round, course, hole }) {
   const [busy, setBusy] = useState(false);
   const [planning, setPlanning] = useState(false);
   const pin = pins[hole.n];
-  const planner = planning && <LazyArea><ShotPlanner hole={hole} pin={pin} onClose={() => setPlanning(false)} /></LazyArea>;
+  const planner = planning && <LazyArea onClose={() => setPlanning(false)}><ShotPlanner hole={hole} pin={pin} onClose={() => setPlanning(false)} /></LazyArea>;
   const d = pos ? greenDistances(hole, pos, pin) : null;
   const mapped = !!(hole.green || pin);
   const toggle = () => {
@@ -125,7 +125,7 @@ export default function Distances({ round, course, hole }) {
           <button type="button" className="btn ghost sm" disabled={busy} onClick={setPin}>🚩 {pin ? 'Move' : 'Set'} today’s pin on {hole.n} — stand next to the flag</button>
         )}
         {pin && status.is_admin && (
-          <button type="button" className="btn ghost sm" disabled={busy} onClick={clearPin}>✕ Clear today’s pin on {hole.n}</button>
+          <button type="button" className="btn danger" style={{ marginTop: 8 }} disabled={busy} onClick={clearPin}><span aria-hidden="true">✕</span> Clear today’s pin on {hole.n}</button>
         )}
       </div>
     </div>

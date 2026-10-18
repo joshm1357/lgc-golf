@@ -1,5 +1,5 @@
 // The Planner's other tabs: Details (where/when, day plan, info, bring list), Jobs, Kitty, Rooms & cars.
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { useData, useSession, playerName } from '../lib/store.jsx';
 import { Avatar, Sheet, Icon, toast } from '../components/ui.jsx';
@@ -581,6 +581,9 @@ function GroupSheet({ pd, kind, group, groups, members, inIds, onClose }) {
   const before = new Set(group ? members.filter((m) => m.group_id === group.id).map((m) => m.player_id) : []);
   const [picked, setPicked] = useState(() => new Set(before));
   const [busy, run] = useRun();
+  // A new room/car is created on the first Save; if adding the people then fails, a second Save
+  // updates that room instead of creating another one.
+  const createdId = useRef(null);
   const cap = Math.max(1, Math.min(12, Number(v.capacity) || 1));
   const whereIs = (pid) => groups.find((g) => g.id !== group?.id && members.some((m) => m.group_id === g.id && m.player_id === pid));
   // Everyone who's In, plus anyone already placed here who has since dropped out (so they can be taken out).
@@ -593,9 +596,9 @@ function GroupSheet({ pd, kind, group, groups, members, inIds, onClose }) {
   const save = () => run(async () => {
     if (picked.size > cap) throw new Error(`${picked.size} people but only ${cap} ${kind === 'car' ? 'seats' : 'beds'} — take someone out or make it bigger.`);
     const row = { plan_id: pd.plan.id, kind, name: v.name.trim(), capacity: cap, note: v.note?.trim() || null };
-    let id = group?.id;
+    let id = group?.id || createdId.current;
     if (id) await must(supabase.from('plan_groups').update(row).eq('id', id));
-    else id = (await must(supabase.from('plan_groups').insert(row).select('id').single())).id;
+    else id = createdId.current = (await must(supabase.from('plan_groups').insert(row).select('id').single())).id;
     const out = [...before].filter((pid) => !picked.has(pid));
     const add = [...picked].filter((pid) => !before.has(pid));
     if (out.length) await must(supabase.from('plan_group_members').delete().eq('group_id', id).in('player_id', out));
@@ -603,7 +606,8 @@ function GroupSheet({ pd, kind, group, groups, members, inIds, onClose }) {
       // Someone moved here from another room/car comes out of that one first.
       const elsewhere = groups.filter((g) => g.id !== id).map((g) => g.id);
       if (elsewhere.length) await must(supabase.from('plan_group_members').delete().in('group_id', elsewhere).in('player_id', add));
-      await must(supabase.from('plan_group_members').insert(add.map((pid) => ({ group_id: id, player_id: pid }))));
+      // Ignore anyone another phone has just put here too, rather than failing half-way.
+      await must(supabase.from('plan_group_members').upsert(add.map((pid) => ({ group_id: id, player_id: pid })), { onConflict: 'group_id,player_id', ignoreDuplicates: true }));
     }
     pd.reload(); onClose();
   }, 'Saved');
@@ -623,7 +627,7 @@ function GroupSheet({ pd, kind, group, groups, members, inIds, onClose }) {
                 <button key={pid} type="button" className="row" onClick={() => toggle(pid)} aria-pressed={picked.has(pid)}
                   style={{ width: '100%', minHeight: 48, padding: '8px 12px', border: 0, borderBottom: '1px solid var(--line-soft)', background: picked.has(pid) ? 'var(--gold-soft)' : '#fff', textAlign: 'left', color: 'inherit' }}>
                   <Avatar player={p} size={30} />
-                  <span className="grow" style={{ fontWeight: 600 }}>{playerName(p)}{other && <span className="small muted"> · in {other.name}</span>}</span>
+                  <span className="grow" style={{ fontWeight: 600 }}>{playerName(p)}{!inIds.includes(pid) && <span className="small muted"> · not coming any more</span>}{other && <span className="small muted"> · in {other.name}</span>}</span>
                   <span style={{ fontWeight: 800 }}>{picked.has(pid) ? '✓' : ''}</span>
                 </button>
               );

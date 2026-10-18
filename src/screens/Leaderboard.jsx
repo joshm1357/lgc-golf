@@ -7,7 +7,7 @@ import { Header, Seg, AvatarStack, Icon, Sheet, Loading } from '../components/ui
 import { TrophyArt } from '../components/TrophyArt.jsx';
 import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
 
-const DrawSetup = lazyScreen(() => import('../components/DrawSetup.jsx'));
+const DrawSetup = lazyScreen(() => import('../components/DrawSetup.jsx'), 'default', { inline: true });
 
 export function useRoundChoice() {
   const data = useData();
@@ -225,7 +225,7 @@ export default function Leaderboard() {
         <Link to={`/score/${round.id}`} className="btn gold fab">Enter score{myTeam ? ` — ${myTeam.name}` : ''}</Link>
       )}
 
-      {drawing && <LazyArea><DrawSetup round={round} onClose={() => setDrawing(false)} /></LazyArea>}
+      {drawing && <LazyArea onClose={() => setDrawing(false)}><DrawSetup round={round} onClose={() => setDrawing(false)} /></LazyArea>}
       {open && (
         <Sheet title={open.name} onClose={() => setOpen(null)}>
           <Scorecard row={open} board={board} />

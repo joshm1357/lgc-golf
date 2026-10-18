@@ -66,8 +66,8 @@ verdict). Staging has no data, no Edge Functions and anonymous sign-in is off.
 - **019_v15_tidy.sql** — 42 foreign-key indexes; 5 rules on `members`/`push_subscriptions` read `auth.uid()` once per
   query; function permissions re-stated; trigger function `scores_touch` closed to direct calls; `clear pin` rule.
 - **020_merge_policies.sql** — 7 overlapping rule pairs on `plans`, `plan_costs`, `plan_items` merged (same meaning).
-- **021_move_pg_net.sql** — pg_net dropped and re-created in `extensions`; the 9am reminder job re-saved from its own
-  settings (so the same file works on live and staging).
+- **021_move_pg_net.sql** — pg_net dropped and re-created in `extensions`. The 9am reminder job calls `net.http_post`
+  by name each run, so it isn't touched (re-saving it could create a duplicate job or wake a paused one).
 
 **SECURITY DEFINER functions checked (A2.5)** — all 15 have `search_path` fixed to `public`; none can be called by
 anyone not signed in (anon/public `EXECUTE` already revoked by 003/005/016 — re-stated in 019).
@@ -88,11 +88,20 @@ link their phone to any player (e.g. pose as Josh and change his PayID); `claim_
 
 **Tested**
 - 54 unit tests pass; build passes.
-- SQL access checks on staging (`supabase/tests/v15_access_checks.sql`, as an ordinary player and as admin, rolled back
-  afterwards): 26/26 as expected (`v15_access_checks.expected.txt`). Run again after 020 — must be identical.
+- SQL access checks on staging (`supabase/tests/v15_access_checks.sql`, as an ordinary player, a stranger who never
+  joined, and the admin; rolled back afterwards): 30/30 as expected (`v15_access_checks.expected.txt`). Run again after
+  020 — must be identical.
+- **Independent review** (a fresh agent that didn't write the code): 020 merges confirmed exactly equivalent; 019 safe
+  for v1.4 phones; "New version ready" banner still works. Fixed what it found: (1) the offline copy could throw away
+  saved screens when the parts list failed to load on weak signal, and (2) a Wi-Fi login page could replace the saved
+  app — the service worker now only saves a real copy of the app, saves the page after its files, and only clears old
+  files after a complete save; opening the app waits at most 4 s for the network before using the saved copy; parts
+  inside a screen (draw, shot planner, draw set-up) never reload the page and get a Close button; a real crash says so
+  instead of blaming signal; a retried room save can't create a duplicate room; two phones editing a room at once can't
+  half-fail; Clear pin is a full-size red button; people no longer "In" are marked in the room sheet.
 - Phone-width (375px) browser check of the built app against a stand-in database (this computer can't reach Supabase):
   leaderboard loads only the starting file; the service worker saves all 21 parts; Tribunal, Coming up, Comps and Admin
-  open with no signal; clear pin; shot planner map loads on demand and keeps the app font; rooms save in one step;
+  open with no signal; saved parts survive a failed parts list and a Wi-Fi login page; clear pin; shot planner map loads on demand and keeps the app font; rooms save in one step;
   over-full room refused.
 - Advisors on staging after 019: unindexed foreign keys 42 → 0; per-row `auth.uid()` 5 → 0. Left: 7 overlapping
   rules (020), pg_net (021), the 15 functions (by design), 3 tables with no rules (by design), "unused index" notes
@@ -101,17 +110,24 @@ link their phone to any player (e.g. pose as Josh and change his PayID); `claim_
 **Known**
 - Leaflet logs a harmless error if you leave a map screen within half a second of opening it (existing behaviour).
 
-**What's next:** Josh approves 020 and 021 on staging → re-run access checks + advisors + a pg_net test call →
+**Decided 18 Oct (Josh):** profiles one per group; photos public with per-group folders; courses per group until
+Stage 8; Josh pastes 020 and 021 into the staging SQL editor himself (the tools here can't run DROPs).
+
+**What's next:** Josh pastes 020 and 021 on staging → re-run access checks + advisors + a pg_net test call →
 STOP → live SQL below → merge `v1.5` into `main` (deploys) → check the live app.
 
 ### Live release steps for v1.5 (after Josh's OK — in this order)
 1. Tag `main` as `v1.4` on GitHub (Releases → Draft a new release → tag `v1.4`, target `main`). The build session
    can't push tags.
-2. Live SQL — run `019_v15_tidy.sql` (no DROPs; safe with phones on v1.4).
+2. Live SQL — run `019_v15_tidy.sql` (no DROPs; safe with phones on v1.4). Before 020, check live hasn't drifted:
+   `select policyname, cmd, qual, with_check from pg_policies where tablename in ('plans','plan_costs','plan_items');`
 3. Live SQL — run `020_merge_policies.sql` (Josh approves the DROPs).
-4. Live SQL — run `021_move_pg_net.sql` away from 9am Sydney time, then test a reminder call:
+4. Live SQL — run `021_move_pg_net.sql` away from 9am Sydney time (indexes in 019 also briefly pause writes — not
+   during a live round). Check `select jobid, jobname, active from cron.job;` still shows one active
+   `lgc-daily-reminders`, then test a reminder call:
    `select net.http_post(url := 'https://luogyzvrbedmicjejilr.supabase.co/functions/v1/notify', headers := jsonb_build_object('Content-Type','application/json','x-cron-secret',(select value from public.server_secrets where name='cron_secret')), body := '{"type":"daily"}'::jsonb);`
-   then `select status_code from net._http_response order by created desc limit 1;` → expect 200.
+   then `select status_code from net._http_response order by created desc limit 1;` → expect 200
+   (if nothing after ~10 s: `select net.worker_restart();`).
    (`daily` only sends what's due and never sends the same reminder twice.)
 5. Re-run both advisors on live.
 6. Merge `v1.5` into `main` → GitHub Pages deploys → open the app, check the "New version ready" banner, leaderboard,

@@ -1,0 +1,12 @@
+Expected (staging, after 032 and 032b).
+
+player picks a starter = refused
+unknown starter = refused
+organiser picks Ambrose and Stableford = 7
+rules are the group's and in force = 7 / names: false
+second starter on top = refused
+only a proposed rule = refused
+only a retired rule = ok
+L.G.C organiser picks a starter = refused
+L.G.C rules untouched = 0
+Ambrose starter asks for = 4 drives each

@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase, friendlyError } from '../lib/supabase.js';
-import { useData, useScores, useSession, playerName } from '../lib/store.jsx';
-import { roundBoard, stablefordTrophyBoard } from '../lib/board.js';
+import { useData, useScores, useSession, useSideEntries, playerName } from '../lib/store.jsx';
+import { roundBoard, stablefordTrophyBoard, compBonuses } from '../lib/board.js';
 import { formatToPar } from '../lib/scoring.js';
 import { Seg, Avatar, AvatarStack, Icon, Sheet, toast } from '../components/ui.jsx';
 import { TrophyArt } from '../components/TrophyArt.jsx';
@@ -39,10 +39,12 @@ export default function Trophies() {
     playersById: data.playersById, scoresIdx: scores.index, quickResults: data.quick_results,
   }) : null), [trip, data, scores.index]);
   const aRound = [...tripRounds].reverse().find((r) => r.format === 'ambrose');
+  const aSide = useSideEntries(aRound?.id);
   const aBoard = useMemo(() => (aRound ? roundBoard({
     round: aRound, course: data.coursesById[aRound.course_id], teams: data.teamsByRound[aRound.id] || [],
     playersById: data.playersById, scoresIdx: scores.index,
-  }) : null), [aRound, data, scores.index]);
+    bonuses: compBonuses(aRound, data.teamsByRound[aRound.id] || [], aSide),
+  }) : null), [aRound, data, scores.index, aSide]);
 
   const plaquesFor = (name) => data.honour_board.filter((h) => h.trophy_name.toLowerCase() === name.toLowerCase()).sort((a, b) => b.sort_key - a.sort_key);
   const leaderLine = (t) => {

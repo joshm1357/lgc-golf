@@ -180,3 +180,18 @@ export function DemoProviders({ session, data, children }) {
     </SessionCtx.Provider>
   );
 }
+
+/** Side-comp entries for a round, live. */
+export function useSideEntries(roundId) {
+  const [rows, setRows] = useState([]);
+  const load = useCallback(async () => {
+    if (!roundId) { setRows([]); return; }
+    try {
+      const { data, error } = await supabase.from('side_entries').select('*').eq('round_id', roundId);
+      if (!error && data) setRows(data);
+    } catch { /* keep what we have */ }
+  }, [roundId]);
+  useEffect(() => { load(); }, [load]);
+  useRealtime(['side_entries'], load);
+  return rows;
+}

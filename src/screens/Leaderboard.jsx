@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { useData, useScores, useSession } from '../lib/store.jsx';
-import { roundBoard, headlines } from '../lib/board.js';
+import { useData, useScores, useSession, useSideEntries } from '../lib/store.jsx';
+import { roundBoard, headlines, compBonuses } from '../lib/board.js';
 import { formatToPar, strokesReceived, stablefordPoints } from '../lib/scoring.js';
 import { Header, Seg, AvatarStack, Icon, Sheet, Loading } from '../components/ui.jsx';
 import { TrophyArt } from '../components/TrophyArt.jsx';
@@ -39,6 +39,7 @@ export default function Leaderboard() {
   const [open, setOpen] = useState(null);
   const [drawing, setDrawing] = useState(false);
   const scores = useScores(round?.id);
+  const sideEntries = useSideEntries(round?.id);
 
   const board = useMemo(() => {
     if (!round) return null;
@@ -46,8 +47,9 @@ export default function Leaderboard() {
       round, course: data.coursesById[round.course_id], teams: data.teamsByRound[round.id] || [],
       roundPlayers: data.roundPlayers[round.id] || [], playersById: data.playersById,
       scoresIdx: scores.index, quickResults: data.quick_results,
+      bonuses: compBonuses(round, data.teamsByRound[round.id] || [], sideEntries),
     });
-  }, [round, data, scores.index]);
+  }, [round, data, scores.index, sideEntries]);
 
   // "Since you last looked": ranks stored on this phone at the last visit.
   const storeKey = round ? `lgc-ranks-${round.id}` : null;
@@ -180,7 +182,7 @@ export default function Leaderboard() {
             <button key={r.id} type="button" className={'lb-row' + (i === 0 && (r.thru > 0 || projected) ? ' lead' : '')} onClick={() => setOpen(r)}>
               <span className="lb-rank">{projected ? i + 1 : r.rankLabel}</span>
               <span className="stack" style={{ gap: 5, minWidth: 0 }}>
-                <span className="lb-name ellipsis">{r.name}</span>
+                <span className="lb-name ellipsis">{r.name}{r.bonus ? <span style={{ marginLeft: 6, fontSize: 12, fontWeight: 700, color: 'var(--up)' }}>−{r.bonus} {r.bonusWins.map((w) => w.split(' ')[0]).join('')}</span> : null}</span>
                 <AvatarStack players={r.players} size={isA ? 26 : 22} />
               </span>
               <span className="lb-thru">{r.finished ? 'F' : r.thru || '–'}{r.quick ? '*' : ''}</span>
@@ -234,6 +236,7 @@ export function Scorecard({ row, board }) {
         <AvatarStack players={row.players} size={34} />
         <span className="muted small">{isA ? `Team handicap ${row.handicap}` : `Playing off ${row.handicap}`}</span>
       </div>
+      {row.bonus ? <div className="card pad small" style={{ background: 'var(--gold-soft)', borderColor: 'var(--gold)' }}><strong>Side comp bonus −{row.bonus}</strong> · {row.bonusWins.join(', ')} (already taken off the score)</div> : null}
       {row.quick ? (
         <div className="card pad">Typed in from a paper card: <strong>{row.points} points</strong>.</div>
       ) : (

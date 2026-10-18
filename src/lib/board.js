@@ -14,7 +14,34 @@ export function courseHoles(course) {
  * Ambrose: one row per team, ranked by net to par through holes played (lower better).
  * Stableford: one row per player, ranked by points vs expected (2 per hole) — higher better.
  */
-export function roundBoard({ round, course, teams = [], roundPlayers = [], playersById = {}, scoresIdx = {}, quickResults = [] }) {
+/**
+ * Side-comp bonus strokes for Ambrose: the leader of each closest-to-pin / longest-drive hole
+ * takes `round.comp_bonus` strokes off their team's score. Returns { teamId: { strokes, wins: [label] } }.
+ */
+export function compBonuses(round, teams, sideEntries = []) {
+  const bonus = Number(round?.comp_bonus || 0);
+  const out = {};
+  if (!bonus || round?.format !== 'ambrose') return out;
+  const teamOf = {};
+  for (const t of teams) for (const p of t.players || []) teamOf[p.id] = t.id;
+  const comps = [
+    ...(round.ctp_holes || []).map((h) => ({ kind: 'ctp', hole: h, label: `🎯 CTP ${h}` })),
+    ...(round.ld_holes || []).map((h) => ({ kind: 'ld', hole: h, label: `💣 LD ${h}` })),
+  ];
+  for (const c of comps) {
+    const list = sideEntries.filter((e) => e.kind === c.kind && e.hole === c.hole && e.distance_m != null);
+    if (!list.length) continue;
+    const best = [...list].sort((a, b) => (c.kind === 'ctp' ? a.distance_m - b.distance_m : b.distance_m - a.distance_m))[0];
+    const tid = teamOf[best.player_id];
+    if (!tid) continue;
+    const o = (out[tid] ||= { strokes: 0, wins: [] });
+    o.strokes += bonus;
+    o.wins.push(c.label);
+  }
+  return out;
+}
+
+export function roundBoard({ round, course, teams = [], roundPlayers = [], playersById = {}, scoresIdx = {}, quickResults = [], bonuses = {} }) {
   const holes = courseHoles(course);
   const nums = holes.map((h) => h.n);
   const scores = scoresIdx[round.id] || {};
@@ -22,8 +49,14 @@ export function roundBoard({ round, course, teams = [], roundPlayers = [], playe
     const rows = teams.map((t) => {
       const sc = scores[t.id] || {};
       const st = ambroseStatus(holes, sc, t.handicap);
+      const b = bonuses[t.id] || { strokes: 0, wins: [] };
+      if (b.strokes) {
+        st.netToPar -= b.strokes;
+        if (st.finalNet != null) st.finalNet -= b.strokes;
+      }
       return {
         id: t.id, name: t.name, players: t.players || [], handicap: t.handicap, scores: sc, ...st,
+        bonus: b.strokes, bonusWins: b.wins,
         sortValue: st.thru ? st.netToPar : 999, cb: st.finished ? countbackKey(holes, sc, t.handicap) : null,
         form3: recentForm(st.perHole, sc, 3, 0),
       };
@@ -33,7 +66,7 @@ export function roundBoard({ round, course, teams = [], roundPlayers = [], playe
       tiebreak: (a, b) => (a.cb && b.cb ? compareCountback(a.cb, b.cb) : 0),
     });
     const proj = holes.length
-      ? project(rows.map((r) => ({ id: r.id, perHole: r.perHole })), nums, { higherBetter: false, defaultValue: 0 })
+      ? project(rows.map((r) => ({ id: r.id, perHole: r.perHole, base: -(r.bonus || 0) })), nums, { higherBetter: false, defaultValue: 0 })
       : [];
     return { format: 'ambrose', holes, rows: ranked, projection: attachProjection(ranked, proj, false), higherBetter: false };
   }

@@ -66,6 +66,7 @@ export default function Guide() {
         <div className="card pad stack" style={{ gap: 8, fontSize: 15, lineHeight: 1.5 }}>
           <div className="row" style={{ alignItems: 'flex-start' }}><span>⛳</span><span><strong>Ambrose pairs.</strong> Both hit, pick the best shot, both play from there. One score per team per hole.</span></div>
           <div className="row" style={{ alignItems: 'flex-start' }}><span>➖</span><span><strong>Final score = gross minus team handicap.</strong> Straight strokes — not Stableford points. Lowest net wins.</span></div>
+          <div className="row" style={{ alignItems: 'flex-start' }}><span>🎯</span><span><strong>Side comps are worth 2 strokes.</strong> Closest to pin on 6 and longest drive on 9 — the winner's team takes 2 off their score.</span></div>
           <div className="row" style={{ alignItems: 'flex-start' }}><span>🏌️</span><span><strong>Minimum 6 drives each.</strong> Every player must have at least 6 of their tee shots used. The app counts them for you.</span></div>
         </div>
       </div>

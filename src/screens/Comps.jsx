@@ -108,6 +108,7 @@ export default function Comps() {
               <EntryRow e={leader} rank={1} me={status.player_id} isAdmin={status.is_admin} onChanged={load} compact />
             )}
             {kind === 'ld' && status.is_admin && <SetTee course={course} hole={hole} />}
+            {round.comp_bonus > 0 && round.format === 'ambrose' && <div className="card pad small" style={{ background: 'var(--gold-soft)', borderColor: 'var(--gold)' }}><strong>Worth {round.comp_bonus} strokes.</strong> Whoever leads this comp at the end takes {round.comp_bonus} off their team's score — the leaderboard updates live.</div>}
             <p className="note" style={{ margin: 0 }}>
               {kind === 'ctp'
                 ? 'Distance is measured or paced and typed in — phone GPS is only good to about 5–10 m. The pin and photo are the evidence.'

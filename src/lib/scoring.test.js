@@ -130,3 +130,28 @@ describe('projection', () => {
     expect(rows.find((r) => r.id === 'a').winPct).toBeGreaterThan(rows.find((r) => r.id === 'b').winPct);
   });
 });
+
+import { compBonuses, roundBoard } from './board.js';
+describe('side comp bonus strokes', () => {
+  const round = { id: 'r', format: 'ambrose', comp_bonus: 2, ctp_holes: [6], ld_holes: [9] };
+  const teams = [{ id: 'A', name: 'A', handicap: 10, players: [{ id: 'a1' }, { id: 'a2' }] }, { id: 'B', name: 'B', handicap: 10, players: [{ id: 'b1' }] }];
+  const entries = [
+    { kind: 'ctp', hole: 6, player_id: 'b1', distance_m: 3.2 },
+    { kind: 'ctp', hole: 6, player_id: 'a2', distance_m: 1.1 },
+    { kind: 'ld', hole: 9, player_id: 'a1', distance_m: 240 },
+  ];
+  it('gives the comp leader\'s team 2 strokes per comp won', () => {
+    const b = compBonuses(round, teams, entries);
+    expect(b.A.strokes).toBe(4);
+    expect(b.B).toBeUndefined();
+  });
+  it('takes the bonus off the team\'s net score', () => {
+    const course = { holes: holes };
+    const scoresIdx = { r: { A: sc(PAR), B: sc(PAR) } };
+    const board = roundBoard({ round, course, teams, scoresIdx, bonuses: compBonuses(round, teams, entries) });
+    const A = board.rows.find((r) => r.id === 'A');
+    const B = board.rows.find((r) => r.id === 'B');
+    expect(A.netToPar).toBe(B.netToPar - 4);
+    expect(board.rows[0].id).toBe('A');
+  });
+});

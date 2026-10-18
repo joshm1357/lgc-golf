@@ -5,6 +5,7 @@ import { useData, useRealtime, useSession, playerName } from '../lib/store.jsx';
 import { uploadPhoto } from '../lib/images.js';
 import { usePlayerHistory } from './Profile.jsx';
 import { Header, Avatar, Icon, Sheet, PhotoButtons, timeAgo, toast, Loading } from '../components/ui.jsx';
+import SharePicture from '../components/SharePicture.jsx';
 
 function fmtChange(n) {
   const v = Number(n);
@@ -271,6 +272,12 @@ export function TribunalCase() {
               : `Closed ${timeAgo(c.closed_at)}.${c.overruled ? ' The chair overruled the vote.' : ''}`}
           </span>
           {c.chair_ruling && <div className="court-card card pad"><strong>Chair's ruling:</strong> {c.chair_ruling}</div>}
+          {!open && c.verdict && (
+            <SharePicture label="🖼️ Share the verdict" kind="verdict"
+              data={{ accused: playerName(accused), verdict: c.verdict, oldHcp: c.old_handicap != null ? Number(c.old_handicap) : null, newHcp: c.new_handicap != null ? Number(c.new_handicap) : null,
+                votes: `${c.guilty_votes ?? 0}–${c.not_guilty_votes ?? 0}`, overruled: c.overruled }}
+              text={`⚖️ The Handicap Tribunal: ${playerName(accused)} — ${c.verdict === 'upheld' ? 'GUILTY' : 'NOT GUILTY'}`} />
+          )}
           {open && status.is_admin && <button type="button" className="btn ghost" onClick={() => setChairOpen(true)}>{Icon.gavel(18)}<span>Chair: close the case</span></button>}
         </div>
       </div>

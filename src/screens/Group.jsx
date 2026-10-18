@@ -29,6 +29,7 @@ export default function Group() {
         {status.is_admin && <FeaturesCard />}
         {status.is_admin && status.legacy && <AdminPinCard />}
         <JoinAnother />
+        <YourData />
         {!status.is_admin && <div className="small muted">You’re a {ROLE_LABEL[status.role] || 'member'} here — {ROLE_HELP[status.role] || ''} Ask an organiser for an invite link to bring someone in.</div>}
       </div>
     </div>
@@ -321,6 +322,99 @@ export function LookCard({ onSaved, hideName = false } = {}) {
         </select>
       </label>
       <button type="button" className="btn gold block" disabled={busy || problems.length > 0 || v.name.trim().length < 2} onClick={save}>{onSaved ? 'Save and carry on' : 'Save the look'}</button>
+    </div>
+  );
+}
+
+const NOT_YET = /PGRST202|Could not find the function/i;
+const notYet = (e) => NOT_YET.test(`${e?.code} ${e?.message}`);
+
+/** Stage 9: your data — the privacy and terms drafts, leaving, deleting your account; organisers download or delete
+ * the group. (Leaving and deleting need 041b on the database; until then they say "coming soon".) */
+function YourData() {
+  const { status, refresh } = useSession();
+  const [busy, run] = useRun();
+  const [removeName, setRemoveName] = useState(false);
+  const [asking, setAsking] = useState(null);
+  const [typed, setTyped] = useState('');
+  const download = () => run(async () => {
+    const { data, error } = await supabase.rpc('export_group');
+    if (error) throw error;
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${(status.group_name || 'group').replace(/[^A-Za-z0-9]+/g, '-')}-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }, 'Downloaded');
+  const leave = () => run(async () => {
+    const { error } = await supabase.rpc('leave_group');
+    if (error) throw notYet(error) ? new Error('Coming soon — Josh is switching this on.') : error;
+    setCurrentGroup(null);
+    await refresh?.();
+    window.location.hash = '#/';
+  }, 'You’ve left the group');
+  const deleteAccount = () => run(async () => {
+    const { error } = await supabase.rpc('delete_my_account', { p_remove_name: removeName });
+    if (error) throw notYet(error) ? new Error('Coming soon — Josh is switching this on.') : error;
+    try { Object.keys(localStorage).filter((k) => k.startsWith('lgc-')).forEach((k) => localStorage.removeItem(k)); } catch { /* fine */ }
+    await supabase.auth.signOut().catch(() => {});
+    window.location.hash = '#/start';
+    window.location.reload();
+  });
+  const deleteGroup = () => run(async () => {
+    const { error } = await supabase.rpc('delete_group', { p_confirm_name: typed });
+    if (error) throw notYet(error) ? new Error('Coming soon — Josh is switching this on.') : error;
+    setCurrentGroup(null);
+    await refresh?.();
+    window.location.hash = '#/';
+  }, 'Group deleted');
+  return (
+    <div className="card pad stack" style={{ gap: 8 }}>
+      <strong>🔒 Your data</strong>
+      <span className="small"><a href="#/privacy">Privacy</a> · <a href="#/terms">Terms</a> <span className="muted">(drafts)</span></span>
+      {status.is_admin && (
+        <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} disabled={busy} onClick={download}>⬇️ Download our group’s data</button>
+      )}
+      {asking == null && (
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          {!status.legacy && <button type="button" className="btn ghost sm" disabled={busy} onClick={() => setAsking('leave')}>Leave this group</button>}
+          <button type="button" className="btn ghost sm" disabled={busy} onClick={() => setAsking('account')}>Delete my account</button>
+          {status.is_admin && !status.legacy && <button type="button" className="btn ghost sm" disabled={busy} onClick={() => { setTyped(''); setAsking('group'); }}>Delete this group</button>}
+        </div>
+      )}
+      {asking === 'leave' && (
+        <div className="stack" style={{ gap: 6 }}>
+          <span className="small">Leave {status.group_name}? Your scores stay in the group’s history; your location and notifications for this group are removed. You’d need a new invite to come back.</span>
+          <div className="row" style={{ gap: 8 }}>
+            <button type="button" className="btn sm" disabled={busy} onClick={leave}>Leave</button>
+            <button type="button" className="btn ghost sm" onClick={() => setAsking(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
+      {asking === 'account' && (
+        <div className="stack" style={{ gap: 6 }}>
+          <span className="small">Delete your account? You’ll leave every group you’re in and your sign-in is removed. Your scores stay in each group’s history.</span>
+          <label className="row small" style={{ gap: 8 }}>
+            <input type="checkbox" checked={removeName} onChange={(e) => setRemoveName(e.target.checked)} style={{ width: 22, height: 22, flex: 'none' }} />
+            Also take my name and selfie off the history (shown as “Former player”)
+          </label>
+          <div className="row" style={{ gap: 8 }}>
+            <button type="button" className="btn sm" disabled={busy} onClick={deleteAccount}>Delete my account</button>
+            <button type="button" className="btn ghost sm" onClick={() => setAsking(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
+      {asking === 'group' && (
+        <div className="stack" style={{ gap: 6 }}>
+          <span className="small">Delete {status.group_name} for everyone? Every score, trip, plan, photo link and chat in it goes, and it can’t be undone. Download the group’s data first if you want a copy.</span>
+          <label className="field"><span>Type the group’s name to delete it</span><input className="input" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={status.group_name} /></label>
+          <div className="row" style={{ gap: 8 }}>
+            <button type="button" className="btn sm" disabled={busy || typed.trim().toLowerCase() !== String(status.group_name || '').trim().toLowerCase()} onClick={deleteGroup}>Delete the group</button>
+            <button type="button" className="btn ghost sm" onClick={() => setAsking(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

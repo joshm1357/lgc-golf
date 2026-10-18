@@ -159,6 +159,7 @@ function Course({ slug }) {
             {course.verified && <span className="small muted">✓ Hole data checked by the club.</span>}
             {course.osm && <span className="small muted">Course details © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors.</span>}
             <a href="#/start" className="small" style={{ fontWeight: 700, textAlign: 'center' }}>Run a golf group? Start your own →</a>
+            <span className="small muted" style={{ textAlign: 'center' }}><a href="#/privacy">Privacy</a> · <a href="#/terms">Terms</a></span>
             {!course.club && <a href="#/club" className="small muted" style={{ textAlign: 'center' }}>Work at this club? Claim this page</a>}
           </>
         ) : <QuickStart course={course} onCancel={() => setStarting(false)} />}
@@ -184,6 +185,7 @@ function ListedOnly({ course }) {
         )}
         {course.osm && <span className="small muted">Course details © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors.</span>}
         <a href="#/start" className="small" style={{ fontWeight: 700, textAlign: 'center' }}>Run a golf group? Start your own →</a>
+            <span className="small muted" style={{ textAlign: 'center' }}><a href="#/privacy">Privacy</a> · <a href="#/terms">Terms</a></span>
         {!course.club && <a href="#/club" className="small muted" style={{ textAlign: 'center' }}>Work at this club? Claim this page and add your hole data</a>}
       </div>
     </>

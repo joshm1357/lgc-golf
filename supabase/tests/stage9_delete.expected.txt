@@ -1,0 +1,6 @@
+Quinn left = 0 memberships / location 0 / name kept Quinn Quitter
+only organiser leaves = refused
+Pete deleted = 0 sign-ins / name Former player / pay gone / his score kept 1
+delete with the wrong name = refused
+group deleted = 0 groups / 0 players / 0 scores
+L.G.C still there = 1

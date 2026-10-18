@@ -291,8 +291,9 @@ and fresh-user limit holes; guests taking unclaimed names; New link failures; gu
 confirms; two organisers demoting each other; sign-in traps (silent link failure, empty new Google accounts, email
 links opening Safari). Left as notes: invite codes stored plainly (server-only table); duplicate display names allowed.
 
-**Josh's paste list for staging (approvals time out from here):** `020`, `021`, `027b_remove_member.sql`, `033b_remove_history_handicap.sql` (after 033c), and
-`drop function public.tmp_echo_headers();` (a test helper, already emptied and locked).
+**Josh's paste list for staging (approvals time out from here):** `020`, `021`, `027b_remove_member.sql`, `033b_remove_history_handicap.sql` (after 033c),
+`drop function public.tmp_echo_headers();` (a test helper, already emptied and locked), and (Stage 9)
+`041b_delete_my_data.sql` then run `supabase/tests/stage9_delete.sql` (it rolls back; compare with its .expected.txt).
 
 ## v2.0 Stage 3 — Feature switches (branch `stage-3-features`, on staging only)
 
@@ -656,6 +657,53 @@ opted in stay off, first names only with no surname or ids, counts carry no name
 only the club sees its counts, upload rules, hole data keeps greens, checked courses can't be moved, removing a club
 unclaims); phone width `tests/e2e/club-test.mjs` 35 checks (claim, approve, club edits, partner card, counts, the kit has every par 3, a scan counted once, par 3 sign to
 closest-to-pin, the TV tick only when the switch is on, the TV page on a phone and a big screen). All other phone tests pass.
+
+## v2.1 Stage 9 — Launch basics (branch `stage-9-launch`, on staging only)
+
+**Built**
+- **Privacy and Terms — DRAFTS** at `#/privacy` and `#/terms` (linked from Start, the join screen, course pages and
+  Group & invites → Your data). Written from what the app actually stores: sign-in, profiles and payment details,
+  scores and side comps (with where they were measured), photos (public-if-you-have-the-link), location (only when
+  shared, latest position only), notifications (pass through Apple/Google/Mozilla), planner, clubs (counts only; TV
+  only when ticked), scan counting, internet addresses (scrambled; wrong PINs kept 30 days), app problem reports,
+  other services (Supabase, hosting, Google Fonts, Esri maps, OpenStreetMap, Google/Facebook sign-in, Claude connector
+  when on), what's on the phone, deleting. **[Brackets] for Josh:** your name/business and contact email, server
+  location, hosting, photo clean-up timing, minimum age (16 or 18), state for the law, notice period, dates.
+- **Your data** (Group & invites): organisers **download the group's data** (a file with everything except sign-ins,
+  invite codes, locations and notification settings — needs a proper sign-in). **Leave this group**, **Delete my
+  account** (optionally "take my name and selfie off the history" → "Former player"), and **Delete this group** (type
+  its name; not L.G.C) are built, but say "Coming soon" until Josh applies `041b` (it removes rows — the build tools
+  can't). The only organiser of a group with others in it is asked to hand over first.
+- **App problems, without a new dependency:** instead of an outside error service, the app reports its own crashes to
+  our database (message, where in the code, the screen without anything after '?' and never an invite code, version,
+  phone type — no names; at most 10 per visit, 30 an hour per address). Josh sees them grouped at **Josh's screen →
+  App problems**. *Question for Josh:* happy with this, or do you still want an outside service (e.g. Sentry's free
+  plan — it would be a new dependency, so it's your call)?
+- **Share pictures:** "🖼️ Winner picture" and "🖼️ Leaderboard picture" on a finished round, "Share as a picture" on a
+  quick round's results, "🖼️ Share the verdict" on a closed Tribunal case. Drawn on the phone in the group's colours
+  with "Made with The Golf Trip"; the share sheet adds a "start your own" link (counted as coming from this group).
+- **Josh's screen** (`#/club/josh`, platform admins only): **Numbers** — groups (all, new, quick, proper, came back,
+  planned a trip, started from another group's card), trips run and players scoring, and the **scan funnel** by club
+  and placement (scans → groups started → played → came back or planned); **App problems**; **Stay cards** — type a
+  place (e.g. a motel), get a printable card (draft until the real address) pointing at Start or at a course page;
+  scans and groups from it are counted. No club account needed.
+- **Not done here (STOPs for Josh):** moving to Vercel + `thegolftrip.club` (with a web address and home-screen icon per
+  group), Supabase Pro, the photo clean-up job (removes files of deleted groups/selfies — needs deleting, so after 041b).
+
+**Tested:** `supabase/tests/stage9_launch.sql` 11 checks (only Josh issues stay cards and sees numbers/problems, stay
+card refs, a stay scan counted in the funnel, nobody can read problem reports, page addresses kept without '?…' or
+invite codes, export leaves out sign-ins/locations/invites, phone-only organisers and players can't export);
+`stage9_delete.sql` written for 041b (Josh runs it); unit tests (problem filter, share-card content); phone width
+`tests/e2e/stage9-test.mjs` 23 checks. All 12 phone tests pass.
+
+**For Josh — launch steps (all STOPs, nothing done):**
+1. **Domain:** buy `thegolftrip.club` (was free on 18 Oct).
+2. **Vercel:** make an account (the free Hobby plan is for non-commercial use — Pro is US$20/month if this earns money
+   later), import the GitHub repo, point the domain at it including `*.thegolftrip.club` (needs Vercel's name servers
+   for the wildcard). Then I set up a web address and home-screen icon per group, and the L.G.C redirect.
+3. **Supabase:** add the new address to Auth → URL configuration (site URL + redirect URLs); Google sign-in: add it to
+   the authorised origins. Switch on **Pro** (US$25/month) before the first outside group.
+4. Make the repo private once the move is done.
 
 ## Known limits
 - GPS distances are approximate (±5–10 m) and straight-line; closest-to-pin distance is typed in.

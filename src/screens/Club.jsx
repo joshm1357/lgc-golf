@@ -359,7 +359,12 @@ function QrCard({ link, title, line, small }) {
 function Kit({ club }) {
   const [pages, setPages] = useState([]);
   const [tvKey, setTvKey] = useState(null);
+  const [busy, run] = useRun();
   useEffect(() => { supabase.rpc('my_club_tv_key').then(({ data }) => setTvKey(data || null)); }, []);
+  const newKey = () => {
+    if (!window.confirm('Get a new TV key? The TV will need the new link — the old one stops working.')) return;
+    run(async () => setTvKey(await must(supabase.rpc('new_club_tv_key'))), 'New TV key — open the new link on the TV');
+  };
   useEffect(() => {
     Promise.all(club.courses.map((c) => supabase.rpc('course_page', { p_slug: c.slug }).then(({ data }) => data))).then((r) => setPages(r.filter(Boolean)));
   }, [club.courses]);
@@ -394,10 +399,11 @@ function Kit({ club }) {
                 ))}
               </div>
             </div>
-            <div className="kit-sheet stack" style={{ gap: 12 }}>
-              <strong className="no-print">Clubhouse TV</strong>
+            <div className="no-print stack" style={{ gap: 12 }}>
+              <strong>Clubhouse TV (for staff — not printed)</strong>
               {tvKey && <QrCard link={`${base}#/tv/${c.slug}?k=${tvKey}&ref=${club.ref}`} title="On the clubhouse TV" line={`Open this on the TV’s browser: ${base}#/tv/${c.slug}?k=${tvKey}`} />}
-              <span className="no-print small muted">Keep the TV link to the club — it has your club’s key in it. Groups only show up if they tick “Show on the clubhouse TV”.</span>
+              <span className="small muted">Keep this link to the club — it has your club’s key in it, so don’t pin it up. Groups only show up if they tick “Show on the clubhouse TV”. If the link gets out, get a new key: the old link stops working.</span>
+              <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} disabled={busy} onClick={newKey}>🔑 New TV key</button>
             </div>
           </React.Fragment>
         ))}

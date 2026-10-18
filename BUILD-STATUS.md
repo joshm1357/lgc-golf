@@ -615,6 +615,9 @@ time next year); phone width `tests/e2e/quick-test.mjs` 21 checks. All other pho
 - A par 3 sign only jumps to today's live round in the group you're using.
 - Checked courses can't be moved or have their area changed by a group; if a club is removed (or Josh unclaims — new
   "Unclaim this course" button on the claims screen) the course goes back to unclaimed and unchecked.
+- Re-check (039c): one internet address can count at most 60 phones a day; the split of groups by code placement only
+  shows from 10 groups; the TV card isn't printed (staff keep the link) and a club can get a **new TV key**; AVIF
+  pictures are allowed.
 - Left as is (low): logos and crests are checked to be on a Supabase storage address, not ours specifically — revisit
   when the app moves to thegolftrip.club (the object must exist in our bucket, so the risk is small).
 

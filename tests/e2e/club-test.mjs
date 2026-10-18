@@ -110,6 +110,7 @@ async function fakeSupabase(route) {
     if (name === 'club_stats') return json(STATS);
     if (name === 'tv_board') return json(JSON.parse(req.postData() || '{}').p_key === 'tvkey123' ? TV.v : null);
     if (name === 'my_club_tv_key') return json('tvkey123');
+    if (name === 'new_club_tv_key') return json('tvkey456');
     return json(null); }
   if (url.pathname.startsWith('/rest/v1/')) {
     const table = url.pathname.split('/')[3];
@@ -262,6 +263,9 @@ await page.getByAltText('QR code: Hole 12').waitFor({ timeout: 10000 });
 const alts = await page.locator('img[alt^="QR code"]').evaluateAll((els) => els.map((e) => e.alt));
 check(alts.includes('QR code: Live scores for your group') && alts.includes('QR code: Bringing a group?') && alts.includes('QR code: On the clubhouse TV'), 'kit has cart, counter and TV codes');
 check(await page.getByText(/#\/tv\/bowral-golf-club\?k=tvkey123/).isVisible(), 'the TV link carries the club’s key');
+await page.getByRole('button', { name: '🔑 New TV key' }).click();
+await page.waitForTimeout(600);
+check(rpc('new_club_tv_key').length === 1, 'the club can get a new TV key');
 check(alts.filter((a) => /Hole \d+/.test(a)).join(',') === 'QR code: Hole 3,QR code: Hole 12', 'kit has a sign for each par 3 (holes 3 and 12)');
 await page.screenshot({ path: `${SHOTS}/k7-kit.png`, fullPage: true });
 await noScroll('QR kit');

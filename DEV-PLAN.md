@@ -69,7 +69,7 @@ DRAFT privacy policy and terms, delete-my-data, error alerts (ask first), share 
 **Added by the club-partners addendum** (order agreed: Stage 8 shared courses → 7b → 8b, because the quick round needs
 the public course page and shared courses)
 - **Stage 3 addition:** feature switch "Clubhouse TV leaderboard" (new group default off; the group also opts in per round).
-- **7b. Quick round:** public course page `/c/<course>` (no sign-in) with "Start a round with your mates"; a quick
+- **7b. Quick round** (✅ on staging, review next — stroke play waits for its STOP): public course page `/c/<course>` (no sign-in) with "Start a round with your mates"; a quick
   group ("Josh's round at <course>") with a one-day trip and one round, guest sign-in only — under 2 minutes from scan
   to first score; invite via the phone's share sheet, mates join with just a name as guests; format picker
   (Stableford, Ambrose, **stroke play** — new format: STOP for the check-constraint change), closest-to-pin pre-filled

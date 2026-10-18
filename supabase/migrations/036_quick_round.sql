@@ -21,7 +21,7 @@ returns json language sql stable security definer set search_path = '' as $$
   select json_build_object('id', l.id, 'slug', l.slug, 'name', l.name, 'area', l.area, 'lat', l.lat, 'lng', l.lng, 'osm', l.osm,
            'holes', (select json_agg(json_strip_nulls(json_build_object('n', h -> 'n', 'par', h -> 'par', 'si', h -> 'si', 'green', h -> 'green', 'tee', h -> 'tee', 'osm', h -> 'osm')) order by (h ->> 'n')::int)
                      from jsonb_array_elements(l.holes) h))
-  from public.course_library l where l.slug = lower(btrim(p_slug));
+  from public.course_library l where l.slug = lower(btrim(p_slug)) and not l.hidden;
 $$;
 revoke all on function public.course_page(text) from public;
 grant execute on function public.course_page(text) to anon, authenticated;
@@ -48,7 +48,7 @@ begin
   if length(v_me) not between 1 and 30 then raise exception 'Your name needs 1–30 characters'; end if;
   if p_handicap is null or p_handicap < -10 or p_handicap > 54 then raise exception 'A handicap is from −10 to 54'; end if;
   if p_format not in ('stableford', 'ambrose') then raise exception 'Pick Stableford or Ambrose'; end if;
-  select * into l from public.course_library where slug = lower(btrim(p_slug));
+  select * into l from public.course_library where slug = lower(btrim(p_slug)) and not hidden;
   if l.id is null then raise exception 'That course isn''t in the library'; end if;
   perform pg_advisory_xact_lock(hashtext('create_group:' || v_uid::text));
   -- Limits: 5 quick rounds a day per person; phone-only starters share 60 an hour (a busy Saturday across clubs).

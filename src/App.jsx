@@ -31,6 +31,8 @@ const GreenMapper = lazyScreen(() => import('./screens/GreenMapper.jsx'));
 const Group = lazyScreen(() => import('./screens/Group.jsx'));
 const History = lazyScreen(() => import('./screens/History.jsx'));
 const Start = lazyScreen(() => import('./screens/Start.jsx'));
+const CoursePage = lazyScreen(() => import('./screens/CoursePage.jsx'));
+const RoundReady = lazyScreen(() => import('./screens/QuickRound.jsx'), 'RoundReady');
 
 // A fresh plan screen per plan, so nothing carries over when a notification jumps to another one.
 function PlanDetailRoute() {
@@ -66,6 +68,14 @@ function Gate() {
   const [problem] = useState(() => signInProblemFromUrl());
   // The public start page and the start-a-group wizard work whether or not you're in a group yet.
   if (loc.pathname === '/start' || loc.pathname.startsWith('/start/')) return <LazyArea resetKey="start" fallback={<Loading />}><Start /></LazyArea>;
+  // The public course page (and the quick round from it): no sign-in needed to look.
+  if (loc.pathname === '/c' || loc.pathname.startsWith('/c/')) {
+    return (
+      <LazyArea resetKey="course" fallback={<Loading />}>
+        <Routes><Route path="/c/:slug" element={<CoursePage />} /><Route path="*" element={<CoursePage />} /></Routes>
+      </LazyArea>
+    );
+  }
   if (loading) return <Loading />;
   const banner = problem && <div className="err" role="alert" style={{ margin: 0, borderRadius: 0 }}>{problem}</div>;
   if (!status?.is_member) return <>{banner}<Join /></>;
@@ -125,6 +135,7 @@ function Inside() {
         <Route path="/courses/:courseId/greens" element={<GreenMapper />} />
         <Route path="/group" element={<Group />} />
         <Route path="/history" element={<History />} />
+        <Route path="/round-ready" element={<RoundReady />} />
         <Route path="/join/:code" element={<JoinInsideRoute />} />
         <Route path="*" element={<Leaderboard />} />
       </Routes>

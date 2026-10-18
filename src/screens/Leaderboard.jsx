@@ -5,6 +5,7 @@ import { roundBoard, headlines, compBonuses } from '../lib/board.js';
 import { formatToPar, strokesReceived, stablefordPoints } from '../lib/scoring.js';
 import { Header, Seg, AvatarStack, Icon, Sheet, Loading } from '../components/ui.jsx';
 import { TrophyArt } from '../components/TrophyArt.jsx';
+import { QuickRoundDone } from './QuickRound.jsx';
 import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
 
 const DrawSetup = lazyScreen(() => import('../components/DrawSetup.jsx'), 'default', { inline: true });
@@ -127,6 +128,8 @@ export default function Leaderboard() {
           <AvatarStack players={winner.players} size={30} />
         </div>
       )}
+
+      {status?.quick && <QuickRoundDone round={round} board={board} course={course} />}
 
       {sideCompsOn && round.status === 'live' && ((round.ctp_holes || []).length > 0 || (round.ld_holes || []).length > 0) && (
         <div className="section">

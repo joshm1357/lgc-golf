@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { roundSettingsFromRules } from '../lib/plan.js';
-import { honourSort } from '../lib/history.js';
+import { honourOrder } from '../lib/history.js';
 import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useSession, playerName, useFeature } from '../lib/store.jsx';
 import { Header, Avatar, Loading, toast } from '../components/ui.jsx';
@@ -67,7 +67,7 @@ export default function Admin() {
         <PlayersAdmin />
         <RoundsAdmin />
         {trophiesOn && <TrophiesAdmin />}
-        {trophiesOn && <HonourAdmin />}
+        {trophiesOn ? <HonourAdmin /> : <Link to="/history" className="btn ghost block">Add past handicaps (from before the app) →</Link>}
         <PinsAdmin />
         <VotesAdmin />
       </div>
@@ -512,7 +512,7 @@ function HonourAdmin() {
   const data = useData();
   const { status } = useSession();
   const [f, setF] = useState({ trophy_name: status?.legacy ? 'BD' : '', label: '', winner_names: '' });
-  const list = [...data.honour_board].sort(honourSort);
+  const list = honourOrder(data.honour_board);
   return (
     <Section title={`6. Honour board (${list.length})`}>
       <Link to="/history" className="btn ghost block">Add past winners and handicaps (paste a list) →</Link>

@@ -168,6 +168,8 @@ await page.locator('select').first().selectOption('__each_line__');
 await typeInto('Paste past winners', '2019, The Cup, Josh M & Mike Morris\n2018, The Cup, Adam H\njust words');
 check(await page.getByText(/^Line 3:/).isVisible(), 'a line it can’t read is pointed out');
 check(await page.getByRole('button', { name: /Add 2 winners/ }).isDisabled(), 'can’t add while a line is wrong');
+await typeInto('Paste past winners', 'Hunter, The Cup, Adam H');
+check(await page.getByText(/put the year first/).isVisible(), 'a winner with no year is refused (it couldn’t be put in order)');
 await typeInto('Paste past winners', '2019, The Cup, Josh M & Mike Morris\n2018, The Cup, Adam H');
 check(await page.getByText('2 matched to players').isVisible(), 'winners matched to players in the preview');
 writes.length = 0;

@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase.js';
 import { useData, useSession, useFeature } from '../lib/store.jsx';
 import { useRun, must } from '../lib/run.js';
 import { Header, Seg, toast } from '../components/ui.jsx';
-import { parseHonours, parseHandicaps, honourSort, matchPlayers, matchTrip, parseDate } from '../lib/history.js';
+import { parseHonours, parseHandicaps, honourOrder, matchPlayers, matchTrip, parseDate, yearOf, readHandicap, localToday, sameHonour } from '../lib/history.js';
 
 const EACH_LINE = '__each_line__';
 
@@ -51,17 +51,21 @@ function Winners() {
   const [one, setOne] = useState({ label: '', winners: '' });
   const trophyName = trophy === EACH_LINE ? null : trophy === '__new__' ? newName.trim() : trophy;
   const ctx = { players: data.players, trips: data.trips };
-  const parsed = useMemo(() => parseHonours(text, { trophy: trophyName, ...ctx }), [text, trophyName, data.players, data.trips]); // eslint-disable-line react-hooks/exhaustive-deps
+  const parsed = useMemo(() => parseHonours(text, { trophy: trophyName, ...ctx, board: data.honour_board }), [text, trophyName, data.players, data.trips, data.honour_board]); // eslint-disable-line react-hooks/exhaustive-deps
+  const fresh = parsed.rows.filter((r) => !r.already);
   const tripName = (id) => data.trips.find((t) => t.id === id)?.name;
 
   const save = (rows, after) => run(async () => {
-    const n = await must(supabase.rpc('import_honours', { p_rows: rows }));
+    const clean = rows.map(({ label, trophy: t, winners, player_ids, trip_id }) => ({ label, trophy: t, winners, player_ids, trip_id }));
+    const n = await must(supabase.rpc('import_honours', { p_rows: clean }));
     after();
     await data.reload();
-    toast(`${n} added to the honour board`);
+    toast(n < rows.length ? `${n} added — ${rows.length - n} were already on the board` : `${n} added to the honour board`);
   });
   const addOne = () => {
     if (!trophyName) { toast('Pick or type the trophy first'); return; }
+    if (!yearOf(one.label)) { toast('Put the year in, e.g. 2019 or “Hunter 2019”'); return; }
+    if (data.honour_board.some((h) => sameHonour({ trophy: trophyName, label: one.label, winners: one.winners }, h))) { toast('That one’s already on the board'); return; }
     save([{ label: one.label.trim(), trophy: trophyName, winners: one.winners.trim(), player_ids: matchPlayers(one.winners, data.players), trip_id: matchTrip(one.label, data.trips) }],
       () => setOne({ label: '', winners: '' }));
   };
@@ -92,16 +96,17 @@ function Winners() {
 
         <div className="stack" style={{ gap: 6 }}>
           <span className="label">Or paste a list</span>
-          <span className="small muted">One per line — {trophyName ? 'year, winner(s)' : 'year, trophy, winner(s)'}. Straight from a spreadsheet works too.</span>
+          <span className="small muted">One per line — {trophyName ? 'year, winner(s)' : 'year, trophy, winner(s)'}. Put &amp; between two winners. Straight from a spreadsheet works too.</span>
           <textarea className="input" rows={6} value={text} onChange={(e) => setText(e.target.value)} aria-label="Paste past winners"
             placeholder={trophyName ? '2019, Josh & Mike\n2018, Sam' : '2019, The Cup, Josh & Mike\n2019, Wooden Spoon, Sam'} style={{ fontFamily: 'inherit', resize: 'vertical' }} />
           <Preview parsed={parsed} render={(r) => (
             <><strong>{r.label}</strong> · {r.trophy} — {r.winners}
-              <span className="muted">{r.player_ids.length ? ` · ${r.player_ids.length} matched to players` : ''}{r.trip_id ? ` · ${tripName(r.trip_id)}` : ''}</span></>
+              <span className="muted">{r.player_ids.length ? ` · ${r.player_ids.length} matched to players` : ''}{r.unmatched > 0 ? ` · ${r.unmatched} name${r.unmatched === 1 ? '' : 's'} not matched to a player` : ''}{r.trip_id ? ` · ${tripName(r.trip_id)}` : ''}</span>
+              {r.already && <strong className="muted"> · already on the board (skipped)</strong>}</>
           )} />
-          <button type="button" className="btn gold block" disabled={busy || !parsed.rows.length || parsed.problems.length > 0}
-            onClick={() => save(parsed.rows, () => setText(''))}>
-            {parsed.rows.length ? `Add ${parsed.rows.length} winner${parsed.rows.length === 1 ? '' : 's'}` : 'Add to the honour board'}
+          <button type="button" className="btn gold block" disabled={busy || !fresh.length || parsed.problems.length > 0}
+            onClick={() => save(fresh, () => setText(''))}>
+            {fresh.length ? `Add ${fresh.length} winner${fresh.length === 1 ? '' : 's'}` : parsed.rows.length ? 'All already on the board' : 'Add to the honour board'}
           </button>
         </div>
       </div>
@@ -127,7 +132,7 @@ function HonourList() {
   const [busy, run] = useRun();
   const byTrophy = useMemo(() => {
     const m = new Map();
-    for (const h of [...data.honour_board].sort(honourSort)) {
+    for (const h of honourOrder(data.honour_board)) {
       const k = h.trophy_name;
       if (!m.has(k)) m.set(k, []);
       m.get(k).push(h);
@@ -167,7 +172,10 @@ function Handicaps() {
   const players = useMemo(() => data.players.filter((p) => p.approved !== false).sort((a, b) => a.name.localeCompare(b.name)), [data.players]);
   const [one, setOne] = useState({ player_id: '', date: '', handicap: '' });
   const [list, setList] = useState(null);
-  const parsed = useMemo(() => parseHandicaps(text, { players }), [text, players]);
+  const parsed = useMemo(() => parseHandicaps(text, {
+    players, existing: (list || []).map((h) => ({ player_id: h.player_id, date: h.created_at.slice(0, 10), handicap: Number(h.new_handicap) })),
+  }), [text, players, list]);
+  const freshH = parsed.rows.filter((r) => !r.already);
 
   const load = async () => {
     const { data: rows, error } = await supabase.from('handicap_history').select('id, player_id, new_handicap, created_at').eq('imported', true).order('created_at', { ascending: false });
@@ -182,6 +190,7 @@ function Handicaps() {
     toast(`${n} handicap${n === 1 ? '' : 's'} added to history`);
   });
   const oneDate = parseDate(one.date) || (/^\d{4}-\d{2}-\d{2}$/.test(one.date) ? one.date : null);
+  const oneHcp = readHandicap(one.handicap);
   const remove = (h) => {
     if (!window.confirm('Remove this handicap from the history?')) return;
     run(async () => {
@@ -205,11 +214,12 @@ function Handicaps() {
             {players.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
           <div className="row" style={{ gap: 8 }}>
-            <input className="input grow" style={{ minWidth: 0 }} type="date" value={one.date} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setOne({ ...one, date: e.target.value })} aria-label="Date" />
+            <input className="input grow" style={{ minWidth: 0 }} type="date" value={one.date} max={localToday()} onChange={(e) => setOne({ ...one, date: e.target.value })} aria-label="Date" />
             <input className="input" style={{ width: 96, flex: 'none' }} inputMode="decimal" value={one.handicap} onChange={(e) => setOne({ ...one, handicap: e.target.value })} placeholder="Hcp" aria-label="Handicap" />
           </div>
-          <button type="button" className="btn" disabled={busy || !one.player_id || !oneDate || one.handicap.trim() === '' || Number.isNaN(Number(one.handicap))}
-            onClick={() => save([{ player_id: one.player_id, date: oneDate, handicap: Number(one.handicap) }], () => setOne({ ...one, date: '', handicap: '' }))}>Add</button>
+          <button type="button" className="btn" disabled={busy || !one.player_id || !oneDate || oneDate > localToday() || oneHcp == null}
+            onClick={() => save([{ player_id: one.player_id, date: oneDate, handicap: oneHcp }], () => setOne({ ...one, date: '', handicap: '' }))}>Add</button>
+          {one.handicap.trim() !== '' && oneHcp == null && <span className="small err" style={{ margin: 0 }}>A handicap is a number from −10 to 54 (write a plus handicap as +2).</span>}
         </div>
 
         <div className="stack" style={{ gap: 6 }}>
@@ -217,10 +227,10 @@ function Handicaps() {
           <span className="small muted">One per line — player, date, handicap (e.g. “Josh M, 1/6/2023, 14.2”; a year on its own is fine). Names must match the players in the group.</span>
           <textarea className="input" rows={6} value={text} onChange={(e) => setText(e.target.value)} aria-label="Paste past handicaps"
             placeholder={'Josh M, 1/6/2023, 14.2\nJosh M, 2022, 16'} style={{ fontFamily: 'inherit', resize: 'vertical' }} />
-          <Preview parsed={parsed} render={(r) => <><strong>{r.name}</strong> · {new Date(r.date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })} · {r.handicap}</>} />
-          <button type="button" className="btn gold block" disabled={busy || !parsed.rows.length || parsed.problems.length > 0}
-            onClick={() => save(parsed.rows, () => setText(''))}>
-            {parsed.rows.length ? `Add ${parsed.rows.length} handicap${parsed.rows.length === 1 ? '' : 's'}` : 'Add to history'}
+          <Preview parsed={parsed} render={(r) => <><strong>{r.name}</strong> · {new Date(r.date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })} · {r.handicap < 0 ? `+${-r.handicap}` : r.handicap}{r.already && <strong className="muted"> · already added (skipped)</strong>}</>} />
+          <button type="button" className="btn gold block" disabled={busy || !freshH.length || parsed.problems.length > 0}
+            onClick={() => save(freshH, () => setText(''))}>
+            {freshH.length ? `Add ${freshH.length} handicap${freshH.length === 1 ? '' : 's'}` : parsed.rows.length ? 'All already added' : 'Add to history'}
           </button>
         </div>
       </div>
@@ -230,7 +240,7 @@ function Handicaps() {
           <strong>Added as history</strong>
           {list.map((h) => (
             <div key={h.id} className="row between small" style={{ gap: 8 }}>
-              <span><Link to={`/player/${h.player_id}`}>{data.playersById[h.player_id]?.name || 'Player'}</Link> · {Number(h.new_handicap)} · {new Date(h.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+              <span><Link to={`/player/${h.player_id}`}>{data.playersById[h.player_id]?.name || 'Player'}</Link> · {Number(h.new_handicap)} · {new Date(h.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })}</span>
               <button type="button" className="btn ghost sm" disabled={busy} aria-label="Remove" onClick={() => remove(h)}>✕</button>
             </div>
           ))}

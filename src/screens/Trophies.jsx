@@ -6,7 +6,7 @@ import { roundBoard, stablefordTrophyBoard, compBonuses } from '../lib/board.js'
 import { formatToPar } from '../lib/scoring.js';
 import { Seg, Avatar, AvatarStack, Icon, Sheet, toast } from '../components/ui.jsx';
 import { TrophyArt } from '../components/TrophyArt.jsx';
-import { honourSort } from '../lib/history.js';
+import { honourOrder } from '../lib/history.js';
 
 /** The Trophy Room: every trophy in its own lit display case, live standings, and brass plaques. */
 export default function Trophies() {
@@ -47,7 +47,7 @@ export default function Trophies() {
     bonuses: compBonuses(aRound, data.teamsByRound[aRound.id] || [], aSide),
   }) : null), [aRound, data, scores.index, aSide]);
 
-  const plaquesFor = (name) => data.honour_board.filter((h) => h.trophy_name.toLowerCase() === name.toLowerCase()).sort(honourSort);
+  const plaquesFor = (name) => honourOrder(data.honour_board.filter((h) => h.trophy_name.toLowerCase() === name.toLowerCase()));
   const leaderLine = (t) => {
     if (t.type === 'stableford_total' && sBoard?.rows[0]?.total > 0) return `${sBoard.rows[0].name} leads · ${sBoard.rows[0].total} pts`;
     if (t.type === 'ambrose' && aBoard?.rows[0]?.thru > 0) return `${aBoard.rows[0].name} lead · ${formatToPar(aBoard.rows[0].netToPar)}`;
@@ -69,7 +69,7 @@ export default function Trophies() {
         <div className="hdr-sub">{status?.look?.short_name || status?.group_name}{trip ? ` · ${trip.name}` : ''}</div>
       </header>
 
-      {!trophies.length && <div className="empty" style={{ color: '#C9B48A' }}>The cabinet's empty. {status.is_admin && <Link to="/admin" style={{ color: '#EBD496' }}>Add trophies in Admin</Link>}</div>}
+      {!trophies.length && <div className="empty" style={{ color: '#C9B48A' }}>The cabinet's empty. {status.is_admin && <><Link to="/admin" style={{ color: '#EBD496' }}>Add trophies in Admin</Link>, or <Link to="/history" style={{ color: '#EBD496' }}>add past winners from before the app</Link>.</>}</div>}
 
       <div className="cabinet" role="group" aria-label="Trophies">
         {trophies.map((t) => {

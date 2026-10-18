@@ -13,6 +13,12 @@ const NAMES: Record<string, string> = {
   NSW: 'New South Wales', VIC: 'Victoria', QLD: 'Queensland', WA: 'Western Australia', SA: 'South Australia',
   TAS: 'Tasmania', ACT: 'Australian Capital Territory', NT: 'Northern Territory',
 };
+// Rough box around each state (south, west, north, east), for running a big state in slices: ?part=1&of=3.
+const BOX: Record<string, [number, number, number, number]> = {
+  NSW: [-37.6, 140.9, -28.1, 153.7], VIC: [-39.3, 140.9, -33.9, 150.1], QLD: [-29.3, 137.9, -9.0, 153.6],
+  WA: [-35.2, 112.9, -13.6, 129.1], SA: [-38.1, 129.0, -25.9, 141.1], TAS: [-43.8, 143.7, -39.4, 148.6],
+  ACT: [-35.95, 148.7, -35.1, 149.45], NT: [-26.1, 128.9, -10.9, 138.1],
+};
 // The main Overpass server first, then public mirrors if it's busy or refuses.
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://overpass.kumi.systems/api/interpreter',
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter', 'https://overpass.osm.jp/api/interpreter'];
@@ -48,13 +54,24 @@ Deno.serve(async (req) => {
     const state = (new URL(req.url).searchParams.get('state') || '').toUpperCase();
     if (!STATES[state]) return new Response('Pick a state: ' + Object.keys(STATES).join(', '), { status: 400 });
 
+    // A slice of the state (by latitude), if asked for: part 1 is the north.
+    const sp = new URL(req.url).searchParams;
+    const part = Number(sp.get('part')) || 0, of = Number(sp.get('of')) || 0;
+    let box = '', placeBox = '';
+    if (part >= 1 && of >= 2 && part <= of) {
+      const [s0, w0, n0, e0] = BOX[state];
+      const step = (n0 - s0) / of;
+      const north = n0 - step * (part - 1), south = n0 - step * part;
+      box = `(${south.toFixed(3)},${w0},${north.toFixed(3)},${e0})`;
+      placeBox = `(${(south - 0.2).toFixed(3)},${w0},${(north + 0.2).toFixed(3)},${e0})`;
+    }
     const query = (areaSel: string) => `[out:json][timeout:120];
 ${areaSel}->.s;
-(way["leisure"="golf_course"](area.s);relation["leisure"="golf_course"](area.s););
+(way["leisure"="golf_course"](area.s)${box};relation["leisure"="golf_course"](area.s)${box};);
 out center tags;
-way["golf"="hole"](area.s);
+way["golf"="hole"](area.s)${box};
 out tags geom;
-node["place"~"^(city|town|village|suburb)$"]["name"](area.s);
+node["place"~"^(city|town|village|suburb)$"]["name"](area.s)${placeBox};
 out;`;
     const tried: string[] = [];
     const overpass = async (q: string): Promise<El[] | null> => {
@@ -123,6 +140,7 @@ out;`;
     });
 
     const result = await rpc('seed_courses', { p_state: state, p_rows: rows });
+    if (box) result.part = `${part} of ${of}`;
     return new Response(JSON.stringify({ state, found: courses.length, holes_mapped: els.filter((e) => e.tags?.golf === 'hole').length, ...result }),
       { headers: { 'Content-Type': 'application/json' } });
   } catch (e) {

@@ -44,7 +44,8 @@ declare v_g uuid := private.current_group();
 begin
   if not private.is_group_organiser(v_g) then raise exception 'Only an organiser can do that'; end if;
   update public.groups set admin_pin = null where id = v_g;
-  if (select legacy from public.groups where id = v_g) then update public.settings set admin_pin = null where id = 1; end if;
+  -- The old settings row can't be empty: give it an unguessable value nobody knows (nothing reads it for the PIN now).
+  if (select legacy from public.groups where id = v_g) then update public.settings set admin_pin = private.random_code(24) where id = 1; end if;
 end $$;
 revoke all on function public.turn_off_admin_pin() from public, anon;
 grant execute on function public.turn_off_admin_pin() to authenticated;

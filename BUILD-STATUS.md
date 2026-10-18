@@ -280,8 +280,8 @@ domain, or Gmail SMTP for now).
   explained and can sign out.
 
 **Tested (staging)**
-- `supabase/tests/stage2_invites.sql` — see its expected file (links, reset, guessing limit, join, names, roles, guests,
-  feed posts, L.G.C admin PIN off).
+- `supabase/tests/stage2_invites.sql` — 35 checks pass (links, reset, guessing limit, join, names, roles, guests,
+  feed posts, L.G.C admin PIN off). Regression after 027/028: isolation 47/47, Trips 39/39, access 30/30.
 - Phone width (`tests/e2e/stage2-test.mjs`, 19 checks): group screen, QR, new link, roles, switching group, joining by
   link and by pasting it, players see no invite controls, new groups have no admin PIN entry. Trips and v1.5 phone
   checks still pass. 78 unit tests.

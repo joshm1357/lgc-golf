@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { HashRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { SessionProvider, DataProvider, useSession, useData } from './lib/store.jsx';
 import { TabBar, Toaster, Loading, UpdateBanner } from './components/ui.jsx';
@@ -32,6 +32,8 @@ function Inside() {
   const { status } = useSession();
   const data = useData();
   const loc = useLocation();
+  // New screens open at the top, so a tap can't land on a button further down the next page.
+  useEffect(() => { window.scrollTo(0, 0); }, [loc.pathname]);
   if (!data.ready) {
     return data.error ? <div className="empty">Couldn't load: {data.error.message}. Pull down to refresh.</div> : <Loading />;
   }

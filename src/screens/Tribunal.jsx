@@ -117,6 +117,8 @@ function LodgeCase({ onClose, onDone, players }) {
   );
 }
 
+const VOTE_LABEL = { guilty: 'Guilty', not_guilty: 'Not guilty', abstain: 'Abstain' };
+
 export function TribunalCase() {
   const { caseId } = useParams();
   const data = useData();
@@ -127,6 +129,7 @@ export function TribunalCase() {
   const [comment, setComment] = useState('');
   const [defence, setDefence] = useState(null);
   const [chairOpen, setChairOpen] = useState(false);
+  const [pick, setPick] = useState(null); // vote chosen but not yet cast
   if (!cases) return <Loading />;
   if (!c) return <div className="page"><Header court back title="Case not found" /></div>;
 
@@ -239,11 +242,24 @@ export function TribunalCase() {
           {open && !isAccused && (
             <>
               <input className="input" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="One-liner for the court (optional)" />
+              {myVote && <div className="small"><strong>Your vote: {VOTE_LABEL[myVote.vote]}.</strong> <span className="muted">Pick another and confirm to change it.</span></div>}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-                <button type="button" className="btn" style={{ background: 'var(--court)', outline: myVote?.vote === 'guilty' ? '3px solid var(--gold)' : 'none' }} onClick={() => vote('guilty')}>Guilty</button>
-                <button type="button" className="btn ghost" style={{ borderColor: 'var(--court)', outline: myVote?.vote === 'not_guilty' ? '3px solid var(--gold)' : 'none' }} onClick={() => vote('not_guilty')}>Not guilty</button>
-                <button type="button" className="btn ghost" style={{ outline: myVote?.vote === 'abstain' ? '3px solid var(--gold)' : 'none' }} onClick={() => vote('abstain')}>Abstain</button>
+                {['guilty', 'not_guilty', 'abstain'].map((v) => {
+                  const on = (pick || myVote?.vote) === v;
+                  return (
+                    <button key={v} type="button" className="btn ghost" aria-pressed={on}
+                      style={on ? { background: 'var(--court)', color: '#fff', borderColor: 'var(--court)' } : { borderColor: 'var(--court)' }}
+                      onClick={() => setPick(v === myVote?.vote ? null : v)}>
+                      {on ? '✓ ' : ''}{VOTE_LABEL[v]}
+                    </button>
+                  );
+                })}
               </div>
+              {pick && pick !== myVote?.vote && (
+                <button type="button" className="btn gold block" onClick={async () => { await vote(pick); setPick(null); }}>
+                  Cast my vote: {VOTE_LABEL[pick]}
+                </button>
+              )}
             </>
           )}
           {open && isAccused && <span className="small muted">The accused can't vote on their own case.</span>}

@@ -142,6 +142,7 @@ export default function Join() {
             <span className="small" style={{ color: 'var(--on-navy-muted)', textAlign: 'center' }}>Got an invite link? Paste it in the box (or just open it).</span>
           </form>
           {SIGN_IN.length > 0 && <ReturningSignIn />}
+          <a href="#/start" className="small" style={{ color: '#fff', fontWeight: 700, textAlign: 'center', borderTop: '1px solid rgba(255,255,255,.2)', paddingTop: 14, width: '100%', maxWidth: 340 }}>Running a golf group? Start your own →</a>
         </>
       )}
     </div>

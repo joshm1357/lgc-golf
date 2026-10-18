@@ -31,3 +31,21 @@ describe('the database list matches this one', () => {
     expect(rows).toEqual(FEATURES.map((f) => ({ key: f.key, newGroup: f.newGroup, parent: f.parent })));
   });
 });
+
+import { PRESETS } from './features.js';
+describe('presets for a new group', () => {
+  it('every preset sets every feature, and never one that isn’t built yet', () => {
+    for (const p of PRESETS) {
+      expect(Object.keys(p.switches).sort()).toEqual(FEATURES.map((f) => f.key).sort());
+      for (const f of FEATURES.filter((x) => x.soon)) expect(p.switches[f.key]).toBe(false);
+    }
+  });
+  it('no preset turns on a feature whose parent is off', () => {
+    for (const p of PRESETS) for (const f of FEATURES) if (f.parent && p.switches[f.key]) expect(p.switches[f.parent]).toBe(true);
+  });
+  it('just scoring keeps the extras off', () => {
+    const s = PRESETS.find((p) => p.key === 'just_scoring').switches;
+    expect(s.feed || s.tribunal || s.planner || s.trophies).toBe(false);
+    expect(s.gps).toBe(true);
+  });
+});

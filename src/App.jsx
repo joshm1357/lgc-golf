@@ -30,6 +30,7 @@ const Rulebook = lazyScreen(() => import('./screens/Rulebook.jsx'));
 const GreenMapper = lazyScreen(() => import('./screens/GreenMapper.jsx'));
 const Group = lazyScreen(() => import('./screens/Group.jsx'));
 const History = lazyScreen(() => import('./screens/History.jsx'));
+const Start = lazyScreen(() => import('./screens/Start.jsx'));
 
 // A fresh plan screen per plan, so nothing carries over when a notification jumps to another one.
 function PlanDetailRoute() {
@@ -60,8 +61,11 @@ function DrawOverlayIfOn() {
 
 function Gate() {
   const { loading, status } = useSession();
+  const loc = useLocation();
   // Coming back from Google with a problem: it's in the address, not an error — say what happened.
   const [problem] = useState(() => signInProblemFromUrl());
+  // The public start page and the start-a-group wizard work whether or not you're in a group yet.
+  if (loc.pathname === '/start' || loc.pathname.startsWith('/start/')) return <LazyArea resetKey="start" fallback={<Loading />}><Start /></LazyArea>;
   if (loading) return <Loading />;
   const banner = problem && <div className="err" role="alert" style={{ margin: 0, borderRadius: 0 }}>{problem}</div>;
   if (!status?.is_member) return <>{banner}<Join /></>;

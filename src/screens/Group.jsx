@@ -59,7 +59,7 @@ function MyGroups() {
   );
 }
 
-function SignInCard() {
+export function SignInCard() {
   const { status } = useSession();
   const [email, setEmail] = useState('');
   const [busy, run] = useRun();
@@ -81,7 +81,7 @@ function SignInCard() {
   );
 }
 
-function InviteCard({ role }) {
+export function InviteCard({ role }) {
   const [code, setCode] = useState(null);
   const [qr, setQr] = useState(null);
   const [failed, setFailed] = useState(false);
@@ -219,6 +219,7 @@ function JoinAnother() {
         <input className="input grow" value={text} onChange={(e) => setText(e.target.value)} placeholder="https://…/#/join/…" autoCapitalize="none" />
         <button className="btn" disabled={!code}>Open</button>
       </div>
+      <a href="#/start" className="small" style={{ fontWeight: 700 }}>Or start a new group of your own →</a>
     </form>
   );
 }
@@ -266,7 +267,7 @@ function FeaturesCard() {
 }
 
 /** The group's look: name, short name, crest, two colours (checked for readability in the sun) and heading font. */
-function LookCard() {
+export function LookCard({ onSaved, hideName = false } = {}) {
   const { status, refresh } = useSession();
   const start = status.look || (status.legacy === false ? DEFAULT_LOOK : LGC_LOOK);
   const [v, set] = useState(() => ({ name: status.group_name || '', short_name: start.short_name || '', primary: start.primary, accent: start.accent, font: start.font, crest_url: start.crest_url }));
@@ -281,6 +282,7 @@ function LookCard() {
     await must(supabase.rpc('set_group_look', { p_name: v.name, p_short_name: v.short_name || null, p_primary: v.primary, p_accent: v.accent, p_font: v.font, p_crest_url: v.crest_url || null }));
     applyLook({ short_name: v.short_name || null, crest_url: v.crest_url || null, primary: v.primary, accent: v.accent, font: v.font }, v.name);
     await refresh();
+    onSaved?.();
   }, 'Saved — everyone sees the new look');
   return (
     <div className="card pad stack" style={{ gap: 10 }}>
@@ -297,7 +299,7 @@ function LookCard() {
           <span className="small" style={{ marginLeft: 10, padding: '4px 8px', borderRadius: 6, background: preview['--navy'], color: preview['--gold'], fontWeight: 700 }}>2026</span>
         </div>
       </div>
-      <label className="field"><span>Group name</span><input className="input" value={v.name} maxLength={40} onChange={(e) => set({ ...v, name: e.target.value })} /></label>
+      {!hideName && <label className="field"><span>Group name</span><input className="input" value={v.name} maxLength={40} onChange={(e) => set({ ...v, name: e.target.value })} /></label>}
       <label className="field"><span>Short name (on small screens, up to 12)</span><input className="input" value={v.short_name} maxLength={12} onChange={(e) => set({ ...v, short_name: e.target.value })} placeholder="e.g. L.G.C" /></label>
       <div className="stack" style={{ gap: 6 }}>
         <span className="label">Crest</span>
@@ -318,7 +320,7 @@ function LookCard() {
           {Object.entries(FONTS).map(([k, f]) => <option key={k} value={k}>{f.label}</option>)}
         </select>
       </label>
-      <button type="button" className="btn gold block" disabled={busy || problems.length > 0 || v.name.trim().length < 2} onClick={save}>Save the look</button>
+      <button type="button" className="btn gold block" disabled={busy || problems.length > 0 || v.name.trim().length < 2} onClick={save}>{onSaved ? 'Save and carry on' : 'Save the look'}</button>
     </div>
   );
 }

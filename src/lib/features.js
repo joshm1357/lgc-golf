@@ -48,3 +48,30 @@ export function featureOn(key, settings = {}) {
 export function children(key) {
   return FEATURES.filter((f) => f.parent === key).map((f) => f.key);
 }
+
+/**
+ * Presets for a new group (Stage 7 wizard). Each gives every feature an on/off, so the group's choices are written
+ * down from day one. "Custom" starts from "Full trip" and lets the organiser flip each switch.
+ */
+const ALL_OFF = Object.fromEntries(FEATURES.map((f) => [f.key, false]));
+export const PRESETS = [
+  {
+    key: 'just_scoring',
+    name: 'Just scoring',
+    blurb: 'Scores, the leaderboard and GPS distances. Nothing else to learn.',
+    switches: { ...ALL_OFF, gps: true, notifications: true },
+  },
+  {
+    key: 'full_trip',
+    name: 'Full trip',
+    blurb: 'Plus the feed, side comps, trophies, the Tribunal, the draw, the Trips planner and rule votes.',
+    switches: { ...ALL_OFF, ...Object.fromEntries(FEATURES.filter((f) => f.newGroup).map((f) => [f.key, true])), planner_rooms: true },
+  },
+  {
+    key: 'everything',
+    name: 'Everything',
+    blurb: 'Every feature that’s ready, including bonus strokes, the where’s-everyone map and the Claude connector.',
+    switches: Object.fromEntries(FEATURES.map((f) => [f.key, !f.soon])),
+  },
+];
+export const PRESET_BY_KEY = Object.fromEntries(PRESETS.map((p) => [p.key, p]));

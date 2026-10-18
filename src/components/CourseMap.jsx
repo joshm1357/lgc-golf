@@ -76,7 +76,7 @@ export default function CourseMap({ markers = [], fit, className = 'map', zoom, 
   return (
     <div className={className}>
       <MapContainer center={center} zoom={pts.length ? 17 : 10} style={{ height: '100%', width: '100%' }} scrollWheelZoom={false}>
-        <TileLayer key={osm ? 'osm' : 'plain'} url={ESRI} maxZoom={20} maxNativeZoom={19} attribution={osm ? 'Imagery © Esri · Greens © OpenStreetMap contributors' : 'Imagery © Esri'} />
+        <TileLayer key={osm ? 'osm' : 'plain'} url={ESRI} maxZoom={20} maxNativeZoom={19} attribution={osm ? 'Imagery © Esri · Greens © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors' : 'Imagery © Esri'} />
         <FitTo points={pts} zoom={zoom} />
         {onTap && <TapCatcher onTap={onTap} />}
         {lines.map((l) => (

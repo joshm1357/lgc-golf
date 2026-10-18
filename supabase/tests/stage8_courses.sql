@@ -1,4 +1,4 @@
--- Stage 8 test: the shared course library. STAGING only, after 035. Rolled back; results in the error message.
+-- Stage 8 test: the shared course library. STAGING only, after 035 and 035b. Rolled back; results in the error message.
 create temp table t_results (n serial, label text, result text);
 grant all on t_results to authenticated;
 grant all on sequence t_results_n_seq to authenticated;
@@ -13,21 +13,31 @@ insert into auth.users (id, instance_id, aud, role) values
   ('00000000-0000-4000-8000-00000000af01', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated'),
   ('00000000-0000-4000-8000-00000000af02', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated'),
   ('00000000-0000-4000-8000-00000000af11', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated');
+insert into auth.users (id, instance_id, aud, role, is_anonymous) values
+  ('00000000-0000-4000-8000-00000000af03', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', true);
 insert into public.group_members (group_id, user_id, role) values
   ('00000000-0000-4000-8000-00000000af00', '00000000-0000-4000-8000-00000000af01', 'organiser'),
   ('00000000-0000-4000-8000-00000000af00', '00000000-0000-4000-8000-00000000af02', 'player'),
-  ('00000000-0000-4000-8000-00000000af10', '00000000-0000-4000-8000-00000000af11', 'organiser');
+  ('00000000-0000-4000-8000-00000000af10', '00000000-0000-4000-8000-00000000af11', 'organiser'),
+  ('00000000-0000-4000-8000-00000000af00', '00000000-0000-4000-8000-00000000af03', 'organiser');
 insert into public.courses (id, group_id, name, holes) values
   ('00000000-0000-4000-8000-00000000af21', '00000000-0000-4000-8000-00000000af00', 'Zzqx Test Links',
    (select jsonb_agg(jsonb_build_object('n', g, 'par', case when g % 6 = 0 then 3 when g % 5 = 0 then 5 else 4 end, 'si', g,
       'green', jsonb_build_object('lat', -34.48 + g * 0.001, 'lng', 150.42), 'osm', g = 1, 'pin_note', 'private')) from generate_series(1, 18) g)),
   ('00000000-0000-4000-8000-00000000af22', '00000000-0000-4000-8000-00000000af00', 'Broken Course',
-   (select jsonb_agg(jsonb_build_object('n', g, 'par', 4, 'si', g)) from generate_series(1, 17) g));
+   (select jsonb_agg(jsonb_build_object('n', g, 'par', 4, 'si', g)) from generate_series(1, 17) g)),
+  ('00000000-0000-4000-8000-00000000af23', '00000000-0000-4000-8000-00000000af00', 'No Pars Course',
+   (select jsonb_agg(jsonb_build_object('n', g, 'si', g)) from generate_series(1, 18) g)),
+  ('00000000-0000-4000-8000-00000000af24', '00000000-0000-4000-8000-00000000af00', 'Nine Hole Course',
+   (select jsonb_agg(jsonb_build_object('n', g, 'par', 4, 'si', g)) from generate_series(1, 9) g));
 
 set local role authenticated;
 do $$ begin perform set_config('request.headers', '{"x-group-id":"00000000-0000-4000-8000-00000000af00"}', true); end $$;
 
--- A player can't share; the organiser can.
+-- A player can't share; a phone-only organiser can't either; a signed-in organiser can.
+set local request.jwt.claims to '{"sub":"00000000-0000-4000-8000-00000000af03","role":"authenticated"}';
+do $$ begin perform public.share_course('00000000-0000-4000-8000-00000000af21', 'Bowral NSW'); insert into t_results (label, result) values ('phone-only organiser shares', 'ok');
+exception when others then insert into t_results (label, result) values ('phone-only organiser shares', 'refused'); end $$;
 set local request.jwt.claims to '{"sub":"00000000-0000-4000-8000-00000000af02","role":"authenticated"}';
 do $$ begin perform public.share_course('00000000-0000-4000-8000-00000000af21', 'Bowral NSW'); insert into t_results (label, result) values ('player shares', 'ok');
 exception when others then insert into t_results (label, result) values ('player shares', 'refused'); end $$;
@@ -35,6 +45,12 @@ set local request.jwt.claims to '{"sub":"00000000-0000-4000-8000-00000000af01","
 insert into t_ids select 'lib', public.share_course('00000000-0000-4000-8000-00000000af21', 'Bowral NSW');
 do $$ begin perform public.share_course('00000000-0000-4000-8000-00000000af22'); insert into t_results (label, result) values ('share a course with 17 holes', 'ok');
 exception when others then insert into t_results (label, result) values ('share a course with 17 holes', 'refused'); end $$;
+do $$ declare c text; begin
+  foreach c in array array['00000000-0000-4000-8000-00000000af23', '00000000-0000-4000-8000-00000000af24'] loop
+    begin perform public.share_course(c::uuid); insert into t_results (label, result) values ('share with no pars / 9 holes', 'ok');
+    exception when others then insert into t_results (label, result) values ('share with no pars / 9 holes', 'refused'); end;
+  end loop;
+end $$;
 do $$ begin perform 1 from public.course_library; insert into t_results (label, result) values ('read the library table directly', 'ok');
 exception when others then insert into t_results (label, result) values ('read the library table directly', 'refused'); end $$;
 
@@ -49,11 +65,13 @@ insert into t_results (label, result) select 'what the library keeps', (h ? 'pin
 insert into t_ids select 'copy', public.copy_library_course((select id from t_ids where k = 'lib'));
 insert into t_results (label, result) select 'copy is N''s own', (group_id = '00000000-0000-4000-8000-00000000af10')::text || ' / ' || name from public.courses where id = (select id from t_ids where k = 'copy');
 insert into t_results (label, result) values ('copy again gives the same course', (public.copy_library_course((select id from t_ids where k = 'lib')) = (select id from t_ids where k = 'copy'))::text);
-update public.courses set holes = jsonb_set(holes, '{0,par}', '5') where id = (select id from t_ids where k = 'copy');
+update public.courses set holes = jsonb_set(jsonb_set(holes, '{0,par}', '5'), '{1,tee}', '{"lat": -34.5, "lng": 150.4}'), library_id = null where id = (select id from t_ids where k = 'copy');
+insert into t_results (label, result) select 'N can''t unlink its copy from the app', (library_id is not null)::text from public.courses where id = (select id from t_ids where k = 'copy');
 insert into t_results (label, result) select 'N changes its copy; library par 1 still', (public.library_course((select id from t_ids where k = 'lib')) -> 'holes' -> 0 ->> 'par');
 insert into t_results (label, result) select 'used by', copies::text from public.search_courses('zzqx');
-do $$ begin perform public.share_course((select id from t_ids where k = 'copy')); insert into t_results (label, result) values ('N shares its copy again', 'ok');
-exception when others then insert into t_results (label, result) values ('N shares its copy again', 'refused'); end $$;
+insert into t_results (label, result) values ('N gives its tees back: same entry', (public.share_course((select id from t_ids where k = 'copy')) = (select id from t_ids where k = 'lib'))::text);
+insert into t_results (label, result) select 'library: tee filled, par not changed', (h -> 1 ? 'tee')::text || ' / par ' || (h -> 0 ->> 'par')
+  from (select (public.library_course((select id from t_ids where k = 'lib')) -> 'holes')::jsonb h) x;
 do $$ begin perform public.share_course('00000000-0000-4000-8000-00000000af21'); insert into t_results (label, result) values ('N shares M''s course', 'ok');
 exception when others then insert into t_results (label, result) values ('N shares M''s course', 'refused'); end $$;
 insert into t_results (label, result) select 'N sees M''s course', count(*)::text from public.courses where id = '00000000-0000-4000-8000-00000000af21';
@@ -63,9 +81,17 @@ set local request.jwt.claims to '{"sub":"00000000-0000-4000-8000-00000000af01","
 do $$ begin perform set_config('request.headers', '{"x-group-id":"00000000-0000-4000-8000-00000000af00"}', true); end $$;
 update public.courses set name = 'Zzqx Test Links (new tees)' where id = '00000000-0000-4000-8000-00000000af21';
 insert into t_results (label, result) values ('share again updates, not a new entry', (public.share_course('00000000-0000-4000-8000-00000000af21') = (select id from t_ids where k = 'lib'))::text);
-insert into t_results (label, result) select 'library entries for it', count(*)::text || ' / ' || min(name) from public.search_courses('zzqx');
+insert into t_results (label, result) select 'library entries for it (name kept — others use it)', count(*)::text || ' / ' || min(name) from public.search_courses('zzqx');
+insert into t_results (label, result) select 'searching for % finds', count(*)::text from public.search_courses('%');
+reset role;
+update public.course_library set hidden = true where id = (select id from t_ids where k = 'lib');
+set local role authenticated;
+insert into t_results (label, result) select 'hidden by Josh', count(*)::text from public.search_courses('zzqx');
 
 -- Not signed in: nothing.
+reset role;
+update public.course_library set hidden = false where id = (select id from t_ids where k = 'lib');
+set local role authenticated;
 set local request.jwt.claims to '{"role":"anon"}';
 insert into t_results (label, result) select 'not signed in searches', count(*)::text from public.search_courses('zzqx');
 reset role;

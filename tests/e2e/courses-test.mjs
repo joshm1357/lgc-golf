@@ -104,7 +104,7 @@ async function fakeSupabase(route) {
     if (name === 'invite_info') return json({ group_id: GROUP2, group_name: 'Test Group B', role: 'player', already_in: false });
     if (name === 'join_by_invite') return json(GROUP2);
     if (name === 'search_courses') return json(LIB.filter((c) => !body?.p_query || c.name.toLowerCase().includes(body.p_query.toLowerCase())));
-    if (name === 'library_course') return json({ ...LIB[0], holes: holes.map(({ n, par, si }) => ({ n, par, si })) });
+    if (name === 'library_course') return json({ ...LIB[0], mine: false, holes: holes.map(({ n, par, si }) => ({ n, par, si })) });
     if (name === 'copy_library_course') { db.courses.push({ id: 'cccccccc-0000-4000-8000-000000000009', name: LIB[0].name, holes, library_id: LIB[0].id, created_at: now }); return json('cccccccc-0000-4000-8000-000000000009'); }
     if (name === 'share_course') return json(LIB[0].id);
     return json(null); }
@@ -195,6 +195,12 @@ await page.getByLabel('Town and state (helps people find it)').fill('Mollymook N
 await page.getByRole('button', { name: 'Share with other groups' }).click();
 await page.waitForTimeout(800);
 check(rpc('share_course')[0]?.body.p_area === 'Mollymook NSW', 'sharing a course sends it with its town');
+await page.reload();
+await page.getByText(/^2\. Courses/).waitFor({ timeout: 15000 });
+await page.getByText(/^2\. Courses/).click();
+await page.getByRole('button', { name: 'Library ✓' }).first().click();
+await page.getByRole('button', { name: 'Give our greens to the library' }).waitFor({ timeout: 5000 });
+check(await page.getByText(/they only fill gaps/).isVisible(), 'a copied course offers to give greens back (never overwrites)');
 check(errors.length === 0, `no page errors (${errors.join(' | ')})`);
 await browser.close();
 console.log(fails.length ? `\n${fails.length} FAILED` : '\nALL PASSED');

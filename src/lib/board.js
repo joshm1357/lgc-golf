@@ -29,9 +29,12 @@ export function compBonuses(round, teams, sideEntries = []) {
     ...(round.ld_holes || []).map((h) => ({ kind: 'ld', hole: h, label: `💣 LD ${h}` })),
   ];
   for (const c of comps) {
-    const list = sideEntries.filter((e) => e.kind === c.kind && e.hole === c.hole && e.distance_m != null);
-    if (!list.length) continue;
-    const best = [...list].sort((a, b) => (c.kind === 'ctp' ? a.distance_m - b.distance_m : b.distance_m - a.distance_m))[0];
+    const here = sideEntries.filter((e) => e.kind === c.kind && e.hole === c.hole);
+    // An admin-confirmed winner beats any measured distance.
+    const confirmed = here.find((e) => e.confirmed);
+    const measured = here.filter((e) => e.distance_m != null);
+    if (!confirmed && !measured.length) continue;
+    const best = confirmed || [...measured].sort((a, b) => (c.kind === 'ctp' ? a.distance_m - b.distance_m : b.distance_m - a.distance_m))[0];
     const tid = teamOf[best.player_id];
     if (!tid) continue;
     const o = (out[tid] ||= { strokes: 0, wins: [] });

@@ -59,9 +59,13 @@ export default function ScoreEntry() {
   useEffect(() => {
     setCompLeader(null);
     if (!compKind) return;
-    supabase.from('side_entries').select('*').eq('round_id', round.id).eq('hole', hole.n).eq('kind', compKind).not('distance_m', 'is', null)
-      .order('distance_m', { ascending: compKind === 'ctp' }).limit(1)
-      .then(({ data: rows }) => setCompLeader(rows?.[0] || null), () => {});
+    supabase.from('side_entries').select('*').eq('round_id', round.id).eq('hole', hole.n).eq('kind', compKind)
+      .then(({ data: rows }) => {
+        const list = rows || [];
+        const best = list.find((e) => e.confirmed)
+          || list.filter((e) => e.distance_m != null).sort((a, b) => (compKind === 'ctp' ? a.distance_m - b.distance_m : b.distance_m - a.distance_m))[0];
+        setCompLeader(best || null);
+      }, () => {});
   }, [compKind, round?.id, hole?.n]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset the stepper when the hole or subject changes.
@@ -173,15 +177,17 @@ export default function ScoreEntry() {
       {locked && <div className="sync">This round isn't live — scores can't be changed.</div>}
       {compHere && (
         <div className="section">
-          <a href={`#/comps?r=${round.id}&kind=${compHere.kind}&hole=${hole.n}&add=1`} className="card pad row" style={{ background: 'var(--gold-soft)', borderColor: 'var(--gold)', textDecoration: 'none', color: 'inherit' }}>
+          <a href={`#/comps?r=${round.id}&kind=${compHere.kind}&hole=${hole.n}`} className="card pad row" style={{ background: 'var(--gold-soft)', borderColor: 'var(--gold)', textDecoration: 'none', color: 'inherit' }}>
             <span style={{ fontSize: 26 }}>{compHere.kind === 'ctp' ? '🎯' : '💣'}</span>
             <span className="grow"><strong>{compHere.label} hole</strong>
               <div className="small muted">
-                {compLeader ? `Leader: ${playerName(data.playersById[compLeader.player_id])}, ${Number(compLeader.distance_m)} m. ` : 'No one on the board yet. '}
-                {compHere.kind === 'ctp' ? 'On the green and closer? Record it — optional.' : 'Beat it? Record it — optional.'}
+                {compLeader
+                  ? `${compLeader.confirmed ? 'Winner' : 'Leader'}: ${playerName(data.playersById[compLeader.player_id])}${compLeader.distance_m != null ? `, ${Number(compLeader.distance_m)} m` : ''}. `
+                  : 'No one on the board yet. '}
+                {compLeader?.confirmed ? 'Already decided.' : compHere.kind === 'ctp' ? 'On the green and closer? Record it — optional.' : 'Beat it? Record it — optional.'}
               </div>
             </span>
-            <span className="btn sm gold">Record</span>
+            <span className="btn sm gold">{compLeader?.confirmed ? 'View' : 'Record'}</span>
           </a>
         </div>
       )}

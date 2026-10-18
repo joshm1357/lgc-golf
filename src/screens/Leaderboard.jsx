@@ -182,8 +182,15 @@ export default function Leaderboard() {
             <button key={r.id} type="button" className={'lb-row' + (i === 0 && (r.thru > 0 || projected) ? ' lead' : '')} onClick={() => setOpen(r)}>
               <span className="lb-rank">{projected ? i + 1 : r.rankLabel}</span>
               <span className="stack" style={{ gap: 5, minWidth: 0 }}>
-                <span className="lb-name ellipsis">{r.name}{r.bonus ? <span style={{ marginLeft: 6, fontSize: 12, fontWeight: 700, color: 'var(--up)' }}>−{r.bonus} {r.bonusWins.map((w) => w.split(' ')[0]).join('')}</span> : null}</span>
-                <AvatarStack players={r.players} size={isA ? 26 : 22} />
+                <span className="lb-name ellipsis">{r.name}</span>
+                <span className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                  <AvatarStack players={r.players} size={isA ? 26 : 22} />
+                  {(r.bonusWins || []).map((w) => (
+                    <span key={w} title={`${w}: −${round.comp_bonus} strokes`} style={{ marginLeft: 8, display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 7px', borderRadius: 999, background: 'var(--gold)', color: 'var(--text)', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap' }}>
+                      {w.split(' ')[0]} {w.split(' ')[1]} −{round.comp_bonus}
+                    </span>
+                  ))}
+                </span>
               </span>
               <span className="lb-thru">{r.finished ? 'F' : r.thru || '–'}{r.quick ? '*' : ''}</span>
               <span className={'lb-main' + (under ? ' under' : '') + (projected ? ' proj' : '')}>{main}</span>
@@ -207,7 +214,7 @@ export default function Leaderboard() {
         {projected
           ? 'Projected = score so far + expected score on the holes left, based on how the groups ahead played them, adjusted for each team’s form. Win % comes from 2,000 simulated finishes. Early on, with few holes played, treat it as banter.'
           : isA
-            ? 'Net to par for the holes each team has played, so teams on different holes compare fairly. Arrows show movement since you last looked. Tap a team for its card.'
+            ? `Net to par for the holes each team has played, so teams on different holes compare fairly.${round.comp_bonus ? ` Gold tags = side comp won (−${round.comp_bonus} strokes, already in the score).` : ''} Arrows show movement since you last looked. Tap a team for its card.`
             : 'Points, and +/− against the expected 2 points a hole, so players on different holes compare fairly. * = typed in from a paper card.'}
       </p>
       {scores.pendingCount > 0 && <div className="sync">{scores.pendingCount} score{scores.pendingCount > 1 ? 's' : ''} waiting to sync — they'll send when signal's back.</div>}

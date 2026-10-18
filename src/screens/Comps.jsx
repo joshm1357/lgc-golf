@@ -12,6 +12,7 @@ const LABEL = { ctp: 'Closest to pin', ld: 'Longest drive' };
 
 export function sortEntries(kind, list) {
   return [...list].sort((a, b) => {
+    if (a.confirmed !== b.confirmed) return a.confirmed ? -1 : 1; // admin-confirmed winner always leads
     if (a.distance_m == null) return 1;
     if (b.distance_m == null) return -1;
     return kind === 'ctp' ? a.distance_m - b.distance_m : b.distance_m - a.distance_m;
@@ -32,7 +33,7 @@ export default function Comps() {
   const [kind, setKind] = useState(params.get('kind') === 'ld' ? 'ld' : 'ctp');
   const [holeSel, setHoleSel] = useState(params.get('hole') ? Number(params.get('hole')) : null);
   const [entries, setEntries] = useState([]);
-  const [adding, setAdding] = useState(params.get('add') === '1');
+  const [adding, setAdding] = useState(false);
 
   const load = useCallback(async () => {
     if (!round) return;
@@ -89,7 +90,7 @@ export default function Comps() {
                   ? <img src={leader.photo_url} alt="" style={{ width: 76, height: 76, borderRadius: 12, objectFit: 'cover' }} />
                   : <Avatar player={data.playersById[leader.player_id]} size={64} />}
                 <div className="grow">
-                  <div className="label" style={{ color: '#5A4300' }}>Leader</div>
+                  <div className="label" style={{ color: '#5A4300' }}>{leader.confirmed ? 'Winner ✓ confirmed' : 'Leader'}</div>
                   <div style={{ fontSize: 18, fontWeight: 700 }}>{playerName(data.playersById[leader.player_id])}</div>
                   <div className="small muted">{timeAgo(leader.created_at)}</div>
                 </div>
@@ -100,12 +101,12 @@ export default function Comps() {
             {list.length > 1 && (
               <div className="card">
                 {list.slice(1).map((e, i) => (
-                  <EntryRow key={e.id} e={e} rank={i + 2} me={status.player_id} isAdmin={status.is_admin} onChanged={load} />
+                  <EntryRow key={e.id} e={e} rank={i + 2} me={status.player_id} isAdmin={status.is_admin} onChanged={load} list={list} />
                 ))}
               </div>
             )}
             {leader && (leader.created_by === status.player_id || status.is_admin) && (
-              <EntryRow e={leader} rank={1} me={status.player_id} isAdmin={status.is_admin} onChanged={load} compact />
+              <EntryRow e={leader} rank={1} me={status.player_id} isAdmin={status.is_admin} onChanged={load} compact list={list} />
             )}
             {kind === 'ld' && status.is_admin && <SetTee course={course} hole={hole} />}
             {round.comp_bonus > 0 && round.format === 'ambrose' && <div className="card pad small" style={{ background: 'var(--gold-soft)', borderColor: 'var(--gold)' }}><strong>Worth {round.comp_bonus} strokes.</strong> Whoever leads this comp at the end takes {round.comp_bonus} off their team's score — the leaderboard updates live.</div>}
@@ -126,18 +127,33 @@ export default function Comps() {
   );
 }
 
-function EntryRow({ e, rank, me, isAdmin, onChanged, compact }) {
+async function setWinner(e, list, on, onChanged) {
+  // Only one confirmed winner per comp hole.
+  if (on) {
+    const others = list.filter((x) => x.id !== e.id && x.confirmed).map((x) => x.id);
+    if (others.length) await supabase.from('side_entries').update({ confirmed: false }).in('id', others);
+  }
+  const { error } = await supabase.from('side_entries').update({ confirmed: on }).eq('id', e.id);
+  if (error) toast(friendlyError(error)); else { toast(on ? 'Winner confirmed' : 'Unconfirmed'); onChanged(); }
+}
+
+function EntryRow({ e, rank, me, isAdmin, onChanged, compact, list = [] }) {
   const data = useData();
   const p = data.playersById[e.player_id];
   const canDelete = e.created_by === me || isAdmin;
   if (compact) {
-    return canDelete ? (
-      <button type="button" className="btn ghost sm" onClick={async () => {
-        if (!window.confirm('Remove the leading entry?')) return;
-        const { error } = await supabase.from('side_entries').delete().eq('id', e.id);
-        if (error) toast(friendlyError(error)); else onChanged();
-      }}>Remove the leading entry (made a mistake)</button>
-    ) : null;
+    return (
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+        {isAdmin && <button type="button" className="btn ghost sm" onClick={() => setWinner(e, list, !e.confirmed, onChanged)}>{e.confirmed ? 'Unconfirm winner' : '✓ Confirm as winner'}</button>}
+        {canDelete && (
+          <button type="button" className="btn ghost sm" onClick={async () => {
+            if (!window.confirm('Remove the leading entry?')) return;
+            const { error } = await supabase.from('side_entries').delete().eq('id', e.id);
+            if (error) toast(friendlyError(error)); else onChanged();
+          }}>Remove this entry</button>
+        )}
+      </div>
+    );
   }
   return (
     <div className="row" style={{ padding: '10px 12px', borderBottom: '1px solid var(--line-soft)' }}>
@@ -145,6 +161,7 @@ function EntryRow({ e, rank, me, isAdmin, onChanged, compact }) {
       {e.photo_url ? <img src={e.photo_url} alt="" style={{ width: 40, height: 40, borderRadius: 8, objectFit: 'cover' }} /> : <Avatar player={p} size={36} />}
       <span className="grow ellipsis" style={{ fontWeight: 600 }}>{playerName(p)}</span>
       <span className="num" style={{ fontSize: 22 }}>{e.distance_m != null ? `${Number(e.distance_m)} m` : '–'}</span>
+      {isAdmin && <button type="button" className="btn ghost sm" onClick={() => setWinner(e, list, true, onChanged)}>Winner</button>}
       {canDelete && (
         <button type="button" className="btn ghost sm" aria-label="Remove entry" onClick={async () => {
           if (!window.confirm('Remove this entry?')) return;

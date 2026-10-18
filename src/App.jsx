@@ -1,7 +1,7 @@
 import React from 'react';
 import { HashRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { SessionProvider, DataProvider, useSession, useData } from './lib/store.jsx';
-import { TabBar, Toaster, Loading } from './components/ui.jsx';
+import { TabBar, Toaster, Loading, UpdateBanner } from './components/ui.jsx';
 import Join from './screens/Join.jsx';
 import ProfileSetup, { AwaitingApproval } from './screens/ProfileSetup.jsx';
 import Leaderboard from './screens/Leaderboard.jsx';
@@ -59,6 +59,7 @@ function Inside() {
       </Routes>
       {!hideTabs && <TabBar />}
       <DrawOverlay />
+      <UpdateBanner />
       <Toaster />
     </div>
   );

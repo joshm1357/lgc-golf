@@ -183,3 +183,32 @@ export function PhotoButtons({ onPick, facing = 'environment', cameraLabel = 'Ta
 export function Loading({ text = 'Loading…' }) {
   return <div className="loading">{text}</div>;
 }
+
+/** Checks for a newer version of the app every minute and offers a one-tap update. */
+export function UpdateBanner() {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const current = [...document.scripts].map((s) => s.src).find((src) => /\/assets\/index-.*\.js/.test(src));
+    if (!current) return undefined;
+    const name = current.split('/').pop();
+    const check = async () => {
+      try {
+        const res = await fetch(`${import.meta.env.BASE_URL}index.html?v=${Date.now()}`, { cache: 'no-store' });
+        const html = await res.text();
+        const m = html.match(/assets\/(index-[^"']+\.js)/);
+        if (m && m[1] !== name) setReady(true);
+      } catch { /* offline */ }
+    };
+    const t = setInterval(check, 60000);
+    const vis = () => document.visibilityState === 'visible' && check();
+    document.addEventListener('visibilitychange', vis);
+    check();
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', vis); };
+  }, []);
+  if (!ready) return null;
+  return (
+    <button type="button" onClick={() => window.location.reload()} style={{ position: 'fixed', top: 'calc(8px + env(safe-area-inset-top, 0px))', left: '50%', transform: 'translateX(-50%)', zIndex: 70, border: 0, borderRadius: 999, padding: '10px 16px', background: 'var(--gold)', color: 'var(--text)', fontWeight: 800, fontSize: 14, boxShadow: '0 4px 14px rgba(0,0,0,.3)' }}>
+      New version ready — tap to update
+    </button>
+  );
+}

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { supabase, friendlyError } from '../lib/supabase.js';
-import { useData, useRealtime, useSession, playerName } from '../lib/store.jsx';
+import { useData, useRealtime, useSession, useScores, playerName } from '../lib/store.jsx';
 import { uploadPhoto } from '../lib/images.js';
 import { distanceM, getFix } from '../lib/geo.js';
 import { Header, Seg, Avatar, Icon, Sheet, timeAgo, toast, PhotoButtons } from '../components/ui.jsx';
@@ -49,6 +49,13 @@ export default function Comps() {
   const holeInfo = course?.holes.find((h) => h.n === hole);
   const list = useMemo(() => sortEntries(kind, entries.filter((e) => e.kind === kind && e.hole === hole)), [entries, kind, hole]);
   const leader = list[0];
+  // The comp is decided once every team/player has a score on this hole (or the round is locked).
+  const scoreIdx = useScores(round?.id);
+  const subjects = !round ? [] : round.format === 'ambrose'
+    ? (data.teamsByRound[round.id] || []).map((t) => t.id)
+    : (data.roundPlayers[round.id] || []).map((rp) => rp.player_id);
+  const allThrough = subjects.length > 0 && subjects.every((id) => scoreIdx?.[round.id]?.[id]?.[hole]);
+  const decided = round?.status === 'locked' || allThrough;
 
   if (!round) return <div className="page"><Header logo title="Side comps" /><div className="empty">No rounds yet.</div></div>;
 
@@ -90,13 +97,13 @@ export default function Comps() {
                   ? <img src={leader.photo_url} alt="" style={{ width: 76, height: 76, borderRadius: 12, objectFit: 'cover' }} />
                   : <Avatar player={data.playersById[leader.player_id]} size={64} />}
                 <div className="grow">
-                  <div className="label" style={{ color: '#5A4300' }}>{leader.confirmed ? 'Winner ✓ confirmed' : 'Leader'}</div>
+                  <div className="label" style={{ color: '#5A4300' }}>{leader.confirmed ? 'Winner ✓ confirmed' : decided ? 'Winner · everyone through' : 'Leader'}</div>
                   <div style={{ fontSize: 18, fontWeight: 700 }}>{playerName(data.playersById[leader.player_id])}</div>
                   <div className="small muted">{timeAgo(leader.created_at)}</div>
                 </div>
                 <span className="num" style={{ fontSize: 40, lineHeight: 1 }}>{leader.distance_m != null ? Number(leader.distance_m) : '–'}<span style={{ fontSize: 20 }}> m</span></span>
               </div>
-            ) : <div className="empty">No entries on this hole yet. First to enter leads!</div>}
+            ) : <div className="empty">{decided ? 'Everyone has played this hole — no entries were made.' : 'No entries on this hole yet. First to enter leads!'}</div>}
 
             {list.length > 1 && (
               <div className="card">
@@ -116,7 +123,8 @@ export default function Comps() {
                 : 'Distance from the tee is approximate (GPS is good to about 5–10 m). Override it if you measured. All entries stay up so the group can argue.'}
             </p>
           </div>
-          {round.status !== 'locked' && <button type="button" className="btn gold fab" onClick={() => setAdding(true)}>Enter a shot — hole {hole}</button>}
+          {!decided && <button type="button" className="btn gold fab" onClick={() => setAdding(true)}>Enter a shot — hole {hole}</button>}
+          {decided && round.status !== 'locked' && status.is_admin && <button type="button" className="btn ghost block" onClick={() => setAdding(true)}>Add a late entry — hole {hole}</button>}
         </>
       )}
       {adding && hole && (

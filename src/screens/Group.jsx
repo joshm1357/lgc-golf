@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase.js';
 import { useData, useSession, playerName } from '../lib/store.jsx';
 import { Header, Avatar, Loading, toast } from '../components/ui.jsx';
 import { setCurrentGroup } from '../lib/group.js';
-import { inviteLink, ROLE_LABEL, ROLE_HELP } from '../lib/invite.js';
+import { inviteLink, inviteCode, ROLE_LABEL, ROLE_HELP } from '../lib/invite.js';
 import { SIGN_IN, linkProvider, linkEmail } from '../lib/auth.js';
 import { shareText } from '../lib/push.js';
 import { useRun, must } from '../lib/run.js';
@@ -21,6 +21,8 @@ export default function Group() {
         {status.is_admin && <InviteCard role="player" />}
         {status.is_admin && <InviteCard role="guest" />}
         {status.is_admin && <Members />}
+        {status.is_admin && status.legacy && <AdminPinCard />}
+        <JoinAnother />
         {!status.is_admin && <div className="small muted">You’re a {ROLE_LABEL[status.role] || 'member'} here — {ROLE_HELP[status.role] || ''} Ask an organiser for an invite link to bring someone in.</div>}
       </div>
     </div>
@@ -80,10 +82,14 @@ function InviteCard({ role }) {
   const [busy, run] = useRun();
   const load = useCallback(async (reset = false) => {
     const { data, error } = await supabase.rpc(reset ? 'reset_group_invite' : 'group_invite', { p_role: role });
-    if (error) { setFailed(true); return; }
+    if (error) {
+      // An older database without invite links: hide the card. Anything else: say so.
+      if (!reset && /PGRST202|Could not find the function/i.test(`${error.code} ${error.message}`)) { setFailed(true); return; }
+      throw error;
+    }
     setCode(data);
   }, [role]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load().catch(() => setFailed(true)); }, [load]);
   const link = code ? inviteLink(code) : '';
   useEffect(() => {
     if (!link) return;
@@ -118,7 +124,7 @@ function InviteCard({ role }) {
 }
 
 function Members() {
-  const { status } = useSession();
+  const { status, user, refresh } = useSession();
   const data = useData();
   const [rows, setRows] = useState(null);
   const [busy, run] = useRun();
@@ -129,12 +135,24 @@ function Members() {
   useEffect(() => { load(); }, [load]);
   if (!rows) return <Loading />;
   const organisers = rows.filter((r) => r.role === 'organiser').length;
+  const named = new Set(rows.map((r) => r.player_id).filter(Boolean));
+  const freeNames = data.players.filter((p) => p.approved !== false && !named.has(p.id)).sort((a, b) => playerName(a).localeCompare(playerName(b)));
+  const changeRole = (r, p, role) => {
+    const self = r.user_id === user?.id;
+    const who = p ? playerName(p) : 'this person';
+    if (role === 'organiser' && !window.confirm(`Make ${who} an organiser? Organisers can change trips, players, roles and invites.`)) return;
+    if (self && !window.confirm(`Change your own role to ${ROLE_LABEL[role]}? You'll lose the organiser controls.`)) return;
+    run(async () => {
+      await must(supabase.rpc('set_member_role', { p_user: r.user_id, p_role: role }));
+      if (self) await refresh(); else load();
+    }, 'Role changed');
+  };
   return (
     <div className="card">
       <div className="label" style={{ padding: '12px 14px 4px' }}>People in the group · {rows.length}</div>
       {rows.map((r) => {
         const p = data.playersById[r.player_id];
-        const me = r.player_id && r.player_id === status.player_id;
+        const me = r.user_id === user?.id;
         const lastOrganiser = r.role === 'organiser' && organisers <= 1;
         return (
           <div key={r.user_id} className="row" style={{ gap: 10, padding: '10px 14px', borderTop: '1px solid var(--line-soft)', alignItems: 'center' }}>
@@ -143,9 +161,16 @@ function Members() {
               <strong>{p ? playerName(p) : 'Hasn’t picked a name yet'}{me ? ' (you)' : ''}</strong>
               {p && <button type="button" className="small" disabled={busy} style={{ display: 'block', border: 0, background: 'none', padding: 0, color: 'var(--muted)' }}
                 onClick={() => { if (window.confirm(`Free the name “${playerName(p)}”? Whoever it really is can then pick it on their phone. Scores stay with the name.`)) run(async () => { await must(supabase.rpc('release_player', { p_player: p.id })); load(); }, 'Name freed'); }}>Free this name</button>}
+              {!p && freeNames.length > 0 && (
+                <select className="select" value="" disabled={busy} aria-label="Give them a name" style={{ marginTop: 4, fontSize: 14, minHeight: 36 }}
+                  onChange={(e) => e.target.value && run(async () => { await must(supabase.rpc('assign_player', { p_user: r.user_id, p_player: e.target.value })); load(); }, 'Name given')}>
+                  <option value="">Give them a name…</option>
+                  {freeNames.map((x) => <option key={x.id} value={x.id}>{playerName(x)}</option>)}
+                </select>
+              )}
             </span>
             <select className="select" value={r.role} disabled={busy || lastOrganiser} aria-label="Role" style={{ width: 'auto', flex: 'none' }}
-              onChange={(e) => run(async () => { await must(supabase.rpc('set_member_role', { p_user: r.user_id, p_role: e.target.value })); load(); }, 'Role changed')}>
+              onChange={(e) => changeRole(r, p, e.target.value)}>
               {Object.entries(ROLE_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </select>
             {!me && !lastOrganiser && (
@@ -157,5 +182,37 @@ function Members() {
       })}
       <div className="small muted" style={{ padding: '8px 14px 12px' }}>{Object.entries(ROLE_HELP).map(([k, h]) => `${ROLE_LABEL[k]}: ${h}`).join(' ')}</div>
     </div>
+  );
+}
+
+/** L.G.C's old admin PIN: an organiser switches it off once everyone who should be an organiser is one. */
+function AdminPinCard() {
+  const [busy, run] = useRun();
+  const [off, setOff] = useState(false);
+  if (off) return <div className="small muted">🔑 The admin PIN is off. New organisers are made here.</div>;
+  return (
+    <div className="card pad stack" style={{ gap: 6 }}>
+      <strong>🔑 Admin PIN</strong>
+      <span className="small muted">Anyone with L.G.C’s admin PIN can make themselves an organiser. Once your organisers are set up here, switch it off.</span>
+      <button type="button" className="btn ghost sm" disabled={busy} onClick={() => {
+        if (window.confirm('Switch the admin PIN off? Organisers are then only made here. (An organiser can set a new PIN in Admin → Change PINs.)')) run(async () => { await must(supabase.rpc('turn_off_admin_pin')); setOff(true); }, 'Admin PIN off');
+      }}>Switch the admin PIN off</button>
+    </div>
+  );
+}
+
+/** Join another group by pasting its invite link (iPhone Home Screen apps can't open links from chats). */
+function JoinAnother() {
+  const [text, setText] = useState('');
+  const code = inviteCode(text);
+  return (
+    <form className="card pad stack" style={{ gap: 6 }} onSubmit={(e) => { e.preventDefault(); if (code) window.location.hash = `#/join/${code}`; }}>
+      <strong>➕ Join another group</strong>
+      <span className="small muted">Paste the invite link someone sent you.</span>
+      <div className="row" style={{ gap: 6 }}>
+        <input className="input grow" value={text} onChange={(e) => setText(e.target.value)} placeholder="https://…/#/join/…" autoCapitalize="none" />
+        <button className="btn" disabled={!code}>Open</button>
+      </div>
+    </form>
   );
 }

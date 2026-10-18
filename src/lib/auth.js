@@ -26,6 +26,30 @@ export async function signInWith(provider) {
   if (error) throw error;
 }
 export async function signInWithEmail(email) {
+  // Only for people who already have an account (shouldCreateUser false); the email carries a 6-digit code
+  // (the Supabase email template must include {{ .Token }} — see docs/SIGN-IN-SETUP.md).
   const { error } = await supabase.auth.signInWithOtp({ email: email.trim(), options: { emailRedirectTo: back(), shouldCreateUser: false } });
+  if (error) {
+    if (/signups not allowed|not found/i.test(error.message || '')) throw new Error('No account uses that email yet — on your old phone, add your email in More → Group & invites first.');
+    throw error;
+  }
+}
+export async function verifyEmailCode(email, token) {
+  const { error } = await supabase.auth.verifyOtp({ email: email.trim(), token: token.trim(), type: 'email' });
   if (error) throw error;
+}
+
+/** After coming back from Google: a problem is reported in the address, not thrown. Read it once and explain it. */
+export function signInProblemFromUrl(href = window.location.href) {
+  const m = href.match(/[?#&]error_code=([^&#]+)/) || href.match(/[?#&]error=([^&#]+)/);
+  if (!m) return null;
+  const code = decodeURIComponent(m[1]);
+  if (/identity_already_exists/.test(code)) return 'That Google account is already used by another sign-in. Sign in with it on the Join screen instead.';
+  if (/access_denied/.test(code)) return 'Sign-in was cancelled.';
+  return 'Sign-in didn’t work — try again.';
+}
+
+/** Signed in with Google on a new phone, but that made a brand-new empty account (it was never added on the old phone). */
+export function isEmptyNewAccount(status, user) {
+  return !!user && !user.is_anonymous && !(status?.groups?.length);
 }

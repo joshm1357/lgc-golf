@@ -3,7 +3,7 @@ import { supabase, friendlyError } from '../lib/supabase.js';
 import { useSession } from '../lib/store.jsx';
 import { setCurrentGroup } from '../lib/group.js';
 import { inviteCode } from '../lib/invite.js';
-import { SIGN_IN, signInWith, signInWithEmail } from '../lib/auth.js';
+import { SIGN_IN, signInWith, signInWithEmail, verifyEmailCode, isEmptyNewAccount } from '../lib/auth.js';
 import { Crest } from '../components/Logo.jsx';
 
 async function ensureSignedIn() {
@@ -78,14 +78,19 @@ export function InviteJoin({ code, inside = false }) {
 }
 
 export default function Join() {
-  const { refresh } = useSession();
+  const { refresh, status, user } = useSession();
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const code = inviteCode(window.location.hash);
+  const [pasted, setPasted] = useState(null);
+  // An invite link opened in the browser, or pasted into the box (on iPhone the Home Screen app is separate from
+  // Safari, so a link tapped in a chat opens Safari — pasting it here is how the Home Screen app joins).
+  const code = inviteCode(window.location.hash) || pasted;
 
   async function submit(e) {
     e.preventDefault();
+    const linkCode = inviteCode(pin);
+    if (linkCode) { setPasted(linkCode); return; }
     setBusy(true);
     setErr('');
     try {
@@ -110,21 +115,27 @@ export default function Join() {
   return (
     <div style={{ minHeight: '100vh', background: 'var(--navy)', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 18 }}>
       <Crest size={code ? 120 : 170} />
-      {code ? <InviteJoin code={code} /> : (
+      {isEmptyNewAccount(status, user) && (
+        <div className="stack" style={{ width: '100%', maxWidth: 340, gap: 8, textAlign: 'center' }}>
+          <div className="err" style={{ color: '#FFB4AB' }}>No account found for that sign-in. If you’ve used the app before, open it on your old phone and add this sign-in there first (More → Group & invites). Or join with an invite link below.</div>
+          <button type="button" className="btn ghost sm" style={{ color: '#fff', borderColor: 'rgba(255,255,255,.5)' }} onClick={() => supabase.auth.signOut().then(() => window.location.reload())}>Sign out</button>
+        </div>
+      )}
+      {code ? <><InviteJoin code={code} />{SIGN_IN.length > 0 && <ReturningSignIn />}</> : (
         <>
           <div style={{ fontFamily: 'var(--display)', fontSize: 34, fontWeight: 700 }}>L.G.C Golf</div>
           <form onSubmit={submit} style={{ width: '100%', maxWidth: 340, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <label className="field">
-              <span style={{ color: 'var(--on-navy-muted)' }}>Group PIN</span>
+              <span style={{ color: 'var(--on-navy-muted)' }}>Group PIN or invite link</span>
               <input
-                className="input" inputMode="numeric" autoComplete="one-time-code" value={pin}
+                className="input" autoComplete="one-time-code" autoCapitalize="none" value={pin}
                 onChange={(e) => setPin(e.target.value)} placeholder="From the group chat"
-                style={{ fontSize: 24, textAlign: 'center', letterSpacing: '.3em', color: 'var(--text)' }}
+                style={{ fontSize: pin.length > 12 ? 15 : 24, textAlign: 'center', letterSpacing: pin.length > 12 ? 0 : '.3em', color: 'var(--text)' }}
               />
             </label>
             {err && <div className="err" style={{ color: '#FFB4AB' }}>{err}</div>}
-            <button className="btn gold block" disabled={busy || pin.length < 4}>{busy ? 'Checking…' : "Let's go"}</button>
-            <span className="small" style={{ color: 'var(--on-navy-muted)', textAlign: 'center' }}>Got an invite link? Just open it.</span>
+            <button className="btn gold block" disabled={busy || pin.trim().length < 4}>{busy ? 'Checking…' : "Let's go"}</button>
+            <span className="small" style={{ color: 'var(--on-navy-muted)', textAlign: 'center' }}>Got an invite link? Paste it in the box (or just open it).</span>
           </form>
           {SIGN_IN.length > 0 && <ReturningSignIn />}
         </>
@@ -137,6 +148,7 @@ export default function Join() {
 function ReturningSignIn() {
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
+  const [codeIn, setCodeIn] = useState('');
   const [err, setErr] = useState('');
   return (
     <div className="stack" style={{ width: '100%', maxWidth: 340, gap: 8, borderTop: '1px solid rgba(255,255,255,.2)', paddingTop: 14 }}>
@@ -144,11 +156,17 @@ function ReturningSignIn() {
       {SIGN_IN.includes('google') && <button type="button" className="btn ghost block" style={{ color: '#fff', borderColor: 'rgba(255,255,255,.5)' }} onClick={() => signInWith('google').catch((e) => setErr(friendlyError(e)))}>Sign in with Google</button>}
       {SIGN_IN.includes('facebook') && <button type="button" className="btn ghost block" style={{ color: '#fff', borderColor: 'rgba(255,255,255,.5)' }} onClick={() => signInWith('facebook').catch((e) => setErr(friendlyError(e)))}>Sign in with Facebook</button>}
       {SIGN_IN.includes('email') && (sent
-        ? <div className="small" style={{ textAlign: 'center' }}>Check your email for the sign-in link.</div>
+        ? (
+          // A 6-digit code, typed here — an emailed link would open Safari, not the Home Screen app.
+          <form className="row" style={{ gap: 6 }} onSubmit={(e) => { e.preventDefault(); verifyEmailCode(email, codeIn).then(() => window.location.reload(), (x) => setErr(friendlyError(x))); }}>
+            <input className="input grow" inputMode="numeric" value={codeIn} onChange={(e) => setCodeIn(e.target.value)} placeholder="6-digit code from the email" style={{ color: 'var(--text)' }} />
+            <button className="btn gold" disabled={codeIn.trim().length < 6}>Sign in</button>
+          </form>
+        )
         : (
           <form className="row" style={{ gap: 6 }} onSubmit={(e) => { e.preventDefault(); signInWithEmail(email).then(() => setSent(true), (x) => setErr(friendlyError(x))); }}>
             <input className="input grow" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Your email" style={{ color: 'var(--text)' }} />
-            <button className="btn gold" disabled={!email.includes('@')}>Email me a link</button>
+            <button className="btn gold" disabled={!email.includes('@')}>Email me a code</button>
           </form>
         ))}
       {err && <div className="err" style={{ color: '#FFB4AB' }}>{err}</div>}

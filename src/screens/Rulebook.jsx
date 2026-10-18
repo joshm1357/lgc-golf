@@ -69,7 +69,7 @@ export default function Rulebook() {
         })}
         {active.length === 0 && <div className="empty">No rules for this comp yet.</div>}
 
-        <button type="button" className="btn gold block" onClick={() => setEditing({})}>+ Propose a rule</button>
+        {status.role !== 'guest' && <button type="button" className="btn gold block" onClick={() => setEditing({})}>+ Propose a rule</button>}
 
         {old.length > 0 && (
           <details>
@@ -139,7 +139,8 @@ function ProposedCard({ rule, votes, reload, onEdit }) {
       <div className="small muted">Proposed by {by ? playerName(by) : 'the admin'}</div>
       <div className="row" style={{ gap: 14, fontWeight: 800 }}><span>👍 {count('for')}</span><span>👎 {count('against')}</span><span className="muted">Abstain {count('abstain')}</span></div>
       {votes.length > 0 && <div className="small muted">{votes.map((v) => `${playerName(data.playersById[v.player_id])}: ${VOTE[v.vote].replace(/^\S+ /, '')}${v.comment ? ` — “${v.comment}”` : ''}`).join(' · ')}</div>}
-      {me && (
+      {status.role === 'guest' && <div className="small muted">Guests don’t vote on rules.</div>}
+      {me && status.role !== 'guest' && (
         <>
           {mine && <div className="small"><strong>Your vote: {VOTE[mine.vote]}.</strong> <span className="muted">Pick another and confirm to change it.</span></div>}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>

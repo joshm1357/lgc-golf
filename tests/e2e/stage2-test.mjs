@@ -191,10 +191,30 @@ await page.getByRole('button', { name: 'Join' }).click();
 await page.waitForTimeout(1500);
 check(writes.some((w) => w.method === 'RPC' && w.table === 'join_by_invite' && w.body.p_token === 'ABCDEFGH2345'), 'joins with the code from the link');
 
-// 6. A member of a new group: no admin PIN entry in More.
+// 5b. iPhone Home Screen app: paste the link into the PIN box.
+STATUS.v = { is_member: false, groups: [] };
+await page.goto(`${BASE}#/`);
+await page.reload();
+await page.getByLabel('Group PIN or invite link').fill('https://joshm1357.github.io/lgc-golf/#/join/ABCDEFGH2345');
+await page.getByRole('button', { name: "Let's go" }).click();
+let pasted = false;
+try { await page.getByText('You’re invited to').waitFor({ timeout: 8000 }); pasted = true; } catch { /* fail below */ }
+check(pasted, 'a pasted invite link in the PIN box opens the invite');
+check(!writes.some((w) => w.table === 'join_group_id' && w.body?.p_pin?.includes('join')), 'the pasted link is not tried as a PIN');
+
+// 6. A member of a new group: no admin PIN entry in More; can paste a link to join another group.
+STATUS.v = { ...ORG, is_admin: false, role: 'player', group_id: GROUP2, group_name: 'Test Group B', legacy: false };
 await page.goto(`${BASE}#/more`);
+await page.reload();
 await page.getByText('Group & invites').waitFor({ timeout: 15000 });
 check(!(await page.getByText("I'm the admin").count()), 'new group: no admin PIN entry');
+await page.getByText('Group & invites').click();
+await page.getByText('Join another group').waitFor({ timeout: 10000 });
+check(!(await page.getByText('✉️ Invite link', { exact: true }).count()) && !(await page.getByRole('button', { name: 'New link' }).count()), 'players see no invite controls');
+await page.getByPlaceholder('https://…/#/join/…').fill('https://x/#/join/ABCDEFGH2345');
+await page.getByRole('button', { name: 'Open', exact: true }).click();
+await page.getByText('You’re invited to').waitFor({ timeout: 8000 });
+check(true, 'join another group by pasting a link');
 
 check(errors.length === 0, `no page errors (${errors.join(' | ')})`);
 await browser.close();

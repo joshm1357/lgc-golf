@@ -29,6 +29,7 @@ function useCases() {
 
 export default function Tribunal() {
   const data = useData();
+  const { status } = useSession();
   const { cases, votes, reload } = useCases();
   const [lodging, setLodging] = useState(false);
   if (!cases) return <Loading />;
@@ -38,7 +39,7 @@ export default function Tribunal() {
     <div className="page">
       <Header court back title="Handicap Tribunal" sub="Lodge a case. The lads decide. The chair has the final say." />
       <div className="section stack">
-        <button type="button" className="btn gold block" onClick={() => setLodging(true)}>{Icon.gavel(20)}<span>Lodge a case</span></button>
+        {status?.role !== 'guest' && <button type="button" className="btn gold block" onClick={() => setLodging(true)}>{Icon.gavel(20)}<span>Lodge a case</span></button>}
         {open.length > 0 && <span className="label">Open cases</span>}
         {open.map((c) => <CaseRow key={c.id} c={c} votes={votes.filter((v) => v.case_id === c.id)} />)}
         {closed.length > 0 && <span className="label">Past verdicts</span>}
@@ -239,7 +240,8 @@ export function TribunalCase() {
               <span className="muted">{v.vote === 'guilty' ? 'Guilty' : v.vote === 'not_guilty' ? 'Not guilty' : 'Abstain'}{v.comment ? ` — “${v.comment}”` : ''}</span>
             </div>
           ))}
-          {open && !isAccused && (
+          {open && status.role === 'guest' && <div className="small muted">Guests don’t vote in the Tribunal.</div>}
+          {open && !isAccused && status.role !== 'guest' && (
             <>
               <input className="input" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="One-liner for the court (optional)" />
               {myVote && <div className="small"><strong>Your vote: {VOTE_LABEL[myVote.vote]}.</strong> <span className="muted">Pick another and confirm to change it.</span></div>}

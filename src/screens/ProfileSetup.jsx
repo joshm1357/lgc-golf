@@ -25,7 +25,8 @@ export default function ProfileSetup() {
       .then(({ data: rows }) => setTaken(new Set((rows || []).map((r) => r.player_id))));
   }, [status?.group_id]);
   const data = useData();
-  const [mode, setMode] = useState('pick');
+  // Guests add themselves; an organiser can link them to an existing name.
+  const [mode, setMode] = useState(() => (status?.role === 'guest' ? 'new' : 'pick'));
   const [chosen, setChosen] = useState(null);
   const [name, setName] = useState('');
   const [nickname, setNickname] = useState('');
@@ -119,7 +120,7 @@ export default function ProfileSetup() {
             <div className="sync" style={{ margin: 0 }}>The admin needs to approve new people before you can join in.</div>
             {err && <div className="err">{err}</div>}
             <div className="row">
-              <button type="button" className="btn ghost grow" onClick={() => setMode('pick')}>Back to the list</button>
+              {status?.role !== 'guest' && <button type="button" className="btn ghost grow" onClick={() => setMode('pick')}>Back to the list</button>}
               <button className="btn gold grow" disabled={busy || !name || hcp === '' || Number.isNaN(Number(hcp))}>{busy ? 'Sending…' : 'Ask to join'}</button>
             </div>
           </form>

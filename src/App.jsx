@@ -8,6 +8,7 @@ import { DrawOverlay } from './components/DrawOverlay.jsx';
 // Loaded straight away: the first screens people see and score entry (must work with no signal).
 import Join, { InviteJoin } from './screens/Join.jsx';
 import { inviteCode } from './lib/invite.js';
+import { signInProblemFromUrl } from './lib/auth.js';
 import ProfileSetup, { AwaitingApproval } from './screens/ProfileSetup.jsx';
 import Leaderboard from './screens/Leaderboard.jsx';
 import ScoreEntry from './screens/ScoreEntry.jsx';
@@ -36,9 +37,9 @@ function PlanDetailRoute() {
 }
 
 // An invite link opened by someone already in a group: join that group too (or open it if already in).
-function JoinInsideRoute() {
+function JoinInsideRoute({ code: given }) {
   const { code } = useParams();
-  const c = inviteCode(code);
+  const c = inviteCode(given || code);
   return (
     <div style={{ minHeight: '70vh', background: 'var(--navy)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       {c ? <InviteJoin code={c} inside /> : <div>That invite link isn’t right.</div>}
@@ -48,10 +49,14 @@ function JoinInsideRoute() {
 
 function Gate() {
   const { loading, status } = useSession();
+  // Coming back from Google with a problem: it's in the address, not an error — say what happened.
+  const [problem] = useState(() => signInProblemFromUrl());
   if (loading) return <Loading />;
-  if (!status?.is_member) return <Join />;
+  const banner = problem && <div className="err" role="alert" style={{ margin: 0, borderRadius: 0 }}>{problem}</div>;
+  if (!status?.is_member) return <>{banner}<Join /></>;
   return (
     <DataProvider>
+      {banner}
       <Inside />
     </DataProvider>
   );
@@ -73,6 +78,8 @@ function Inside() {
   if (!data.ready) {
     return data.error ? <div className="empty">Couldn't load: {data.error.message}. Pull down to refresh.</div> : <Loading />;
   }
+  // An invite link opened while still picking a name (or waiting for approval) still works.
+  if (loc.pathname.startsWith('/join/') && (!status.player_id || !data.playersById[status.player_id])) return <JoinInsideRoute code={loc.pathname.slice(6)} />;
   if (!status.player_id) return <ProfileSetup />;
   const me = data.playersById[status.player_id];
   if (!me) return <ProfileSetup />;

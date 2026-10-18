@@ -1,13 +1,13 @@
 // The Trips tab: every trip in one list — the one that's on (or next), the ideas being voted on, and past trips.
 // A trip moves idea → deciding → locked in → on → done (see lib/trips.js). Tapping one opens it (Planner.jsx).
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
 import { useData, useRealtime, useSession, playerName, cacheGet, cacheSet, useFeature } from '../lib/store.jsx';
 import { Header, AvatarStack, Sheet, Loading, toast } from '../components/ui.jsx';
 import { fmtRange, countdown, RSVP_LABEL, todayISO, money } from '../lib/plan.js';
 import { STAGE_LABEL, sortTrips, stillToDecide, suggestionOptions, defaultCloses } from '../lib/trips.js';
-import { notify } from '../lib/push.js';
+import { notify, shareText } from '../lib/push.js';
 import { useRun, must } from '../lib/run.js';
 import { NotifyCard } from '../components/NotifyCard.jsx';
 
@@ -18,7 +18,15 @@ export default function Trips() {
   const { status } = useSession();
   const nav = useNavigate();
   const [rows, setRows] = useState(null);
-  const [suggesting, setSuggesting] = useState(false);
+  const loc = useLocation();
+  // "Same time next year?" from a finished quick round opens a ready-made idea.
+  const [suggesting, setSuggesting] = useState(() => {
+    const q = new URLSearchParams(loc.search);
+    if (!q.get('suggest')) return false;
+    const d = q.get('date');
+    return { kind: q.get('kind') === 'trip' ? 'trip' : 'round', name: (q.get('name') || '').slice(0, 60), dates: d ? [{ start_date: d, end_date: d }] : [],
+      place: (q.get('place') || '').slice(0, 80) || null, share: q.get('share') === '1' };
+  });
   const notifyOn = useFeature('notifications');
   const votesOn = useFeature('planner_tasks');
   const trophiesOn = useFeature('trophies');
@@ -78,7 +86,7 @@ export default function Trips() {
         {past.map((x) => <PastCard key={x.plan.id} plan={x.plan} stage={x.stage} photo={photos[x.plan.trip_id]} rounds={data.rounds.filter((r) => x.plan.trip_id && r.trip_id === x.plan.trip_id).length}
           winners={trophiesOn && x.plan.trip_id ? data.honour_board.filter((h) => h.trip_id === x.plan.trip_id).sort((a, b) => a.trophy_name.localeCompare(b.trophy_name)) : []} />)}
       </div>
-      {suggesting && <SuggestSheet onClose={() => setSuggesting(false)} onSaved={(p) => nav(`/plan/${p.id}`)} />}
+      {suggesting && <SuggestSheet initial={typeof suggesting === 'object' ? suggesting : null} onClose={() => setSuggesting(false)} onSaved={(p) => nav(`/plan/${p.id}`)} />}
     </div>
   );
 }
@@ -199,13 +207,14 @@ function PastCard({ plan, stage, photo, rounds, winners = [] }) {
 
 function blankDate() { return { start_date: '', end_date: '' }; }
 
-export function SuggestSheet({ onClose, onSaved }) {
+export function SuggestSheet({ onClose, onSaved, initial = null }) {
   const { status } = useSession();
-  const [kind, setKind] = useState('trip');
-  const [name, setName] = useState('');
-  const [dates, setDates] = useState([blankDate(), blankDate()]);
+  // initial: a ready-made idea, e.g. "Same time next year?" after a quick round ({ kind, name, dates }).
+  const [kind, setKind] = useState(initial?.kind || 'trip');
+  const [name, setName] = useState(initial?.name || '');
+  const [dates, setDates] = useState(() => (initial?.dates?.length ? [...initial.dates, blankDate()] : [blankDate(), blankDate()]));
   const [rough, setRough] = useState('');
-  const [places, setPlaces] = useState([{ label: '', cost_pp: '' }, { label: '', cost_pp: '' }]);
+  const [places, setPlaces] = useState(() => (initial?.place ? [{ label: initial.place, cost_pp: '' }, { label: '', cost_pp: '' }] : [{ label: '', cost_pp: '' }, { label: '', cost_pp: '' }]));
   const [budget, setBudget] = useState('');
   const [note, setNote] = useState('');
   const [closes, setCloses] = useState(defaultCloses());
@@ -230,6 +239,8 @@ export function SuggestSheet({ onClose, onSaved }) {
     await supabase.from('posts').insert({ kind: 'user', player_id: status.player_id, link: `/plan/${created.id}`,
       body: `💡 New ${kind === 'round' ? 'round' : 'trip'} idea: ${created.name}. ${opts.dates.length || opts.places.length ? 'Vote on when and where, and say if you’re in.' : 'Say if you’re in.'}` });
     const r = await notify(status.is_admin ? 'plan_new' : 'plan_proposed', { plan_id: created.id });
+    // From a finished quick round: send the vote to everyone who played (they may not have notifications).
+    if (initial?.share) await shareText(`📅 ${created.name}? Vote on the date and say if you’re in: ${window.location.origin}${import.meta.env.BASE_URL}#/plan/${created.id}`);
     onClose(); onSaved?.(created);
     toast(`Up for a vote${r?.sent ? ` — ${r.sent} phone${r.sent === 1 ? '' : 's'} told` : ''}`);
   });

@@ -10,6 +10,7 @@ import { useRun, must } from '../lib/run.js';
 import { GolfTripCrest } from '../components/Logo.jsx';
 import { Toaster, toast } from '../components/ui.jsx';
 import { readHandicap } from '../lib/history.js';
+import { sourceFrom, rememberSource, rememberedSource, forgetSource } from '../lib/quick.js';
 import { paintLook, savedLook, DEFAULT_LOOK } from '../lib/theme.js';
 import { SignInCard, InviteCard, LookCard } from './Group.jsx';
 
@@ -47,7 +48,10 @@ async function ensureSignedIn() {
 }
 
 export default function Start() {
-  const wizard = useLocation().pathname.startsWith('/start/new');
+  const loc = useLocation();
+  const wizard = loc.pathname.startsWith('/start/new');
+  // Came from another group's results card (?from=…) or a club's code: remembered for the group you start.
+  useEffect(() => { rememberSource(sourceFrom(loc.search)); }, [loc.search]);
   const { status } = useSession() || {};
   // Someone who isn't in a group sees The Golf Trip, not the last group this phone showed (L.G.C's colours).
   useEffect(() => {
@@ -100,6 +104,7 @@ function Intro() {
         </div>
         <a href="#/start/new" className="btn gold block" style={{ minHeight: 56, fontSize: 18 }}>{going?.gid ? 'Carry on setting up your group' : 'Start your group'}</a>
         <span className="small muted" style={{ textAlign: 'center' }}>Under 10 minutes. You’ll get a link to send to your group at the end.</span>
+        <a href="#/c" className="btn ghost block">⛳ Just a round today? Start one in 2 minutes</a>
         <a href="#/" className="btn ghost block" onClick={backToMine}>{status?.is_member || going?.prevGroup ? 'Back to my group' : 'Got an invite? Join a group'}</a>
       </div>
     </>
@@ -147,7 +152,8 @@ function Wizard() {
   const inNewGroup = !progress.gid || status?.group_id === progress.gid;
 
   const step = STEPS[progress.step] || STEPS[0];
-  const next = () => setProgress({ ...progress, step: Math.min(progress.step + 1, STEPS.length - 1) });
+  // Making a quick group official: the group already exists, so after signing in go straight to its name and crest.
+  const next = () => setProgress({ ...progress, step: progress.official && progress.gid && progress.step < 2 ? 2 : Math.min(progress.step + 1, STEPS.length - 1) });
   const back = () => setProgress({ ...progress, step: Math.max(progress.gid ? 2 : 0, progress.step - 1) });
   const minsLeft = STEPS.slice(progress.step).reduce((a, s) => a + s.mins, 0);
 
@@ -158,7 +164,7 @@ function Wizard() {
           <a href="#/start" style={{ color: 'var(--on-navy-muted)', fontWeight: 700, textDecoration: 'none' }}>✕ Close</a>
           <span className="small" style={{ color: 'var(--on-navy-muted)' }}>Step {progress.step + 1} of {STEPS.length} · about {minsLeft} min left</span>
         </div>
-        <h1 style={{ fontFamily: 'var(--display)', fontSize: 30, margin: '10px 0 8px' }}>{step.title}</h1>
+        <h1 style={{ fontFamily: 'var(--display)', fontSize: 30, margin: '10px 0 8px' }}>{progress.official && step.key === 'look' ? 'Name and crest' : step.title}</h1>
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${STEPS.length}, 1fr)`, gap: 4 }} aria-hidden="true">
           {STEPS.map((s, i) => <span key={s.key} style={{ height: 5, borderRadius: 3, background: i <= progress.step ? 'var(--gold)' : 'rgba(255,255,255,.25)' }} />)}
         </div>
@@ -175,7 +181,7 @@ function Wizard() {
             {step.key === 'name' && <NameStep refresh={refresh} uid={user?.id}
               made={{ step: progress.step + 1, uid: user?.id, prevGroup: status?.is_member ? status.group_id : null }}
               onMade={(gid) => setProgress({ ...loadProgress(user?.id), gid })} />}
-            {step.key === 'look' && <LookStep onNext={next} />}
+            {step.key === 'look' && <LookStep onNext={next} official={!!progress.official} />}
             {step.key === 'rules' && <RulesStep onNext={next} />}
             {step.key === 'features' && <FeaturesStep onNext={next} gid={progress.gid} />}
             {step.key === 'players' && <PlayersStep onNext={next} />}
@@ -224,6 +230,8 @@ function NameStep({ onMade, refresh, made, uid }) {
         p_name: name.trim(), p_features: PRESET_BY_KEY.full_trip.switches, p_my_name: me.trim(), p_handicap: h,
       }));
       saveProgress({ ...made, gid }); // saved straight away: coming back never makes it twice
+      const src = rememberedSource();
+      if (src) { await supabase.rpc('set_group_source', { p_source: src }); forgetSource(); } // only counted, never shown; fine if it fails
     }
     setCurrentGroup(gid);
     await refresh?.();
@@ -244,12 +252,12 @@ function NameStep({ onMade, refresh, made, uid }) {
   );
 }
 
-function LookStep({ onNext }) {
+function LookStep({ onNext, official = false }) {
   return (
     <>
-      <p style={{ margin: 0 }}>Upload your crest (or skip — there’s a plain one), and pick two colours. The app checks they’re readable in the sun.</p>
-      <LookCard onSaved={onNext} hideName />
-      <button type="button" className="btn ghost block" onClick={onNext}>Skip — keep the plain look</button>
+      <p style={{ margin: 0 }}>{official ? 'Give the group its proper name, upload your crest (or skip), and pick two colours.' : 'Upload your crest (or skip — there’s a plain one), and pick two colours.'} The app checks they’re readable in the sun.</p>
+      <LookCard onSaved={onNext} hideName={!official} />
+      {!official && <button type="button" className="btn ghost block" onClick={onNext}>Skip — keep the plain look</button>}
     </>
   );
 }

@@ -526,6 +526,56 @@ library alone, use count, a copy gives tees back without changing pars, can't sh
 sharing again fills only once others use it, % searched literally, hidden entries, not signed in sees nothing);
 unit test (OpenStreetMap marking); phone width `tests/e2e/courses-test.mjs` 11 checks. All other phone tests pass.
 
+## v2.1 Stage 7b — Quick round (club-partners addendum; branch `stage-7b-quick`, on staging only)
+
+**Built**
+- **Database (036, applied on staging):** Clubhouse TV switch added to the feature list (off; built in 8b).
+  `course_page(slug)` — the public course page, readable without signing in (course details only). 
+  `start_quick_round(course, your name, handicap, format, closest-to-pin holes, longest-drive holes, where from)` —
+  makes a **quick group** ("Josh's round at Bowral Golf Club") with its own copy of the course, a one-day trip and a
+  live round, you on it, a guest link, and just the features a round needs; phone-only sign-in is fine (5 a day per
+  person; phone-only starters share 60 an hour). In a quick group, people who join are approved straight away and go
+  into today's Stableford round. `make_group_official()` turns it into an ordinary group; `set_group_source()` records
+  where an ordinary group came from (once). Groups keep `source` — a club's code and placement, or the group whose
+  results card started them — for counting later; never shown to clubs. `my_status` says whether it's a quick group.
+- **App:** `#/c/<course>` — the course, its greens on the map (with the OpenStreetMap credit), scorecard, and
+  **⛳ Start a round with your mates** → your name (handicap optional, 18 if blank), Stableford or Ambrose (**stroke
+  play shown as coming soon** — it needs a database change that's a STOP), closest-to-pin holes pre-filled from the
+  par 3s and longest drive from the longest par 5 → **Get your mates in**: the phone's share sheet (Messenger, WhatsApp,
+  text) and a QR code → **Start scoring**. `#/c` finds a course. Mates who tap the link type just a name and are in
+  the round. After the last hole: **Share the results** (text for the group chat, with "Start your own group" counted
+  as coming from this group), **Finish — winner on the honour board**, **📅 Same time next year?** (a Trips idea with
+  next year's date, same weekday), **⭐ Make it official** (the Stage 7 wizard from the name-and-crest step).
+  The start page links to the quick round.
+- **Waiting on Josh:** stroke play (STOP: the round-format rule needs a DROP to widen); share cards as images come in
+  Stage 9 (text results now).
+
+**Independent review — fixed (036b, applied on staging):**
+- **No fake players:** in a quick round each person adds themselves once; a round tops out at 40 players.
+- A quick round no longer counts as "using" a library course (so phone-only rounds can't push a course up the search
+  or lock its details); making the group official does. The phone-only limit is per course (20 an hour), so one script
+  can't stop quick rounds everywhere.
+- **Make it official:** the mates become players; the wizard starts with signing in if the organiser hasn't; its step
+  is "Name and crest"; the button only appears once the round is finished (so finishing isn't lost).
+- The organiser can finish once anyone has played 18 or the day is over (one mate who never scored can't hold it up);
+  "📤 Invite more mates" while playing; guests are asked to add a sign-in to keep the round on their record.
+- **Same time next year** names the course as the place and, once saved, opens the share sheet so everyone who played
+  gets the vote.
+- Where a group came from: the newest code or card, kept 30 days and forgotten once used; mates who join from an
+  invite are counted as coming from that group if they start their own.
+- **Quick rounds are Stableford for now** — Ambrose is shown as coming soon (it needs a teams step), as is stroke play
+  (a STOP).
+- Left for Josh (settings — STOP): turn on CAPTCHA for phone-only sign-ins and check Supabase's per-address limit for
+  them (30 an hour by default; phones on 4G often share an address) before any QR kit goes out.
+- Notes: each quick round makes a new group (a "play with your last group" shortcut can come later); an iPhone that
+  scans a code opens Safari, not the Home Screen app.
+
+**Tested:** `supabase/tests/stage7b_quick_round.sql` 20 checks (public course page, no session refused, the quick
+group/round/players/features, my_status, a mate joins as a guest, approved and in the round, can't add a second player,
+guests can't make it official, bad inputs refused, made official, mates become players, library use counted only then,
+source tidied, ordinary groups unchanged); unit tests (side comps pre-fill, where-from incl. expiry, results text, same
+time next year); phone width `tests/e2e/quick-test.mjs` 21 checks. All other phone tests pass.
+
 ## Known limits
 - GPS distances are approximate (±5–10 m) and straight-line; closest-to-pin distance is typed in.
 - Location sharing only works while the app is open.

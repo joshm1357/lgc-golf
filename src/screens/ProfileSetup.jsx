@@ -3,6 +3,7 @@ import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useSession, playerName } from '../lib/store.jsx';
 import { uploadPhoto } from '../lib/images.js';
 import { Avatar, Icon, Loading, PhotoButtons, Sheet, toast } from '../components/ui.jsx';
+import { QuickJoin } from './QuickRound.jsx';
 
 function PhotoCircle({ preview, player }) {
   return (
@@ -16,6 +17,13 @@ function PhotoCircle({ preview, player }) {
 
 /** First time in: pick your name from the list. Anyone not on it can add themselves — the admin approves them. */
 export default function ProfileSetup() {
+  const { status } = useSession();
+  // A quick round: just a name, no list to pick from, no waiting for approval.
+  if (status?.quick) return <QuickJoin />;
+  return <PickOrAdd />;
+}
+
+function PickOrAdd() {
   const { refresh, status } = useSession();
   // Names someone else has already picked (only an organiser can free one).
   const [taken, setTaken] = useState(new Set());

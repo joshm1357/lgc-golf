@@ -18,7 +18,7 @@ Kept up to date at the end of every build. The shared copy for comments is a Cla
 2. **Rules drive the round set-up.** Pick CTP/LD value, minimum drives etc. from the Rulebook when creating a round instead of typing them.
 3. **Plan → trip in one tap (admin button, not automatic).** Turns a locked-in plan into the trip, rounds, courses and trophies.
 4. **More offline.** Side comp entries and feed posts queue with no signal; cache map tiles for the course.
-5. **Distance to the green.** Uses the tee/green points already stored for each hole.
+5. **Distance to the green.** Phone GPS (about ±5–10 m, same as 18Birdies) to the front/middle/back of each green. The admin taps each green once on the satellite map (about 5 minutes a course); today's pin can be dragged into place on CTP holes. Optionally pull greens from OpenStreetMap where the course is mapped.
 6. **Tidy-ups.** One-step save for rooms; move the `pg_net` database add-on; remove Josh's stray Tribunal vote (needs an approval that keeps getting auto-cancelled).
 
 ## Later — v2
@@ -51,7 +51,7 @@ Options: **A. Keep our own scoring** (recommended — already does Ambrose/Stabl
 - **B. Next — "Ask Claude" inside the app, admin only.** Photo of a scorecard → scores; "draft the next trip" → votes and jobs; weekend summary for the feed. Needs an Anthropic API key; a small pay-per-use cost.
 - **C. Later — an L.G.C connector** that lets any Claude chat do only safe app actions (enter scores, add jobs, post results) instead of full database access.
 
-Recommendation: A now, B for the scorecard import in v1.4, C if more than one person uses AI to run things.
+**Decision (18 Oct): C — build the L.G.C connector.** Keep using A (this chat) until it's ready.
 
 ## Known limits
 

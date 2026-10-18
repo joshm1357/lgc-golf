@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { useData, useScores, useSession, useSideEntries } from '../lib/store.jsx';
+import { useData, useScores, useSession, useSideEntries, useFeature } from '../lib/store.jsx';
 import { roundBoard, headlines, compBonuses } from '../lib/board.js';
 import { formatToPar, strokesReceived, stablefordPoints } from '../lib/scoring.js';
 import { Header, Seg, AvatarStack, Icon, Sheet, Loading } from '../components/ui.jsx';
@@ -40,6 +40,7 @@ export default function Leaderboard() {
   const [mode, setMode] = useState('live');
   const [open, setOpen] = useState(null);
   const [drawing, setDrawing] = useState(false);
+  const drawOn = useFeature('draw');
   const scores = useScores(round?.id);
   const sideEntries = useSideEntries(round?.id);
 
@@ -166,10 +167,10 @@ export default function Leaderboard() {
             {isA ? (status?.is_admin ? (
               <div className="stack" style={{ alignItems: 'stretch' }}>
                 <strong style={{ color: 'var(--text)' }}>How are teams decided?</strong>
-                <button type="button" className="btn gold" onClick={() => setDrawing(true)}>🎲 Random draw — live for everyone</button>
+                {drawOn && <button type="button" className="btn gold" onClick={() => setDrawing(true)}>🎲 Random draw — live for everyone</button>}
                 <Link to="/admin" className="btn ghost">Pick the teams myself</Link>
               </div>
-            ) : 'Teams come out of the draw — keep the app open and it will pop up.') : 'No players in this round yet.'}
+            ) : (drawOn ? 'Teams come out of the draw — keep the app open and it will pop up.' : 'Teams aren’t set yet.')) : 'No players in this round yet.'}
           </div>
         )}
         {rows.map((r, i) => {

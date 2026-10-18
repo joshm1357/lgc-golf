@@ -43,6 +43,21 @@ const ALWAYS_NOW = new Set(['draw_open', 'test']);
 /** What "only important" people still get: the draw room, a job given to them or due, money, their trip tomorrow. */
 const IMPORTANT = new Set(['draw_open', 'test', 'job_assigned', 'job_due', 'payment_recorded', 'nudge_kitty', 'trip_tomorrow']);
 
+/** Which feature each kind of message belongs to (Stage 3): nothing goes out for a switched-off feature. */
+const KIND_FEATURE: Record<string, string> = {
+  poll_open: 'planner_tasks', poll_decided: 'planner_tasks', poll_closing: 'planner_tasks', nudge_votes: 'planner_tasks',
+  job_assigned: 'planner_tasks', job_due: 'planner_tasks',
+  plan_new: 'planner', plan_proposed: 'planner', trip_locked: 'planner', rsvp_locked: 'planner', rsvp_deadline: 'planner',
+  nudge_rsvp: 'planner', trip_week: 'planner', trip_tomorrow: 'planner', comment: 'planner',
+  nudge_kitty: 'planner_costs', payment_recorded: 'planner_costs', groups_set: 'planner_rooms',
+  rule_proposed: 'rule_voting', draw_open: 'draw',
+};
+/** Is a feature on for group g? (An older database without switches: everything on.) */
+async function featureOn(g: string, key: string) {
+  const { data, error } = await db.rpc('feature_on', { p_group: g, p_key: key });
+  return error ? true : data !== false;
+}
+
 /** Push to these people's phones now. Cleans up phones that have unsubscribed. */
 async function pushTo(users: string[], msg: Msg) {
   if (!users.length) return 0;
@@ -65,6 +80,8 @@ async function pushTo(users: string[], msg: Msg) {
  *  Phones are found through who is in the group, so nothing ever reaches another group.
  *  Returns how many phones got it now. */
 async function send(g: string, to: string[] | 'all', msg: Msg, except: string | null | undefined, kind: string) {
+  if (kind !== 'test' && !(await featureOn(g, 'notifications'))) return 0;
+  if (KIND_FEATURE[kind] && !(await featureOn(g, KIND_FEATURE[kind]))) return 0;
   let mq = db.from('group_members').select('user_id,player_id').eq('group_id', g);
   if (to !== 'all') {
     const ids = [...new Set(to)].filter((x) => x && x !== except);

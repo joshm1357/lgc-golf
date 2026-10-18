@@ -4,6 +4,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { supabase } from './supabase.js';
 import { pendingScores, onQueueChange, freeCacheSpace } from './offline.js';
 import { currentGroup, setCurrentGroup, GROUP_TABLES } from './group.js';
+import { featureOn } from './features.js';
 
 // The offline copy of a group's players, rounds, courses… is kept per group.
 const refKey = () => `ref-${currentGroup() || 'x'}`;
@@ -146,10 +147,24 @@ export function DataProvider({ children }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Feature switches for this group (Stage 3). Loaded on their own, so an older database without them just means
+  // "everything at its default" rather than the app failing to load.
+  const [features, setFeatures] = useState(() => cacheGet(`features-${currentGroup()}`) || {});
+  const loadFeatures = useCallback(async () => {
+    const { data: rows, error: e } = await supabase.from('group_features').select('feature_key,enabled');
+    if (e) return;
+    const next = Object.fromEntries((rows || []).map((r) => [r.feature_key, r.enabled]));
+    cacheSet(`features-${currentGroup()}`, next);
+    setFeatures(next);
+  }, []);
+  useEffect(() => { loadFeatures(); }, [loadFeatures]);
+  useRealtime(['group_features'], loadFeatures);
+
   useRealtime(['players', 'trips', 'rounds', 'teams', 'team_players', 'quick_results', 'honour_board', 'trophies', 'round_players', 'courses'], load);
 
   const value = useMemo(() => {
-    if (!data) return { ready: false, error, reload: load };
+    if (!data) return { ready: false, error, reload: load, features };
     const playersById = Object.fromEntries(data.players.map((p) => [p.id, p]));
     const coursesById = Object.fromEntries(data.courses.map((c) => [c.id, c]));
     const trips = [...data.trips].sort((a, b) => String(b.start_date || b.created_at).localeCompare(String(a.start_date || a.created_at)));
@@ -177,14 +192,20 @@ export function DataProvider({ children }) {
       rounds[rounds.length - 1] || null;
     return {
       ready: true, error, offline, reload: load, ...data, trips, rounds, playersById, coursesById,
-      teamsByRound, roundPlayers, currentTrip, liveRound, defaultRound,
+      teamsByRound, roundPlayers, currentTrip, liveRound, defaultRound, features,
     };
-  }, [data, error, load, offline]);
+  }, [data, error, load, offline, features]);
 
   return <DataCtx.Provider value={value}>{children}</DataCtx.Provider>;
 }
 
 export const useData = () => useContext(DataCtx);
+
+/** Is a feature switched on for this group? (lib/features.js has the list, defaults and which needs which.) */
+export function useFeature(key) {
+  const d = useContext(DataCtx);
+  return featureOn(key, d?.features || {});
+}
 
 /** Scores for one or more rounds, live, with my not-yet-synced saves merged in. */
 export function useScores(roundIds) {

@@ -3,7 +3,7 @@
 // A plan from before Stage 1b with no trip yet gets one made here, as before.
 import React, { useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
-import { useData, useSession } from '../lib/store.jsx';
+import { useData, useSession, useFeature } from '../lib/store.jsx';
 import { Sheet, toast } from '../components/ui.jsx';
 import { fmtRange, parseDate, daysUntil, roundSettingsFromRules } from '../lib/plan.js';
 import { useRun, must, feedPost } from './Planner.jsx';
@@ -44,6 +44,7 @@ export function TripSetupCard({ plan, reload }) {
 
 function TripSetupSheet({ plan, onClose, onDone }) {
   const data = useData();
+  const bonusOn = useFeature('comp_bonus');
   const { status } = useSession();
   const [busy, run] = useRun();
   const days = useMemo(() => planDays(plan), [plan]);
@@ -82,7 +83,7 @@ function TripSetupSheet({ plan, onClose, onDone }) {
         return {
           trip_id: trip.id, course_id: r.course_id, play_date: r.date, format: r.format, status: 'setup',
           name: `${DOW[parseDate(r.date).getDay()]} ${r.format === 'ambrose' ? 'Ambrose' : 'Stableford'} — ${course?.name || ''}`.trim(),
-          ...(r.format === 'ambrose' ? { comp_bonus: s.comp_bonus ?? 0, min_drives: s.min_drives } : {}),
+          ...(r.format === 'ambrose' ? { comp_bonus: bonusOn ? s.comp_bonus ?? 0 : 0, min_drives: s.min_drives } : {}),
           rules: s.text || null,
         };
       }));

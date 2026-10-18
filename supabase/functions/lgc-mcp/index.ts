@@ -28,7 +28,12 @@ async function ctxForKey(key: string | undefined): Promise<Ctx | null> {
   const hit = keyCache.get(key);
   if (hit && Date.now() - hit.at < 60000) return hit.ctx;
   const { data } = await db.from('connector_keys').select('group_id, player_id, groups(name)').eq('key_hash', await sha256(key)).maybeSingle();
-  const ctx = data ? { g: data.group_id as string, author: (data.player_id as string) || null, groupName: (data as any).groups?.name || 'the group' } : null;
+  let ctx = data ? { g: data.group_id as string, author: (data.player_id as string) || null, groupName: (data as any).groups?.name || 'the group' } : null;
+  // The group can switch the connector off (Stage 3). An older database without switches: on.
+  if (ctx) {
+    const { data: on, error } = await db.rpc('feature_on', { p_group: ctx.g, p_key: 'connector' });
+    if (!error && on === false) ctx = null;
+  }
   // Only remember keys that work (and not too many), so random wrong keys can't fill the memory.
   if (ctx) {
     if (keyCache.size > 200) keyCache.clear();

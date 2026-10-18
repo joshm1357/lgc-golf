@@ -20,6 +20,8 @@ export const GROUP_TABLES = new Set([
   'plan_payments', 'plan_groups', 'plan_transfers', 'rule_votes',
   // Stage 1b (migration 025)
   'plan_comments', 'notify_prefs',
+  // Stage 3 (migration 029)
+  'group_features',
 ]);
 
 let current = (() => {

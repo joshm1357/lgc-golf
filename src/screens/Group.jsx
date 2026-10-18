@@ -8,6 +8,7 @@ import { setCurrentGroup } from '../lib/group.js';
 import { inviteLink, inviteCode, ROLE_LABEL, ROLE_HELP } from '../lib/invite.js';
 import { SIGN_IN, linkProvider, linkEmail } from '../lib/auth.js';
 import { shareText } from '../lib/push.js';
+import { FEATURES, featureOn, children } from '../lib/features.js';
 import { useRun, must } from '../lib/run.js';
 
 export default function Group() {
@@ -21,6 +22,7 @@ export default function Group() {
         {status.is_admin && <InviteCard role="player" />}
         {status.is_admin && <InviteCard role="guest" />}
         {status.is_admin && <Members />}
+        {status.is_admin && <FeaturesCard />}
         {status.is_admin && status.legacy && <AdminPinCard />}
         <JoinAnother />
         {!status.is_admin && <div className="small muted">You’re a {ROLE_LABEL[status.role] || 'member'} here — {ROLE_HELP[status.role] || ''} Ask an organiser for an invite link to bring someone in.</div>}
@@ -214,5 +216,40 @@ function JoinAnother() {
         <button className="btn" disabled={!code}>Open</button>
       </div>
     </form>
+  );
+}
+
+/** Features: one switch each. A feature that needs another is greyed out while that one is off. Applies to everyone
+ *  in the group straight away (the database refuses writes to a switched-off feature, so it can't be got around). */
+function FeaturesCard() {
+  const data = useData();
+  const [busy, run] = useRun();
+  const settings = data.features || {};
+  const flip = (f, on) => {
+    const kids = children(f.key).filter((k) => featureOn(k, settings));
+    if (!on && kids.length && !window.confirm(`Switching off ${f.name} also switches off: ${kids.map((k) => FEATURES.find((x) => x.key === k).name).join(', ')}. Go ahead?`)) return;
+    run(() => must(supabase.rpc('set_feature', { p_key: f.key, p_on: on })), on ? `${f.name} on` : `${f.name} off`);
+  };
+  return (
+    <div className="card">
+      <div style={{ padding: '12px 14px 4px' }}>
+        <div className="label">Features</div>
+        <div className="small muted">Switch off what your group doesn’t use — it disappears for everyone. History stays.</div>
+      </div>
+      {FEATURES.map((f) => {
+        const own = f.key in settings ? !!settings[f.key] : f.newGroup;
+        const parentOff = f.parent && !featureOn(f.parent, settings);
+        return (
+          <label key={f.key} className="row" style={{ gap: 10, padding: '10px 14px', paddingLeft: f.parent ? 34 : 14, borderTop: '1px solid var(--line-soft)', opacity: parentOff ? 0.5 : 1 }}>
+            <span className="grow" style={{ minWidth: 0 }}>
+              <strong style={{ fontSize: 15 }}>{f.name}</strong>
+              <div className="small muted">{parentOff ? `Needs ${FEATURES.find((x) => x.key === f.parent).name} on. ` : ''}{f.description}</div>
+            </span>
+            <input type="checkbox" role="switch" checked={own && !parentOff} disabled={busy || parentOff} aria-label={f.name}
+              onChange={(e) => flip(f, e.target.checked)} style={{ width: 24, height: 24, flex: 'none' }} />
+          </label>
+        );
+      })}
+    </div>
   );
 }

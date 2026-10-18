@@ -6,7 +6,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { supabase, friendlyError } from '../lib/supabase.js';
-import { useData, useRealtime, useSession, playerName, cacheGet, cacheSet } from '../lib/store.jsx';
+import { useData, useRealtime, useSession, playerName, cacheGet, cacheSet, useFeature } from '../lib/store.jsx';
 import { Header, Avatar, AvatarStack, Sheet, Loading, Icon, toast } from '../components/ui.jsx';
 import {
   tallyPoll, nonVoters, suggestions, fmtRange, countdown, nudgeText, RSVP_LABEL, DEFAULT_BRING, todayISO, money,
@@ -88,13 +88,13 @@ export function usePlanData(planId) {
 }
 
 const TABS = [
-  { value: 'vote', label: '🗳️ Vote' },
+  { value: 'vote', label: '🗳️ Vote', feature: 'planner_tasks' },
   { value: 'chat', label: '💬 Chat' },
   { value: 'people', label: '🙋 Who’s in' },
   { value: 'details', label: '📍 Details' },
-  { value: 'jobs', label: '📋 Jobs' },
-  { value: 'kitty', label: '💰 Kitty' },
-  { value: 'groups', label: '🛏️ Rooms & cars' },
+  { value: 'jobs', label: '📋 Jobs', feature: 'planner_tasks' },
+  { value: 'kitty', label: '💰 Kitty', feature: 'planner_costs' },
+  { value: 'groups', label: '🛏️ Rooms & cars', feature: 'planner_rooms' },
 ];
 
 export function PlanDetail() {
@@ -103,14 +103,17 @@ export function PlanDetail() {
   const { status } = useSession();
   const pd = usePlanData(planId);
   const [editing, setEditing] = useState(false);
-  const tab = TABS.some((t) => t.value === params.get('tab')) ? params.get('tab') : null;
+  // Tabs for switched-off features (Group & invites → Features) aren't shown.
+  const on = { planner_tasks: useFeature('planner_tasks'), planner_costs: useFeature('planner_costs'), planner_rooms: useFeature('planner_rooms') };
+  const tabs = TABS.filter((t) => !t.feature || on[t.feature]);
+  const tab = tabs.some((t) => t.value === params.get('tab')) ? params.get('tab') : null;
   const setTab = (t) => setParams((p) => { const n = new URLSearchParams(p); n.set('tab', t); return n; }, { replace: true });
 
   if (!pd) return <div className="page"><Header back="Trips" title="Loading…" /><Loading /></div>;
   if (!pd.plan) return <div className="page"><Header back="Trips" title="Not found" /><div className="empty">This trip has been removed.</div></div>;
   const { plan } = pd;
   // Open on the most useful tab: vote while a vote is open, otherwise the details.
-  const current = tab || (pd.polls.some((p) => p.status === 'open') ? 'vote' : plan.start_date ? 'details' : 'people');
+  const current = tab || (on.planner_tasks && pd.polls.some((p) => p.status === 'open') ? 'vote' : plan.start_date ? 'details' : 'people');
   const sub = [plan.start_date ? `${fmtRange(plan.start_date, plan.end_date)} · ${countdown(plan.start_date)}` : 'Dates TBC', plan.location_name || 'Location TBC'].join(' · ');
 
   return (
@@ -118,7 +121,7 @@ export function PlanDetail() {
       <Header back="Trips" title={plan.name} sub={sub}
         right={(status.is_admin || (plan.proposed && plan.created_by === status.player_id)) && <button type="button" className="btn ghost sm" style={{ color: '#fff', background: 'transparent', borderColor: 'rgba(255,255,255,.45)' }} onClick={() => setEditing(true)}>Edit</button>}>
         <div className="chips" role="tablist" aria-label="Sections" style={{ margin: '4px -16px 0', padding: '0 16px' }}>
-          {TABS.map((t) => (
+          {tabs.map((t) => (
             <button key={t.value} type="button" role="tab" className="chip" aria-selected={t.value === current} onClick={() => setTab(t.value)}
               style={t.value === current ? { background: 'var(--gold)', borderColor: 'var(--gold)', color: 'var(--navy)' } : { background: 'rgba(255,255,255,.08)', borderColor: 'rgba(255,255,255,.35)', color: '#fff' }}>{t.label}</button>
           ))}
@@ -129,7 +132,7 @@ export function PlanDetail() {
         {plan.status !== 'cancelled' && <StageBar pd={pd} />}
         {plan.proposed && plan.status !== 'cancelled' && <ProposalBanner plan={plan} reload={pd.reload} />}
         <LockInCard pd={pd} />
-        <Checklist pd={pd} onGo={setTab} />
+        {on.planner_tasks && <Checklist pd={pd} onGo={setTab} />}
         <TripSetupCard plan={plan} reload={pd.reload} />
         {current === 'vote' && <VoteTab pd={pd} />}
         {current === 'chat' && <ChatTab pd={pd} />}

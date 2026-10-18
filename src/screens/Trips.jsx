@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
-import { useData, useRealtime, useSession, playerName, cacheGet, cacheSet } from '../lib/store.jsx';
+import { useData, useRealtime, useSession, playerName, cacheGet, cacheSet, useFeature } from '../lib/store.jsx';
 import { Header, AvatarStack, Sheet, Loading, toast } from '../components/ui.jsx';
 import { fmtRange, countdown, RSVP_LABEL, todayISO, money } from '../lib/plan.js';
 import { STAGE_LABEL, sortTrips, stillToDecide, suggestionOptions, defaultCloses } from '../lib/trips.js';
@@ -19,6 +19,7 @@ export default function Trips() {
   const nav = useNavigate();
   const [rows, setRows] = useState(null);
   const [suggesting, setSuggesting] = useState(false);
+  const notifyOn = useFeature('notifications');
   const load = useCallback(async () => {
     try {
       const [plans, rsvps, polls] = await Promise.all([
@@ -54,7 +55,7 @@ export default function Trips() {
     <div className="page">
       <Header logo title="Trips" sub="What’s on, what’s being decided, and every trip so far" />
       <div className="section stack">
-        <NotifyCard compact />
+        {notifyOn && <NotifyCard compact />}
         {rows.offline && <div className="small muted">No signal — showing the list from last time.</div>}
         {rows.failed && <div className="err">Couldn’t load the trips — check your signal and open Trips again.</div>}
 
@@ -204,15 +205,19 @@ export function SuggestSheet({ onClose, onSaved }) {
   const [note, setNote] = useState('');
   const [closes, setCloses] = useState(defaultCloses());
   const [busy, run] = useRun();
+  const votesOn = useFeature('planner_tasks');
   const opts = suggestionOptions({ dates, rough, places });
+  // With votes switched off, the first date and place are simply the trip's.
+  const firstDate = opts.dates.find((d) => d.start_date);
 
   const save = () => run(async () => {
     const each = budget === '' ? null : Number(String(budget).replace(/[^0-9.]/g, '')) || null;
     const created = await must(supabase.from('plans').insert({
       kind, name: name.trim(), status: 'planning', proposed: !status.is_admin, brief: note.trim() || null,
       ...(each ? { budget_pp: each } : {}), // only sent when given, so the form works on a database without it
+      ...(!votesOn ? { start_date: firstDate?.start_date || null, end_date: firstDate?.end_date || null, location_name: opts.places[0]?.label || null } : {}),
     }).select().single());
-    if (opts.dates.length || opts.places.length) {
+    if (votesOn && (opts.dates.length || opts.places.length)) {
       const { error } = await supabase.rpc('start_trip_votes', { p_plan: created.id, p_dates: opts.dates, p_places: opts.places, p_closes_on: closes || null });
       if (error) toast('Saved, but the votes didn’t open — add them on the Vote tab');
     }

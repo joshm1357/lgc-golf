@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase, friendlyError } from '../lib/supabase.js';
-import { useData, useScores, useSession, playerName } from '../lib/store.jsx';
+import { useData, useScores, useSession, playerName, useFeature } from '../lib/store.jsx';
 import { saveScore } from '../lib/offline.js';
 import { sendOrQueue } from '../lib/outbox.js';
 import { courseHoles } from '../lib/board.js';
@@ -79,6 +79,8 @@ export default function ScoreEntry() {
     setDrive(null);
   }, [resetKey]);
 
+  const sideCompsOn = useFeature('side_comps');
+  const gpsOn = useFeature('gps');
   if (!data.ready) return <Loading />;
   if (!round || !course) return <div className="empty">Round not found.</div>;
   if (!subjects.length) return <div className="empty">No {isA ? 'teams' : 'players'} in this round yet.</div>;
@@ -172,7 +174,7 @@ export default function ScoreEntry() {
         <div className="sync"><strong>{scores.pendingCount} waiting to sync.</strong> They'll send when signal's back.</div>
       )}
       {locked && <div className="sync">This round isn't live — scores can't be changed.</div>}
-      {compHere && (
+      {compHere && sideCompsOn && (
         <div className="section">
           <a href={`#/comps?r=${round.id}&kind=${compHere.kind}&hole=${hole.n}`} className="card pad row" style={{ background: 'var(--gold-soft)', borderColor: 'var(--gold)', textDecoration: 'none', color: 'inherit' }}>
             <span style={{ fontSize: 26 }}>{compHere.kind === 'ctp' ? '🎯' : '💣'}</span>
@@ -189,7 +191,7 @@ export default function ScoreEntry() {
         </div>
       )}
 
-      <Distances round={round} course={course} hole={hole} />
+      {gpsOn && <Distances round={round} course={course} hole={hole} />}
 
       <div className="section">
         <div className="card" style={{ padding: '20px 16px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>

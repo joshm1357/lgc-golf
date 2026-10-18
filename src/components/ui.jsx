@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { Crest } from './Logo.jsx';
+import { useFeature } from '../lib/store.jsx';
 
 // ---------- Icons (simple stroke icons) ----------
 const P = { fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' };
@@ -93,16 +94,17 @@ export function Seg({ options, value, onChange, light }) {
 }
 
 export function TabBar() {
+  const on = { feed: useFeature('feed'), side_comps: useFeature('side_comps'), planner: useFeature('planner') };
   const tabs = [
     { to: '/', label: 'Leaderboard', icon: Icon.board, end: true },
-    { to: '/feed', label: 'Feed', icon: Icon.feed },
-    { to: '/comps', label: 'Comps', icon: Icon.flag },
-    { to: '/plan', label: 'Trips', icon: Icon.calendar },
+    { to: '/feed', label: 'Feed', icon: Icon.feed, feature: 'feed' },
+    { to: '/comps', label: 'Comps', icon: Icon.flag, feature: 'side_comps' },
+    { to: '/plan', label: 'Trips', icon: Icon.calendar, feature: 'planner' },
     { to: '/more', label: 'More', icon: Icon.more },
-  ];
+  ].filter((t) => !t.feature || on[t.feature]);
   return (
     <nav className="tabs" aria-label="Main">
-      <div className="tabs-in">
+      <div className="tabs-in" style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}>
         {tabs.map((t) => (
           <NavLink key={t.to} to={t.to} end={t.end} className={({ isActive }) => 'tab' + (isActive ? ' active' : '')}>
             {t.icon()}

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { roundSettingsFromRules } from '../lib/plan.js';
 import { supabase, friendlyError } from '../lib/supabase.js';
-import { useData, useSession, playerName } from '../lib/store.jsx';
+import { useData, useSession, playerName, useFeature } from '../lib/store.jsx';
 import { Header, Avatar, Loading, toast } from '../components/ui.jsx';
 import DrawSetup from '../components/DrawSetup.jsx';
 
@@ -261,6 +261,7 @@ function RoundsAdmin() {
 /** The Rulebook rules for this round's format, and the numbers scoring uses (side comp strokes, minimum drives). */
 function RoundRules({ round }) {
   const data = useData();
+  const bonusOn = useFeature('comp_bonus');
   const [rules, setRules] = useState(null);
   const [bonus, setBonus] = useState(String(round.comp_bonus ?? 0));
   const [drives, setDrives] = useState(String(round.min_drives ?? ''));
@@ -279,15 +280,15 @@ function RoundRules({ round }) {
         {s.applies.map((r) => <div key={r.id} className="small"><strong>{r.title}</strong>{r.value ? ` · ${r.value}` : ''}</div>)}
         {isA && (
           <div className="row">
-            <label className="field grow"><span>Side comp worth (strokes off)</span><input className="input" inputMode="numeric" value={bonus} onChange={(e) => setBonus(e.target.value.replace(/[^0-9]/g, ''))} /></label>
+            {bonusOn && <label className="field grow"><span>Side comp worth (strokes off)</span><input className="input" inputMode="numeric" value={bonus} onChange={(e) => setBonus(e.target.value.replace(/[^0-9]/g, ''))} /></label>}
             <label className="field grow"><span>Minimum drives each</span><input className="input" inputMode="numeric" value={drives} onChange={(e) => setDrives(e.target.value.replace(/[^0-9]/g, ''))} placeholder="none" /></label>
           </div>
         )}
-        {changed && <button type="button" className="btn sm" onClick={() => save({ comp_bonus: parseInt(bonus, 10) || 0, min_drives: drives ? Number(drives) : null }, 'Round settings saved')}>Save these settings</button>}
+        {changed && <button type="button" className="btn sm" onClick={() => save({ comp_bonus: bonusOn ? parseInt(bonus, 10) || 0 : 0, min_drives: drives ? Number(drives) : null }, 'Round settings saved')}>Save these settings</button>}
         {rules && s.applies.length > 0 && (
           <button type="button" className="btn ghost sm" onClick={() => {
             const patch = { rules: s.text };
-            if (isA && s.comp_bonus != null) patch.comp_bonus = s.comp_bonus;
+            if (isA && s.comp_bonus != null && bonusOn) patch.comp_bonus = s.comp_bonus;
             if (isA && s.min_drives != null) patch.min_drives = s.min_drives;
             if (isA) { setBonus(String(patch.comp_bonus ?? round.comp_bonus ?? 0)); setDrives(String(patch.min_drives ?? round.min_drives ?? '')); }
             save(patch, 'Applied from the Rulebook — shown on the leaderboard');

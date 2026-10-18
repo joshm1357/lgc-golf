@@ -503,11 +503,28 @@ start page → all 7 steps → invite, coming back mid-way, someone already on t
   shot planner, side comps) carries "Greens © OpenStreetMap contributors"; the library and preview say so too.
   (L.G.C's earlier OpenStreetMap fills weren't marked; re-filling a course marks it.)
 
-**Tested:** `supabase/tests/stage8_courses.sql` 16 checks (players can't share, 17-hole course refused, table not
-readable, search by name with area/holes/greens/credit, distance, only course details kept, copy is the group's own,
-copying twice gives the same course, changing a copy leaves the library alone, use count, a copy can't be shared again,
-can't share another group's course or see it, sharing again updates the same entry, not signed in sees nothing);
-unit test (OpenStreetMap marking); phone width `tests/e2e/courses-test.mjs` 10 checks. All other phone tests pass.
+**Independent review — fixed (035b, applied on staging):**
+- Every hole needs a par (3–6) and stroke index; map points must be real places; 18 holes only for now (handicap
+  maths is 18-hole).
+- **The library can't be wrecked:** phone-only (not signed-in) organisers can't share; 10 shares a day per group; once
+  another group has copied an entry, sharing again only fills in missing tees and greens (name, pars and stroke index
+  stay); Josh can hide a junk entry (`hidden`).
+- **Groups give greens back:** sharing a course that came from the library fills holes the library is missing — never
+  overwriting anything — so "one group maps it, the next gets it" works both ways.
+- No duplicates when two people share or copy at once; the library link on a course can't be changed from the app.
+- OpenStreetMap credit now also on the score screen (distances), and the credits link to openstreetmap.org/copyright.
+- Search: % and _ are searched literally, replies can't arrive out of order, "no signal" isn't shown as "no
+  courses"; a course you already added by hand is pointed out; adding from trip set-up puts it on the first round.
+- Left for Josh: L.G.C's earlier OpenStreetMap greens aren't marked (say which courses were filled from it and they'll
+  be marked, adding the credit); the OSM licence question for a public library (see the club-partners note) before the
+  public course page and seeding.
+
+**Tested:** `supabase/tests/stage8_courses.sql` 23 checks (phone-only and players can't share, 17 holes / no pars / 9
+holes refused, table not readable, search with area/holes/greens/credit, distance, only course details kept, copy is
+the group's own, copying twice gives the same course, the link can't be removed from the app, changing a copy leaves the
+library alone, use count, a copy gives tees back without changing pars, can't share or see another group's course,
+sharing again fills only once others use it, % searched literally, hidden entries, not signed in sees nothing);
+unit test (OpenStreetMap marking); phone width `tests/e2e/courses-test.mjs` 11 checks. All other phone tests pass.
 
 ## Known limits
 - GPS distances are approximate (±5–10 m) and straight-line; closest-to-pin distance is typed in.

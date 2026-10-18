@@ -144,7 +144,7 @@ export default function GreenMapper() {
           {(h.tee || h.green) && <button type="button" className="btn ghost sm" onClick={clearHole}>Clear hole {h.n}</button>}
         </div>
         <button type="button" className="btn ghost block" disabled={busy} onClick={fromOsm}>🌐 Fill from OpenStreetMap (if the course is drawn there)</button>
-        <p className="note" style={{ margin: 0 }}>Points from OpenStreetMap (© OpenStreetMap contributors, openstreetmap.org/copyright) are drawn by volunteers — check each hole on the satellite picture. Phone GPS is good to about 5–10 m, so distances are a guide, like any golf GPS app.</p>
+        <p className="note" style={{ margin: 0 }}>Points from OpenStreetMap (© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors) are drawn by volunteers — check each hole on the satellite picture. Phone GPS is good to about 5–10 m, so distances are a guide, like any golf GPS app.</p>
       </div>
       <div className="fab" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, boxShadow: 'none' }}>
         <button type="button" className="btn ghost" onClick={() => { if (!dirty || window.confirm('Leave without saving?')) nav(-1); }}>Done</button>

@@ -29,3 +29,30 @@ A mobile web app for a group of mates' golf weekends. Live scoring, a live leade
 14. **Protect tomorrow's round.** As soon as Stage 1 passes and is live, create a git tag `ambrose-ready`. Build every later piece on its own branch and merge to `main` only when its tests pass. If anything breaks the live app, roll `main` back to the last good tag first and debug second. Any database change after Stage 1 must be additive (new tables/columns only — never drop or rename what Stage 1 uses).
 
 ---
+
+## Product phase (from 18 Oct 2026, v2.0 onwards) — these replace the matching rules above
+
+- **What this is now:** the L.G.C app becomes **The Golf Trip**, a product any golf group can use. One codebase and one
+  database serve many groups. Each group sees only its own data, plus its own name, crest, rulebook, history and choice
+  of features. L.G.C is group number one and keeps its own name, crest and trophies.
+- **Security goal (replaces "stop accidents and randoms"):** no group can ever read or change another group's data.
+  This covers tables, Edge Functions, scheduled jobs, push notifications, photos, phone storage and the Claude
+  connector. It is tested, not assumed.
+- **Features can be switched on or off per group.** Every feature beyond the core (scoring, leaderboard, players,
+  rounds) sits behind a switch. A switched-off feature is hidden in the app and refused by the database. Switching off
+  never deletes data; switching back on brings it back.
+- **Pace (replaces rule 2's "all tonight"):** keep building through the stages in order without waiting for Josh,
+  except at a **STOP**. Stops come after each audit, before anything touches the live database or `main`, and before
+  anything costs money or changes hosting, domains or sign-in settings.
+- **L.G.C must keep working.** Its live app, data and PINs work the same after every release. Rule 14 still applies:
+  tag before each release, branch per stage, database changes additive only.
+- **Old phones keep working.** The service worker keeps the app saved on phones, so some phones run the previous
+  version for a while. Every database change must keep the previous app version working until it updates.
+- **Build and test on staging first.** Supabase project `lgc-golf-staging` for every database change; the live project
+  only after Josh's OK. Database changes that DROP anything need Josh in the chat to approve them.
+- **Words:** group, organiser, player, guest, trip, round, rulebook, history, feature — used the same way in code,
+  comments and UI. The planner's `plan_groups` / `plan_group_members` tables are rooms and cars, not groups in this
+  sense. Leave their names alone and never mix the two up.
+- **Plain language, Australian English, mobile first** (375px, one hand, sunlight), as before.
+- **Branding (replaces rule 10):** brand values come from the current group (Stage 4); until then they live in
+  `src/styles.css` (`:root`) and `src/components/Logo.jsx`.

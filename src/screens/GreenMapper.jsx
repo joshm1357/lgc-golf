@@ -137,14 +137,14 @@ export default function GreenMapper() {
           {MODES.map((m) => <button key={m.key} type="button" aria-pressed={mode === m.key} onClick={() => setMode(m.key)}>{m.label}{h[m.key] ? ' ✓' : ''}</button>)}
         </div>
         <span className="small muted">Tap the map to place the <strong>{MODES.find((m) => m.key === mode).label.toLowerCase()}</strong>{mode === 'tee' ? '' : ' of the green'}. Drag any point to fine-tune. Zoom right in on the green for front and back.</span>
-        <CourseMap className="map tall" markers={markers} fit={fit} zoom={fit.length === 1 ? 18 : undefined} onTap={(p) => setPoint(mode, p)} />
+        <CourseMap className="map tall" markers={markers} fit={fit} zoom={fit.length === 1 ? 18 : undefined} onTap={(p) => setPoint(mode, p)} osm={holes.some((h) => h.osm)} />
         <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
           <button type="button" className="btn ghost sm" onClick={here}>📍 {MODES.find((m) => m.key === mode).label} = where I’m standing</button>
           {!fit.length && <button type="button" className="btn ghost sm" onClick={centreOnMe}>Centre the map on me</button>}
           {(h.tee || h.green) && <button type="button" className="btn ghost sm" onClick={clearHole}>Clear hole {h.n}</button>}
         </div>
         <button type="button" className="btn ghost block" disabled={busy} onClick={fromOsm}>🌐 Fill from OpenStreetMap (if the course is drawn there)</button>
-        <p className="note" style={{ margin: 0 }}>Points from OpenStreetMap are drawn by volunteers — check each hole on the satellite picture. Phone GPS is good to about 5–10 m, so distances are a guide, like any golf GPS app.</p>
+        <p className="note" style={{ margin: 0 }}>Points from OpenStreetMap (© OpenStreetMap contributors, openstreetmap.org/copyright) are drawn by volunteers — check each hole on the satellite picture. Phone GPS is good to about 5–10 m, so distances are a guide, like any golf GPS app.</p>
       </div>
       <div className="fab" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, boxShadow: 'none' }}>
         <button type="button" className="btn ghost" onClick={() => { if (!dirty || window.confirm('Leave without saving?')) nav(-1); }}>Done</button>

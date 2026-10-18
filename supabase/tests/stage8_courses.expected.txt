@@ -1,0 +1,18 @@
+Expected (staging, after 035). Run as one script; it rolls itself back.
+
+player shares = refused
+share a course with 17 holes = refused
+read the library table directly = refused
+search by name = Zzqx Test Links / Bowral NSW / 18 holes / 18 greens / osm true
+search near me (km) = 0.1
+what the library keeps = false / osm on hole 1: true      (only course details — nothing else from the group's copy)
+copy is N's own = true / Zzqx Test Links
+copy again gives the same course = true
+N changes its copy; library par 1 still = 4
+used by = 1
+N shares its copy again = refused
+N shares M's course = refused
+N sees M's course = 0
+share again updates, not a new entry = true
+library entries for it = 1 / Zzqx Test Links (new tees)
+not signed in searches = 0

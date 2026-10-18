@@ -5,6 +5,7 @@ import React, { useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { useData, useSession, useFeature } from '../lib/store.jsx';
 import { Sheet, toast } from '../components/ui.jsx';
+import { FindCourse } from '../components/CourseLibrary.jsx';
 import { fmtRange, parseDate, daysUntil, roundSettingsFromRules } from '../lib/plan.js';
 import { useRun, must, feedPost } from './Planner.jsx';
 
@@ -58,6 +59,7 @@ function TripSetupSheet({ plan, onClose, onDone }) {
   const [rounds, setRounds] = useState(() => days.map((d, i) => ({ date: d, course_id: '', format: plan.kind === 'trip' && i === days.length - 1 && days.length > 1 ? 'ambrose' : 'stableford' })));
   const set = (i, patch) => setRounds(rounds.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const chosen = rounds.filter((r) => r.course_id);
+  const [finding, setFinding] = useState(false);
 
   const go = () => run(async () => {
     const { data: rules } = await supabase.from('rules').select('*').eq('status', 'active');
@@ -126,8 +128,13 @@ function TripSetupSheet({ plan, onClose, onDone }) {
             </div>
           </div>
         ))}
-        {!data.courses.length && <span className="small muted">Add the courses in Admin first (par and stroke index), then come back.</span>}
-        <span className="small muted">New course? Add it in Admin → Courses, then pick it here. Ambrose rounds take the side comp and drive rules from the Rulebook. Teams and side comp holes are set nearer the day.</span>
+        {finding ? (
+          <div className="card pad stack" style={{ gap: 8 }}>
+            <strong>📚 Find a course in the library</strong>
+            <FindCourse onAdded={() => setFinding(false)} />
+          </div>
+        ) : <button type="button" className="btn ghost block" onClick={() => setFinding(true)}>📚 Course not listed? Find it in the library</button>}
+        <span className="small muted">Not in the library either? Add it in Admin → Courses (par and stroke index), then pick it here. Ambrose rounds take the side comp and drive rules from the Rulebook. Teams and side comp holes are set nearer the day.</span>
         {trophiesOn && lastTrophies.length > 0 && (
           <label className="row" style={{ gap: 8, fontWeight: 600 }}>
             <input type="checkbox" checked={copyTrophies} onChange={(e) => setCopyTrophies(e.target.checked)} style={{ width: 20, height: 20 }} />

@@ -116,7 +116,8 @@ export function mergeGreens(holes, found, overwrite = false) {
     if (!f) return h;
     if (!overwrite && h.green) return h;
     changed++;
-    return { ...h, tee: f.tee || h.tee, green: f.green || h.green, front: f.front || (overwrite ? undefined : h.front), back: f.back || (overwrite ? undefined : h.back) };
+    // osm: these points came from OpenStreetMap, so maps showing them carry its credit.
+    return { ...h, tee: f.tee || h.tee, green: f.green || h.green, front: f.front || (overwrite ? undefined : h.front), back: f.back || (overwrite ? undefined : h.back), osm: true };
   });
   return { holes: next, changed };
 }

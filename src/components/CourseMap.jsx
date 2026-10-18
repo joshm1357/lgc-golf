@@ -69,13 +69,14 @@ export const meIcon = L.divIcon({
 });
 
 /** lines: [{ id, points: [{lat,lng}], color, dashed }] */
-export default function CourseMap({ markers = [], fit, className = 'map', zoom, onTap, lines = [] }) {
+/** osm: some points came from OpenStreetMap — its licence needs the credit on the map. */
+export default function CourseMap({ markers = [], fit, className = 'map', zoom, onTap, lines = [], osm = false }) {
   const pts = (fit || markers).filter((m) => m && m.lat != null && m.lng != null);
   const center = pts[0] ? [pts[0].lat, pts[0].lng] : [-33.87, 151.21];
   return (
     <div className={className}>
       <MapContainer center={center} zoom={pts.length ? 17 : 10} style={{ height: '100%', width: '100%' }} scrollWheelZoom={false}>
-        <TileLayer url={ESRI} maxZoom={20} maxNativeZoom={19} attribution="Imagery © Esri" />
+        <TileLayer key={osm ? 'osm' : 'plain'} url={ESRI} maxZoom={20} maxNativeZoom={19} attribution={osm ? 'Imagery © Esri · Greens © OpenStreetMap contributors' : 'Imagery © Esri'} />
         <FitTo points={pts} zoom={zoom} />
         {onTap && <TapCatcher onTap={onTap} />}
         {lines.map((l) => (

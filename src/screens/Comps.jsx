@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useRealtime, useSession, useScores, playerName } from '../lib/store.jsx';
-import { uploadPhoto } from '../lib/images.js';
+import { sendOrQueue } from '../lib/outbox.js';
 import { distanceM, getFix } from '../lib/geo.js';
 import { Header, Seg, Avatar, Icon, Sheet, timeAgo, toast, PhotoButtons } from '../components/ui.jsx';
 import CourseMap, { avatarIcon, teeIcon } from '../components/CourseMap.jsx';
@@ -227,17 +227,21 @@ function EntryForm({ round, kind, hole, holeInfo, leader, playerIds, onClose, on
   async function save() {
     setBusy(true);
     try {
-      const url = file ? await uploadPhoto(file, 'comps') : null;
       const d = shownDist === '' ? null : Number(shownDist);
-      const { error } = await supabase.from('side_entries').insert({
+      const res = await sendOrQueue('side_entries', {
         round_id: round.id, hole, kind, player_id: playerId, distance_m: d, lat: pt?.lat ?? null, lng: pt?.lng ?? null,
-        accuracy_m: pt?.accuracy ?? null, photo_url: url, created_by: me,
-      });
-      if (error) throw error;
+        accuracy_m: pt?.accuracy ?? null, photo_url: null, created_by: me,
+      }, { photo: file ? { file, field: 'photo_url', folder: 'comps' } : null });
+      const url = res.row?.photo_url || null;
+      if (!res.sent) {
+        toast('No signal — entry saved on your phone, it’ll send when signal’s back');
+        onClose();
+        return;
+      }
       // New leader? Tell the feed.
       const leads = d != null && (!leader || leader.distance_m == null || (kind === 'ctp' ? d < leader.distance_m : d > leader.distance_m));
       if (leads) {
-        await supabase.from('posts').insert({
+        await sendOrQueue('posts', {
           kind: 'user', player_id: me, round_id: round.id, trip_id: round.trip_id, hole, photo_url: url,
           body: `New leader — ${LABEL[kind].toLowerCase()} on ${hole}: ${playerName(data.playersById[playerId])}, ${d} m`,
         });

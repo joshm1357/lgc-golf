@@ -3,3 +3,7 @@
 # otherwise the daily reminders get refused.
 [functions.notify]
 verify_jwt = false
+
+# The L.G.C connector checks its own secret key (last part of the URL); Claude sends no Supabase token.
+[functions.lgc-mcp]
+verify_jwt = false

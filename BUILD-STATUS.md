@@ -39,10 +39,15 @@ Database: Supabase project `lgc-golf` (Sydney), migrations in `supabase/migratio
   scores and plans are saved on the phone) and scores entered offline queue and send on reconnect — tested end
   to end in a browser with the network cut. Database client retries are off so a lost signal doesn't freeze reads.
 - **Bottom bar:** Leaderboard · Feed · Comps · Coming up · More (Map moved into More).
+- **v1.4 (18 Oct night):** GPS distances (front/middle/back/today's pin; `round_pins` table, members can set it
+  while the round is live), shot planner (`ShotPlanner.jsx`, `planLegs` in greens.js), green mapper with
+  OpenStreetMap fill (line direction + duplicate holes handled), offline course tiles, round rules from the
+  Rulebook, trip set-up from a plan, outbox for posts/comp entries (client ids, photos in IndexedDB, 7-day expiry,
+  permanent refusals dropped with a message), `lgc-mcp` connector Edge Function (11 tools, key in the URL). 54 tests.
 - **Release plan:** DEV-PLAN.md (and the shared doc "L.G.C App — Release plan").
 
 ## Known limits
-- GPS distances are approximate (±5–10 m); closest-to-pin distance is typed in.
+- GPS distances are approximate (±5–10 m) and straight-line; closest-to-pin distance is typed in.
 - Location sharing only works while the app is open.
 - iPhone notifications only work once the app is added to the Home Screen and opened from there (iOS 16.4+).
 - `pg_net` sits in the public schema (Supabase advisor warning, harmless; moving it needs a drop/recreate).

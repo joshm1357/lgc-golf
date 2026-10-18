@@ -32,15 +32,52 @@ self.addEventListener('install', (e) => {
 });
 self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
-    for (const k of await caches.keys()) if (k !== CACHE) await caches.delete(k);
+    for (const k of await caches.keys()) if (k !== CACHE && k !== TILES) await caches.delete(k);
     await self.clients.claim();
   })());
 });
+
+const TILES = 'lgc-tiles-v1';
+const TILE_HOST = 'server.arcgisonline.com';
+const MAX_TILES = 2500; // about 50 MB at most
+
+async function trimTiles() {
+  const c = await caches.open(TILES);
+  const keys = await c.keys();
+  for (let i = 0; i < keys.length - MAX_TILES; i++) await c.delete(keys[i]); // oldest first
+}
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
+  // Satellite map tiles: a saved copy first (so the course map works with no signal), else fetch and save.
+  if (url.hostname === TILE_HOST && url.pathname.includes('/tile/')) {
+    event.respondWith((async () => {
+      let c = null;
+      try {
+        c = await caches.open(TILES);
+        const saved = await c.match(req.url);
+        if (saved) return saved;
+      } catch { /* storage unavailable — just fetch */ }
+      // Ask for a readable (CORS) copy so we only ever save real pictures, never error pages or
+      // unreadable "opaque" responses (Chrome counts each of those as ~7 MB of storage).
+      let fresh;
+      try {
+        fresh = await fetch(req.url, { mode: 'cors', credentials: 'omit' });
+      } catch {
+        return fetch(req); // CORS refused or no signal: let the browser try its own way, save nothing
+      }
+      if (fresh.ok && c) {
+        try {
+          await c.put(req.url, fresh.clone());
+          if (Math.random() < 0.05) event.waitUntil(trimTiles().catch(() => {}));
+        } catch { /* storage full: show the tile anyway */ }
+      }
+      return fresh;
+    })());
+    return;
+  }
   if (url.origin !== self.location.origin || !url.pathname.startsWith(BASE)) return;
 
   const isPage = req.mode === 'navigate' || url.pathname === BASE || url.pathname.endsWith('/index.html');

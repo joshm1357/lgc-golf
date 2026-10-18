@@ -1,14 +1,34 @@
 import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useData, useScores } from '../lib/store.jsx';
+import { useData, useScores, useSession } from '../lib/store.jsx';
+import { greensMapped, courseTiles } from '../lib/greens.js';
+import { Header, Sheet, toast } from '../components/ui.jsx';
 import { roundBoard, courseHoles } from '../lib/board.js';
 import { formatToPar, parTotal } from '../lib/scoring.js';
-import { Header, Sheet } from '../components/ui.jsx';
+
+const TILE = (t) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${t.z}/${t.y}/${t.x}`;
+
+/** Fetch the satellite pictures for a course once, so the map (comps, greens, where's everyone) works with no signal. */
+async function saveCourseMap(course, setProgress) {
+  const tiles = courseTiles(course.holes);
+  if (!tiles.length) { toast('Map the greens first — the app needs to know where the course is.'); return; }
+  if (!navigator.serviceWorker?.controller) { toast('Open the app from the Home Screen (or reload once) first, then try again.'); return; }
+  let done = 0;
+  for (let i = 0; i < tiles.length; i += 6) {
+    await Promise.all(tiles.slice(i, i + 6).map((t) => fetch(TILE(t), { mode: 'cors', credentials: 'omit' }).catch(() => {})));
+    done = Math.min(tiles.length, i + 6);
+    setProgress(Math.round((done / tiles.length) * 100));
+  }
+  setProgress(null);
+  toast(`Saved ${tiles.length} map pieces for ${course.name} — the map works without signal now`);
+}
 
 export default function Courses() {
   const data = useData();
+  const { status } = useSession();
   const scores = useScores(data.rounds.map((r) => r.id));
   const [open, setOpen] = useState(null);
+  const [progress, setProgress] = useState(null);
 
   const stats = useMemo(() => Object.fromEntries(data.courses.map((c) => {
     const rounds = data.rounds.filter((r) => r.course_id === c.id);
@@ -33,7 +53,7 @@ export default function Courses() {
           return (
             <button key={c.id} type="button" className="card pad stack" style={{ textAlign: 'left', gap: 4 }} onClick={() => setOpen(c)}>
               <div className="row between"><strong style={{ fontSize: 18 }}>{c.name}</strong><span className="muted">Par {parTotal(c.holes)}</span></div>
-              <div className="small muted">{s.rounds.length} round{s.rounds.length === 1 ? '' : 's'} played</div>
+              <div className="small muted">{s.rounds.length} round{s.rounds.length === 1 ? '' : 's'} played · 📍 {greensMapped(c.holes)}/{c.holes.length} greens mapped for GPS</div>
               {s.bestS && <div className="small">Best Stableford: <strong>{s.bestS.name}, {s.bestS.points} pts</strong></div>}
               {s.bestA && <div className="small">Best Ambrose: <strong>{s.bestA.name}, {formatToPar(s.bestA.netToPar, 1)} net</strong></div>}
             </button>
@@ -54,6 +74,12 @@ export default function Courses() {
                 </tbody>
               </table>
             </div>
+            {status.is_admin && <Link to={`/courses/${open.id}/greens`} className="btn gold block" onClick={() => setOpen(null)}>📍 Map the greens for GPS distances</Link>}
+            {greensMapped(open.holes) > 0 && (
+              <button type="button" className="btn ghost block" disabled={progress != null} onClick={() => saveCourseMap(open, setProgress)}>
+                {progress != null ? `Saving the map… ${progress}%` : '📵 Save the course map for no signal'}
+              </button>
+            )}
             <span className="label">Rounds here</span>
             {stats[open.id].rounds.map((r) => (
               <Link key={r.id} to={`/?r=${r.id}`} className="card pad row between" style={{ color: 'inherit', textDecoration: 'none' }} onClick={() => setOpen(null)}>

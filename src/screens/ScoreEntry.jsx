@@ -3,10 +3,11 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useScores, useSession, playerName } from '../lib/store.jsx';
 import { saveScore } from '../lib/offline.js';
-import { uploadPhoto } from '../lib/images.js';
+import { sendOrQueue } from '../lib/outbox.js';
 import { courseHoles } from '../lib/board.js';
 import { strokesReceived, stablefordPoints } from '../lib/scoring.js';
 import { Icon, Loading, toast, PhotoButtons } from '../components/ui.jsx';
+import Distances from '../components/Distances.jsx';
 
 const MOMENTS = ['Chip-in', 'Bomb drive', 'Lost ball', 'Air shot', 'Three-putt', 'Tree hit', 'Sandy save'];
 
@@ -116,15 +117,11 @@ export default function ScoreEntry() {
       if (!sent) toast('Saved on your phone — will sync when signal returns');
       // Moment and photo go to the feed.
       if (moment || photo) {
-        let url = null;
-        if (photo) {
-          try { url = await uploadPhoto(photo, 'feed'); } catch { toast('Photo upload failed — try again from the Feed'); }
-        }
-        const { error: postErr } = await supabase.from('posts').insert({
-          kind: 'user', player_id: me, round_id: round.id, trip_id: round.trip_id, hole: hole.n, photo_url: url,
+        // Goes now, or waits on the phone (photo too) until there's signal.
+        sendOrQueue('posts', {
+          kind: 'user', player_id: me, round_id: round.id, trip_id: round.trip_id, hole: hole.n, photo_url: null,
           body: moment ? `${moment} on ${hole.n}${isA ? ` (${subject.name})` : ''}` : null,
-        });
-        if (postErr) toast("Score saved, but the feed post didn't go — no signal?");
+        }, { photo: photo ? { file: photo, field: 'photo_url', folder: 'feed' } : null }).catch(() => toast("Score saved, but the feed post was refused"));
       }
       const next = holes.find((h) => h.n > hole.n && !myScores[h.n]) || holes.find((h) => !myScores[h.n] && h.n !== hole.n);
       if (next) setHoleN(next.n);
@@ -191,6 +188,8 @@ export default function ScoreEntry() {
           </a>
         </div>
       )}
+
+      <Distances round={round} course={course} hole={hole} />
 
       <div className="section">
         <div className="card" style={{ padding: '20px 16px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>

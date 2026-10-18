@@ -52,13 +52,44 @@ Full brief: `the-golf-trip-full-build-prompt.md` (in the Claude project). Every 
 **Phase 2 — Make it theirs (release v2.1 with Phase 3)**
 4. ✅ on staging, reviewed, in `product` — Branding from the database (name, crest, colours, font; trophy names were
 already per group). 5. ✅ on staging, reviewed, in `product` — Rulebook per group with starter rulebooks.
-6. ✅ on staging (review next) — History import: past winners and handicaps, by hand or pasted from a list; honour board
+6. ✅ on staging, reviewed, in `product` — History import: past winners and handicaps, by hand or pasted from a list; honour board
 and Trophy Room mix history and app-made winners by year; past trips show their winners.
 
 **Phase 3 — Open the doors**
-7. Start-a-group wizard (under 10 minutes). 8. Shared course library (OpenStreetMap credit). 9. Launch basics:
+7. ✅ on staging, reviewed, in `product` — Start-a-group wizard (under 10 minutes). 8. Shared course library (OpenStreetMap credit). 9. Launch basics:
 move to Vercel with `<slug>.thegolftrip.club` (STOP — Josh buys the domain), Supabase Pro (STOP — Josh switches it on),
 DRAFT privacy policy and terms, delete-my-data, error alerts (ask first), share cards, basic usage numbers.
+
+**Target user** (club-partners addendum, 18 Oct)
+- **The organiser:** the bloke in a group of 6–16 mates who books the trip, runs the group chat and chases the money.
+  Roughly 25–50, social golfer, often not a club member, phone-first, Messenger or WhatsApp.
+- **Design rules:** no app store and no sign-up before the first tee. One-handed on a cart in sunlight. Sharing to the
+  group chat comes first. Every screen a first-time guest sees makes sense with no explanation.
+
+**Added by the club-partners addendum** (order agreed: Stage 8 shared courses → 7b → 8b, because the quick round needs
+the public course page and shared courses)
+- **Stage 3 addition:** feature switch "Clubhouse TV leaderboard" (new group default off; the group also opts in per round).
+- **7b. Quick round:** public course page `/c/<course>` (no sign-in) with "Start a round with your mates"; a quick
+  group ("Josh's round at <course>") with a one-day trip and one round, guest sign-in only — under 2 minutes from scan
+  to first score; invite via the phone's share sheet, mates join with just a name as guests; format picker
+  (Stableford, Ambrose, **stroke play** — new format: STOP for the check-constraint change), closest-to-pin pre-filled
+  from par 3s, longest drive from a par 5; after the last hole: results card (share sheet), winner on the honour board,
+  "Same time next year?" (a Trips idea with a dates vote), "Make it official" (the Stage 7 wizard, pre-filled); guests
+  keep history by signing in later; every card and invite carries "Start your own group" with its source tracked.
+  Quick groups get their own new-group limit.
+- **8b. Club partners:** every Australian course listed (seeded from OpenStreetMap with credit — STOP before seeding
+  live); "Claim your course" (Josh approves each claim by hand — STOP before the first real one; club accounts need
+  real sign-in, so the Stage 2 STOP comes first); club role edits verified hole data, logo, booking contact, offers,
+  photos; QR kit PDF (cart, par 3 signs, counter, TV; each code carries club ref and placement — STOP before any kit is
+  printed or sent, and codes only ever carry the final thegolftrip.club address); attribution (first scan's club and
+  placement; per club: scans, rounds, groups, returns, trips — counts only, never names); Clubhouse TV mode (opted-in
+  groups, first names only, no photos); "Partner course" label that never hides unclaimed courses; privacy: clubs see
+  nothing about players unless a group opts in to TV (goes in the Stage 9 privacy draft).
+- **Stage 9 additions:** scan funnel in the usage numbers (by club and placement); stay cards (placement `stay`) issued
+  by Josh from the admin screen. Share cards are built once in 7b and reused.
+- **Stage 10 addition:** "Ask about a group booking" on claimed course pages and in trip place votes (form → email to
+  the club, logged against its code). No money changes hands yet; any future payment goes to the club itself, never to
+  staff, and is disclosed.
 
 **Phase 4 — Earn later (release v2.2)**
 10. Planner per group + booking links (switched off, one redirect so referral codes can be added later).

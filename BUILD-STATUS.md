@@ -354,6 +354,19 @@ crest folder, L.G.C crest only for L.G.C, bad colour/font refused, no reading an
 (theme colour maths and readability); phone width `tests/e2e/look-test.mjs` 12 checks (new group's colours/font/plain
 crest, no L.G.C artwork, pale colour blocked, save, L.G.C exact colours and crest).
 
+## v2.1 Stage 5 — Rulebook per group (branch `stage-5-rulebook`, on staging only)
+
+**Built**
+- The Rulebook was already per group (Stage 1), and round set-up already reads each group's own rules (side comp
+  strokes, minimum drives — only applied when bonus strokes are switched on).
+- **Starter rulebooks (032):** an organiser of a group with no rules picks one — **Social Stableford weekend**,
+  **Ambrose and Stableford** (L.G.C-style, with L.G.C's names removed: "trip trophy", "organiser"), **Just scoring** —
+  and edits anything afterwards. Only once (not on top of existing rules), organisers only.
+
+**Tested:** `supabase/tests/stage5_starters.sql` 6 checks (only organisers, unknown refused, 7 rules in force, no
+L.G.C names, not twice, L.G.C untouched); unit test: the Ambrose starter gives 2 strokes per side comp and 6 drives;
+phone width `tests/e2e/rulebook-test.mjs` (picker shown, choosing calls the server).
+
 ## Known limits
 - GPS distances are approximate (±5–10 m) and straight-line; closest-to-pin distance is typed in.
 - Location sharing only works while the app is open.

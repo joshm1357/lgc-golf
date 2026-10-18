@@ -1,0 +1,8 @@
+Expected (staging, after 032).
+
+player picks a starter = refused
+unknown starter = refused
+organiser picks Ambrose and Stableford = 7
+rules are the group's and in force = 7 / names: false
+second starter on top = refused
+L.G.C rules untouched = 0

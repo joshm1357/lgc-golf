@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { useData, useRealtime, useSession, playerName, useFeature } from '../lib/store.jsx';
+import { STARTERS } from '../lib/starters.js';
 import { Header, Sheet, Loading, toast } from '../components/ui.jsx';
 import { notify } from '../lib/push.js';
 import { useRun, must } from './Planner.jsx';
@@ -50,6 +51,8 @@ export default function Rulebook() {
         <div className="seg light" role="group">
           {[['all', 'All'], ['stableford', 'Stableford'], ['ambrose', 'Ambrose']].map(([k, l]) => <button key={k} type="button" aria-pressed={filter === k} onClick={() => setFilter(k)}>{l}</button>)}
         </div>
+
+        {status.is_admin && rb.rules.filter((r) => r.status === 'active' || r.status === 'proposed').length === 0 && <StarterPicker reload={rb.reload} />}
 
         {proposed.length > 0 && (
           <>
@@ -229,5 +232,26 @@ function RuleSheet({ rule, onClose, onSaved }) {
         )}
       </div>
     </Sheet>
+  );
+}
+
+/** A group with no rules yet: start from one of the starter rulebooks (organisers). */
+function StarterPicker({ reload }) {
+  const [busy, run] = useRun();
+  return (
+    <div className="card pad stack" style={{ gap: 10, borderColor: 'var(--gold)' }}>
+      <div><strong>📖 Start your Rulebook</strong><div className="small muted">Pick a starting point — you can change, add or remove any rule afterwards.</div></div>
+      {STARTERS.map((s) => (
+        <div key={s.key} className="card pad stack" style={{ gap: 6 }}>
+          <strong>{s.name}</strong>
+          <span className="small">{s.blurb}</span>
+          <span className="small muted">{s.rules.join(' · ')}</span>
+          <button type="button" className="btn sm gold" disabled={busy} onClick={() => run(async () => {
+            await must(supabase.rpc('use_starter_rulebook', { p_starter: s.key }));
+            reload();
+          }, `${s.name} rules added`)}>Use these rules</button>
+        </div>
+      ))}
+    </div>
   );
 }

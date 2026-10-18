@@ -133,6 +133,48 @@ STOP → live SQL below → merge `v1.5` into `main` (deploys) → check the liv
 6. Merge `v1.5` into `main` → GitHub Pages deploys → open the app, check the "New version ready" banner, leaderboard,
    a score, Coming up → Rooms, More → Tribunal, and airplane mode.
 
+
+## v2.0 Stage 1 — Groups (branch `stage-1-groups`, on staging only)
+
+**Built**
+- **Database (022, 023).** `groups` (L.G.C = the `legacy` group, copied from `settings`) and `group_members`
+  (copied from `members`; the 2 admins are organisers). `group_id` on 33 tables, filled in for L.G.C without touching
+  anything else (score times unchanged), indexed, then required. A trigger fills it on every new row from the row's
+  parent (a score from its round, a post from its round/trip/player…) or from the person's current group; a row can't
+  point at another group's parent and can't be moved between groups. Every existing access rule was rewritten in
+  place to mean "of this row's group" (same names, same meaning — the 30 L.G.C access checks give identical answers),
+  plus a second lock on every table: "same group only". The old function names work as before, answering for the
+  person's current group (the group the new app names in the `x-group-id` header, else their first). Photos: new
+  uploads go to `<group id>/<folder>/…`; old phones' folders only work for L.G.C. Claude connector keys live in
+  `connector_keys` (hashed, one group each; L.G.C keeps its current key). `join_group_id(pin)` tells the app which
+  group a PIN opened.
+- **Deviation:** `plan_group_members` (rooms & cars) already has a column called `group_id` — its room/car — so it
+  gets its golf group through the room/car instead of a column of its own. Its rules and the "same group only" lock
+  go through the room/car.
+- **Server.** `notify` works inside one group: the group the app names (if you're in it) or your first; every id in a
+  request must be that group's; messages only reach phones of people in that group; the daily reminders run group by
+  group. `lgc-mcp`: each key reaches one group only.
+- **App.** `src/lib/group.js`: every database request carries the group and every read of a group's table is filtered
+  to it, centrally, so no screen can show another group's rows. Offline copy and live updates per group; photo folders
+  per group (fixed when queued); join opens the joined group. Old offline copy carried over once.
+
+**Tested (staging)**
+- Isolation (`supabase/tests/stage1_isolation.sql`): a second group with players, a live round, a score, a plan,
+  a cost, a room, a rule, a post and a Tribunal case. An L.G.C player sees **0** of Group B's rows across all tables
+  and can't edit, delete, score, post, say In, take a room, claim a player, lodge or vote on a case, or upload into
+  B's photo folder; Group B sees **0** L.G.C rows; B's organiser can't touch L.G.C rounds or handicaps; the handicap
+  guard works per group and logs in the right group; a person in both groups gets the right group from the header.
+- Access checks within L.G.C: 30/30 identical to v1.5.
+- Claude connector (called from the database): Group B's key sees only Group B; L.G.C round/plan ids → "No such
+  round/plan in this group"; can't score L.G.C players; wrong key → 404.
+- Daily reminders: processed per group (both groups' "trip is tomorrow" reminders logged separately); wrong cron
+  secret → 401; notify without sign-in → 401.
+- App: 63 unit tests; phone-width browser check (all v1.5 checks plus: every group-table read carries this group's
+  filter and header; rooms & cars reads are left alone).
+
+**Not yet tested — needs Josh:** notify refusing another group's ids for a *signed-in* caller, and the old-version
+(v1.5 build) browser test against staging, both need **anonymous sign-ins switched on in `lgc-golf-staging`**
+(Authentication → Sign In / Providers). The old-app behaviour (no header) is covered by the SQL tests.
 ## Known limits
 - GPS distances are approximate (±5–10 m) and straight-line; closest-to-pin distance is typed in.
 - Location sharing only works while the app is open.

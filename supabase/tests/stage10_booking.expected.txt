@@ -1,0 +1,22 @@
+links with the switch off = refused
+accommodation link = https://www.booking.com/searchresults.html?ss=Port+Stephens+%26+Co&checkin=START&checkout=END&group_adults=3&no_rooms=2
+what the screen says about money = The Golf Trip doesn’t earn anything from these links.
+getting there link = https://www.google.com/maps/dir/?api=1&destination=Port+Stephens+%26+Co
+a made-up link kind = refused
+read the link templates = refused
+taps counted = 3
+enquiry email = bookings@zzqx.example / Group booking enquiry — Zzqx Links Golf Club / ref in body: true
+the same club twice in a day = refused
+enquiry to an unclaimed course = refused
+phone-only sign-in without a phone = refused
+enquiry with no way to reply = refused
+a group of 1000 = refused
+read the enquiries table = refused
+a player asks for the club's enquiries = []
+the club sees it = Pip Smith / 12 golfers / Zzqx Links Golf Club
+place vote match = zzqx-links / matches 1 / a town on its own: 0
+every group free = 0
+organiser makes it premium = Only Josh can change a group's plan
+premium feature on a free group = false
+premium feature on a premium group = true
+Josh's booking numbers = 1 enquiry / taps {"golf": 1, "stay": 1, "transport": 1}

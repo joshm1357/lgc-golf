@@ -28,7 +28,7 @@ export const FEATURES = [
   { key: 'notifications', name: 'Phone notifications and reminders', description: 'Buzzes for votes, jobs, reminders and the draw room.', newGroup: true },
   { key: 'connector', name: 'Claude connector', description: 'Run the group from a Claude chat (organisers).', newGroup: false },
   { key: 'scorecard_photo', name: 'Scorecard photo reading', description: 'Read a photo of a scorecard into scores (needs an API key).', newGroup: false, soon: true },
-  { key: 'booking_links', name: 'Booking links', description: 'Links to find accommodation and book courses for a trip.', newGroup: false, soon: true },
+  { key: 'booking_links', name: 'Booking links', description: 'Buttons on a trip to find accommodation, a course and directions, with your place and dates filled in.', newGroup: false },
   { key: 'clubhouse_tv', name: 'Clubhouse TV leaderboard', description: 'Show your round on the clubhouse TV — first names only, and only for rounds you choose.', newGroup: false },
 ].map((f) => ({ parent: null, tier: 'free', ...f }));
 

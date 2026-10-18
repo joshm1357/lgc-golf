@@ -22,16 +22,6 @@ begin
     new.trip_id := old.trip_id;
   end if;
 
-  -- An old phone's "Set it up in the app" makes its own trip and links it: tidy away the empty one lock-in made.
-  if tg_op = 'UPDATE' and old.trip_id is not null and new.trip_id is distinct from old.trip_id and new.trip_id is not null then
-    delete from public.trips t
-    where t.id = old.trip_id and t.made_by_lock_in
-      and not exists (select 1 from public.rounds r where r.trip_id = t.id)
-      and not exists (select 1 from public.trophies x where x.trip_id = t.id)
-      and not exists (select 1 from public.posts p where p.trip_id = t.id)
-      and not exists (select 1 from public.plans p where p.trip_id = t.id and p.id <> new.id);
-  end if;
-
   -- Lock-in makes the trip — only when the plan has never had one (a deleted trip doesn't come back by itself).
   if new.status = 'confirmed' and new.trip_id is null and new.start_date is not null and not new.proposed
      and (tg_op = 'INSERT' or old.trip_id is null) then
@@ -47,6 +37,25 @@ begin
   return new;
 end $$;
 revoke all on function private.plans_trip_guard() from public, anon, authenticated;
+
+-- An old phone's "Set it up in the app" makes its own trip and links it: tidy away the empty one lock-in made.
+-- Runs after the plan has moved to the new trip (doing it during the change clashes with the trip link's
+-- "set to empty on delete").
+create or replace function private.plans_tidy_old_trip()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  delete from public.trips t
+  where t.id = old.trip_id and t.made_by_lock_in
+    and not exists (select 1 from public.rounds r where r.trip_id = t.id)
+    and not exists (select 1 from public.trophies x where x.trip_id = t.id)
+    and not exists (select 1 from public.posts p where p.trip_id = t.id)
+    and not exists (select 1 from public.plans p where p.trip_id = t.id);
+  return null;
+end $$;
+revoke all on function private.plans_tidy_old_trip() from public, anon, authenticated;
+create or replace trigger plans_tidy_old_trip after update of trip_id on public.plans
+  for each row when (old.trip_id is not null and new.trip_id is not null and new.trip_id is distinct from old.trip_id)
+  execute function private.plans_tidy_old_trip();
 
 -- Trips start on their own — but never in the middle of another trip that's on, and a missed day is caught up.
 create or replace function private.trips_daily()

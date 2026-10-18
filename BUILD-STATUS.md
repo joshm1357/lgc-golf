@@ -30,6 +30,17 @@ Database: Supabase project `lgc-golf` (Sydney), migrations in `supabase/migratio
   reply-by deadline, a week out / day before, jobs due. Push keys live in `server_secrets` (no app access).
   Share-to-Messenger nudges and calendar files need no setup.
 
+- **Planner v2 (18 Oct):** anyone can suggest a trip/round (admin approves or passes); the Rulebook
+  (rules + what they apply to; propose → two-tap vote → admin adopts/rejects/retires; seeded with the 2026 rules);
+  shared costs (anyone logs what they paid, custom splits, payment details on profiles, who-pays-who with the
+  fewest payments, "I've paid" → receiver confirms); review fixes (claimable jobs, row guards, push ownership,
+  draw overlay prefers live draws). 43 tests.
+- **Offline:** the app opens with no signal (service worker keeps the app; session, players/rounds/courses,
+  scores and plans are saved on the phone) and scores entered offline queue and send on reconnect — tested end
+  to end in a browser with the network cut. Database client retries are off so a lost signal doesn't freeze reads.
+- **Bottom bar:** Leaderboard · Feed · Comps · Coming up · More (Map moved into More).
+- **Release plan:** DEV-PLAN.md (and the shared doc "L.G.C App — Release plan").
+
 ## Known limits
 - GPS distances are approximate (±5–10 m); closest-to-pin distance is typed in.
 - Location sharing only works while the app is open.

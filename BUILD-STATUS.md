@@ -598,8 +598,21 @@ time next year); phone width `tests/e2e/quick-test.mjs` 21 checks. All other pho
   ticks **📺 Show on the clubhouse TV** on the leaderboard for that round. `#/tv/<course>` is a big-screen page for the
   club's TV: today's opted-in rounds only, refreshed every 30 seconds, moving through groups every 15. **First names or
   nicknames only**, no photos, no surnames, no group or round names (boards are "Group 1", "Group 2").
-- **Not built yet:** club photos (logo only for now); seeding every Australian course from OpenStreetMap (next — a
-  staging-only job, STOP before live).
+- **Every Australian course listed (040, staging only — STOP before live):** a seeding job (Supabase function
+  `seed-osm-courses`, one state at a time) reads golf courses and any mapped holes from OpenStreetMap and adds them to
+  the shared course list. Most come as a **listing** — a name and a place, "no scorecard yet": they show in search and
+  have a course page (where it is, how to fill it in, "claim this page"), but can't be added to a group or played until
+  someone adds the pars. A group that shares the same course (same name, close by) **fills the listing** instead of
+  making a second one; a club that claims it adds its hole data. Hole data from OpenStreetMap is only taken when it's
+  complete (18 holes, each with a par and stroke index). Seeding never changes a course a club has claimed, a group has
+  shared, or anyone uses — at most it fills a missing area or map position — and running it again adds nothing twice.
+  Each run is recorded (`private.seed_runs`). Course pages and the library credit OpenStreetMap.
+- **Not built yet:** club photos (logo only for now).
+- **For Josh — OpenStreetMap licence (ODbL), before seeding live:** credit is shown everywhere the data appears. The
+  licence also says that if we publicly use a database built from OSM data, we must offer that OSM-derived part (course
+  names and locations we took from OSM) under the same licence on request. Our groups' own scorecards and the clubs'
+  hole data stay ours. Worth a quick read: openstreetmap.org/copyright and the OSMF "Community Guidelines". This is your
+  call — the seeding job only runs on staging until you say so.
 
 **Independent review — fixed (039b, applied on staging):**
 - **Clubs can upload their logo** (the old "group members only" upload rule blocked club accounts); nobody without a
@@ -620,6 +633,11 @@ time next year); phone width `tests/e2e/quick-test.mjs` 21 checks. All other pho
   pictures are allowed.
 - Left as is (low): logos and crests are checked to be on a Supabase storage address, not ours specifically — revisit
   when the app moves to thegolftrip.club (the object must exist in our bucket, so the risk is small).
+
+**Tested (part 4):** `supabase/tests/stage8b_seed.sql` 14 checks (only the seeding job can run it, token check, new
+listings added, a shared course matched not duplicated, same name far away kept separate, bad rows skipped, only full
+scorecards taken, running twice adds nothing, a listing can't be added or played, a full OSM scorecard can, sharing fills
+the nearby listing); phone checks for "no scorecard yet" in the library and on the course page.
 
 **Tested:** `supabase/tests/stage8b_clubs.sql` (claims, approval, club edits, verified hole data protected, partner
 search) and `supabase/tests/stage8b_counts_tv.sql` 18 checks (nobody can read the scan log, bad codes ignored, two phones on one

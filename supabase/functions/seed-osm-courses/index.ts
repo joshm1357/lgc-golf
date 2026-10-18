@@ -8,7 +8,8 @@
 const STATES: Record<string, string> = {
   NSW: 'AU-NSW', VIC: 'AU-VIC', QLD: 'AU-QLD', WA: 'AU-WA', SA: 'AU-SA', TAS: 'AU-TAS', ACT: 'AU-ACT', NT: 'AU-NT',
 };
-const OVERPASS = 'https://overpass-api.de/api/interpreter';
+// The main Overpass server first, then two public mirrors if it's busy or refuses.
+const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
 const URL_ = Deno.env.get('SUPABASE_URL')!;
 const KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
@@ -47,13 +48,20 @@ area["ISO3166-2"="${STATES[state]}"]->.s;
 out center tags;
 way["golf"="hole"](area.s);
 out tags geom;`;
-    const r = await fetch(OVERPASS, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'TheGolfTrip/1.0 (course list; staging)' },
-      body: new URLSearchParams({ data: q }),
-    });
-    if (!r.ok) return new Response(`OpenStreetMap said ${r.status}`, { status: 502 });
-    const els: El[] = (await r.json()).elements || [];
+    let els: El[] | null = null;
+    const tried: string[] = [];
+    for (const url of OVERPASS) {
+      try {
+        const r = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json, */*', 'User-Agent': 'TheGolfTrip/1.0 (golf course list)' },
+          body: `data=${encodeURIComponent(q)}`,
+        });
+        if (r.ok) { els = (await r.json()).elements || []; break; }
+        tried.push(`${new URL(url).host} ${r.status}`);
+      } catch (e) { tried.push(`${new URL(url).host} ${(e as Error).message.slice(0, 60)}`); }
+    }
+    if (!els) return new Response(`OpenStreetMap servers said: ${tried.join('; ')}`, { status: 502 });
 
     const courses = els.filter((e) => e.tags?.leisure === 'golf_course' && e.tags?.name && e.center)
       .filter((e) => !/^(disused|abandoned)/.test(e.tags?.['lifecycle'] || '') && !e.tags?.['disused:leisure'])

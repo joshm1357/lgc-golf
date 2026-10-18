@@ -4,8 +4,8 @@ import { supabase, friendlyError } from '../lib/supabase.js';
 import { useSession } from '../lib/store.jsx';
 import { setCurrentGroup } from '../lib/group.js';
 import { useRun, must } from '../lib/run.js';
-import { defaultComps, sourceFrom, rememberSource, rememberedSource, forgetSource } from '../lib/quick.js';
-import { readHandicap } from '../lib/history.js';
+import { defaultComps, sourceFrom, rememberSource, rememberedSource, forgetSource, countScan } from '../lib/quick.js';
+import { readHandicap, localToday } from '../lib/history.js';
 import { parTotal } from '../lib/scoring.js';
 import { paintLook, DEFAULT_LOOK } from '../lib/theme.js';
 import { GolfTripCrest } from '../components/Logo.jsx';
@@ -65,7 +65,8 @@ function FindACourse() {
     const t = setTimeout(async () => {
       try {
         await ensureSignedIn();
-        const { data, error } = await supabase.rpc('search_courses', { p_query: q, p_lat: null, p_lng: null, p_limit: 20 });
+        let { data, error } = await supabase.rpc('find_courses', { p_query: q, p_lat: null, p_lng: null, p_limit: 20 });
+        if (error && /PGRST202|Could not find the function/i.test(`${error.code} ${error.message}`)) ({ data, error } = await supabase.rpc('search_courses', { p_query: q, p_lat: null, p_lng: null, p_limit: 20 }));
         if (error) throw error;
         setErr('');
         setRows(data || []);
@@ -82,7 +83,7 @@ function FindACourse() {
         {rows?.map((r) => (
           <a key={r.id} href={`#/c/${r.slug}`} className="card pad stack" style={{ gap: 2, textDecoration: 'none', color: 'inherit' }}>
             <strong>{r.name}</strong>
-            <span className="small muted">{[r.area, `${r.holes} holes`].filter(Boolean).join(' · ')}</span>
+            <span className="small muted">{[r.area, `${r.holes} holes`, r.partner ? 'Partner course' : null].filter(Boolean).join(' · ')}</span>
           </a>
         ))}
         {rows && !rows.length && !err && <span className="small muted">No courses by that name yet. Groups add them as they play — or <a href="#/start">start a group</a> and add yours.</span>}
@@ -94,11 +95,36 @@ function FindACourse() {
 // ---------------------------------------------------------------- The course and "Start a round"
 
 function Course({ slug }) {
+  const loc = useLocation();
+  const { status } = useSession() || {};
   const [course, setCourse] = useState(undefined);
   const [starting, setStarting] = useState(false);
+  const q = new URLSearchParams(loc.search);
+  const par3 = q.get('p') === 'par3' && Number(q.get('h')) > 0 ? Number(q.get('h')) : null;
   useEffect(() => {
     supabase.rpc('course_page', { p_slug: slug }).then(({ data, error }) => setCourse(error ? null : data || null));
   }, [slug]);
+  // A club's code: count the scan once per visit (no person attached — counts only).
+  useEffect(() => {
+    const ref = q.get('ref');
+    const key = `lgc-scan-${ref}-${q.get('p')}-${q.get('h') || ''}`;
+    if (!ref) return;
+    try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, '1'); } catch { /* fine */ }
+    countScan(supabase, { ref, placement: q.get('p') || 'cart', slug, hole: par3 }).catch(() => {});
+  }, [loc.search, slug]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A par 3 sign: if this phone's group is playing this course today, go straight to closest to the pin.
+  useEffect(() => {
+    const gid = status?.group_id;
+    if (!par3 || !course?.id || !status?.is_member || !gid) return;
+    (async () => {
+      const { data: mine } = await supabase.from('courses').select('id').eq('group_id', gid).eq('library_id', course.id);
+      const ids = (mine || []).map((c) => c.id);
+      if (!ids.length) return;
+      const { data: live } = await supabase.from('rounds').select('id').eq('group_id', gid).eq('status', 'live')
+        .eq('play_date', localToday()).in('course_id', ids).limit(1);
+      if (live?.[0]) window.location.hash = `#/comps?r=${live[0].id}&kind=ctp&hole=${par3}`;
+    })().catch(() => {});
+  }, [par3, course?.id, status?.is_member, status?.group_id]);
   if (course === undefined) return <><Top title="…" /><div className="muted" style={{ padding: 16 }}>Loading the course…</div></>;
   if (!course) {
     return (
@@ -118,6 +144,7 @@ function Course({ slug }) {
       <div className="stack" style={{ maxWidth: 520, margin: '0 auto', padding: 16, gap: 12 }}>
         {!starting ? (
           <>
+            {par3 && <div className="card pad small" style={{ borderColor: 'var(--gold)' }}>🎯 Closest to the pin on hole {par3}? Start your round below (or open the app you’re scoring in) — then scan again to log it.</div>}
             <button type="button" className="btn gold block" style={{ minHeight: 64, fontSize: 20 }} onClick={() => setStarting(true)}>⛳ Start a round with your mates</button>
             <span className="small muted" style={{ textAlign: 'center' }}>Live scores and a leaderboard on everyone’s phone. No app store, no sign-up — your mates just tap a link.</span>
             {greens.length > 0 && (
@@ -125,13 +152,33 @@ function Course({ slug }) {
                 <CourseMap className="map" markers={greens.map((h) => ({ id: `g${h.n}`, lat: h.green.lat, lng: h.green.lng, popup: `Hole ${h.n} · par ${h.par}` }))} osm={course.holes.some((h) => h.osm)} animate={false} />
               </LazyArea>
             )}
+            {course.club && <PartnerCard club={course.club} />}
             <Scorecard holes={course.holes} />
+            {course.verified && <span className="small muted">✓ Hole data checked by the club.</span>}
             {course.osm && <span className="small muted">Some greens © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors.</span>}
             <a href="#/start" className="small" style={{ fontWeight: 700, textAlign: 'center' }}>Run a golf group? Start your own →</a>
+            {!course.club && <a href="#/club" className="small muted" style={{ textAlign: 'center' }}>Work at this club? Claim this page</a>}
           </>
         ) : <QuickStart course={course} onCancel={() => setStarting(false)} />}
       </div>
     </>
+  );
+}
+
+/** A partner course: the club's logo, offers for groups and who to ask about a group booking. Clearly labelled. */
+function PartnerCard({ club }) {
+  return (
+    <div className="card pad stack" style={{ gap: 6 }}>
+      <div className="row" style={{ gap: 10 }}>
+        {club.logo_url && <img src={club.logo_url} alt={`${club.name} logo`} width={48} height={48} style={{ borderRadius: 8, objectFit: 'contain', background: '#fff', flex: 'none' }} />}
+        <span><strong>{club.name}</strong><div className="small muted">Partner course</div></span>
+      </div>
+      {club.offers && <span className="small">🎁 {club.offers}</span>}
+      {club.booking_note && <span className="small">{club.booking_note}</span>}
+      {(club.booking_email || club.booking_phone) && (
+        <span className="small">Group bookings: {club.booking_email && <a href={`mailto:${club.booking_email}`}>{club.booking_email}</a>}{club.booking_email && club.booking_phone ? ' · ' : ''}{club.booking_phone && <a href={`tel:${club.booking_phone.replace(/\s/g, '')}`}>{club.booking_phone}</a>}</span>
+      )}
+    </div>
   );
 }
 

@@ -576,6 +576,59 @@ guests can't make it official, bad inputs refused, made official, mates become p
 source tidied, ordinary groups unchanged); unit tests (side comps pre-fill, where-from incl. expiry, results text, same
 time next year); phone width `tests/e2e/quick-test.mjs` 21 checks. All other phone tests pass.
 
+## v2.1 Stage 8b — Club partners (club-partners addendum; branch `stage-8b-clubs`, on staging only)
+
+**Built**
+- **Claims and the club screen (037, applied on staging):** `#/club` — "Is this your course?". A club must sign in
+  properly (Google or email, not phone-only), finds its course, and sends a claim (name, club email, phone, role). **Josh
+  approves each claim by hand** at `#/club/claims` (STOP before the first real one). An approved club gets a club account:
+  its logo, a group-bookings email/phone, a note and offers for visiting groups, and **Hole data** — it can check and
+  save pars, stroke indexes and greens, after which the course shows "✓ Hole data checked by the club" and other people
+  can only fill gaps. The course page shows a clearly labelled **Partner course** card; unclaimed courses still show
+  normally with "Work at this club? Claim this page". The library search lists partners with their label but never
+  hides anyone else. To make yourself the approver: `insert into public.platform_admins (user_id) values ('<your user id>');`
+- **QR kit and counts (038, applied on staging):** `#/club/kit` — a printable kit (cart sticker, counter card, one sign
+  per par 3, a TV card), each code carrying the club's ref and where it sits. It's marked **"Draft — please don't print
+  yet"**: the codes point at the test address until the move to thegolftrip.club (STOP before any kit is printed or
+  sent). A scan is counted once per visit with no person attached (a daily scrambled mark, at most 20 a day per phone).
+  A par 3 sign scanned by someone whose group is playing that course right now goes straight to closest-to-the-pin for
+  that hole. The club screen shows **How groups find you**: scans (split by cart/par 3/counter/TV), rounds started,
+  groups started, came back, trips planned, became a group — 30 days, 90 days or a year. Counts only, never names.
+- **Clubhouse TV (039, applied on staging):** the group's **Clubhouse TV** switch now works. With it on, the organiser
+  ticks **📺 Show on the clubhouse TV** on the leaderboard for that round. `#/tv/<course>` is a big-screen page for the
+  club's TV: today's opted-in rounds only, refreshed every 30 seconds, moving through groups every 15. **First names or
+  nicknames only**, no photos, no surnames, no group or round names (boards are "Group 1", "Group 2").
+- **Not built yet:** club photos (logo only for now); seeding every Australian course from OpenStreetMap (next — a
+  staging-only job, STOP before live).
+
+**Independent review — fixed (039b, applied on staging):**
+- **Clubs can upload their logo** (the old "group members only" upload rule blocked club accounts); nobody without a
+  club can put files in the clubs folder; the photos bucket now only takes pictures, up to 12 MB.
+- Saving checked hole data changes pars and stroke indexes only — the tee and green points stay.
+- **Club counts can't follow one group:** rounds are only those on the club's own courses in the period; the period
+  is 30, 90 or 365 days only; any count of groups or rounds under 5 shows as "<5".
+- **The TV link carries the club's key** (on the kit), so nobody can watch by guessing a course name; the old keyless
+  link shows no groups; the TV feed sends list positions, not database ids. The organiser's tick now says "Anyone with
+  the club's TV link can see it", and stays visible after the round is finished so it can be turned off.
+- Scans count per phone (a random mark the phone keeps), not per internet address, so a clubhouse wifi isn't one
+  person; days run on Sydney time; 20 a day per phone, 300 a day per address.
+- A par 3 sign only jumps to today's live round in the group you're using.
+- Checked courses can't be moved or have their area changed by a group; if a club is removed (or Josh unclaims — new
+  "Unclaim this course" button on the claims screen) the course goes back to unclaimed and unchecked.
+- Re-check (039c): one internet address can count at most 60 phones a day; the split of groups by code placement only
+  shows from 10 groups; the TV card isn't printed (staff keep the link) and a club can get a **new TV key**; AVIF
+  pictures are allowed.
+- Left as is (low): logos and crests are checked to be on a Supabase storage address, not ours specifically — revisit
+  when the app moves to thegolftrip.club (the object must exist in our bucket, so the risk is small).
+
+**Tested:** `supabase/tests/stage8b_clubs.sql` (claims, approval, club edits, verified hole data protected, partner
+search) and `supabase/tests/stage8b_counts_tv.sql` 18 checks (nobody can read the scan log, bad codes ignored, two phones on one
+address count as two, TV needs the group's switch and the club's key, a guest can't put a round on TV, rounds not
+opted in stay off, first names only with no surname or ids, counts carry no names and show "<5", only 30/90/365 days,
+only the club sees its counts, upload rules, hole data keeps greens, checked courses can't be moved, removing a club
+unclaims); phone width `tests/e2e/club-test.mjs` 35 checks (claim, approve, club edits, partner card, counts, the kit has every par 3, a scan counted once, par 3 sign to
+closest-to-pin, the TV tick only when the switch is on, the TV page on a phone and a big screen). All other phone tests pass.
+
 ## Known limits
 - GPS distances are approximate (±5–10 m) and straight-line; closest-to-pin distance is typed in.
 - Location sharing only works while the app is open.

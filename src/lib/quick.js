@@ -62,3 +62,23 @@ export function sameTimeNextYear(isoDate) {
   d.setUTCDate(d.getUTCDate() + 364);
   return d.toISOString().slice(0, 10);
 }
+
+/** A random mark this phone keeps, so a club's scan counts treat each phone as one person (no name, never sent with
+ * anything else). Phones that can't keep it count by internet address instead. */
+export function scanVisitor() {
+  try {
+    let v = localStorage.getItem('lgc-visitor');
+    if (!v || !/^[A-Za-z0-9-]{8,64}$/.test(v)) {
+      v = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`);
+      localStorage.setItem('lgc-visitor', v);
+    }
+    return v;
+  } catch { return null; }
+}
+
+/** Count a club's QR code being opened. Falls back to the older call if the database doesn't have the new one yet. */
+export async function countScan(supabase, { ref, placement, slug, hole = null }) {
+  const args = { p_ref: ref, p_placement: placement, p_course_slug: slug, p_hole: hole };
+  const { error } = await supabase.rpc('count_scan', { ...args, p_visitor: scanVisitor() });
+  if (error && /PGRST202|Could not find the function/i.test(`${error.code} ${error.message}`)) await supabase.rpc('log_scan', args);
+}

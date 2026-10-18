@@ -103,7 +103,7 @@ async function fakeSupabase(route) {
     if (name === 'group_invite' || name === 'reset_group_invite') return json(name === 'reset_group_invite' ? 'NEWCODE23456' : 'ABCDEFGH2345');
     if (name === 'invite_info') return json({ group_id: GROUP2, group_name: 'Test Group B', role: 'player', already_in: false });
     if (name === 'join_by_invite') return json(GROUP2);
-    if (name === 'search_courses') return json(LIB.filter((c) => !body?.p_query || c.name.toLowerCase().includes(body.p_query.toLowerCase())));
+    if (name === 'search_courses' || name === 'find_courses') return json(LIB.filter((c) => !body?.p_query || c.name.toLowerCase().includes(body.p_query.toLowerCase())));
     if (name === 'library_course') return json({ ...LIB[0], mine: false, holes: holes.map(({ n, par, si }) => ({ n, par, si })) });
     if (name === 'copy_library_course') { db.courses.push({ id: 'cccccccc-0000-4000-8000-000000000009', name: LIB[0].name, holes, library_id: LIB[0].id, created_at: now }); return json('cccccccc-0000-4000-8000-000000000009'); }
     if (name === 'share_course') return json(LIB[0].id);
@@ -174,7 +174,7 @@ check(!(await page.getByText('Bowral Golf Club').count()) && await page.getByTex
 await page.getByLabel('Search courses').fill('');
 await page.getByRole('button', { name: '📍 Near me' }).click();
 await page.waitForTimeout(800);
-const s1 = rpc('search_courses').at(-1);
+const s1 = [...rpc('search_courses'), ...rpc('find_courses')].at(-1);
 check(!!s1 && Math.abs(s1.body.p_lat + 34.48) < 0.01 && Math.abs(s1.body.p_lng - 150.42) < 0.01, 'near me searches from this phone’s location');
 check(await page.getByText('2.4 km').isVisible(), 'shows how far away');
 await page.screenshot({ path: `${SHOTS}/c1-library.png`, fullPage: true });

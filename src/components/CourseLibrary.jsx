@@ -24,7 +24,9 @@ export function FindCourse({ onAdded, hint = 'add it below' }) {
 
   const search = async (query = q, at = near.current) => {
     const ticket = ++latest.current;
-    const { data: found, error } = await supabase.rpc('search_courses', { p_query: query, p_lat: at?.lat ?? null, p_lng: at?.lng ?? null, p_limit: 20 });
+    const args = { p_query: query, p_lat: at?.lat ?? null, p_lng: at?.lng ?? null, p_limit: 20 };
+    let { data: found, error } = await supabase.rpc('find_courses', args);
+    if (error && /PGRST202|Could not find the function/i.test(`${error.code} ${error.message}`)) ({ data: found, error } = await supabase.rpc('search_courses', args));
     if (ticket !== latest.current) return;
     if (error) {
       if (/PGRST202|Could not find the function/i.test(`${error.code} ${error.message}`)) { setRows([]); toast('The course library isn’t switched on yet.'); return; }
@@ -68,6 +70,7 @@ export function FindCourse({ onAdded, hint = 'add it below' }) {
             {r.km != null && <span className="small muted" style={{ flex: 'none' }}>{Number(r.km) < 10 ? Number(r.km).toFixed(1) : Math.round(Number(r.km))} km</span>}
           </div>
           <span className="small muted">{[r.area, `${r.holes} holes`, r.greens ? `${r.greens} greens mapped` : 'no greens mapped yet', r.copies ? `used by ${r.copies} group${r.copies === 1 ? '' : 's'}` : null].filter(Boolean).join(' · ')}</span>
+          {r.partner && <span className="small" style={{ fontWeight: 700 }}>Partner course{r.verified ? ' · hole data checked by the club' : ''}</span>}
           {have.has(r.id) && <span className="small" style={{ fontWeight: 700 }}>✓ In your courses</span>}
           {r.osm && <span className="small muted">Greens <OsmCredit /></span>}
         </button>

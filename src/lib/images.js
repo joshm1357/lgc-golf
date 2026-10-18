@@ -75,8 +75,9 @@ export async function uploadPhoto(file, folder, opts = {}) {
     blob = file;
     type = file.type || 'image/jpeg';
   }
-  const ext = type === 'image/png' ? 'png' : type === 'image/webp' ? 'webp' : type === 'image/heic' ? 'heic' : 'jpg';
-  const path = `${groupFolder(folder)}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const ext = type === 'image/png' ? 'png' : type === 'image/webp' ? 'webp' : type === 'image/heic' ? 'heic' : type === 'image/avif' ? 'avif' : 'jpg';
+  // rawFolder: a folder that isn't a group's (a club's logo: clubs/<club id>).
+  const path = `${opts.rawFolder ? folder : groupFolder(folder)}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
   const { error } = await supabase.storage.from('photos').upload(path, blob, { contentType: type, upsert: false });
   if (error) throw error;
   return supabase.storage.from('photos').getPublicUrl(path).data.publicUrl;

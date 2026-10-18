@@ -1,0 +1,17 @@
+Expected (staging, after 037). Run as one script; it rolls itself back.
+
+phone-only person claims = refused
+the same claim twice = refused
+someone else sees the claims list = 0
+someone else approves their own claim = refused
+a non-club person edits a club = refused
+Josh sees the claims = 2
+approved: club, its code, course claimed, other claim closed = Zzqx Golf Club / true / true / rejected
+my club = Zzqx Golf Club / courses 1
+logo from somewhere else = refused
+course page shows the partner club = bookings@zzqxclub.example / verified true / par hole 4 3
+search labels it a partner = true / true
+club logo folder: own / another = true / false
+verified course after a group shares = par hole 4 3 / green filled true      (the club's pars stay; the group's green fills a gap)
+group P's own copy unchanged by the club = 5
+a group organiser sees club claims = 0

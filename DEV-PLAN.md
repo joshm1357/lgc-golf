@@ -69,7 +69,7 @@ DRAFT privacy policy and terms, delete-my-data, error alerts (ask first), share 
 **Added by the club-partners addendum** (order agreed: Stage 8 shared courses → 7b → 8b, because the quick round needs
 the public course page and shared courses)
 - **Stage 3 addition:** feature switch "Clubhouse TV leaderboard" (new group default off; the group also opts in per round).
-- **7b. Quick round** (✅ on staging, review next — stroke play waits for its STOP): public course page `/c/<course>` (no sign-in) with "Start a round with your mates"; a quick
+- **7b. Quick round** (✅ on staging, reviewed and merged — stroke play waits for its STOP): public course page `/c/<course>` (no sign-in) with "Start a round with your mates"; a quick
   group ("Josh's round at <course>") with a one-day trip and one round, guest sign-in only — under 2 minutes from scan
   to first score; invite via the phone's share sheet, mates join with just a name as guests; format picker
   (Stableford, Ambrose, **stroke play** — new format: STOP for the check-constraint change), closest-to-pin pre-filled
@@ -77,7 +77,8 @@ the public course page and shared courses)
   "Same time next year?" (a Trips idea with a dates vote), "Make it official" (the Stage 7 wizard, pre-filled); guests
   keep history by signing in later; every card and invite carries "Start your own group" with its source tracked.
   Quick groups get their own new-group limit.
-- **8b. Club partners:** every Australian course listed (seeded from OpenStreetMap with credit — STOP before seeding
+- **8b. Club partners** (✅ claims, club screen, QR kit draft, counts, Clubhouse TV on staging — review next; OSM
+  seeding and club photos still to come): every Australian course listed (seeded from OpenStreetMap with credit — STOP before seeding
   live); "Claim your course" (Josh approves each claim by hand — STOP before the first real one; club accounts need
   real sign-in, so the Stage 2 STOP comes first); club role edits verified hole data, logo, booking contact, offers,
   photos; QR kit PDF (cart, par 3 signs, counter, TV; each code carries club ref and placement — STOP before any kit is

@@ -12,6 +12,7 @@ import {
 } from '../lib/plan.js';
 import { notify, shareText, appLink, pushState, enablePush, disablePush, isIOS } from '../lib/push.js';
 import { DetailsTab, JobsTab, KittyTab, GroupsTab } from './PlanTabs.jsx';
+import { TripSetupCard } from './TripSetup.jsx';
 
 const PLAN_TABLES = ['plans', 'plan_polls', 'plan_options', 'plan_votes', 'plan_rsvps', 'plan_items', 'plan_costs', 'plan_payments', 'plan_groups', 'plan_group_members', 'plan_transfers'];
 const STATUS_LABEL = { planning: 'Planning', confirmed: 'Locked in', done: 'Done', cancelled: 'Called off' };
@@ -209,6 +210,7 @@ export function PlanDetail() {
         {plan.status === 'cancelled' && <div className="err">{plan.proposed ? 'The admin passed on this one.' : 'This one’s been called off.'}</div>}
         {plan.proposed && plan.status !== 'cancelled' && <ProposalBanner plan={plan} reload={pd.reload} />}
         <Checklist pd={pd} onGo={setTab} />
+        <TripSetupCard plan={plan} reload={pd.reload} />
         {current === 'vote' && <VoteTab pd={pd} />}
         {current === 'people' && <PeopleTab pd={pd} />}
         {current === 'details' && <DetailsTab pd={pd} />}

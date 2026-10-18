@@ -1,0 +1,127 @@
+// Admin: turn a plan into the trip in the app — the trip, a round per day, the trophies — in one go.
+// Nothing happens until the admin taps; the organising itself stays suggestions only.
+import React, { useMemo, useState } from 'react';
+import { supabase } from '../lib/supabase.js';
+import { useData, useSession } from '../lib/store.jsx';
+import { Sheet, toast } from '../components/ui.jsx';
+import { fmtRange, parseDate, daysUntil, roundSettingsFromRules } from '../lib/plan.js';
+import { useRun, must, feedPost } from './Planner.jsx';
+
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const DOW = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+export function planDays(plan) {
+  const a = parseDate(plan.start_date);
+  if (!a) return [];
+  const b = parseDate(plan.end_date) || a;
+  const out = [];
+  for (let d = new Date(a); d <= b && out.length < 10; d.setDate(d.getDate() + 1)) out.push(iso(d));
+  return out;
+}
+
+export function TripSetupCard({ plan, reload }) {
+  const data = useData();
+  const { status } = useSession();
+  const [open, setOpen] = useState(false);
+  if (!status.is_admin || plan.proposed || !plan.start_date || plan.status === 'cancelled') return null;
+  const trip = plan.trip_id && data.trips.find((t) => t.id === plan.trip_id);
+  if (trip) {
+    const n = data.rounds.filter((r) => r.trip_id === trip.id).length;
+    return <div className="small" style={{ fontWeight: 600 }}>✅ Set up in the app as “{trip.name}” · {n} round{n === 1 ? '' : 's'} · {trip.status === 'active' ? 'current trip' : 'goes live when you reopen it in Admin → Trips'}</div>;
+  }
+  return (
+    <>
+      <button type="button" className="card pad row" onClick={() => setOpen(true)} style={{ textAlign: 'left', color: 'inherit', width: '100%', borderColor: 'var(--navy)', gap: 12 }}>
+        <span style={{ fontSize: 26 }}>🏌️</span>
+        <span className="grow"><strong>Set it up in the app</strong><div className="small muted">Creates the trip, a round for each day and the trophies — ready for scoring.</div></span>
+        <span className="btn sm">Set up</span>
+      </button>
+      {open && <TripSetupSheet plan={plan} onClose={() => setOpen(false)} onDone={reload} />}
+    </>
+  );
+}
+
+function TripSetupSheet({ plan, onClose, onDone }) {
+  const data = useData();
+  const { status } = useSession();
+  const [busy, run] = useRun();
+  const days = useMemo(() => planDays(plan), [plan]);
+  const lastTrip = data.trips.find((t) => t.id !== plan.trip_id && data.trophies.some((x) => x.trip_id === t.id));
+  const lastTrophies = lastTrip ? data.trophies.filter((x) => x.trip_id === lastTrip.id) : [];
+  const soon = daysUntil(plan.start_date) <= 7;
+  const [name, setName] = useState(plan.name);
+  const [copyTrophies, setCopyTrophies] = useState(plan.kind === 'trip' && lastTrophies.length > 0);
+  const [current, setCurrent] = useState(soon);
+  const [rounds, setRounds] = useState(() => days.map((d, i) => ({ date: d, course_id: '', format: plan.kind === 'trip' && i === days.length - 1 && days.length > 1 ? 'ambrose' : 'stableford' })));
+  const set = (i, patch) => setRounds(rounds.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const chosen = rounds.filter((r) => r.course_id);
+
+  const go = () => run(async () => {
+    const { data: rules } = await supabase.from('rules').select('*').eq('status', 'active');
+    if (current) {
+      const others = data.trips.filter((t) => t.status === 'active').map((t) => t.id);
+      if (others.length) await must(supabase.from('trips').update({ status: 'locked' }).in('id', others));
+    }
+    const trip = await must(supabase.from('trips').insert({ name: name.trim(), start_date: plan.start_date, end_date: plan.end_date || plan.start_date, status: current ? 'active' : 'locked' }).select().single());
+    if (copyTrophies && lastTrophies.length) {
+      await must(supabase.from('trophies').insert(lastTrophies.map((x) => ({ trip_id: trip.id, name: x.name, type: x.type, description: x.description }))));
+    }
+    if (chosen.length) {
+      await must(supabase.from('rounds').insert(chosen.map((r) => {
+        const course = data.coursesById[r.course_id];
+        const s = roundSettingsFromRules(rules || [], r.format);
+        return {
+          trip_id: trip.id, course_id: r.course_id, play_date: r.date, format: r.format, status: 'setup',
+          name: `${DOW[parseDate(r.date).getDay()]} ${r.format === 'ambrose' ? 'Ambrose' : 'Stableford'} — ${course?.name || ''}`.trim(),
+          ...(r.format === 'ambrose' ? { comp_bonus: s.comp_bonus ?? 0, min_drives: s.min_drives } : {}),
+          rules: s.text || null,
+        };
+      })));
+    }
+    await must(supabase.from('plans').update({ trip_id: trip.id, status: plan.status === 'planning' ? 'confirmed' : plan.status }).eq('id', plan.id));
+    await feedPost(status.player_id, plan, `🏌️ ${trip.name} is set up in the app${chosen.length ? ` — ${chosen.length} round${chosen.length === 1 ? '' : 's'} ready` : ''}. See you on the first tee.`);
+    data.reload();
+    onDone();
+    onClose();
+    toast(current ? 'Done — it’s the current trip now' : 'Done — reopen it in Admin → Trips when it starts');
+  });
+
+  return (
+    <Sheet title="Set it up in the app" onClose={onClose}>
+      <div className="stack">
+        <label className="field"><span>Trip name (shows on the trophies and honour boards)</span><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></label>
+        <span className="label">Rounds · {fmtRange(plan.start_date, plan.end_date)}</span>
+        {rounds.map((r, i) => (
+          <div key={r.date} className="card pad stack" style={{ gap: 6 }}>
+            <strong>{fmtRange(r.date)}</strong>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 8 }}>
+              <select className="select" value={r.course_id} onChange={(e) => set(i, { course_id: e.target.value })} aria-label="Course">
+                <option value="">No golf / add later</option>
+                {data.courses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              <select className="select" value={r.format} onChange={(e) => set(i, { format: e.target.value })} aria-label="Format">
+                <option value="stableford">Stableford</option>
+                <option value="ambrose">Ambrose</option>
+              </select>
+            </div>
+          </div>
+        ))}
+        {!data.courses.length && <span className="small muted">Add the courses in Admin first (par and stroke index), then come back.</span>}
+        <span className="small muted">New course? Add it in Admin → Courses, then pick it here. Ambrose rounds take the side comp and drive rules from the Rulebook. Teams and side comp holes are set nearer the day.</span>
+        {lastTrophies.length > 0 && (
+          <label className="row" style={{ gap: 8, fontWeight: 600 }}>
+            <input type="checkbox" checked={copyTrophies} onChange={(e) => setCopyTrophies(e.target.checked)} style={{ width: 20, height: 20 }} />
+            <span>Play for the same trophies ({lastTrophies.map((x) => x.name).join(', ')})</span>
+          </label>
+        )}
+        <label className="row" style={{ gap: 8, fontWeight: 600, alignItems: 'flex-start' }}>
+          <input type="checkbox" checked={current} onChange={(e) => setCurrent(e.target.checked)} style={{ width: 20, height: 20, marginTop: 2 }} />
+          <span>Make it the current trip now<div className="small muted" style={{ fontWeight: 400 }}>{current ? 'The leaderboard and trophies switch to this trip; the current one is closed off.' : 'It waits, closed, until you reopen it in Admin → Trips.'}</div></span>
+        </label>
+        <button type="button" className="btn gold block" style={{ minHeight: 56 }} disabled={busy || !name.trim()} onClick={go}>
+          Set it up{chosen.length ? ` — ${chosen.length} round${chosen.length === 1 ? '' : 's'}` : ''}
+        </button>
+      </div>
+    </Sheet>
+  );
+}

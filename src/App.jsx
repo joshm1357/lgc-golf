@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { startOutbox, outboxCount, onOutboxChange } from './lib/outbox.js';
 import { HashRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { SessionProvider, DataProvider, useSession, useData } from './lib/store.jsx';
 import { TabBar, Toaster, Loading, UpdateBanner } from './components/ui.jsx';
@@ -17,6 +18,7 @@ import Tribunal, { TribunalCase } from './screens/Tribunal.jsx';
 import Courses from './screens/Courses.jsx';
 import Planner, { PlanDetail } from './screens/Planner.jsx';
 import Rulebook from './screens/Rulebook.jsx';
+import GreenMapper from './screens/GreenMapper.jsx';
 import { useParams } from 'react-router-dom';
 
 // A fresh plan screen per plan, so nothing carries over when a notification jumps to another one.
@@ -43,6 +45,8 @@ function Inside() {
   const loc = useLocation();
   // New screens open at the top, so a tap can't land on a button further down the next page.
   useEffect(() => { window.scrollTo(0, 0); }, [loc.pathname]);
+  const [waiting, setWaiting] = useState(outboxCount());
+  useEffect(() => { startOutbox(); return onOutboxChange(setWaiting); }, []);
   if (!data.ready) {
     return data.error ? <div className="empty">Couldn't load: {data.error.message}. Pull down to refresh.</div> : <Loading />;
   }
@@ -54,6 +58,7 @@ function Inside() {
   const offline = data.offline || (typeof navigator !== 'undefined' && navigator.onLine === false);
   return (
     <div className="app">
+      {waiting > 0 && !offline && <div className="sync" role="status">📤 {waiting} post{waiting === 1 ? '' : 's'} or entr{waiting === 1 ? 'y' : 'ies'} waiting to send…</div>}
       {offline && <div className="sync" role="status">📵 No signal — showing the copy saved on this phone. Scores you enter are kept and sent when signal comes back.</div>}
       <Routes>
         <Route path="/" element={<Leaderboard />} />
@@ -71,6 +76,7 @@ function Inside() {
         <Route path="/plan" element={<Planner />} />
         <Route path="/plan/:planId" element={<PlanDetailRoute />} />
         <Route path="/rules" element={<Rulebook />} />
+        <Route path="/courses/:courseId/greens" element={<GreenMapper />} />
         <Route path="*" element={<Leaderboard />} />
       </Routes>
       {!hideTabs && <TabBar />}

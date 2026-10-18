@@ -133,3 +133,27 @@ describe('rooms & cars draw', () => {
     expect(d.leftOver).toHaveLength(1);
   });
 });
+
+import { roundSettingsFromRules } from './plan.js';
+describe('rules into round settings', () => {
+  const rules = [
+    { title: 'Closest to pin', value: '−2 strokes', category: 'side_comp', applies_to: ['ambrose'], status: 'active' },
+    { title: 'Minimum drives', value: '6 drives each', category: 'format', applies_to: ['ambrose'], status: 'active', detail: 'Each player 6 tee shots.' },
+    { title: 'Stableford counts for the BD', category: 'format', applies_to: ['stableford'], status: 'active' },
+    { title: 'Birdie bonus', value: '−1 stroke', category: 'bonus', applies_to: ['ambrose'], status: 'proposed' },
+    { title: 'Tribunal', category: 'handicap', applies_to: ['all'], status: 'active' },
+  ];
+  it('picks the Ambrose numbers', () => {
+    const s = roundSettingsFromRules(rules, 'ambrose');
+    expect(s.comp_bonus).toBe(2);
+    expect(s.min_drives).toBe(6);
+    expect(s.applies.map((r) => r.title)).toEqual(['Closest to pin', 'Minimum drives', 'Tribunal']);
+    expect(s.text).toContain('Minimum drives (6 drives each): Each player 6 tee shots.');
+  });
+  it('gives Stableford no comp strokes or drive rule', () => {
+    const s = roundSettingsFromRules(rules, 'stableford');
+    expect(s.comp_bonus).toBeNull();
+    expect(s.min_drives).toBeNull();
+    expect(s.applies).toHaveLength(2);
+  });
+});

@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { sendOrQueue } from '../lib/outbox.js';
 import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useRealtime, useSession, playerName } from '../lib/store.jsx';
-import { uploadPhoto } from '../lib/images.js';
 import { Header, Avatar, Icon, Sheet, timeAgo, toast, PhotoButtons } from '../components/ui.jsx';
 
 const REACTIONS = ['🔥', '😂', '👏', '🤦', '🍺'];
@@ -150,13 +150,12 @@ function Composer({ onClose, onPosted }) {
   async function post() {
     setBusy(true);
     try {
-      const url = file ? await uploadPhoto(file, 'feed') : null;
       const r = data.liveRound;
-      const { error } = await supabase.from('posts').insert({
-        kind: 'user', player_id: status.player_id, body: text.trim() || null, photo_url: url,
+      const res = await sendOrQueue('posts', {
+        kind: 'user', player_id: status.player_id, body: text.trim() || null, photo_url: null,
         hole: hole ? Number(hole) : null, round_id: r?.id || null, trip_id: r?.trip_id || data.currentTrip?.id || null,
-      });
-      if (error) throw error;
+      }, { photo: file ? { file, field: 'photo_url', folder: 'feed' } : null });
+      if (!res.sent) toast('No signal — saved on your phone, it’ll post when signal’s back');
       onPosted();
       onClose();
     } catch (e) {

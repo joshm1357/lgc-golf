@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { roundSettingsFromRules } from '../lib/plan.js';
 import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useSession, playerName } from '../lib/store.jsx';
 import { Header, Avatar, Loading, toast } from '../components/ui.jsx';
@@ -255,6 +257,47 @@ function RoundsAdmin() {
   );
 }
 
+/** The Rulebook rules for this round's format, and the numbers scoring uses (side comp strokes, minimum drives). */
+function RoundRules({ round }) {
+  const data = useData();
+  const [rules, setRules] = useState(null);
+  const [bonus, setBonus] = useState(String(round.comp_bonus ?? 0));
+  const [drives, setDrives] = useState(String(round.min_drives ?? ''));
+  useEffect(() => {
+    supabase.from('rules').select('*').eq('status', 'active').order('sort').then(({ data: r }) => setRules(r || []), () => setRules([]));
+  }, []);
+  const isA = round.format === 'ambrose';
+  const s = roundSettingsFromRules(rules || [], round.format);
+  const changed = String(round.comp_bonus ?? 0) !== bonus || String(round.min_drives ?? '') !== drives;
+  const save = (patch, msg) => run(() => supabase.from('rounds').update(patch).eq('id', round.id), msg).then(data.reload);
+  return (
+    <details className="card pad" style={{ background: '#fff' }}>
+      <summary style={{ fontWeight: 700, cursor: 'pointer' }}>📜 Rules for this round{rules ? ` (${s.applies.length})` : ''}</summary>
+      <div className="stack" style={{ marginTop: 8, gap: 8 }}>
+        {rules && !s.applies.length && <span className="small muted">No active rules for {round.format} yet. <Link to="/rules">Open the Rulebook</Link>.</span>}
+        {s.applies.map((r) => <div key={r.id} className="small"><strong>{r.title}</strong>{r.value ? ` · ${r.value}` : ''}</div>)}
+        {isA && (
+          <div className="row">
+            <label className="field grow"><span>Side comp worth (strokes off)</span><input className="input" inputMode="numeric" value={bonus} onChange={(e) => setBonus(e.target.value.replace(/[^0-9.]/g, ''))} /></label>
+            <label className="field grow"><span>Minimum drives each</span><input className="input" inputMode="numeric" value={drives} onChange={(e) => setDrives(e.target.value.replace(/[^0-9]/g, ''))} placeholder="none" /></label>
+          </div>
+        )}
+        {changed && <button type="button" className="btn sm" onClick={() => save({ comp_bonus: Number(bonus) || 0, min_drives: drives ? Number(drives) : null }, 'Round settings saved')}>Save these settings</button>}
+        {rules && s.applies.length > 0 && (
+          <button type="button" className="btn ghost sm" onClick={() => {
+            const patch = { rules: s.text };
+            if (isA && s.comp_bonus != null) patch.comp_bonus = s.comp_bonus;
+            if (isA && s.min_drives != null) patch.min_drives = s.min_drives;
+            if (isA) { setBonus(String(patch.comp_bonus ?? round.comp_bonus ?? 0)); setDrives(String(patch.min_drives ?? round.min_drives ?? '')); }
+            save(patch, 'Applied from the Rulebook — shown on the leaderboard');
+          }}>Apply from the Rulebook{isA && (s.comp_bonus != null || s.min_drives != null) ? ` (${[s.comp_bonus != null ? `comps −${s.comp_bonus}` : null, s.min_drives != null ? `${s.min_drives} drives` : null].filter(Boolean).join(', ')})` : ''}</button>
+        )}
+        {round.rules && <span className="small muted">Shown to the lads: “{round.rules.length > 140 ? `${round.rules.slice(0, 140)}…` : round.rules}”</span>}
+      </div>
+    </details>
+  );
+}
+
 function RoundCard({ round }) {
   const data = useData();
   const [ld, setLd] = useState(round.ld_holes.join(' '));
@@ -274,6 +317,7 @@ function RoundCard({ round }) {
       {(ld !== round.ld_holes.join(' ') || ctp !== round.ctp_holes.join(' ')) && (
         <button type="button" className="btn sm" onClick={() => run(() => supabase.from('rounds').update({ ld_holes: parseNums(ld).filter((n) => n >= 1 && n <= 18), ctp_holes: parseNums(ctp).filter((n) => n >= 1 && n <= 18) }).eq('id', round.id), 'Side comps saved').then(data.reload)}>Save side comp holes</button>
       )}
+      <RoundRules round={round} />
       {round.format === 'ambrose' && <DrawButton round={round} />}
       {round.format === 'ambrose' ? <TeamsEditor round={round} /> : <StablefordPlayers round={round} />}
       <details>

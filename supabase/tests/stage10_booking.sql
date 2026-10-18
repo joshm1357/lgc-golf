@@ -35,15 +35,16 @@ insert into public.course_library (slug, name, holes) values ('zzqx-unclaimed', 
 set local role authenticated;
 set local request.jwt.claims to '{"sub":"00000000-0000-4000-8000-000000001002","role":"authenticated"}';
 do $$ begin perform set_config('request.headers', '{"x-group-id":"00000000-0000-4000-8000-000000001a00"}', true); end $$;
-do $$ begin perform public.booking_go('stay', '00000000-0000-4000-8000-000000001c01'); insert into t_results (label, result) values ('links with the switch off', 'ok');
+do $$ begin perform public.booking_link('stay', '00000000-0000-4000-8000-000000001c01'); insert into t_results (label, result) values ('links with the switch off', 'ok');
 exception when others then insert into t_results (label, result) values ('links with the switch off', 'refused'); end $$;
 reset role;
 insert into public.group_features (group_id, feature_key, enabled) values ('00000000-0000-4000-8000-000000001a00', 'booking_links', true)
 on conflict (group_id, feature_key) do update set enabled = true;
 set local role authenticated;
-insert into t_results (label, result) select 'accommodation link', replace(replace(public.booking_go('stay', '00000000-0000-4000-8000-000000001c01'), (current_date + 30)::text, 'START'), (current_date + 32)::text, 'END');
-insert into t_results (label, result) select 'getting there link', public.booking_go('transport', '00000000-0000-4000-8000-000000001c01');
-do $$ begin perform public.booking_go('bogus', '00000000-0000-4000-8000-000000001c01'); insert into t_results (label, result) values ('a made-up link kind', 'ok');
+insert into t_results (label, result) select 'accommodation link', replace(replace(public.booking_link('stay', '00000000-0000-4000-8000-000000001c01') ->> 'url', (current_date + 30)::text, 'START'), (current_date + 32)::text, 'END');
+insert into t_results (label, result) select 'what the screen says about money', public.booking_link('golf', '00000000-0000-4000-8000-000000001c01') ->> 'disclosure';
+insert into t_results (label, result) select 'getting there link', public.booking_link('transport', '00000000-0000-4000-8000-000000001c01') ->> 'url';
+do $$ begin perform public.booking_link('bogus', '00000000-0000-4000-8000-000000001c01'); insert into t_results (label, result) values ('a made-up link kind', 'ok');
 exception when others then insert into t_results (label, result) values ('a made-up link kind', 'refused'); end $$;
 do $$ begin perform 1 from public.booking_targets; insert into t_results (label, result) values ('read the link templates', 'ok');
 exception when others then insert into t_results (label, result) values ('read the link templates', 'refused'); end $$;
@@ -54,9 +55,13 @@ insert into t_results (label, result) select 'taps counted', count(*)::text from
 set local role authenticated;
 set local request.jwt.claims to '{"sub":"00000000-0000-4000-8000-000000001002","role":"authenticated"}';
 insert into t_results (label, result) select 'enquiry email', (r ->> 'to') || ' / ' || (r ->> 'subject') || ' / ref in body: ' || ((r ->> 'body') ~ 'ref ZZQXTEN1')
-  from (select public.send_booking_enquiry('zzqx-links', 'Pip Smith', 'pip@example.com', null, current_date + 30, current_date + 32, 12, 2, 'Carts please')::jsonb r) x;
+  from (select public.send_booking_enquiry('zzqx-links', 'Pip Smith', 'pip@example.com', '0400 000 000', current_date + 30, current_date + 32, 12, 2, 'Carts please')::jsonb r) x;
+do $$ begin perform public.send_booking_enquiry('zzqx-links', 'Pip', 'pip@example.com', '0400 000 000', null, null, 12, 2); insert into t_results (label, result) values ('the same club twice in a day', 'ok');
+exception when others then insert into t_results (label, result) values ('the same club twice in a day', 'refused'); end $$;
 do $$ begin perform public.send_booking_enquiry('zzqx-unclaimed', 'Pip', 'pip@example.com', null, null, null, 12, 2); insert into t_results (label, result) values ('enquiry to an unclaimed course', 'ok');
 exception when others then insert into t_results (label, result) values ('enquiry to an unclaimed course', 'refused'); end $$;
+do $$ begin perform public.send_booking_enquiry('zzqx-links', 'Pip', 'pip@example.com', null, null, null, 12, 2); insert into t_results (label, result) values ('phone-only sign-in without a phone', 'ok');
+exception when others then insert into t_results (label, result) values ('phone-only sign-in without a phone', 'refused'); end $$;
 do $$ begin perform public.send_booking_enquiry('zzqx-links', 'Pip', null, null, null, null, 12, 2); insert into t_results (label, result) values ('enquiry with no way to reply', 'ok');
 exception when others then insert into t_results (label, result) values ('enquiry with no way to reply', 'refused'); end $$;
 do $$ begin perform public.send_booking_enquiry('zzqx-links', 'Pip', 'pip@example.com', null, null, null, 1000, 2); insert into t_results (label, result) values ('a group of 1000', 'ok');
@@ -68,16 +73,18 @@ set local request.jwt.claims to '{"sub":"00000000-0000-4000-8000-000000001003","
 insert into t_results (label, result) select 'the club sees it', (e ->> 'contact_name') || ' / ' || (e ->> 'group_size') || ' golfers / ' || (e ->> 'course')
   from (select json_array_elements(public.club_enquiries(90)) e) x;
 insert into t_results (label, result) select 'place vote match', coalesce((select slug from public.partner_courses_for(array['Zzqx Links GC', 'Zzqx Unclaimed Golf Club', 'Mudgee']) limit 1), 'none')
-  || ' / matches ' || (select count(*) from public.partner_courses_for(array['Zzqx Links GC', 'Zzqx Unclaimed Golf Club', 'Mudgee']));
+  || ' / matches ' || (select count(*) from public.partner_courses_for(array['Zzqx Links GC', 'Zzqx Unclaimed Golf Club', 'Mudgee']))
+  || ' / a town on its own: ' || (select count(*) from public.partner_courses_for(array['Zzqx']));
 
 -- 3. Group plans: everything free; an organiser can't make their group premium; Josh can; a premium feature follows.
 reset role;
 insert into t_results (label, result) select 'every group free', (select count(*) from public.groups where group_plan <> 'free')::text;
 set local role authenticated;
 set local request.jwt.claims to '{"sub":"00000000-0000-4000-8000-000000001001","role":"authenticated"}';
-do $$ begin update public.groups set group_plan = 'premium' where id = '00000000-0000-4000-8000-000000001a00'; insert into t_results (label, result) values ('organiser makes it premium', 'ok');
-exception when others then insert into t_results (label, result) values ('organiser makes it premium', 'refused'); end $$;
 reset role;
+-- Even with full table rights (like a function owned by the database), an organiser's request can't change the plan.
+do $$ begin update public.groups set group_plan = 'premium' where id = '00000000-0000-4000-8000-000000001a00'; insert into t_results (label, result) values ('organiser makes it premium', 'ok');
+exception when others then insert into t_results (label, result) values ('organiser makes it premium', sqlerrm); end $$;
 update public.feature_catalogue set tier = 'premium' where key = 'booking_links';
 insert into t_results (label, result) select 'premium feature on a free group', public.feature_on('00000000-0000-4000-8000-000000001a00', 'booking_links')::text;
 set local role authenticated;

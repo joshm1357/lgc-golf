@@ -615,9 +615,9 @@ time next year); phone width `tests/e2e/quick-test.mjs` 21 checks. All other pho
   like just "Golf Club" are skipped (the one already seeded is hidden); a server that gives up part-way counts as a
   failure, not "no courses"; holes near two courses (36-hole clubs) aren't used; listing search results and the claim
   search credit OpenStreetMap; the job's "no sign-in token check" setting is in config.toml.
-- **Seeding progress on staging:** Tasmania done (72 courses). The other states are waiting: OpenStreetMap's main
-  query server refuses Supabase's servers (406) and the two public mirrors are failing intermittently. The job tries
-  all three; it'll be re-run until each state is in.
+- **Seeding progress on staging:** Tasmania (72), ACT (10), NT (12, one with a full scorecard) done; SA, WA, VIC,
+  QLD and NSW to go. OpenStreetMap's main query server refuses Supabase's servers (406), so the job works through four
+  public mirrors and skips any that answer with nothing.
 - **Not built yet:** club photos (logo only for now).
 - **For Josh — OpenStreetMap licence (ODbL), before seeding live:** credit is shown everywhere the data appears. The
   licence also says that if we publicly use a database built from OSM data, we must offer that OSM-derived part (course
@@ -740,7 +740,21 @@ L.G.C safe, clean-up scheduled); unit tests (problem filter, share-card content)
   list of ideas that could be premium later is in DEV-PLAN.
 - **Josh's numbers:** enquiries per club and booking-link taps.
 
-**Tested:** `supabase/tests/stage10_booking.sql` 19 checks (links refused with the switch off, the addresses with place/
+**Independent review — fixed (044, applied on staging):**
+- **Enquiry spam:** one enquiry per person per club per day, 5 a day per person, 20 a day per club; a phone-only
+  sign-in must give a phone number; checks run under a lock so quick repeats can't slip through.
+- After sending, the screen says "Nearly done — press Send in your email app" (or, for a club with only a phone,
+  "Saved for the club — give them a call") instead of claiming it was sent.
+- What the trip screen says about money now comes from the database with the link: if a referral code is ever added,
+  it says "may get a small referral fee… never changes your price" without an app update.
+- Booking links open in a new window straight from the tap, so the app stays on the trip underneath.
+- The plan guard now works whoever asks (only Josh's function can change a plan); the test checks its own message.
+- Place votes: only an option that names a golf course (not just a town) offers the enquiry.
+- A one-day trip books one night; an end date needs a start date; whole numbers only for golfers/rounds.
+- Deleting your account (041b) unlinks your enquiries from your sign-in (the club keeps its copy).
+- Noted for later: the app's own feature list ignores the premium tier — needed once anything is marked premium.
+
+**Tested:** `supabase/tests/stage10_booking.sql` 22 checks (links refused with the switch off, the addresses with place/
 dates/people/rooms, made-up kinds refused, templates and enquiries unreadable, taps counted, enquiry email text with the
 club's ref, unclaimed course / no way to reply / silly group sizes refused, the club sees only its own, place-vote match,
 every group free, organisers can't make their group premium, a premium feature follows the plan, Josh's numbers);

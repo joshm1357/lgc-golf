@@ -1,5 +1,5 @@
 // The Planner's other tabs: Details (where/when, day plan, info, bring list), Jobs, Kitty, Rooms & cars.
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { useData, useSession, playerName, useFeature } from '../lib/store.jsx';
 import { Avatar, Sheet, Icon, toast } from '../components/ui.jsx';
@@ -16,12 +16,17 @@ const canEdit = (item, me, isAdmin) => isAdmin || item.created_by === me || item
  * the trip's place, dates and how many are in — so a referral code can be added later without an app update. */
 function BookingLinks({ plan }) {
   const [busy, setBusy] = useState(null);
+  const [note, setNote] = useState('');
+  useEffect(() => { supabase.rpc('booking_disclosure').then(({ data }) => setNote(data || ''), () => {}); }, []);
   const go = async (kind) => {
+    // Open the new window straight from the tap (so phones don't block it, and the app stays where it is underneath).
+    const win = window.open('', '_blank');
     setBusy(kind);
-    const { data: url, error } = await supabase.rpc('booking_go', { p_kind: kind, p_plan: plan.id });
+    const { data, error } = await supabase.rpc('booking_link', { p_kind: kind, p_plan: plan.id });
     setBusy(null);
-    if (error || !url) { toast(error?.message || 'Couldn’t open that link'); return; }
-    window.location.href = url;
+    if (error || !data?.url) { win?.close(); toast(error?.message || 'Couldn’t open that link'); return; }
+    if (data.disclosure) setNote(data.disclosure);
+    if (win) { try { win.opener = null; } catch { /* fine */ } win.location.href = data.url; } else window.location.href = data.url;
   };
   return (
     <div className="stack" style={{ gap: 6, borderTop: '1px solid var(--line-soft)', paddingTop: 8 }}>
@@ -30,7 +35,7 @@ function BookingLinks({ plan }) {
           <button key={k} type="button" className="btn ghost sm" disabled={!!busy} onClick={() => go(k)}>{busy === k ? 'Opening…' : label}</button>
         ))}
       </div>
-      <span className="small muted">Opens the booking site with your place and dates filled in. The Golf Trip doesn’t earn anything from these.</span>
+      <span className="small muted">Opens the booking site with your place and dates filled in. {note}</span>
     </div>
   );
 }

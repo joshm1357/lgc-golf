@@ -204,7 +204,7 @@ function Enquiry({ course, club, onClose }) {
     await ensureSignedIn();
     const r = await must(supabase.rpc('send_booking_enquiry', {
       p_course_slug: course.slug, p_name: f.name.trim(), p_email: f.email.trim() || null, p_phone: f.phone.trim() || null,
-      p_start: f.start || null, p_end: f.end || null, p_size: f.size ? Number(f.size) : null, p_rounds: f.rounds ? Number(f.rounds) : null, p_note: f.note.trim() || null,
+      p_start: f.start || null, p_end: f.end || null, p_size: f.size ? parseInt(f.size, 10) || null : null, p_rounds: f.rounds ? parseInt(f.rounds, 10) || null : null, p_note: f.note.trim() || null,
     }));
     setSent(r);
     if (r?.to) window.location.href = `mailto:${r.to}?subject=${encodeURIComponent(r.subject)}&body=${encodeURIComponent(r.body)}`;
@@ -213,10 +213,10 @@ function Enquiry({ course, club, onClose }) {
     <Sheet title={`Group booking — ${club.name}`} onClose={onClose}>
       {sent ? (
         <div className="stack" style={{ gap: 8 }}>
-          <strong>Sent to {sent.club}.</strong>
-          {sent.to && <span className="small">Your email app should have opened with it ready to send. If it didn’t: <a href={`mailto:${sent.to}?subject=${encodeURIComponent(sent.subject)}&body=${encodeURIComponent(sent.body)}`}>email {sent.to}</a>.</span>}
-          {sent.phone && <span className="small">Or call them: <a href={`tel:${sent.phone.replace(/\s/g, '')}`}>{sent.phone}</a></span>}
-          <span className="small muted">The club also sees your enquiry on its page in The Golf Trip.</span>
+          <strong>{sent.to ? 'Nearly done — press Send in your email app.' : `Saved for ${sent.club} — give them a call.`}</strong>
+          {sent.to && <span className="small">Your email app should have opened with it written out. If it didn’t: <a href={`mailto:${sent.to}?subject=${encodeURIComponent(sent.subject)}&body=${encodeURIComponent(sent.body)}`}>email {sent.to}</a>.</span>}
+          {sent.phone && <span className="small">{sent.to ? 'Or call them: ' : ''}<a href={`tel:${sent.phone.replace(/\s/g, '')}`}>{sent.phone}</a></span>}
+          <span className="small muted">{sent.club} also sees your enquiry on its page in The Golf Trip.</span>
           <button type="button" className="btn ghost block" onClick={onClose}>Done</button>
         </div>
       ) : (

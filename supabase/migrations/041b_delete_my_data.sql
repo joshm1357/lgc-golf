@@ -86,6 +86,10 @@ begin
   delete from public.club_members where user_id = v_uid;
   delete from public.group_members where user_id = v_uid;
   update public.club_claims set decided_by = null where decided_by = v_uid;
+  -- Group booking enquiries (Stage 10) stay with the club, but no longer point at the person's sign-in.
+  if to_regclass('public.booking_enquiries') is not null then
+    execute 'update public.booking_enquiries set user_id = null where user_id = $1' using v_uid;
+  end if;
   delete from auth.users where id = v_uid;
 end $$;
 

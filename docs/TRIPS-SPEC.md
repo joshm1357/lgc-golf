@@ -66,3 +66,7 @@ email address): an **email digest** for anyone who never adds it.
 - Digest: three events for a digest person → one message at their hour, none straight away; "draw room open" still
   instant; an "only important" person gets nothing for a new vote.
 - Phone-width check of the Trips tab: now/next, ideas, past; a suggestion from start to locked in.
+
+## Status (18 Oct)
+Built and tested on staging (branch `stage-1b-trips`, migrations 025–026). Not yet: winners on past-trip cards (needs
+the honour board linked to trips — Stage 6), an email digest (Stage 2, once people have an email address).

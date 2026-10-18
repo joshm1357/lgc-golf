@@ -233,9 +233,23 @@ STOP → live SQL below → merge `v1.5` into `main` (deploys) → check the liv
   The v1.5 browser checks (`tests/e2e/phone-test.mjs`) all still pass. 75 unit tests.
 - Regression after 024 + 025 (re-run on staging): isolation 47/47, Trips 37/37, L.G.C access checks 30/30.
 
+**Independent review → fixes (026, 18 Oct)** — nothing leaked between groups; 2 must-fix, 5 should-fix, done:
+- An admin on an old phone who taps "Set it up in the app" after lock-in no longer leaves a stray empty trip (the
+  empty one lock-in made is tidied away); a trip deleted by hand doesn't come back by itself.
+- The new app works before 025 is applied (budget only sent when given; the admin closes votes the old way).
+- No flooding: at most 3 "new idea" buzzes a day from one person; one Chat buzz per trip every 10 minutes; people who
+  haven't picked their name can't send anything.
+- The midnight job never swaps trips in the middle of one that's on (a one-day round inside a long weekend stays
+  put), and catches up a missed first day. The hourly digest job is checked to really ask for the digest.
+- Trips added in Admin → Trips (no plan) still show on the Trips tab; Trips keeps an offline copy; switching to
+  "only important" still delivers waiting important items; the vote-closing button says "Pick this winner".
+- "Trusted server" in the lock-in guard is now the request's database role, not "nobody signed in".
+- Left as notes: past trips don't show winners yet (the honour board isn't linked to trips — Stage 6 history import
+  links them); Chat delete events, like other tables', carry only the deleted row's id to every phone.
+
 ### Live order for v2.0 (at the release STOP — not before)
-022 → 023 → 024 → 025 on live, then deploy `notify` and `lgc-mcp`, then the app. (On staging 024 ran after 025; 025
-calls the same-group check builder again, so the order above is the one for live.)
+022 → 023 → 024 → 025 → 026 on live, then deploy `notify` and `lgc-mcp`, then the app. (On staging 024 ran after 025;
+025 calls the same-group check builder again, so the order above is the one for live.)
 
 ## Known limits
 - GPS distances are approximate (±5–10 m) and straight-line; closest-to-pin distance is typed in.

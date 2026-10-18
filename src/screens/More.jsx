@@ -16,7 +16,9 @@ export default function More() {
     { to: '/tribunal', icon: Icon.gavel, label: 'Handicap Tribunal', sub: 'Lodge a case, vote, see verdicts' },
     { to: '/courses', icon: Icon.map, label: 'Courses', sub: 'Every course and its history' },
     { to: `/player/${status.player_id}`, icon: Icon.user, label: 'My profile', sub: 'Photo, nickname, history' },
-    { to: '/admin', icon: Icon.cog, label: status.is_admin ? 'Admin' : "I'm the admin", sub: status.is_admin ? (pending ? `${pending} waiting for approval` : 'Trips, courses, players, rounds') : 'Needs the admin PIN' },
+    { to: '/group', icon: Icon.user, label: 'Group & invites', sub: status.is_admin ? 'Invite links, QR code, people and roles' : (status.groups?.length > 1 ? 'Switch group, how you’re signed in' : 'Your group and how you’re signed in') },
+    // The admin PIN is L.G.C's only; other groups make organisers in Group & invites.
+    ...(status.is_admin || status.legacy !== false ? [{ to: '/admin', icon: Icon.cog, label: status.is_admin ? 'Admin' : "I'm the admin", sub: status.is_admin ? (pending ? `${pending} waiting for approval` : 'Trips, courses, players, rounds') : 'Needs the admin PIN' }] : []),
   ];
   return (
     <div className="page">

@@ -6,7 +6,8 @@ import { TabBar, Toaster, Loading, UpdateBanner, toast } from './components/ui.j
 import { lazyScreen, LazyArea } from './lib/lazy.jsx';
 import { DrawOverlay } from './components/DrawOverlay.jsx';
 // Loaded straight away: the first screens people see and score entry (must work with no signal).
-import Join from './screens/Join.jsx';
+import Join, { InviteJoin } from './screens/Join.jsx';
+import { inviteCode } from './lib/invite.js';
 import ProfileSetup, { AwaitingApproval } from './screens/ProfileSetup.jsx';
 import Leaderboard from './screens/Leaderboard.jsx';
 import ScoreEntry from './screens/ScoreEntry.jsx';
@@ -26,11 +27,23 @@ const Planner = lazyScreen(() => import('./screens/Trips.jsx'));
 const PlanDetail = lazyScreen(() => import('./screens/Planner.jsx'), 'PlanDetail');
 const Rulebook = lazyScreen(() => import('./screens/Rulebook.jsx'));
 const GreenMapper = lazyScreen(() => import('./screens/GreenMapper.jsx'));
+const Group = lazyScreen(() => import('./screens/Group.jsx'));
 
 // A fresh plan screen per plan, so nothing carries over when a notification jumps to another one.
 function PlanDetailRoute() {
   const { planId } = useParams();
   return <PlanDetail key={planId} />;
+}
+
+// An invite link opened by someone already in a group: join that group too (or open it if already in).
+function JoinInsideRoute() {
+  const { code } = useParams();
+  const c = inviteCode(code);
+  return (
+    <div style={{ minHeight: '70vh', background: 'var(--navy)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      {c ? <InviteJoin code={c} inside /> : <div>That invite link isn’t right.</div>}
+    </div>
+  );
 }
 
 function Gate() {
@@ -88,6 +101,8 @@ function Inside() {
         <Route path="/plan/:planId" element={<PlanDetailRoute />} />
         <Route path="/rules" element={<Rulebook />} />
         <Route path="/courses/:courseId/greens" element={<GreenMapper />} />
+        <Route path="/group" element={<Group />} />
+        <Route path="/join/:code" element={<JoinInsideRoute />} />
         <Route path="*" element={<Leaderboard />} />
       </Routes>
       </LazyArea>

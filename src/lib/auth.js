@@ -6,17 +6,18 @@ import { supabase } from './supabase.js';
 export const SIGN_IN = String(import.meta.env.VITE_SIGN_IN || '')
   .split(',').map((s) => s.trim()).filter((s) => ['google', 'email', 'facebook'].includes(s));
 
-const back = () => `${window.location.origin}${import.meta.env.BASE_URL}`;
+// Where to come back to after Google or an email link (the start-a-group wizard passes its own page).
+const back = (hash = '') => `${window.location.origin}${import.meta.env.BASE_URL}${hash}`;
 
 /** Add Google (or Facebook) to this phone's user — same user, same scores. */
-export async function linkProvider(provider) {
-  const { error } = await supabase.auth.linkIdentity({ provider, options: { redirectTo: back() } });
+export async function linkProvider(provider, returnHash = '') {
+  const { error } = await supabase.auth.linkIdentity({ provider, options: { redirectTo: back(returnHash) } });
   if (error) throw error;
 }
 
 /** Add an email to this phone's user; they confirm it from the email. */
-export async function linkEmail(email) {
-  const { error } = await supabase.auth.updateUser({ email: email.trim() }, { emailRedirectTo: back() });
+export async function linkEmail(email, returnHash = '') {
+  const { error } = await supabase.auth.updateUser({ email: email.trim() }, { emailRedirectTo: back(returnHash) });
   if (error) throw error;
 }
 

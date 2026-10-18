@@ -1,21 +1,24 @@
-Expected (staging, after 034). Run as one script; it rolls itself back.
+Expected (staging, after 034 and 034b). Run as one script; it rolls itself back.
 
 made: slug / legacy / my role = the-thursday-hackers / false / organiser
-starts empty (players, trips, courses, rules, trophies, honours) = 0 0 0 0 0 0
+the organiser is on it (name / handicap / linked) = Josh / 14.0 / true
+starts empty apart from them (players, trips, courses, rules, trophies, honours) = 1 0 0 0 0 0
 preset switches: feed / tribunal / gps / planner(default) = false / false / true / true
 plain look = #1F4B33 / plain
-organiser adds themselves = true
 set_features: feed / planner = true / false
 starter rulebook = 2
 invite link = true
 same name, new address = the-thursday-hackers-2
 4th group today = refused
 outsider changes features = refused
-reserved name = lgc-golf
+names that look like L.G.C = group / group-2
+the first version (no name or handicap) = refused
+set_features for a group I'm not working in = refused
 bad name = refused
 bad name = refused
 unknown feature = refused
 feature not on/off = refused
+handicap 99 = refused
 outsider sees the first group = 0
 not signed in = refused
 L.G.C untouched (members) = 0

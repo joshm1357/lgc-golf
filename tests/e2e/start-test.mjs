@@ -185,7 +185,7 @@ await page.getByRole('button', { name: 'Make the group' }).click();
 await page.getByText('Step 3 of 7').waitFor({ timeout: 10000 });
 const cg = rpc('create_group')[0];
 check(!!cg && cg.body.p_name === 'The Mulligans' && cg.body.p_features.feed === true && cg.body.p_features.scorecard_photo === false, 'makes the group (name, Full trip switches)');
-check(rpc('create_my_player')[0]?.body.p_name === 'Josh' && rpc('create_my_player')[0]?.body.p_handicap === 14, 'adds the organiser as a player');
+check(cg?.body.p_my_name === 'Josh' && cg?.body.p_handicap === 14, 'adds the organiser as a player in the same step');
 
 // Leaving and coming back carries on at the same step, without making a second group.
 await page.reload();
@@ -213,12 +213,13 @@ await page.getByRole('button', { name: /Just scoring/ }).click();
 await page.getByRole('button', { name: 'Next' }).click();
 await page.getByText('Step 6 of 7').waitFor({ timeout: 5000 });
 const sf = rpc('set_features')[0]?.body.p_switches;
-check(!!sf && sf.feed === false && sf.gps === true && sf.tribunal === false, 'step 5: Just scoring switches saved');
+check(!!sf && sf.feed === false && sf.gps === true && sf.tribunal === false && rpc('set_features')[0]?.body.p_group === NEWG, 'step 5: Just scoring switches saved, for the new group');
 
 // 6. Players.
 await page.getByLabel('One per line — name and handicap').fill('Mike, 18\nSam 9.4\nmike 12');
 check(await page.getByText(/Mike is on the list twice/i).isVisible(), 'step 6: a name twice is pointed out');
-await page.getByLabel('One per line — name and handicap').fill('Mike, 18\nSam 9.4');
+await page.getByLabel('One per line — name and handicap').fill('Mike, 18\nSam 9.4\nAdam H, 22');
+check(await page.getByText(/Adam H \(22\) — already on the list/).isVisible(), 'step 6: someone already on the list is skipped');
 await page.getByRole('button', { name: 'Add 2 players' }).click();
 await page.getByText('Step 7 of 7').waitFor({ timeout: 5000 });
 check(rpc('admin_create_player').map((x) => `${x.body.p_name}:${x.body.p_handicap}`).join(',') === 'Mike:18,Sam:9.4', 'step 6: players added');

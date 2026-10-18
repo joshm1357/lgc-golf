@@ -38,6 +38,9 @@ const db = {
   plan_groups: [{ id: ROOM, plan_id: PLAN, kind: 'room', name: 'Bunk room', capacity: 2, sort: 0, created_at: now }],
   plan_group_members: [{ group_id: ROOM, player_id: P2 }],
   tribunal_cases: [], tribunal_votes: [], posts: [], rules: [],
+  // L.G.C's switches (migration 030): everything on apart from the two coming-soon features.
+  group_features: ['feed', 'side_comps', 'comp_bonus', 'trophies', 'tribunal', 'draw', 'gps', 'location', 'planner', 'planner_tasks',
+    'planner_costs', 'planner_rooms', 'rule_voting', 'notifications', 'connector'].map((k) => ({ group_id: 'a0a0a0a0-0000-4000-8000-00000000000a', feature_key: k, enabled: true })),
 };
 
 const writes = [];

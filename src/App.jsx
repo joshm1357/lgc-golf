@@ -1,32 +1,37 @@
 import React, { useEffect, useState } from 'react';
 import { startOutbox, outboxCount, onOutboxChange, onOutboxDrop } from './lib/outbox.js';
-import { HashRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { HashRouter, Routes, Route, useLocation, useParams } from 'react-router-dom';
 import { SessionProvider, DataProvider, useSession, useData } from './lib/store.jsx';
 import { TabBar, Toaster, Loading, UpdateBanner, toast } from './components/ui.jsx';
+import { lazyScreen, LazyArea } from './lib/lazy.jsx';
+import { DrawOverlay } from './components/DrawOverlay.jsx';
+// Loaded straight away: the first screens people see and score entry (must work with no signal).
 import Join from './screens/Join.jsx';
 import ProfileSetup, { AwaitingApproval } from './screens/ProfileSetup.jsx';
 import Leaderboard from './screens/Leaderboard.jsx';
 import ScoreEntry from './screens/ScoreEntry.jsx';
-import Admin from './screens/Admin.jsx';
-import More from './screens/More.jsx';
-import Profile from './screens/Profile.jsx';
 import Feed from './screens/Feed.jsx';
-import Comps from './screens/Comps.jsx';
-import MapScreen from './screens/MapScreen.jsx';
-import Trophies from './screens/Trophies.jsx';
-import Tribunal, { TribunalCase } from './screens/Tribunal.jsx';
-import Courses from './screens/Courses.jsx';
-import Planner, { PlanDetail } from './screens/Planner.jsx';
-import Rulebook from './screens/Rulebook.jsx';
-import GreenMapper from './screens/GreenMapper.jsx';
-import { useParams } from 'react-router-dom';
+import More from './screens/More.jsx';
+
+// Loaded when first opened (the service worker saves them all for offline use in the background).
+const Admin = lazyScreen(() => import('./screens/Admin.jsx'));
+const Profile = lazyScreen(() => import('./screens/Profile.jsx'));
+const Comps = lazyScreen(() => import('./screens/Comps.jsx'));
+const MapScreen = lazyScreen(() => import('./screens/MapScreen.jsx'));
+const Trophies = lazyScreen(() => import('./screens/Trophies.jsx'));
+const Tribunal = lazyScreen(() => import('./screens/Tribunal.jsx'));
+const TribunalCase = lazyScreen(() => import('./screens/Tribunal.jsx'), 'TribunalCase');
+const Courses = lazyScreen(() => import('./screens/Courses.jsx'));
+const Planner = lazyScreen(() => import('./screens/Planner.jsx'));
+const PlanDetail = lazyScreen(() => import('./screens/Planner.jsx'), 'PlanDetail');
+const Rulebook = lazyScreen(() => import('./screens/Rulebook.jsx'));
+const GreenMapper = lazyScreen(() => import('./screens/GreenMapper.jsx'));
 
 // A fresh plan screen per plan, so nothing carries over when a notification jumps to another one.
 function PlanDetailRoute() {
   const { planId } = useParams();
   return <PlanDetail key={planId} />;
 }
-import { DrawOverlay } from './components/DrawCeremony.jsx';
 
 function Gate() {
   const { loading, status } = useSession();
@@ -65,6 +70,7 @@ function Inside() {
     <div className="app">
       {waiting > 0 && !offline && <div className="sync" role="status">📤 {waiting} post{waiting === 1 ? '' : 's'} or entr{waiting === 1 ? 'y' : 'ies'} waiting to send…</div>}
       {offline && <div className="sync" role="status">📵 No signal — showing the copy saved on this phone. Scores you enter are kept and sent when signal comes back.</div>}
+      <LazyArea resetKey={loc.pathname} fallback={<Loading />}>
       <Routes>
         <Route path="/" element={<Leaderboard />} />
         <Route path="/score/:roundId" element={<ScoreEntry />} />
@@ -84,6 +90,7 @@ function Inside() {
         <Route path="/courses/:courseId/greens" element={<GreenMapper />} />
         <Route path="*" element={<Leaderboard />} />
       </Routes>
+      </LazyArea>
       {!hideTabs && <TabBar />}
       <DrawOverlay />
       <UpdateBanner />

@@ -189,7 +189,8 @@ img { max-width: 100%; }
 
 .loading { min-height: 60vh; display: flex; align-items: center; justify-content: center; color: var(--muted); }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(150px + var(--safe-bottom)); background: var(--text); color: #fff; padding: 10px 16px; border-radius: 999px; font-weight: 600; z-index: 60; font-size: 14px; }
-.leaflet-container { font-family: var(--body); }
+/* Doubled class so it still wins now the map styles load later, with the map. */
+.leaflet-container.leaflet-container { font-family: var(--body); }
 
 /* Trophy Room */
 .room { background: #1E1611; min-height: 100vh; color: #F4EFE3; }

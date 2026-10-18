@@ -11,14 +11,29 @@
 const CACHE = 'lgc-shell-v2';
 const BASE = '/lgc-golf/';
 
-/** Save the page and every code/style file it uses; drop code files from older versions. */
+/** Every code/style file of the version on the server — including screens that load only when
+ *  opened — from the list written at build time. Empty if it can't be fetched. */
+async function allParts() {
+  try {
+    const res = await fetch(`${BASE}asset-list.json`, { cache: 'no-store' });
+    if (!res.ok) return [];
+    const list = await res.json();
+    return Array.isArray(list) ? list.filter((f) => /^assets\/[\w.-]+$/.test(f)).map((f) => BASE + f) : [];
+  } catch { return []; }
+}
+
+/** Save the page and every code/style file the app uses; drop code files from older versions. */
 async function saveShell(pageResponse) {
   const c = await caches.open(CACHE);
   const page = pageResponse || (await fetch(BASE, { cache: 'no-store' }));
   if (!page.ok) return;
   const html = await page.clone().text();
   await c.put(BASE, page);
-  const used = [...new Set((html.match(/\/lgc-golf\/assets\/[^"'\s)]+/g) || []))];
+  const fromPage = (html.match(/\/lgc-golf\/assets\/[^"'\s)]+/g) || []);
+  // The list only counts if it belongs to the same version as the page (it names the page's main file).
+  const parts = await allParts();
+  const listed = fromPage.every((u) => parts.includes(u)) ? parts : [];
+  const used = [...new Set([...fromPage, ...listed])];
   await Promise.all(used.map(async (u) => { if (!(await c.match(u))) { try { await c.add(u); } catch { /* next time */ } } }));
   for (const req of await c.keys()) {
     const p = new URL(req.url).pathname;

@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { useData, useSession, playerName } from '../lib/store.jsx';
 import { Header, Icon, Avatar } from '../components/ui.jsx';
-import { NotifyCard } from './Planner.jsx';
+import { NotifyCard } from '../components/NotifyCard.jsx';
 
 export default function More() {
   const { status } = useSession();

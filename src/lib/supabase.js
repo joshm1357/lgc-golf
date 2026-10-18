@@ -2,8 +2,10 @@ import { createClient } from '@supabase/supabase-js';
 
 // These two values are public by design (they ship in every browser).
 // The data is protected by the group PIN and Row Level Security in the database.
-export const SUPABASE_URL = 'https://luogyzvrbedmicjejilr.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_uNBEcPawkDZHYGeubyYyag_MwhYkhR7';
+// A test build can point at the staging database instead (VITE_SUPABASE_URL / VITE_SUPABASE_KEY);
+// the live app uses the L.G.C database below.
+export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://luogyzvrbedmicjejilr.supabase.co';
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY || 'sb_publishable_uNBEcPawkDZHYGeubyYyag_MwhYkhR7';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, storageKey: 'lgc-auth' },

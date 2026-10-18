@@ -14,34 +14,10 @@ import { Avatar, toast } from './ui.jsx';
 
 export const TEAM_COLOURS = ['#D9A521', '#5FB3E0', '#E0705F', '#7FD1AE', '#C79BE6', '#F2F4F6'];
 const COUNTDOWN_MS = 5000;
-const DISMISS_KEY = 'lgc-draw-dismissed';
 
-/** Watches for an open draw room or a live draw and takes over the screen. */
-export function DrawOverlay() {
-  const [draw, setDraw] = useState(null);
-  const [dismissed, setDismissed] = useState(() => {
-    try { return localStorage.getItem(DISMISS_KEY); } catch { return null; }
-  });
-  const load = useCallback(async () => {
-    const since = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
-    const { data } = await supabase.from('draws').select('*').gte('created_at', since).neq('status', 'cancelled').order('created_at', { ascending: false }).limit(10);
-    // A draw that's open or running always wins over one that's finished (e.g. cars drawn after the teams room opened).
-    const d = (data || []).find((x) => x.status === 'lobby' || x.status === 'running' || x.status === 'done') || data?.[0] || null;
-    // A locked draw only reappears for 30 minutes.
-    if (d && d.status === 'locked' && Date.now() - new Date(d.started_at).getTime() > 30 * 60 * 1000) setDraw(null);
-    else setDraw(d);
-  }, []);
-  useEffect(() => { load(); }, [load]);
-  useRealtime(['draws'], load);
-
-  if (!draw || dismissed === draw.id + ':' + draw.status) return null;
-  return (
-    <DrawCeremony draw={draw} actions={liveActions} onClose={() => {
-      const v = draw.id + ':' + draw.status;
-      try { localStorage.setItem(DISMISS_KEY, v); } catch { /* ignore */ }
-      setDismissed(v);
-    }} />
-  );
+/** The live ceremony, writing to the database so every phone follows along (opened by DrawOverlay). */
+export function LiveDrawCeremony({ draw, onClose }) {
+  return <DrawCeremony draw={draw} actions={liveActions} onClose={onClose} />;
 }
 
 /** Real actions: write to the database so every phone follows along. */

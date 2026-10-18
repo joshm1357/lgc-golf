@@ -230,7 +230,7 @@ Deno.serve(async (req) => {
       }
       case 'poll_decided': {
         const p = await mine(g, 'plan_polls', body.poll_id);
-        const { data: o } = p.winner_option_id ? await db.from('plan_options').select('label').eq('id', p.winner_option_id).single() : { data: null };
+        const { data: o } = p.winner_option_id ? await db.from('plan_options').select('label').eq('id', p.winner_option_id).eq('group_id', g).maybeSingle() : { data: null };
         const pl = await plan(g, p.plan_id);
         sent = await send(g, 'all', { title: `✅ ${pl.name}: ${o?.label || 'decided'}`, body: p.question, url: planUrl(pl.id), tag: `poll-${p.id}` }, from);
         break;

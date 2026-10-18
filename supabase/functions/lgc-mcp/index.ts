@@ -29,7 +29,11 @@ async function ctxForKey(key: string | undefined): Promise<Ctx | null> {
   if (hit && Date.now() - hit.at < 60000) return hit.ctx;
   const { data } = await db.from('connector_keys').select('group_id, player_id, groups(name)').eq('key_hash', await sha256(key)).maybeSingle();
   const ctx = data ? { g: data.group_id as string, author: (data.player_id as string) || null, groupName: (data as any).groups?.name || 'the group' } : null;
-  keyCache.set(key, { ctx, at: Date.now() });
+  // Only remember keys that work (and not too many), so random wrong keys can't fill the memory.
+  if (ctx) {
+    if (keyCache.size > 200) keyCache.clear();
+    keyCache.set(key, { ctx, at: Date.now() });
+  }
   return ctx;
 }
 
@@ -109,7 +113,7 @@ const TOOLS: Tool[] = [
       const all = await players(c);
       const trips = await must(db.from('trips').select('*').eq('group_id', c.g).order('start_date', { ascending: false })) as Record<string, any>[];
       const trip = trips.find((t) => t.status === 'active') || trips[0];
-      const rounds = trip ? await must(db.from('rounds').select('*, courses(name)').eq('trip_id', trip.id).order('play_date')) as Record<string, any>[] : [];
+      const rounds = trip ? await must(db.from('rounds').select('*, courses(name)').eq('trip_id', trip.id).eq('group_id', c.g).order('play_date')) as Record<string, any>[] : [];
       const lines = [`Group: ${c.groupName}`, `Current trip: ${trip ? `${trip.name} (${trip.start_date || '?'} to ${trip.end_date || '?'})` : 'none'}`];
       for (const r of rounds) {
         const subs = await subjectsOf(r, all);
@@ -129,7 +133,7 @@ const TOOLS: Tool[] = [
     inputSchema: { type: 'object', properties: { round_id: str('Round id (optional)') } },
     async run(a, c) {
       const round = await currentRound(c, a.round_id);
-      const course = await must(db.from('courses').select('*').eq('id', round.course_id).single()) as Record<string, any>;
+      const course = await must(db.from('courses').select('*').eq('id', round.course_id).eq('group_id', c.g).single()) as Record<string, any>;
       const subs = await subjectsOf(round, await players(c));
       const scores = await must(db.from('scores').select('*').eq('round_id', round.id)) as Record<string, any>[];
       const holes = course.holes as { n: number; par: number; si: number }[];

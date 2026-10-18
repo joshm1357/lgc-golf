@@ -47,9 +47,11 @@ export function Privacy() {
           course they were measured), honour board, trophies, the Rulebook and Tribunal, votes and comments. Your group sees them.</>,
         <><strong>Photos</strong> you post (feed, comps, Tribunal, the group’s crest). They’re stored at a web address that
           isn’t listed anywhere, but anyone who has the exact link can open it.</>,
+        <><strong>Share pictures and results.</strong> When anyone in the group shares a winner, leaderboard or Tribunal
+          picture (or the results text) to a chat, the names and scores on it go wherever they send it.</>,
         <><strong>Location — only if you switch on “Share my location”</strong> and have the map open. We keep only your
-          latest position, your group sees it, and it’s removed when you switch sharing off. Distances to the green are
-          worked out on your phone and aren’t sent.</>,
+          latest position, your group sees it, and it’s removed when you switch sharing off or after a day without an
+          update. Distances to the green are worked out on your phone and aren’t sent.</>,
         <><strong>Notifications</strong>, if you turn them on: your phone’s notification address, the phone type, your time
           zone and your settings. The text of a notification passes through Apple’s, Google’s or Mozilla’s notification
           service to reach your phone.</>,
@@ -76,8 +78,10 @@ export function Privacy() {
         <>Your internet address is used to stop abuse (too many tries, too many new groups). It’s scrambled with the date
           before it’s stored — except after a wrong PIN or invite code, when it’s kept as it is for up to 30 days to lock out
           guessing.</>,
-        <>If the app breaks on your phone, it sends Josh the error, the screen it happened on (without any invite code), the
-          app version and the phone type. No names.</>,
+        <>If the app breaks on your phone, it sends Josh the error, the screen it happened on (without any invite code or
+          sign-in code), which group you were in, the app version and the phone type. No names. Kept for 90 days.</>,
+        <>Supabase, which runs our database, keeps its own records of requests (including internet addresses) for a short
+          time to run and protect its service.</>,
       ]} />
 
       <H>Other services the app uses</H>
@@ -103,9 +107,14 @@ export function Privacy() {
         <><strong>Leave a group</strong> (Group &amp; invites → Your data): your scores stay in the group’s history; your location and
           notifications for that group go.</>,
         <><strong>Delete your account</strong>: you leave every group and your sign-in is removed. You can also have your name
-          and selfie taken off the history (you’ll show as “Former player”).</>,
-        <><strong>Organisers</strong> can download all of the group’s data, or delete the whole group.</>,
-        <>Photo files of a deleted group or selfie are removed from storage by a regular clean-up [timing to confirm].</>,
+          and selfie taken off your profile, the honour board and the app’s own feed posts (you’ll show as “Former
+          player”). Things other people wrote that mention you aren’t changed.</>,
+        <><strong>Organisers</strong> can download all of the group’s data (it includes everyone’s profile, so any payment
+          details people added), or delete the whole group.</>,
+        <>Photos of a deleted group or a removed selfie disappear from the app straight away; the files themselves are removed
+          from storage by a clean-up that isn’t running yet [to come] — until then, someone who already has a photo’s exact
+          link could still open it.</>,
+        <>Scan counts are kept for 2 years; app problem reports for 90 days.</>,
         <>Anything else, or a copy of what we hold about you: email [contact email].</>,
       ]} />
 

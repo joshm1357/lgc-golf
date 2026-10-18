@@ -21,6 +21,8 @@ insert into public.group_members (group_id, user_id, role, player_id) values
   ('00000000-0000-4000-8000-0000000f0a00', '00000000-0000-4000-8000-0000000f0002', 'organiser', '00000000-0000-4000-8000-0000000f0b01'),
   ('00000000-0000-4000-8000-0000000f0a00', '00000000-0000-4000-8000-0000000f0003', 'organiser', null),
   ('00000000-0000-4000-8000-0000000f0a00', '00000000-0000-4000-8000-0000000f0004', 'player', '00000000-0000-4000-8000-0000000f0b04');
+insert into public.group_features (group_id, feature_key, enabled, updated_by) values ('00000000-0000-4000-8000-0000000f0a00', 'feed', true, '00000000-0000-4000-8000-0000000f0003')
+on conflict (group_id, feature_key) do update set updated_by = excluded.updated_by;
 insert into public.location_pings (player_id, group_id, lat, lng, accuracy_m) values ('00000000-0000-4000-8000-0000000f0b04', '00000000-0000-4000-8000-0000000f0a00', -34.5, 150.4, 5);
 
 -- Josh's screens: refused for anyone else.
@@ -41,6 +43,7 @@ select public.count_scan((select extra from t_ids where k = 'stay'), 'stay', nul
 -- The app reports a problem (without a sign-in); the page address loses anything after '?' and any invite code.
 select public.report_error('TypeError: x is undefined', 'at Leaderboard (index.js:1:2)', '/lgc-golf/#/c/bowral?ref=ABC&p=cart', 'v2.1', 'Mozilla/5.0');
 select public.report_error('TypeError: x is undefined', null, '/lgc-golf/#/join/SECRETCODE12', 'v2.1', 'Mozilla/5.0');
+select public.report_error('TypeError: x is undefined', null, '/lgc-golf/#access_token=eyJabc&refresh_token=zzz', 'v2.1', 'Mozilla/5.0');
 select public.report_error('', null, null, null, null);
 do $$ begin perform 1 from public.client_errors; insert into t_results (label, result) values ('read the problems table', 'ok');
 exception when others then insert into t_results (label, result) values ('read the problems table', 'refused'); end $$;
@@ -58,7 +61,7 @@ set local request.jwt.claims to '{"sub":"00000000-0000-4000-8000-0000000f0002","
 do $$ begin perform set_config('request.headers', '{"x-group-id":"00000000-0000-4000-8000-0000000f0a00"}', true); end $$;
 insert into t_results (label, result) select 'export', (e -> 'group' ->> 'name') || ' / players ' || jsonb_array_length(e -> 'players')
   || ' / members ' || jsonb_array_length(e -> 'members') || ' / user ids in it: ' || (e::text ~ '0000000f0003|0000000f0004')
-  || ' / locations in it: ' || (e ? 'location_pings') || ' / invites in it: ' || (e ? 'group_invites')
+  || ' / locations in it: ' || (e ? 'location_pings') || ' / invites in it: ' || (e ? 'group_invites') || ' / rooms in it: ' || (e ? 'plan_group_members')
   from (select public.export_group()::jsonb e) x;
 set local request.jwt.claims to '{"sub":"00000000-0000-4000-8000-0000000f0003","role":"authenticated"}';
 do $$ begin perform public.export_group(); insert into t_results (label, result) values ('phone-only organiser exports', 'ok');

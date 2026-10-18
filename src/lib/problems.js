@@ -14,6 +14,12 @@ export function worthReporting(message, already = seen, max = MAX_PER_VISIT) {
   return !!m && !IGNORE.test(m) && !already.has(m) && already.size < max;
 }
 
+/** The screen, without anything after '?', never an invite code, never a sign-in token. */
+export function safePath(path) {
+  return String(path || '').split('?')[0].split('#/join/')[0]
+    .replace(/(access_token|refresh_token|provider_token|token_hash|error_description|code)=.*$/, '').slice(0, 200);
+}
+
 function appVersion() {
   try {
     const src = [...document.scripts].map((s) => s.src).find((s) => /\/index-[\w-]+\.js/.test(s)) || '';
@@ -30,7 +36,7 @@ export function reportProblem(err, where = '') {
     supabase.rpc('report_error', {
       p_message: message,
       p_stack: String(err?.stack || where || '').slice(0, 3000),
-      p_path: `${window.location.pathname}${window.location.hash}`,
+      p_path: safePath(`${window.location.pathname}${window.location.hash}`),
       p_version: appVersion(),
       p_agent: (navigator.userAgent || '').slice(0, 200),
     }).then(() => {}, () => {});

@@ -1,6 +1,14 @@
 Quinn left = 0 memberships / location 0 / name kept Quinn Quitter
-only organiser leaves = refused
-Pete deleted = 0 sign-ins / name Former player / pay gone / his score kept 1
+Quinn leaves a group he isn't in = refused
+the only person leaves = refused
+the only person deletes his account = refused
+the only organiser leaves = refused
+Pete deleted = 0 sign-ins / names Former player,Former player / pay gone / scores kept 2 / honour board: Former player & Bea / feed: Former player made birdie on 1.
+phone-only organiser deletes = refused
+another group's organiser deletes = refused
 delete with the wrong name = refused
-group deleted = 0 groups / 0 players / 0 scores
+group A deleted = 0 groups / 0 players / 0 scores
+group B untouched = 2 players / 1 scores / 1 rounds
+solo group deleted = 0
 L.G.C still there = 1
+daily clean-up scheduled = 1

@@ -8,6 +8,8 @@ import { shareText } from '../lib/push.js';
 import { resultsText, sameTimeNextYear, startOwnLink } from '../lib/quick.js';
 import { readHandicap } from '../lib/history.js';
 import { toast } from '../components/ui.jsx';
+import { SIGN_IN } from '../lib/auth.js';
+import { SignInCard } from './Group.jsx';
 
 // Stage 7b: the quick round inside the app — getting your mates in, joining with just a name, and what happens
 // after the last hole (share the results, the winner on the honour board, same time next year, make it official).
@@ -17,7 +19,9 @@ const quickSaved = () => { try { return JSON.parse(localStorage.getItem(QUICK_KE
 
 /** The share-sheet invite and a QR code, for a quick group's guest link. */
 function useGuestLink() {
-  const [code, setCode] = useState(() => quickSaved()?.invite || null);
+  const { status } = useSession();
+  // The link saved when the round started — only if it's for the group this phone is in now.
+  const [code, setCode] = useState(() => (quickSaved()?.gid === status?.group_id ? quickSaved()?.invite : null) || null);
   useEffect(() => {
     if (code) return;
     supabase.rpc('group_invite', { p_role: 'guest' }).then(({ data }) => data && setCode(data));
@@ -50,7 +54,7 @@ export function RoundReady() {
     <div className="page">
       <header className="hdr"><div className="hdr-title">Get your mates in</div><div className="hdr-sub">{round?.name || 'Your round'}</div></header>
       <div className="section stack" style={{ gap: 12 }}>
-        <button type="button" className="btn gold block" style={{ minHeight: 60, fontSize: 19 }} disabled={!link} onClick={share}>📤 Send the link (Messenger, WhatsApp, text)</button>
+        <button type="button" className="btn gold block" style={{ minHeight: 60, fontSize: 19 }} disabled={!link} onClick={share}>📤 Send your mates the link</button>
         <span className="small muted" style={{ textAlign: 'center' }}>They tap it, type their name, and they’re in — no app store, no sign-up.</span>
         {qr && <img src={qr} alt="QR code for your mates to scan" style={{ width: 200, height: 200, alignSelf: 'center', borderRadius: 8 }} />}
         <span className="small muted" style={{ textAlign: 'center' }}>Standing together? They can scan this instead.</span>
@@ -92,12 +96,21 @@ export function QuickJoin() {
 /** After the last hole of a quick round: share, honour board, same time next year, make it official. */
 export function QuickRoundDone({ round, board, course }) {
   const data = useData();
-  const { status } = useSession();
+  const { status, user } = useSession();
   const nav = useNavigate();
   const [busy, run] = useRun();
   const rows = board?.rows || [];
   const allDone = rows.length > 0 && rows.every((r) => r.finished);
-  if (round.status !== 'locked' && !allDone) return null;
+  const someDone = rows.some((r) => r.finished);
+  const today = new Date().toISOString().slice(0, 10);
+  const pastDay = round.play_date && round.play_date < today;
+  // Everyone done, or (for the organiser) someone's done 18 or the day's over — one mate who never scored can't hold it up.
+  const show = round.status === 'locked' || allDone || (status?.is_admin && (someDone || pastDay));
+  if (!show) {
+    return round.status === 'live' && status?.is_admin ? (
+      <div className="section"><Link to="/round-ready" className="small" style={{ fontWeight: 700 }}>📤 Invite more mates</Link></div>
+    ) : null;
+  }
   const isA = round.format === 'ambrose';
   const top = rows[0];
   const slug = (status?.groups || []).find((g) => g.id === status?.group_id)?.slug;
@@ -107,6 +120,7 @@ export function QuickRoundDone({ round, board, course }) {
   const share = async () => {
     const r = await shareText(resultsText({ roundName: round.name, courseName: course?.name, rows, format: round.format, groupSlug: slug }));
     if (r === 'copied') toast('Results copied — paste them in the group chat');
+    else if (r === 'failed') toast('Couldn’t share from this phone — take a screenshot instead');
   };
   const finish = () => run(async () => {
     if (round.status !== 'locked') await must(supabase.from('rounds').update({ status: 'locked' }).eq('id', round.id));
@@ -118,12 +132,14 @@ export function QuickRoundDone({ round, board, course }) {
     await data.reload();
   }, top ? `${top.name} goes on the honour board` : 'Round finished');
   const nextYear = () => {
-    const q = new URLSearchParams({ suggest: '1', kind: 'round', name: `${course?.name || 'Our round'} again`, date: sameTimeNextYear(round.play_date || new Date().toISOString().slice(0, 10)) });
+    const q = new URLSearchParams({ suggest: '1', kind: 'round', name: `${course?.name || 'Our round'} again`, date: sameTimeNextYear(round.play_date || today),
+      place: course?.name || '', share: '1' });
     nav(`/plan?${q.toString()}`);
   };
   const official = () => run(async () => {
     await must(supabase.rpc('make_group_official'));
-    try { localStorage.setItem('lgc-start', JSON.stringify({ gid: status.group_id, step: 2, official: true, uid: null })); } catch { /* fine */ }
+    // The wizard from its sign-in step (if not signed in properly yet), then the group's name and crest.
+    try { localStorage.setItem('lgc-start', JSON.stringify({ gid: status.group_id, step: status.signed_in ? 2 : 0, official: true, uid: user?.id || null })); } catch { /* fine */ }
     window.location.hash = '#/start/new';
   });
 
@@ -137,7 +153,13 @@ export function QuickRoundDone({ round, board, course }) {
           <button type="button" className="btn block" disabled={busy} onClick={finish}>{round.status === 'locked' ? `Put ${top?.name || 'the winner'} on the honour board` : `Finish — ${top?.name || 'the winner'} on the honour board`}</button>
         )}
         <button type="button" className="btn ghost block" onClick={nextYear}>📅 Same time next year?</button>
-        {status?.is_admin && status?.quick && (
+        {!status?.signed_in && SIGN_IN.length > 0 && (
+          <div className="stack" style={{ gap: 6 }}>
+            <span className="small"><strong>Keep this round on your record</strong> — add a sign-in and it stays with you on any phone.</span>
+            <SignInCard />
+          </div>
+        )}
+        {status?.is_admin && status?.quick && round.status === 'locked' && (
           <>
             <button type="button" className="btn ghost block" disabled={busy} onClick={official}>⭐ Make it official — name the group, add a crest</button>
             <span className="small muted">Keeps everyone and today’s round. You become a proper group with your own Rulebook, trophies and trips.</span>

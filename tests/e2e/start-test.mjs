@@ -193,7 +193,8 @@ await page.getByText('Step 3 of 7').waitFor({ timeout: 15000 });
 check(rpc('create_group').length === 1, 'coming back carries on — no second group');
 
 // 3. Look: the Look card, or skip.
-check(await page.getByText('🎨 Look').isVisible() && !(await page.getByText('Group name').count()), 'step 3: crest and colours (name already set)');
+await page.getByText('🎨 Look').waitFor({ timeout: 10000 });
+check(!(await page.getByText('Group name').count()), 'step 3: crest and colours (name already set)');
 await page.screenshot({ path: `${SHOTS}/s3-look.png`, fullPage: true });
 await noScroll('Wizard look step');
 await page.getByRole('button', { name: 'Skip — keep the plain look' }).click();

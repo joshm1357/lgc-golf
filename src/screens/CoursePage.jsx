@@ -4,7 +4,7 @@ import { supabase, friendlyError } from '../lib/supabase.js';
 import { useSession } from '../lib/store.jsx';
 import { setCurrentGroup } from '../lib/group.js';
 import { useRun, must } from '../lib/run.js';
-import { defaultComps, sourceFrom, rememberSource, rememberedSource } from '../lib/quick.js';
+import { defaultComps, sourceFrom, rememberSource, rememberedSource, forgetSource } from '../lib/quick.js';
 import { readHandicap } from '../lib/history.js';
 import { parTotal } from '../lib/scoring.js';
 import { paintLook, DEFAULT_LOOK } from '../lib/theme.js';
@@ -154,7 +154,8 @@ function QuickStart({ course, onCancel }) {
   const comps = useMemo(() => defaultComps(course.holes), [course.holes]);
   const [name, setName] = useState('');
   const [hcp, setHcp] = useState('');
-  const [format, setFormat] = useState('stableford');
+  // Quick rounds are Stableford for now: Ambrose needs a teams step, stroke play a database change (both coming).
+  const format = 'stableford';
   const [ctp, setCtp] = useState(comps.ctp);
   const [ld, setLd] = useState(comps.ld);
   const h = hcp.trim() === '' ? 18 : readHandicap(hcp);
@@ -167,6 +168,7 @@ function QuickStart({ course, onCancel }) {
       p_source: sourceFrom(loc.search) || rememberedSource() || {},
     }));
     try { localStorage.setItem(QUICK_KEY, JSON.stringify({ gid: r.group_id, round: r.round_id, invite: r.invite })); } catch { /* fine */ }
+    forgetSource();
     setCurrentGroup(r.group_id);
     await refresh?.();
     window.location.hash = '#/round-ready';
@@ -179,12 +181,12 @@ function QuickStart({ course, onCancel }) {
           <label className="field"><span>Handicap</span><input className="input" inputMode="decimal" value={hcp} onChange={(e) => setHcp(e.target.value)} placeholder="18" /></label>
         </div>
         {hcp.trim() !== '' && h == null && <span className="small err" style={{ margin: 0 }}>A handicap is a number from −10 to 54 (write a plus handicap as +2).</span>}
-        <span className="small muted" style={{ marginTop: -4 }}>No handicap? Leave it at 18 — you can change it later.</span>
+        <span className="small muted" style={{ marginTop: -4 }}>No handicap? Leave it at 18.</span>
         <div className="seg light" role="group" aria-label="Format">
-          {[['stableford', 'Stableford'], ['ambrose', 'Ambrose']].map(([k, l]) => <button key={k} type="button" aria-pressed={format === k} onClick={() => setFormat(k)}>{l}</button>)}
+          <button type="button" aria-pressed="true">Stableford</button>
+          <button type="button" disabled title="Coming soon" style={{ opacity: 0.45 }}>Ambrose (soon)</button>
           <button type="button" disabled title="Coming soon" style={{ opacity: 0.45 }}>Stroke play (soon)</button>
         </div>
-        {format === 'ambrose' && <span className="small muted">Ambrose: once your mates are in, put them in teams from Admin (or use the draw).</span>}
         <div className="stack" style={{ gap: 6 }}>
           <span className="label">🎯 Closest to the pin</span>
           <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>

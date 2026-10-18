@@ -1,4 +1,4 @@
--- Stage 7b test: the quick round. STAGING only, after 035 and 036. Rolled back; results in the error message.
+-- Stage 7b test: the quick round. STAGING only, after 035, 036 and 036b. Rolled back; results in the error message.
 create temp table t_results (n serial, label text, result text);
 grant all on t_results to authenticated, anon;
 grant all on sequence t_results_n_seq to authenticated, anon;
@@ -40,6 +40,8 @@ insert into t_results (label, result) select 'mate joins as', role from public.g
 select public.create_my_player('Mike', null, 18, null);
 insert into t_results (label, result) select 'mate approved and on the round', p.approved || ' / ' || (select count(*) from public.round_players rp where rp.player_id = p.id)
   from public.players p where p.group_id = (select id from t_ids where k = 'q') and p.name = 'Mike';
+do $$ begin perform public.create_my_player('Mike again', null, 18, null); insert into t_results (label, result) values ('the same mate adds a second player', 'ok');
+exception when others then insert into t_results (label, result) values ('the same mate adds a second player', 'refused'); end $$;
 do $$ begin perform public.make_group_official(); insert into t_results (label, result) values ('guest makes it official', 'ok');
 exception when others then insert into t_results (label, result) values ('guest makes it official', 'refused'); end $$;
 
@@ -57,7 +59,9 @@ end $$;
 do $$ begin perform set_config('request.headers', json_build_object('x-group-id', (select id from t_ids where k = 'q'))::text, true); end $$;
 select public.make_group_official();
 insert into t_results (label, result) select 'made official', (not quick)::text from public.groups where id = (select id from t_ids where k = 'q');
+insert into t_results (label, result) select 'mates become players', string_agg(role, ',' order by role) from public.group_members where group_id = (select id from t_ids where k = 'q');
 reset role;
+insert into t_results (label, result) select 'library use counted only once official', copies::text from public.course_library where slug = 'zzqx-quick-links';
 insert into t_results (label, result) select 'where it came from (tidied)', source::text from public.groups where id = (select id from t_ids where k = 'q');
 -- In an ordinary group (L.G.C), a new player still waits for approval and isn't put in any round.
 with x as (insert into public.players (group_id, name, handicap, approved) values (private.legacy_group(), 'Zzqx Test', 18, false) returning id)

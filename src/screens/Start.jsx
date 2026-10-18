@@ -10,7 +10,7 @@ import { useRun, must } from '../lib/run.js';
 import { GolfTripCrest } from '../components/Logo.jsx';
 import { Toaster, toast } from '../components/ui.jsx';
 import { readHandicap } from '../lib/history.js';
-import { sourceFrom, rememberSource, rememberedSource } from '../lib/quick.js';
+import { sourceFrom, rememberSource, rememberedSource, forgetSource } from '../lib/quick.js';
 import { paintLook, savedLook, DEFAULT_LOOK } from '../lib/theme.js';
 import { SignInCard, InviteCard, LookCard } from './Group.jsx';
 
@@ -152,7 +152,8 @@ function Wizard() {
   const inNewGroup = !progress.gid || status?.group_id === progress.gid;
 
   const step = STEPS[progress.step] || STEPS[0];
-  const next = () => setProgress({ ...progress, step: Math.min(progress.step + 1, STEPS.length - 1) });
+  // Making a quick group official: the group already exists, so after signing in go straight to its name and crest.
+  const next = () => setProgress({ ...progress, step: progress.official && progress.gid && progress.step < 2 ? 2 : Math.min(progress.step + 1, STEPS.length - 1) });
   const back = () => setProgress({ ...progress, step: Math.max(progress.gid ? 2 : 0, progress.step - 1) });
   const minsLeft = STEPS.slice(progress.step).reduce((a, s) => a + s.mins, 0);
 
@@ -163,7 +164,7 @@ function Wizard() {
           <a href="#/start" style={{ color: 'var(--on-navy-muted)', fontWeight: 700, textDecoration: 'none' }}>✕ Close</a>
           <span className="small" style={{ color: 'var(--on-navy-muted)' }}>Step {progress.step + 1} of {STEPS.length} · about {minsLeft} min left</span>
         </div>
-        <h1 style={{ fontFamily: 'var(--display)', fontSize: 30, margin: '10px 0 8px' }}>{step.title}</h1>
+        <h1 style={{ fontFamily: 'var(--display)', fontSize: 30, margin: '10px 0 8px' }}>{progress.official && step.key === 'look' ? 'Name and crest' : step.title}</h1>
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${STEPS.length}, 1fr)`, gap: 4 }} aria-hidden="true">
           {STEPS.map((s, i) => <span key={s.key} style={{ height: 5, borderRadius: 3, background: i <= progress.step ? 'var(--gold)' : 'rgba(255,255,255,.25)' }} />)}
         </div>
@@ -230,7 +231,7 @@ function NameStep({ onMade, refresh, made, uid }) {
       }));
       saveProgress({ ...made, gid }); // saved straight away: coming back never makes it twice
       const src = rememberedSource();
-      if (src) await supabase.rpc('set_group_source', { p_source: src }); // only counted, never shown; fine if it fails
+      if (src) { await supabase.rpc('set_group_source', { p_source: src }); forgetSource(); } // only counted, never shown; fine if it fails
     }
     setCurrentGroup(gid);
     await refresh?.();
@@ -256,7 +257,7 @@ function LookStep({ onNext, official = false }) {
     <>
       <p style={{ margin: 0 }}>{official ? 'Give the group its proper name, upload your crest (or skip), and pick two colours.' : 'Upload your crest (or skip — there’s a plain one), and pick two colours.'} The app checks they’re readable in the sun.</p>
       <LookCard onSaved={onNext} hideName={!official} />
-      <button type="button" className="btn ghost block" onClick={onNext}>Skip — keep the plain look</button>
+      {!official && <button type="button" className="btn ghost block" onClick={onNext}>Skip — keep the plain look</button>}
     </>
   );
 }

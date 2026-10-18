@@ -22,13 +22,23 @@ export function sourceFrom(search = '') {
 }
 
 const SOURCE_KEY = 'lgc-source';
-/** Remember the first place this phone came from, so a group started later can say so. */
-export function rememberSource(src) {
+const SOURCE_DAYS = 30;
+/** Remember where this phone last came from (for 30 days), so a group started from it can say so. */
+export function rememberSource(src, now = Date.now()) {
   if (!src) return;
-  try { if (!localStorage.getItem(SOURCE_KEY)) localStorage.setItem(SOURCE_KEY, JSON.stringify(src)); } catch { /* fine */ }
+  try { localStorage.setItem(SOURCE_KEY, JSON.stringify({ ...src, at: now })); } catch { /* fine */ }
 }
-export function rememberedSource() {
-  try { return JSON.parse(localStorage.getItem(SOURCE_KEY) || 'null'); } catch { return null; }
+export function rememberedSource(now = Date.now()) {
+  try {
+    const s = JSON.parse(localStorage.getItem(SOURCE_KEY) || 'null');
+    if (!s || !s.at || now - s.at > SOURCE_DAYS * 864e5) return null;
+    const { at, ...src } = s; // eslint-disable-line no-unused-vars
+    return src;
+  } catch { return null; }
+}
+/** Used once (a group was started from it): forget it. */
+export function forgetSource() {
+  try { localStorage.removeItem(SOURCE_KEY); } catch { /* fine */ }
 }
 
 /** The link on every results card and invite: start your own group, counted as coming from this one. */

@@ -1,4 +1,4 @@
-Expected (staging, after 029). 'feed off: delete own post = 0' is intended: a switched-off feature takes no changes at all;
+Expected (staging, after 029 + 030). The 'refused' lines added for 030 only count a 'switched off' refusal. 'feed off: delete own post = 0' is intended: a switched-off feature takes no changes at all;
 reading stays allowed.
 
 defaults for a new group: feed / location / comp bonus / rooms = true / false / false / false
@@ -19,4 +19,12 @@ feed off: no birdie post = 0
 comp bonus off: set bonus strokes = refused
 comp bonus on: set bonus strokes = 2
 parent off switches the child off = false
+bonus off: lock a round that has a bonus = locked
+bonus off: change the bonus = refused
+tribunal off: chair closes a case = refused
+tribunal off: accused writes a defence = refused
+tribunal off: vote = refused
+tribunal off: handicap unchanged = 15.0
+votes off: open trip votes = refused
+votes off: pick a winner = refused
 L.G.C sees F's switches = 0

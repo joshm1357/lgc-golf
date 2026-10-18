@@ -13,7 +13,7 @@ const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.p
 const URL_ = Deno.env.get('SUPABASE_URL')!;
 const KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-type El = { type: string; id: number; tags?: Record<string, string>; center?: { lat: number; lon: number };
+type El = { type: string; id: number; lat?: number; lon?: number; tags?: Record<string, string>; center?: { lat: number; lon: number };
   geometry?: { lat: number; lon: number }[] };
 
 async function rpc(name: string, body: unknown) {
@@ -47,7 +47,9 @@ area["ISO3166-2"="${STATES[state]}"]->.s;
 (way["leisure"="golf_course"](area.s);relation["leisure"="golf_course"](area.s););
 out center tags;
 way["golf"="hole"](area.s);
-out tags geom;`;
+out tags geom;
+node["place"~"^(city|town|village|suburb)$"]["name"](area.s);
+out;`;
     let els: El[] | null = null;
     const tried: string[] = [];
     for (const url of OVERPASS) {
@@ -63,13 +65,22 @@ out tags geom;`;
     }
     if (!els) return new Response(`OpenStreetMap servers said: ${tried.join('; ')}`, { status: 502 });
 
+    // Towns, for courses with no address: the nearest within 10 km (a suburb or village before a big city's centre).
+    const places = els.filter((e) => e.type === 'node' && e.tags?.place && e.tags?.name && e.lat != null)
+      .map((e) => ({ name: e.tags!.name!, lat: e.lat!, lng: e.lon!, rank: e.tags!.place === 'city' ? 1.5 : 1 }));
+    const townNear = (p: { lat: number; lng: number }) => {
+      let best: string | null = null, bestScore = 10;
+      for (const t of places) { const d = km(p, t) * t.rank; if (d < bestScore) { bestScore = d; best = t.name; } }
+      return best;
+    };
     const courses = els.filter((e) => e.tags?.leisure === 'golf_course' && e.tags?.name && e.center)
       .filter((e) => !/^(disused|abandoned)/.test(e.tags?.['lifecycle'] || '') && !e.tags?.['disused:leisure'])
       .map((e) => ({
         ref: `${e.type === 'relation' ? 'r' : 'w'}${e.id}`,
         name: e.tags!.name!.trim(),
         lat: e.center!.lat, lng: e.center!.lon,
-        area: [e.tags!['addr:suburb'] || e.tags!['addr:city'] || e.tags!['addr:town'] || e.tags!['addr:place'], state].filter(Boolean).join(' '),
+        area: [e.tags!['addr:suburb'] || e.tags!['addr:city'] || e.tags!['addr:town'] || e.tags!['addr:place']
+          || townNear({ lat: e.center!.lat, lng: e.center!.lon }), state].filter(Boolean).join(' '),
         holes: [] as { n: number; par: number | null; si: number | null; tee?: { lat: number; lng: number }; green?: { lat: number; lng: number }; osm: boolean }[],
       }));
 

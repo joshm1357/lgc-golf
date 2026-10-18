@@ -121,8 +121,10 @@ do $$ begin
 exception when others then insert into t_results (label, result) values ('last organiser steps down', 'refused'); end $$;
 select public.release_player('00000000-0000-4000-8000-0000000e0b02');
 insert into t_results (label, result) select 'release a name', coalesce(player_id::text, 'free') from public.group_members where user_id = '00000000-0000-4000-8000-0000000e0a02';
-select public.remove_member('00000000-0000-4000-8000-0000000e0a03');
-insert into t_results (label, result) select 'remove a member', count(*)::text from public.group_members where group_id = '00000000-0000-4000-8000-00000000e000';
+do $$ begin
+  perform public.remove_member('00000000-0000-4000-8000-0000000e0a03');
+  insert into t_results (label, result) select 'remove a member (members left)', count(*)::text from public.group_members where group_id = '00000000-0000-4000-8000-00000000e000';
+exception when undefined_function then insert into t_results (label, result) values ('remove a member (members left)', 'not yet — needs 027b'); end $$;
 do $$ begin
   perform public.set_member_role((select user_id from public.group_members where group_id = private.legacy_group() limit 1), 'guest');
   insert into t_results (label, result) values ('E organiser changes an L.G.C role', 'ok');

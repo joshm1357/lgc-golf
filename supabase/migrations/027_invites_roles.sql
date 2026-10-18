@@ -102,19 +102,6 @@ begin
   update public.group_members set role = p_role where group_id = v_g and user_id = p_user;
 end $$;
 
--- Organisers take someone out of the group (their scores and posts stay; their player is freed for someone else).
-create or replace function public.remove_member(p_user uuid)
-returns void language plpgsql security definer set search_path = '' as $$
-declare v_g uuid := private.current_group();
-begin
-  if not private.is_group_organiser(v_g) then raise exception 'Only an organiser can do that'; end if;
-  if (select role from public.group_members where group_id = v_g and user_id = p_user) = 'organiser'
-     and (select count(*) from public.group_members where group_id = v_g and role = 'organiser') <= 1 then
-    raise exception 'The group needs at least one organiser';
-  end if;
-  delete from public.group_members where group_id = v_g and user_id = p_user;
-end $$;
-
 -- Organisers free a player's name so whoever it really is can pick it (e.g. a new phone before proper sign-in).
 create or replace function public.release_player(p_player uuid)
 returns void language plpgsql security definer set search_path = '' as $$
@@ -124,8 +111,8 @@ begin
   update public.group_members set player_id = null where group_id = v_g and player_id = p_player;
 end $$;
 
-revoke all on function public.set_member_role(uuid, text), public.remove_member(uuid), public.release_player(uuid) from public, anon;
-grant execute on function public.set_member_role(uuid, text), public.remove_member(uuid), public.release_player(uuid) to authenticated;
+revoke all on function public.set_member_role(uuid, text), public.release_player(uuid) from public, anon;
+grant execute on function public.set_member_role(uuid, text), public.release_player(uuid) to authenticated;
 
 -- ------------------------------------------------------------------ Picking your name: only a name nobody has
 -- (Before: any member could link themselves to any player in their group and act as them.) Organisers can still

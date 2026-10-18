@@ -291,7 +291,7 @@ and fresh-user limit holes; guests taking unclaimed names; New link failures; gu
 confirms; two organisers demoting each other; sign-in traps (silent link failure, empty new Google accounts, email
 links opening Safari). Left as notes: invite codes stored plainly (server-only table); duplicate display names allowed.
 
-**Josh's paste list for staging (approvals time out from here):** `020`, `021`, `027b_remove_member.sql`, and
+**Josh's paste list for staging (approvals time out from here):** `020`, `021`, `027b_remove_member.sql`, `033b_remove_history_handicap.sql` (after 033c), and
 `drop function public.tmp_echo_headers();` (a test helper, already emptied and locked).
 
 ## v2.0 Stage 3 — Feature switches (branch `stage-3-features`, on staging only)
@@ -400,6 +400,50 @@ L.G.C names, not twice, only-proposed refused, only-retired allowed, L.G.C organ
 drives); unit tests (starter values drive round set-up, picker matches the database, no L.G.C names); phone width
 `tests/e2e/rulebook-test.mjs` 10 checks (picker shown, confirm, choosing calls the server, hidden for players and
 once there are rules).
+
+## v2.1 Stage 6 — History import (branch `stage-6-history`, on staging only)
+
+**Built**
+- **Database (033, applied on staging):** honour board entries can be linked to the trip they were won on and are
+  marked when added as history; handicap history entries are marked when added as history. `import_honours` (up to 200
+  lines; organisers; needs the Trophy Room switched on) and `import_handicaps` (up to 500 lines; organisers) — a whole
+  list is saved or nothing is; only the group's own players and trips are linked; dates can't be in the future;
+  handicaps must be −10 to 54. Today's handicaps never change (still only via the admin or the Tribunal).
+  **033b** (Josh pastes it — it has a delete): lets an organiser take back a mistyped history handicap; real changes
+  can't be removed.
+- **History screen** (Admin → Honour board, or "+ Add past winners" in the Trophy Room; organisers only): **Past
+  winners** — pick the trophy (or a new one, or "several — trophy named on each line"), add one, or paste a list
+  (year, winner(s) — straight from a spreadsheet, commas, semicolons or dashes). A preview shows each line, which
+  players it matched and which past trip; lines it can't read are named and must be fixed first. **Past handicaps** —
+  player, date (1/6/2023, 2023-06-01, "June 2023" or just "2023"), handicap ("+2" is a plus handicap). Lists what was
+  added, with remove.
+- **Shown together:** the honour board, Trophy Room plaques (the holder is the newest) and player profiles sort by
+  the year in the label, then the order added — so history slots in among the app's own winners. Imported handicaps
+  appear on each player's handicap chart and list. Engraving a winner now links it to the current trip, and **past
+  trips on the Trips tab show their winners**.
+
+**Independent review — fixed (033c, applied on staging):**
+- **Order:** the app's own winners keep exactly the order they always had (so nothing moves for L.G.C); each history
+  entry slots in just before the first app winner from an earlier year. A past winner must have a year in its label
+  ("2019", "Hunter 2019") — the app and the database both refuse one without, so it can't jump to the top as holder.
+- Pasting the same list twice doesn't double it (exact repeats are skipped and shown as "already on the board").
+- Names that match no player are pointed out ("Smith, John" → "2 names not matched" — put & between winners); a
+  header line is skipped even after blank lines; non-breaking spaces from WhatsApp/Word are fine; "+2" means a plus
+  handicap whether pasted or typed; "1/6/99" is 1999.
+- Winners link to a past trip only when the label is exactly the trip's name (L.G.C plays twice a year, so a year
+  alone could be either trip). Past trip cards sort winners and say "+N more".
+- Past handicaps can be added even with the Trophy Room switched off (Admin link); the empty Trophy Room offers
+  "add past winners". Dates show the same day everywhere; "today" is this phone's today.
+- Profile trophies match whole names ("Sam" no longer matches "Samuel").
+- Left as notes: no editing an entry (delete and re-add); organisers could already change handicap history rows
+  directly, so 033b's "only history" is what the app offers, not a lock.
+
+**Tested:** `supabase/tests/stage6_history.sql` 21 checks (players refused, 3 winners added as history, other group's
+players/trips dropped, the same list again adds 0, no-year refused, a bad line saves nothing, 201 lines refused, honour
+linked to another group's trip refused, own trip fine, handicaps added with their dates, the same again adds 0, today's
+handicap unchanged, 4 bad handicap lines refused, another group sees none, Trophy Room off refuses winners); 16 unit
+tests (reading pasted lists, dates, plus handicaps, matching, repeats, the ordering keeps app-made order); phone width
+`tests/e2e/history-test.mjs` 18 checks. All other phone tests still pass.
 
 ## Known limits
 - GPS distances are approximate (±5–10 m) and straight-line; closest-to-pin distance is typed in.

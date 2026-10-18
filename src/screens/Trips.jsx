@@ -21,6 +21,7 @@ export default function Trips() {
   const [suggesting, setSuggesting] = useState(false);
   const notifyOn = useFeature('notifications');
   const votesOn = useFeature('planner_tasks');
+  const trophiesOn = useFeature('trophies');
   const load = useCallback(async () => {
     try {
       const [plans, rsvps, polls] = await Promise.all([
@@ -61,7 +62,7 @@ export default function Trips() {
         {rows.failed && <div className="err">Couldn’t load the trips — check your signal and open Trips again.</div>}
 
         {now ? <NowCard plan={now.plan} stage={now.stage} rsvps={rsvpsOf(now.plan.id)} me={status.player_id} />
-          : <div className="empty">Nothing locked in yet. Suggest a trip below and let the lads vote on when and where.</div>}
+          : <div className="empty">Nothing locked in yet. Suggest a trip below and let everyone vote on when and where.</div>}
         {later.map((x) => <TripCard key={x.plan.id} plan={x.plan} stage={x.stage} rsvps={rsvpsOf(x.plan.id)} me={status.player_id} />)}
 
         <span className="label" style={{ marginTop: 6 }}>{votesOn ? 'Ideas and voting' : 'Ideas'}</span>
@@ -74,7 +75,8 @@ export default function Trips() {
         <span className="small muted" style={{ textAlign: 'center' }}>{votesOn ? 'Everyone votes on when and where; ' : 'Everyone says if they’re in; '}{status.is_admin ? 'you lock it in' : 'the admin locks it in'}.</span>
 
         {past.length > 0 && <span className="label" style={{ marginTop: 6 }}>Past trips</span>}
-        {past.map((x) => <PastCard key={x.plan.id} plan={x.plan} stage={x.stage} photo={photos[x.plan.trip_id]} rounds={data.rounds.filter((r) => x.plan.trip_id && r.trip_id === x.plan.trip_id).length} />)}
+        {past.map((x) => <PastCard key={x.plan.id} plan={x.plan} stage={x.stage} photo={photos[x.plan.trip_id]} rounds={data.rounds.filter((r) => x.plan.trip_id && r.trip_id === x.plan.trip_id).length}
+          winners={trophiesOn && x.plan.trip_id ? data.honour_board.filter((h) => h.trip_id === x.plan.trip_id).sort((a, b) => a.trophy_name.localeCompare(b.trophy_name)) : []} />)}
       </div>
       {suggesting && <SuggestSheet onClose={() => setSuggesting(false)} onSaved={(p) => nav(`/plan/${p.id}`)} />}
     </div>
@@ -175,7 +177,7 @@ export function tripsWithoutPlan(trips, plans) {
   }));
 }
 
-function PastCard({ plan, stage, photo, rounds }) {
+function PastCard({ plan, stage, photo, rounds, winners = [] }) {
   const cancelled = stage === 'cancelled';
   return (
     <Link to={plan.tripOnly ? '/trophies' : `/plan/${plan.id}`} className="card row" style={{ gap: 12, padding: 10, textDecoration: 'none', color: 'inherit', opacity: cancelled ? 0.55 : 1 }}>
@@ -186,6 +188,8 @@ function PastCard({ plan, stage, photo, rounds }) {
         <div style={{ fontWeight: 800, fontSize: 17 }}>{plan.name}</div>
         <div className="small muted">{cancelled ? (plan.proposed ? 'Idea passed on' : 'Called off') : [plan.start_date ? fmtRange(plan.start_date, plan.end_date) : null, plan.location_name].filter(Boolean).join(' · ') || 'Done'}</div>
         {!cancelled && rounds > 0 && <div className="small" style={{ fontWeight: 700 }}>{rounds} round{rounds === 1 ? '' : 's'} played</div>}
+        {winners.slice(0, 3).map((h) => <div key={h.id} className="small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>🏆 {h.trophy_name}: <strong>{h.winner_names}</strong></div>)}
+        {winners.length > 3 && <div className="small muted">+{winners.length - 3} more in the Trophy Room</div>}
       </div>
     </Link>
   );

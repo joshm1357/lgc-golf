@@ -29,6 +29,7 @@ const PlanDetail = lazyScreen(() => import('./screens/Planner.jsx'), 'PlanDetail
 const Rulebook = lazyScreen(() => import('./screens/Rulebook.jsx'));
 const GreenMapper = lazyScreen(() => import('./screens/GreenMapper.jsx'));
 const Group = lazyScreen(() => import('./screens/Group.jsx'));
+const History = lazyScreen(() => import('./screens/History.jsx'));
 
 // A fresh plan screen per plan, so nothing carries over when a notification jumps to another one.
 function PlanDetailRoute() {
@@ -119,6 +120,7 @@ function Inside() {
         <Route path="/rules" element={<Rulebook />} />
         <Route path="/courses/:courseId/greens" element={<GreenMapper />} />
         <Route path="/group" element={<Group />} />
+        <Route path="/history" element={<History />} />
         <Route path="/join/:code" element={<JoinInsideRoute />} />
         <Route path="*" element={<Leaderboard />} />
       </Routes>

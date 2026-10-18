@@ -3,6 +3,10 @@ import { Link, useParams } from 'react-router-dom';
 import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useScores, useSession, playerName } from '../lib/store.jsx';
 import { roundBoard } from '../lib/board.js';
+import { honourOrder, winnerNames } from '../lib/history.js';
+
+// "Sam" is on "Sam & Josh", but not on "Samuel".
+const namedIn = (winners, name) => winnerNames(winners).some((w) => w.toLowerCase() === String(name).toLowerCase());
 import { uploadPhoto } from '../lib/images.js';
 import { Header, Avatar, Icon, Loading, toast, PhotoButtons } from '../components/ui.jsx';
 
@@ -43,9 +47,9 @@ export function usePlayerHistory(playerId) {
     const avg = finished.length ? finished.reduce((a, s) => a + s.points, 0) / finished.length : null;
     const best = finished.length ? Math.max(...finished.map((s) => s.points)) : null;
     const p = data.playersById[playerId];
-    const honours = data.honour_board.filter((h) =>
-      (h.player_ids || []).includes(playerId) || (p && h.winner_names.toLowerCase().includes(p.name.toLowerCase()))
-    ).sort((a, b) => b.sort_key - a.sort_key);
+    const honours = honourOrder(data.honour_board.filter((h) =>
+      (h.player_ids || []).includes(playerId) || (p && namedIn(h.winner_names, p.name))
+    ));
     // Side comp wins: best entry per round/hole/kind.
     const groups = {};
     for (const e of extra.side) (groups[`${e.round_id}|${e.hole}|${e.kind}`] ||= []).push(e);
@@ -157,7 +161,7 @@ export default function Profile() {
           {h.hist.slice().reverse().map((x) => (
             <div key={x.id} className="row between small">
               <span>{x.old_handicap != null ? `${Number(x.old_handicap)} → ` : ''}<strong>{Number(x.new_handicap)}</strong> · {x.reason}</span>
-              <span className="muted">{new Date(x.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: '2-digit' })}</span>
+              <span className="muted">{new Date(x.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: '2-digit', ...(x.imported ? { timeZone: 'UTC' } : {}) })}</span>
             </div>
           ))}
           {!h.hist.length && <span className="muted small">No changes yet.</span>}

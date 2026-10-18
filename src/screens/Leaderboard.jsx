@@ -7,6 +7,8 @@ import { Header, Seg, AvatarStack, Icon, Sheet, Loading, toast } from '../compon
 import { supabase, friendlyError } from '../lib/supabase.js';
 import { TrophyArt } from '../components/TrophyArt.jsx';
 import { QuickRoundDone } from './QuickRound.jsx';
+import SharePicture from '../components/SharePicture.jsx';
+import { boardCard } from '../lib/shareCard.js';
 import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
 
 const DrawSetup = lazyScreen(() => import('../components/DrawSetup.jsx'), 'default', { inline: true });
@@ -128,6 +130,18 @@ export default function Leaderboard() {
             <div className="hdr-sub">{isA ? `${formatToPar(winner.netToPar, 1)} net` : `${winner.points} points`}</div>
           </div>
           <AvatarStack players={winner.players} size={30} />
+        </div>
+      )}
+
+      {winner && !status?.quick && (
+        <div className="section row" style={{ gap: 8 }}>
+          <SharePicture className="btn ghost sm grow" label="🖼️ Winner picture" kind="winner"
+            data={{ name: winner.name, score: isA ? `${formatToPar(winner.netToPar, 1)} net` : `${winner.points} points`, roundName: trophy?.name || round.name, courseName: course?.name,
+              date: round.play_date ? new Date(`${round.play_date}T00:00:00`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '' }}
+            text={`🏆 ${winner.name} wins ${trophy?.name || round.name}!`} />
+          <SharePicture className="btn ghost sm grow" label="🖼️ Leaderboard picture" kind="leaderboard"
+            data={boardCard(board, { roundName: round.name, courseName: course?.name, playDate: round.play_date, final: round.status === 'locked' })}
+            text={`⛳ ${round.name}${course?.name ? ` at ${course.name}` : ''} — the leaderboard`} />
         </div>
       )}
 

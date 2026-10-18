@@ -6,6 +6,7 @@
 // there's genuinely no signal — then the message shows instead.
 // Parts inside a screen (the draw ceremony, shot planner, draw set-up) never reload the page — that
 // could throw away a score being typed — they just show a message with a Close button.
+import { reportProblem } from './problems.js';
 import React, { Component, Suspense, lazy } from 'react';
 
 const FLAG = 'lgc-chunk-reload';
@@ -35,6 +36,7 @@ export function lazyScreen(load, name = 'default', { inline = false } = {}) {
 class LoadBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null }; }
   static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(error, info) { if (!LOAD_FAIL.test(String(error?.message || error))) reportProblem(error, info?.componentStack || ''); }
   componentDidUpdate(prev) { if (prev.resetKey !== this.props.resetKey && this.state.error) this.setState({ error: null }); }
   render() {
     const { error } = this.state;

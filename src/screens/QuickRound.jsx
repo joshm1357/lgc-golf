@@ -10,6 +10,8 @@ import { readHandicap } from '../lib/history.js';
 import { toast } from '../components/ui.jsx';
 import { SIGN_IN } from '../lib/auth.js';
 import { SignInCard } from './Group.jsx';
+import SharePicture from '../components/SharePicture.jsx';
+import { boardCard } from '../lib/shareCard.js';
 
 // Stage 7b: the quick round inside the app — getting your mates in, joining with just a name, and what happens
 // after the last hole (share the results, the winner on the honour board, same time next year, make it official).
@@ -149,6 +151,8 @@ export function QuickRoundDone({ round, board, course }) {
         <strong style={{ fontSize: 18 }}>🏁 {round.status === 'locked' ? 'Round finished' : 'Everyone’s done'}</strong>
         {top && <span>{top.name} {round.status === 'locked' ? 'won' : 'leads'} — {isA ? `${top.netToPar > 0 ? '+' : ''}${top.netToPar} net` : `${top.points} points`}.</span>}
         <button type="button" className="btn gold block" onClick={share}>📤 Share the results</button>
+        <SharePicture kind="leaderboard" data={boardCard(board, { roundName: round.name, courseName: course?.name, playDate: round.play_date, final: round.status === 'locked' })}
+          text={`⛳ ${round.name}${course?.name ? ` at ${course.name}` : ''}`} />
         {status?.is_admin && (round.status !== 'locked' || !engraved) && (
           <button type="button" className="btn block" disabled={busy} onClick={finish}>{round.status === 'locked' ? `Put ${top?.name || 'the winner'} on the honour board` : `Finish — ${top?.name || 'the winner'} on the honour board`}</button>
         )}

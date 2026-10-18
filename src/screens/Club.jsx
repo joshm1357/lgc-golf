@@ -6,6 +6,8 @@ import { uploadPhoto } from '../lib/images.js';
 import { parTotal } from '../lib/scoring.js';
 import { GolfTripCrest } from '../components/Logo.jsx';
 import { Toaster, toast, Sheet } from '../components/ui.jsx';
+import { QrCard } from '../components/QrCard.jsx';
+import JoshPage from './Josh.jsx';
 
 // Stage 8b: club partners. A club claims its course's page (Josh approves each claim by hand), then keeps its hole
 // data, logo, group-booking contact and offers up to date. A club never sees players' names, scores or locations.
@@ -46,10 +48,12 @@ export default function Club() {
   useEffect(() => { load(); }, [load]);
   const claimsPage = typeof window !== 'undefined' && window.location.hash.startsWith('#/club/claims');
   const kitPage = typeof window !== 'undefined' && window.location.hash.startsWith('#/club/kit');
+  const joshPage = typeof window !== 'undefined' && window.location.hash.startsWith('#/club/josh');
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg, #F4F5F7)' }}>
       {me === undefined ? <><Top title="Clubs" /><div className="muted" style={{ padding: 16 }}>Loading…</div></>
         : claimsPage && me?.platform_admin ? <Claims />
+        : joshPage && me?.platform_admin ? <JoshPage Top={Top} />
         : kitPage && me?.club ? <Kit club={me.club} />
         : me?.club ? <ClubHome club={me.club} reload={load} admin={me.platform_admin} />
         : <ClaimStart me={me} reload={load} />}
@@ -73,6 +77,7 @@ function ClaimStart({ me, reload }) {
           <span className="small">• A QR kit for carts, par 3s and the counter, and a clubhouse TV leaderboard that shows only groups who say yes.</span>
         </div>
         {me?.platform_admin && <a href="#/club/claims" className="btn ghost block">Josh: claims to approve →</a>}
+        {me?.platform_admin && <a href="#/club/josh" className="btn ghost block">Josh: numbers, app problems and stay cards →</a>}
         {!me?.signed_in ? <SignInFirst /> : (
           <>
             {(me?.claims || []).length > 0 && (
@@ -181,6 +186,7 @@ function ClubHome({ club, reload, admin }) {
       <Top title={club.name} sub="Partner club" />
       <div className="stack" style={{ maxWidth: 560, margin: '0 auto', padding: 16, gap: 12 }}>
         {admin && <a href="#/club/claims" className="btn ghost block">Josh: claims to approve →</a>}
+        {admin && <a href="#/club/josh" className="btn ghost block">Josh: numbers, app problems and stay cards →</a>}
         <div className="card pad stack" style={{ gap: 8 }}>
           <strong>Your course page</strong>
           <div className="row" style={{ gap: 10 }}>
@@ -334,28 +340,6 @@ function Counts() {
 }
 
 // ---------------------------------------------------------------- The QR kit (print, or save as PDF)
-
-function useQr(text) {
-  const [url, setUrl] = useState(null);
-  useEffect(() => {
-    let live = true;
-    import('qrcode').then((QR) => QR.toDataURL(text, { margin: 1, width: 600, errorCorrectionLevel: 'M' })).then((u) => live && setUrl(u)).catch(() => {});
-    return () => { live = false; };
-  }, [text]);
-  return url;
-}
-
-function QrCard({ link, title, line, small }) {
-  const qr = useQr(link);
-  return (
-    <div className="kit-card" style={{ border: '2px solid #1F4B33', borderRadius: 14, padding: 16, textAlign: 'center', background: '#fff', color: '#15202E', breakInside: 'avoid' }}>
-      <div style={{ fontFamily: 'var(--display)', fontSize: small ? 22 : 30, fontWeight: 700, lineHeight: 1.1 }}>{title}</div>
-      {qr && <img src={qr} alt={`QR code: ${title}`} style={{ width: small ? 150 : 200, height: small ? 150 : 200, margin: '10px auto', display: 'block' }} />}
-      <div style={{ fontSize: small ? 14 : 16 }}>{line}</div>
-      <div style={{ fontSize: 11, marginTop: 6, color: '#555' }}>The Golf Trip</div>
-    </div>
-  );
-}
 
 function Kit({ club }) {
   const [pages, setPages] = useState([]);

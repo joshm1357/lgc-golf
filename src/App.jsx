@@ -17,6 +17,8 @@ import More from './screens/More.jsx';
 
 // Loaded when first opened (the service worker saves them all for offline use in the background).
 const Admin = lazyScreen(() => import('./screens/Admin.jsx'));
+const Privacy = lazyScreen(() => import('./screens/Legal.jsx'), 'Privacy');
+const Terms = lazyScreen(() => import('./screens/Legal.jsx'), 'Terms');
 const Profile = lazyScreen(() => import('./screens/Profile.jsx'));
 const Comps = lazyScreen(() => import('./screens/Comps.jsx'));
 const MapScreen = lazyScreen(() => import('./screens/MapScreen.jsx'));
@@ -70,6 +72,9 @@ function Gate() {
   const [problem] = useState(() => signInProblemFromUrl());
   // The public start page and the start-a-group wizard work whether or not you're in a group yet.
   if (loc.pathname === '/start' || loc.pathname.startsWith('/start/')) return <LazyArea resetKey="start" fallback={<Loading />}><Start /></LazyArea>;
+  // Privacy and terms (drafts): anyone can read them.
+  if (loc.pathname === '/privacy') return <LazyArea resetKey="privacy" fallback={<Loading />}><Privacy /></LazyArea>;
+  if (loc.pathname === '/terms') return <LazyArea resetKey="terms" fallback={<Loading />}><Terms /></LazyArea>;
   // The clubhouse TV: read-only, no sign-in.
   if (loc.pathname.startsWith('/tv/')) return <LazyArea resetKey="tv" fallback={<Loading />}><Routes><Route path="/tv/:slug" element={<TvBoard />} /></Routes></LazyArea>;
   // Club partners (claiming a course, the club's own page; Josh's claim approvals).

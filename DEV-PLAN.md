@@ -59,6 +59,8 @@ and Trophy Room mix history and app-made winners by year; past trips show their 
 7. ✅ on staging, reviewed, in `product` — Start-a-group wizard (under 10 minutes). 8. ✅ on staging, reviewed, in `product` — Shared course library (OpenStreetMap credit). 9. Launch basics:
 move to Vercel with `<slug>.thegolftrip.club` (STOP — Josh buys the domain), Supabase Pro (STOP — Josh switches it on),
 DRAFT privacy policy and terms, delete-my-data, error alerts (ask first), share cards, basic usage numbers.
+  (✅ on staging: privacy/terms drafts, your data (download; leave/delete waiting on Josh's 041b), app problem reports
+  (no new dependency), share pictures, Josh's numbers with scan funnel, stay cards. Hosting, domain, Pro: STOPs.)
 
 **Target user** (club-partners addendum, 18 Oct)
 - **The organiser:** the bloke in a group of 6–16 mates who books the trip, runs the group chat and chases the money.

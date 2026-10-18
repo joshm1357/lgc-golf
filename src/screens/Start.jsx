@@ -10,7 +10,7 @@ import { useRun, must } from '../lib/run.js';
 import { GolfTripCrest } from '../components/Logo.jsx';
 import { Toaster, toast } from '../components/ui.jsx';
 import { readHandicap } from '../lib/history.js';
-import { sourceFrom, rememberSource, rememberedSource, forgetSource } from '../lib/quick.js';
+import { sourceFrom, rememberSource, rememberedSource, forgetSource, countScan } from '../lib/quick.js';
 import { paintLook, savedLook, DEFAULT_LOOK } from '../lib/theme.js';
 import { SignInCard, InviteCard, LookCard } from './Group.jsx';
 
@@ -51,7 +51,17 @@ export default function Start() {
   const loc = useLocation();
   const wizard = loc.pathname.startsWith('/start/new');
   // Came from another group's results card (?from=…) or a club's code: remembered for the group you start.
-  useEffect(() => { rememberSource(sourceFrom(loc.search)); }, [loc.search]);
+  useEffect(() => {
+    const src = sourceFrom(loc.search);
+    rememberSource(src);
+    // A stay card (or a club's code) opened here: count the scan once a visit, no person attached.
+    if (src?.ref && src.placement) {
+      const key = `lgc-scan-${src.ref}-${src.placement}-start`;
+      let counted = false;
+      try { counted = !!sessionStorage.getItem(key); sessionStorage.setItem(key, '1'); } catch { /* fine */ }
+      if (!counted) countScan(supabase, { ref: src.ref, placement: src.placement, slug: null }).catch(() => {});
+    }
+  }, [loc.search]);
   const { status } = useSession() || {};
   // Someone who isn't in a group sees The Golf Trip, not the last group this phone showed (L.G.C's colours).
   useEffect(() => {
@@ -106,6 +116,7 @@ function Intro() {
         <span className="small muted" style={{ textAlign: 'center' }}>Under 10 minutes. You’ll get a link to send to your group at the end.</span>
         <a href="#/c" className="btn ghost block">⛳ Just a round today? Start one in 2 minutes</a>
         <a href="#/" className="btn ghost block" onClick={backToMine}>{status?.is_member || going?.prevGroup ? 'Back to my group' : 'Got an invite? Join a group'}</a>
+        <span className="small muted" style={{ textAlign: 'center' }}><a href="#/privacy">Privacy</a> · <a href="#/terms">Terms</a></span>
       </div>
     </>
   );

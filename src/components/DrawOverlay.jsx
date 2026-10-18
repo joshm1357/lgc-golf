@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase.js';
 import { useRealtime } from '../lib/store.jsx';
 import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
 
-const LiveDrawCeremony = lazyScreen(() => import('./DrawCeremony.jsx'), 'LiveDrawCeremony');
+const LiveDrawCeremony = lazyScreen(() => import('./DrawCeremony.jsx'), 'LiveDrawCeremony', { inline: true });
 const DISMISS_KEY = 'lgc-draw-dismissed';
 
 /** Watches for an open draw room or a live draw and takes over the screen. */
@@ -28,7 +28,7 @@ export function DrawOverlay() {
 
   if (!draw || dismissed === draw.id + ':' + draw.status) return null;
   return (
-    <LazyArea resetKey={draw.id + ':' + draw.status}>
+    <LazyArea resetKey={draw.id + ':' + draw.status} quiet>
       <LiveDrawCeremony draw={draw} onClose={() => {
         const v = draw.id + ':' + draw.status;
         try { localStorage.setItem(DISMISS_KEY, v); } catch { /* ignore */ }

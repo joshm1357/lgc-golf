@@ -348,7 +348,7 @@ function YourData() {
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   }, 'Downloaded');
   const leave = () => run(async () => {
-    const { error } = await supabase.rpc('leave_group');
+    const { error } = await supabase.rpc('leave_group', { p_group: status.group_id });
     if (error) throw notYet(error) ? new Error('Coming soon — Josh is switching this on.') : error;
     setCurrentGroup(null);
     await refresh?.();
@@ -363,7 +363,7 @@ function YourData() {
     window.location.reload();
   });
   const deleteGroup = () => run(async () => {
-    const { error } = await supabase.rpc('delete_group', { p_confirm_name: typed });
+    const { error } = await supabase.rpc('delete_group', { p_group: status.group_id, p_confirm_name: typed });
     if (error) throw notYet(error) ? new Error('Coming soon — Josh is switching this on.') : error;
     setCurrentGroup(null);
     await refresh?.();
@@ -394,10 +394,10 @@ function YourData() {
       )}
       {asking === 'account' && (
         <div className="stack" style={{ gap: 6 }}>
-          <span className="small">Delete your account? You’ll leave every group you’re in and your sign-in is removed. Your scores stay in each group’s history.</span>
+          <span className="small">Delete your account? You’ll leave every group you’re in and your sign-in is removed. Your scores stay in each group’s history. (If you’re the only organiser of a group, hand it over or delete it first.)</span>
           <label className="row small" style={{ gap: 8 }}>
             <input type="checkbox" checked={removeName} onChange={(e) => setRemoveName(e.target.checked)} style={{ width: 22, height: 22, flex: 'none' }} />
-            Also take my name and selfie off the history (shown as “Former player”)
+            Also take my name and selfie off the history — my profile, the honour board and the app’s own feed posts show “Former player”
           </label>
           <div className="row" style={{ gap: 8 }}>
             <button type="button" className="btn sm" disabled={busy} onClick={deleteAccount}>Delete my account</button>

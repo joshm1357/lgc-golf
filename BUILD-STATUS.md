@@ -690,10 +690,25 @@ closest-to-pin, the TV tick only when the switch is on, the TV page on a phone a
 - **Not done here (STOPs for Josh):** moving to Vercel + `thegolftrip.club` (with a web address and home-screen icon per
   group), Supabase Pro, the photo clean-up job (removes files of deleted groups/selfies — needs deleting, so after 041b).
 
+**Independent review — fixed (041c applied on staging; 041b rewritten for Josh):**
+- Leaving or deleting your account can't leave a group behind with nobody in it (the only person deletes the group
+  instead), and leaving/deleting name the group (not "whichever one the phone was on").
+- "Former player" also comes off the honour board and the app's own feed posts; the wording says what isn't changed.
+- 041b now includes a **daily clean-up** (wrong-PIN records 30 days, app problems 90 days, scans 2 years, a shared
+  location with no update for a day). The privacy draft says plainly that photo files of deleted groups aren't removed
+  from storage yet (that clean-up needs the storage service — a follow-up), and adds: Supabase's own request logs,
+  share pictures leave the group, downloads include payment details, problem reports say which group.
+- Download: a fixed list of tables (rooms and cars included; feature switches without who changed them).
+- Problem reports never keep a sign-in token from the address; Josh's list shows the latest 100.
+- Josh's numbers: "came back" = played again 30+ days after the first round; L.G.C left out of every group count.
+- Left for Josh to decide: a 7-day "undo" for deleting a group (any organiser can delete it now, after typing its name).
+
 **Tested:** `supabase/tests/stage9_launch.sql` 11 checks (only Josh issues stay cards and sees numbers/problems, stay
 card refs, a stay scan counted in the funnel, nobody can read problem reports, page addresses kept without '?…' or
 invite codes, export leaves out sign-ins/locations/invites, phone-only organisers and players can't export);
-`stage9_delete.sql` written for 041b (Josh runs it); unit tests (problem filter, share-card content); phone width
+`stage9_delete.sql` 14 checks written for 041b (Josh runs it: leaving, the only person/organiser rules, Former player
+on the honour board and feed, deleting refused for players/phone-only/other groups/wrong name, another group untouched,
+L.G.C safe, clean-up scheduled); unit tests (problem filter, share-card content); phone width
 `tests/e2e/stage9-test.mjs` 23 checks. All 12 phone tests pass.
 
 **For Josh — launch steps (all STOPs, nothing done):**

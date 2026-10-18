@@ -607,6 +607,16 @@ time next year); phone width `tests/e2e/quick-test.mjs` 21 checks. All other pho
   complete (18 holes, each with a par and stroke index). Seeding never changes a course a club has claimed, a group has
   shared, or anyone uses — at most it fills a missing area or map position — and running it again adds nothing twice.
   Each run is recorded (`private.seed_runs`). Course pages and the library credit OpenStreetMap.
+- **Independent review — fixed (040b, applied on staging):** a listing's course page no longer breaks (old phones
+  too — the database now sends an empty hole list); a group's course with no greens mapped can only fill a listing
+  whose town matches the one given when sharing (it could have taken over a same-named course in another state), and
+  filling a listing never renames it; seeding only matches entries with a map position and never hidden ones; names
+  like just "Golf Club" are skipped (the one already seeded is hidden); a server that gives up part-way counts as a
+  failure, not "no courses"; holes near two courses (36-hole clubs) aren't used; listing search results and the claim
+  search credit OpenStreetMap; the job's "no sign-in token check" setting is in config.toml.
+- **Seeding progress on staging:** Tasmania done (72 courses). The other states are waiting: OpenStreetMap's main
+  query server refuses Supabase's servers (406) and the two public mirrors are failing intermittently. The job tries
+  all three; it'll be re-run until each state is in.
 - **Not built yet:** club photos (logo only for now).
 - **For Josh — OpenStreetMap licence (ODbL), before seeding live:** credit is shown everywhere the data appears. The
   licence also says that if we publicly use a database built from OSM data, we must offer that OSM-derived part (course

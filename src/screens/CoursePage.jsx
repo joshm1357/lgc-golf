@@ -83,9 +83,10 @@ function FindACourse() {
         {rows?.map((r) => (
           <a key={r.id} href={`#/c/${r.slug}`} className="card pad stack" style={{ gap: 2, textDecoration: 'none', color: 'inherit' }}>
             <strong>{r.name}</strong>
-            <span className="small muted">{[r.area, `${r.holes} holes`, r.partner ? 'Partner course' : null].filter(Boolean).join(' · ')}</span>
+            <span className="small muted">{[r.area, r.holes ? `${r.holes} holes` : 'no scorecard yet', r.partner ? 'Partner course' : null].filter(Boolean).join(' · ')}</span>
           </a>
         ))}
+        {rows?.some((r) => r.osm) && <span className="small muted">Some course details © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors.</span>}
         {rows && !rows.length && !err && <span className="small muted">No courses by that name yet. Groups add them as they play — or <a href="#/start">start a group</a> and add yours.</span>}
       </div>
     </>
@@ -137,8 +138,8 @@ function Course({ slug }) {
       </>
     );
   }
+  if (!course.holes?.length) return <ListedOnly course={course} />;
   const greens = course.holes.filter((h) => h.green);
-  if (!course.holes.length) return <ListedOnly course={course} />;
   return (
     <>
       <Top title={course.name} sub={[course.area, `${course.holes.length} holes · par ${parTotal(course.holes)}`].filter(Boolean).join(' · ')} />

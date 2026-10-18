@@ -129,6 +129,7 @@ function PickCourse({ onPick }) {
         </button>
       ))}
       {rows && !rows.length && <span className="small muted">Not listed yet? Email Josh and we’ll add it.</span>}
+      {rows?.some((r) => r.osm) && <span className="small muted">Some course details © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors.</span>}
     </div>
   );
 }
@@ -384,7 +385,7 @@ function Kit({ club }) {
         </div>
         {pages.map((c) => (
           <React.Fragment key={c.slug}>
-            {!c.holes?.length && <div className="no-print card pad small err" style={{ margin: 0 }}>{c.name} has no hole data yet — add it (Club screen → Hole data) before putting codes out, or golfers can’t start a round.</div>}
+            {!(c.holes || []).length && <div className="no-print card pad small err" style={{ margin: 0 }}>{c.name} has no hole data yet — add it (Club screen → Hole data) before putting codes out, or golfers can’t start a round.</div>}
             <div className="kit-sheet stack" style={{ gap: 12 }}>
               <strong className="no-print">{c.name}: cart sticker and counter card</strong>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
@@ -395,7 +396,7 @@ function Kit({ club }) {
             <div className="kit-sheet stack" style={{ gap: 12 }}>
               <strong className="no-print">Par 3 signs</strong>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-                {c.holes.filter((h) => Number(h.par) === 3).map((h) => (
+                {(c.holes || []).filter((h) => Number(h.par) === 3).map((h) => (
                   <QrCard key={h.n} small link={link(c.slug, 'par3', h.n)} title={`Hole ${h.n}`} line="Closest to the pin today? Log it here." />
                 ))}
               </div>

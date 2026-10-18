@@ -251,6 +251,10 @@ check(!(await page.getByRole('button', { name: /Start a round/ }).count()), 'a l
 check(await page.getByRole('link', { name: '📍 Where it is' }).isVisible() && await page.getByText(/Course details ©/).isVisible(), 'listed course shows where it is, with the OpenStreetMap credit');
 await page.screenshot({ path: `${SHOTS}/k5b-listed.png`, fullPage: true });
 await noScroll('Listed course');
+PAGE.v = { ...PAGE.v, holes: null };
+await page.reload();
+await page.getByText('No scorecard yet').waitFor({ timeout: 15000 });
+check(errors.length === 0, 'a course page with no holes at all (older database) still shows');
 PAGE.v = { id: LIB[0].id, slug: LIB[0].slug, name: LIB[0].name, area: 'Bowral NSW', osm: false, verified: false, club: null, holes: H };
 
 // 6. The club's counts: numbers only.

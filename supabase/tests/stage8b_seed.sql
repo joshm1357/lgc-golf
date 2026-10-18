@@ -62,6 +62,13 @@ do $$ begin perform public.start_quick_round((select slug from public.search_cou
 exception when others then insert into t_results (label, result) values ('quick round on a listing with no scorecard', 'refused'); end $$;
 insert into t_results (label, result) select 'mapped course can be added', (public.copy_library_course((select id from public.search_courses('Zzqx Mapped', null, null, 1))) is not null)::text;
 insert into t_results (label, result) select 'share our Lakes course', (public.share_course('00000000-0000-4000-8000-0000000e0c01') = (select id from public.search_courses('Zzqx Lakes', -33.9, 151.0, 1)))::text || ' (filled the nearby listing)';
+-- A course with no greens mapped, same name as a listing in another state: a new entry, not that listing.
+reset role;
+insert into public.courses (id, group_id, name, holes) values ('00000000-0000-4000-8000-0000000e0c02', '00000000-0000-4000-8000-0000000e0a00', 'Zzqx Lakes Golf Club',
+  (select jsonb_agg(jsonb_build_object('n', g, 'par', 4, 'si', g) order by g) from generate_series(1, 18) g));
+set local role authenticated;
+insert into t_results (label, result) select 'unmapped course, listing elsewhere', (public.share_course('00000000-0000-4000-8000-0000000e0c02', 'Other Town NSW')
+  <> (select id from public.search_courses('Zzqx Lakes', -36.9, 149.9, 1)))::text || ' (left the far-away listing alone)';
 reset role;
 insert into t_results (label, result) select 'Lakes listing now', jsonb_array_length(holes) || ' holes / ' || area || ' / owner set ' || (source_group_id is not null) || ' / osm ' || osm
   from public.course_library where osm_ref = 'w900000001';

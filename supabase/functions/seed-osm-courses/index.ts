@@ -8,6 +8,11 @@
 const STATES: Record<string, string> = {
   NSW: 'AU-NSW', VIC: 'AU-VIC', QLD: 'AU-QLD', WA: 'AU-WA', SA: 'AU-SA', TAS: 'AU-TAS', ACT: 'AU-ACT', NT: 'AU-NT',
 };
+// Some state boundaries aren't tagged with their code, so the name is tried too.
+const NAMES: Record<string, string> = {
+  NSW: 'New South Wales', VIC: 'Victoria', QLD: 'Queensland', WA: 'Western Australia', SA: 'South Australia',
+  TAS: 'Tasmania', ACT: 'Australian Capital Territory', NT: 'Northern Territory',
+};
 // The main Overpass server first, then two public mirrors if it's busy or refuses.
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
 const URL_ = Deno.env.get('SUPABASE_URL')!;
@@ -42,28 +47,41 @@ Deno.serve(async (req) => {
     const state = (new URL(req.url).searchParams.get('state') || '').toUpperCase();
     if (!STATES[state]) return new Response('Pick a state: ' + Object.keys(STATES).join(', '), { status: 400 });
 
-    const q = `[out:json][timeout:170];
-area["ISO3166-2"="${STATES[state]}"]->.s;
+    const query = (areaSel: string) => `[out:json][timeout:120];
+${areaSel}->.s;
 (way["leisure"="golf_course"](area.s);relation["leisure"="golf_course"](area.s););
 out center tags;
 way["golf"="hole"](area.s);
 out tags geom;
 node["place"~"^(city|town|village|suburb)$"]["name"](area.s);
 out;`;
-    let els: El[] | null = null;
     const tried: string[] = [];
-    for (const url of OVERPASS) {
-      try {
-        const r = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json, */*', 'User-Agent': 'TheGolfTrip/1.0 (golf course list)' },
-          body: `data=${encodeURIComponent(q)}`,
-        });
-        if (r.ok) { els = (await r.json()).elements || []; break; }
-        tried.push(`${new URL(url).host} ${r.status}`);
-      } catch (e) { tried.push(`${new URL(url).host} ${(e as Error).message.slice(0, 60)}`); }
+    const overpass = async (q: string): Promise<El[] | null> => {
+      for (const url of OVERPASS) {
+        try {
+          const r = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json, */*', 'User-Agent': 'TheGolfTrip/1.0 (golf course list)' },
+            body: `data=${encodeURIComponent(q)}`,
+          });
+          if (r.ok) {
+            // A server that ran out of time or memory still says 200, with a remark — that's a failure, not "no courses".
+            const j = await r.json();
+            if (j.remark && /error|timed out|out of memory|runtime/i.test(j.remark)) { tried.push(`${new URL(url).host} remark: ${String(j.remark).slice(0, 120)}`); continue; }
+            return j.elements || [];
+          }
+          tried.push(`${new URL(url).host} ${r.status} ${(await r.text()).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 160)}`);
+        } catch (e) { tried.push(`${new URL(url).host} ${(e as Error).message.slice(0, 60)}`); }
+      }
+      return null;
+    };
+    // The state's boundary by its code; if that finds no courses, by its name.
+    let els = await overpass(query(`area["ISO3166-2"="${STATES[state]}"]`));
+    if (els && !els.some((e) => e.tags?.leisure === 'golf_course')) {
+      els = await overpass(query(`area["boundary"="administrative"]["admin_level"="4"]["name"="${NAMES[state]}"]`));
     }
     if (!els) return new Response(`OpenStreetMap servers said: ${tried.join('; ')}`, { status: 502 });
+    if (!els.some((e) => e.tags?.leisure === 'golf_course')) return new Response(`No courses came back for ${state} — try again later. ${tried.join('; ')}`, { status: 502 });
 
     // Towns, for courses with no address: the nearest within 10 km (a suburb or village before a big city's centre).
     const places = els.filter((e) => e.type === 'node' && e.tags?.place && e.tags?.name && e.lat != null)
@@ -91,9 +109,9 @@ out;`;
       if (!n || n > 18) continue;
       const g = h.geometry!;
       const tee = { lat: g[0].lat, lng: g[0].lon }, green = { lat: g[g.length - 1].lat, lng: g[g.length - 1].lon };
-      let best = null as null | (typeof courses)[number], bestKm = 2.5;
-      for (const c of courses) { const d = km(green, c); if (d < bestKm) { bestKm = d; best = c; } }
-      if (best) best.holes.push({ n, par: int(h.tags?.par), si: int(h.tags?.handicap), tee, green, osm: true });
+      // Next-door courses (36-hole clubs): if two course centres are both within 2.5 km, the hole isn't used.
+      const near = courses.filter((c) => km(green, c) < 2.5);
+      if (near.length === 1) near[0].holes.push({ n, par: int(h.tags?.par), si: int(h.tags?.handicap), tee, green, osm: true });
     }
     const rows = courses.map(({ holes, ...c }) => {
       const nums = new Set(holes.map((h) => h.n));

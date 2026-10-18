@@ -386,9 +386,20 @@ when not in a group).
   **Ambrose and Stableford** (L.G.C-style, with L.G.C's names removed: "trip trophy", "organiser"), **Just scoring** —
   and edits anything afterwards. Only once (not on top of existing rules), organisers only.
 
-**Tested:** `supabase/tests/stage5_starters.sql` 6 checks (only organisers, unknown refused, 7 rules in force, no
-L.G.C names, not twice, L.G.C untouched); unit test: the Ambrose starter gives 2 strokes per side comp and 6 drives;
-phone width `tests/e2e/rulebook-test.mjs` (picker shown, choosing calls the server).
+**Independent review — fixed (032b, applied on staging):**
+- Two taps (or two organisers) at once can't add two starters: the group is locked while the check and inserts run.
+- The Ambrose starter asks for **4 drives each**, not 6 (a team of four on 18 holes can't all have 6). Scoring never
+  asks for more drives than the round allows (holes ÷ team size) — nothing changes for L.G.C.
+- "Are you sure?" before adding a starter; no "no rules" message under the picker; players are told the organiser can
+  start one; the Ambrose card says the −2 strokes need side comp bonus strokes switched on (off by default — deliberate,
+  as for every new group).
+- A unit test checks the picker's list matches the rules the database adds.
+
+**Tested:** `supabase/tests/stage5_starters.sql` 10 checks (only organisers, unknown refused, 7 rules in force, no
+L.G.C names, not twice, only-proposed refused, only-retired allowed, L.G.C organiser refused, L.G.C untouched, 4
+drives); unit tests (starter values drive round set-up, picker matches the database, no L.G.C names); phone width
+`tests/e2e/rulebook-test.mjs` 10 checks (picker shown, confirm, choosing calls the server, hidden for players and
+once there are rules).
 
 ## Known limits
 - GPS distances are approximate (±5–10 m) and straight-line; closest-to-pin distance is typed in.

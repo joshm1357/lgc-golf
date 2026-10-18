@@ -97,7 +97,9 @@ export default function ScoreEntry() {
   const compHere = (round.ctp_holes || []).includes(hole.n) ? { kind: 'ctp', label: 'Closest to pin' }
     : (round.ld_holes || []).includes(hole.n) ? { kind: 'ld', label: 'Longest drive' } : null;
   // Ambrose minimum-drives rule.
-  const minDrives = isA ? round.min_drives || 0 : 0;
+  // Never more than the round allows: 4 in a team on 18 holes can't all have 6 drives (18 ÷ 4 = 4 each at most).
+  const teamSize = (subject.players || []).filter(Boolean).length;
+  const minDrives = isA ? Math.min(round.min_drives || 0, teamSize ? Math.floor(holes.length / teamSize) : 0) : 0;
   const driveBy = drive === '' ? null : drive ?? existing?.tee_shot_player ?? null;
   const driveCounts = Object.fromEntries((subject.players || []).filter(Boolean).map((p) => [p.id, 0]));
   for (const h of holes) {

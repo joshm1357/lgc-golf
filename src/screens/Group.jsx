@@ -164,7 +164,7 @@ function Members() {
               {p && <button type="button" className="small" disabled={busy} style={{ display: 'block', border: 0, background: 'none', padding: 0, color: 'var(--muted)' }}
                 onClick={() => { if (window.confirm(`Free the name “${playerName(p)}”? Whoever it really is can then pick it on their phone. Scores stay with the name.`)) run(async () => { await must(supabase.rpc('release_player', { p_player: p.id })); load(); }, 'Name freed'); }}>Free this name</button>}
               {!p && freeNames.length > 0 && (
-                <select className="select" value="" disabled={busy} aria-label="Give them a name" style={{ marginTop: 4, fontSize: 14, minHeight: 36 }}
+                <select className="select" value="" disabled={busy} aria-label="Give them a name" style={{ marginTop: 4, fontSize: 14, minHeight: 36, width: '100%' }}
                   onChange={(e) => e.target.value && run(async () => { await must(supabase.rpc('assign_player', { p_user: r.user_id, p_player: e.target.value })); load(); }, 'Name given')}>
                   <option value="">Give them a name…</option>
                   {freeNames.map((x) => <option key={x.id} value={x.id}>{playerName(x)}</option>)}

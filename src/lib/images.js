@@ -1,3 +1,4 @@
+import { groupFolder } from './group.js';
 import { supabase } from './supabase.js';
 
 /** Load a picked photo into something we can draw. Tries several ways — phones differ. */
@@ -70,7 +71,7 @@ export async function uploadPhoto(file, folder, opts) {
     type = file.type || 'image/jpeg';
   }
   const ext = type === 'image/png' ? 'png' : type === 'image/webp' ? 'webp' : type === 'image/heic' ? 'heic' : 'jpg';
-  const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const path = `${groupFolder(folder)}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
   const { error } = await supabase.storage.from('photos').upload(path, blob, { contentType: type, upsert: false });
   if (error) throw error;
   return supabase.storage.from('photos').getPublicUrl(path).data.publicUrl;

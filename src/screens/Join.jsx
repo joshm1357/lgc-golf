@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { supabase, friendlyError } from '../lib/supabase.js';
 import { useSession } from '../lib/store.jsx';
+import { setCurrentGroup } from '../lib/group.js';
 import { Crest } from '../components/Logo.jsx';
 
 export default function Join() {
@@ -19,12 +20,15 @@ export default function Join() {
         const { error } = await supabase.auth.signInAnonymously();
         if (error) throw error;
       }
-      const { data, error } = await supabase.rpc('join_group', { p_pin: pin });
+      // join_group_id says which group the PIN opened, so the app shows that group.
+      let { data, error } = await supabase.rpc('join_group_id', { p_pin: pin });
+      if (error && /join_group_id/.test(error.message || '')) ({ data, error } = await supabase.rpc('join_group', { p_pin: pin }));
       if (error) throw error;
       if (!data) {
         setErr("That PIN's not right. Check the group chat.");
         return;
       }
+      if (typeof data === 'string') setCurrentGroup(data);
       await refresh();
     } catch (e2) {
       setErr(friendlyError(e2));

@@ -273,3 +273,6 @@ select cron.schedule('lgc-trips-daily', '5 14 * * *', 'select private.trips_dail
 -- Hourly digest: same call as the daily reminders, with type "digest" (so it points at this project's function).
 select cron.schedule('lgc-hourly-digest', '3 * * * *', replace(command, '"type":"daily"', '"type":"digest"'))
 from cron.job where jobname = 'lgc-daily-reminders';
+
+-- New links (plans.organiser_id, plan_comments) get the same-group check from 024.
+select private.add_same_group_checks();

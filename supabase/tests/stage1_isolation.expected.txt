@@ -1,5 +1,51 @@
-Expected result (staging, 18 Oct 2026, after 022):
-parent fills group: B round = true | parent fills group: B score = true | parent fills group: B case = true | score with wrong group for its round = refused | a sees Group B rows (all tables) = 0 | a sees own L.G.C plan = 1 | a my_status group = L.G.C | a edits B plan (rows) = 0 | a deletes B cost (rows) = 0 | a changes B player handicap (rows) = 0 | a enters a score in B round = refused | a posts into B feed = refused | a says In to B plan = refused | a puts self in B room = refused | a claims B player = refused | a lodges case against B player = refused | a votes in B case = refused | a uploads photo into B folder = refused | a uploads photo the old way (feed/…) = ok | b2 sees L.G.C rows (all tables) = 0 | b2 sees B rows: players = 3 | b2 my_status group = Test Group B | b2 changes B organiser handicap (rows) = 0 | b2 enters own score in B round = ok | b2 uses L.G.C admin PIN = player | b2 joins L.G.C with its PIN = 2 | b organiser changes B player handicap (rows) = 1 | b handicap change logged in group B = 1 | b organiser locks L.G.C rounds (rows) = 0 | b organiser changes L.G.C handicaps (rows) = 0 | b organiser closes B case = closed | B verdict post is in group B = true | ab no header: group = L.G.C | ab no header: groups listed = 2 | ab header B: group = Test Group B | ab header B: my player = true | ab header B: post lands in = test-b | ab header B: post as L.G.C profile = lgc | ab header for a group not mine: falls back to = L.G.C
-
-Notes: "b2 joins L.G.C with its PIN = 2" is expected — anyone with a group's PIN can join it (that's what a PIN is for).
+Expected result (staging, after 022–024). One line per check.
+Notes: "b2 joins L.G.C with its PIN = 2" is expected — anyone with a group's PIN can join it.
 "post as L.G.C profile = lgc" — the post's player decides its group, whatever group the app is showing.
+
+parent fills group: B round = true
+parent fills group: B score = true
+parent fills group: B case = true
+score with wrong group for its round = refused
+a sees Group B rows (all tables) = 0
+a sees own L.G.C plan = 1
+a my_status group = L.G.C
+a edits B plan (rows) = 0
+a deletes B cost (rows) = 0
+a changes B player handicap (rows) = 0
+a enters a score in B round = refused
+a posts into B feed = refused
+a says In to B plan = refused
+a puts self in B room = refused
+a claims B player = refused
+a lodges case against B player = refused
+a votes in B case = refused
+a uploads photo into B folder = refused
+a uploads photo the old way (feed/…) = ok
+b2 sees L.G.C rows (all tables) = 0
+b2 sees B rows: players = 3
+b2 my_status group = Isolation Group B
+b2 changes B organiser handicap (rows) = 0
+b2 enters own score in B round = ok
+b2 uses L.G.C admin PIN = player
+b2 joins L.G.C with its PIN = 2
+b organiser changes B player handicap (rows) = 1
+b handicap change logged in group B = 1
+b organiser locks L.G.C rounds (rows) = 0
+b organiser changes L.G.C handicaps (rows) = 0
+b organiser closes B case = closed
+B verdict post is in group B = true
+ab no header: group = L.G.C
+ab no header: groups listed = 2
+ab header B: group = Isolation Group B
+ab header B: my player = true
+ab header B: post lands in = iso-b
+ab header B: post as L.G.C profile = lgc
+ab header for a group not mine: falls back to = L.G.C
+b organiser reads L.G.C members (rows) = 0
+b organiser changes L.G.C members = refused
+b gives a B job to an L.G.C player = refused
+b adds someone to group_members directly = refused
+b sets its own group PIN = refused
+b gets a new joining code = 10
+b2 scores a birdie for an L.G.C player in B round = refused
+b2 11th wrong PIN = Too many wrong PINs — wait an hour and try again

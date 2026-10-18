@@ -12,8 +12,8 @@ grant all on sequence t_results_n_seq to authenticated;
 create temp table t_ids (k text primary key, id uuid);
 grant select on t_ids to authenticated;
 
-insert into public.groups (slug, name, group_pin, admin_pin) values ('test-b', 'Test Group B', 'b-pin-1234', 'b-admin-1234');
-insert into t_ids select 'B', id from public.groups where slug = 'test-b';
+insert into public.groups (slug, name, group_pin, admin_pin) values ('iso-b', 'Isolation Group B', 'iso-b-pin-1234', 'iso-b-admin-1234');
+insert into t_ids select 'B', id from public.groups where slug = 'iso-b';
 insert into t_ids select 'A', private.legacy_group();
 
 insert into auth.users (id, instance_id, aud, role) values
@@ -81,7 +81,7 @@ begin
   end loop;
   select count(*) into n from public.plan_group_members where group_id = '00000000-0000-4000-8000-0000000bc006';
   total := total + n;
-  select count(*) into n from public.groups where slug = 'test-b'; total := total + n;
+  select count(*) into n from public.groups where slug = 'iso-b'; total := total + n;
   select count(*) into n from public.group_members where group_id = (select id from t_ids where k = 'B'); total := total + n;
   insert into t_results (label, result) values ('a sees Group B rows (all tables)', total || coalesce(nullif(' ' || seen, ' '), ''));
 end $$;
@@ -219,6 +219,48 @@ do $$ begin
 exception when others then insert into t_results (label, result) values ('ab header B: post as L.G.C profile', 'refused'); end $$;
 do $$ begin perform set_config('request.headers', json_build_object('x-group-id', '00000000-0000-4000-8000-0000000000ff')::text, true); end $$;
 insert into t_results (label, result) select 'ab header for a group not mine: falls back to', (public.my_status() ->> 'group_name');
+
+-- ================= review fixes (024) =================
+reset role;
+set local role authenticated;
+set local request.jwt.claims to '{"sub":"00000000-0000-4000-8000-00000000bb01","role":"authenticated"}';
+do $$ begin perform set_config('request.headers', json_build_object('x-group-id', (select id from t_ids where k='B'))::text, true); end $$;
+do $$ declare n int; begin
+  select count(*) into n from public.members;
+  insert into t_results (label, result) values ('b organiser reads L.G.C members (rows)', n);
+exception when others then insert into t_results (label, result) values ('b organiser reads L.G.C members (rows)', 'refused'); end $$;
+do $$ declare n int; begin
+  with u as (update public.members set is_admin = true returning 1) select count(*) into n from u;
+  insert into t_results (label, result) values ('b organiser changes L.G.C members', n);
+exception when others then insert into t_results (label, result) values ('b organiser changes L.G.C members', 'refused'); end $$;
+do $$ begin
+  insert into public.plan_items (plan_id, kind, title, owner_id) values ('00000000-0000-4000-8000-0000000bc004', 'job', 'x', '00000000-0000-4000-8000-0000000a0001');
+  insert into t_results (label, result) values ('b gives a B job to an L.G.C player', 'ok');
+exception when others then insert into t_results (label, result) values ('b gives a B job to an L.G.C player', 'refused'); end $$;
+do $$ begin
+  insert into public.group_members (group_id, user_id, role) values ((select id from t_ids where k='B'), '00000000-0000-4000-8000-00000000aa01', 'organiser');
+  insert into t_results (label, result) values ('b adds someone to group_members directly', 'ok');
+exception when others then insert into t_results (label, result) values ('b adds someone to group_members directly', 'refused'); end $$;
+do $$ begin
+  perform public.set_pins('my-own-pin', 'b-admin-5678');
+  insert into t_results (label, result) values ('b sets its own group PIN', 'ok');
+exception when others then insert into t_results (label, result) values ('b sets its own group PIN', 'refused'); end $$;
+insert into t_results (label, result) select 'b gets a new joining code', length(public.reset_group_code())::text;
+
+set local request.jwt.claims to '{"sub":"00000000-0000-4000-8000-00000000bb02","role":"authenticated"}';
+do $$ begin
+  insert into public.scores (round_id, subject_id, subject_type, hole, strokes) values ('00000000-0000-4000-8000-0000000bc003', '00000000-0000-4000-8000-0000000a0001', 'player', 1, 3);
+  insert into t_results (label, result) values ('b2 scores a birdie for an L.G.C player in B round', 'ok');
+exception when others then insert into t_results (label, result) values ('b2 scores a birdie for an L.G.C player in B round', 'refused'); end $$;
+do $$ declare i int; v text := ''; begin
+  for i in 1 .. 11 loop
+    begin
+      v := coalesce(public.join_group('wrong-' || i)::text, 'null');
+    exception when others then v := sqlerrm;
+    end;
+  end loop;
+  insert into t_results (label, result) values ('b2 11th wrong PIN', v);
+end $$;
 
 reset role;
 do $$ begin

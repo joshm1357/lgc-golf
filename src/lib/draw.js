@@ -94,3 +94,26 @@ export function makeDraw(players, k, { balance = false, tries = 4000, slack = 1,
 
 export const REVEAL_MS = 4500; // timed mode: time per name
 export const SPIN_MS = 2400; // the drum rolls this long before each name lands
+
+/**
+ * Rooms or cars: deal the players into the groups at random, one at a time across the
+ * groups that still have space (so rooms fill evenly), never over a group's capacity.
+ * groups: [{ id, name, capacity }]. Returns { teams, picks, leftOver } in the same shape
+ * the live draw uses — teams[i].group_id says which room/car it is.
+ */
+export function makeGroupDraw(playerIds, groups, rand = cryptoRand) {
+  const order = shuffle(playerIds, rand);
+  const teams = groups.map((g) => ({ name: g.name, group_id: g.id, capacity: Number(g.capacity) || 1, players: [], handicap: null }));
+  let gi = 0;
+  const leftOver = [];
+  for (const pid of order) {
+    let tries = 0;
+    while (tries < teams.length && teams[gi % teams.length].players.length >= teams[gi % teams.length].capacity) { gi++; tries++; }
+    if (tries >= teams.length) { leftOver.push(pid); continue; }
+    teams[gi % teams.length].players.push(pid);
+    gi++;
+  }
+  const teamOrder = shuffle(teams.map((_, i) => i), rand);
+  const picks = teamOrder.flatMap((ti) => shuffle(teams[ti].players, rand).map((id) => ({ player_id: id, team: ti })));
+  return { teams, picks, leftOver };
+}

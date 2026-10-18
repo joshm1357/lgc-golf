@@ -7,6 +7,9 @@ const SUPABASE_KEY = 'sb_publishable_uNBEcPawkDZHYGeubyYyag_MwhYkhR7';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, storageKey: 'lgc-auth' },
+  // No built-in retries: on a golf course they turn a lost signal into a 7-second freeze. The app
+  // re-loads by itself when signal returns, and score saves have their own queue (offline.js).
+  db: { retry: false },
   realtime: { params: { eventsPerSecond: 10 } },
 });
 

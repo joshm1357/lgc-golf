@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { useData, useSession, playerName } from '../lib/store.jsx';
 import { Header, Icon, Avatar } from '../components/ui.jsx';
+import { NotifyCard } from './Planner.jsx';
 
 export default function More() {
   const { status } = useSession();
@@ -9,6 +10,8 @@ export default function More() {
   const me = data.playersById[status.player_id];
   const pending = status.is_admin ? data.players.filter((p) => p.approved === false).length : 0;
   const items = [
+    { to: '/map', icon: Icon.pin, label: 'Where’s everyone', sub: 'Course map with each group’s location' },
+    { to: '/rules', icon: Icon.book, label: 'The Rulebook', sub: 'Our rules and bonuses — propose and vote on changes' },
     { to: '/trophies', icon: Icon.trophy, label: 'The Trophy Room', sub: 'BD, Putt Buddies, Noodle Cup and the honour boards' },
     { to: '/tribunal', icon: Icon.gavel, label: 'Handicap Tribunal', sub: 'Lodge a case, vote, see verdicts' },
     { to: '/courses', icon: Icon.map, label: 'Courses', sub: 'Every course and its history' },
@@ -31,6 +34,7 @@ export default function More() {
             </Link>
           ))}
         </div>
+        <div style={{ marginTop: 12 }}><NotifyCard /></div>
         <a href="?guide" className="btn ghost block" style={{ marginTop: 12 }}>How the app works</a>
         <p className="note">Tip: add this app to your home screen — Share → Add to Home Screen (iPhone) or ⋮ → Add to Home screen (Android).</p>
       </div>

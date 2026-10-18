@@ -93,15 +93,15 @@ select public.claim_player('00000000-0000-4000-8000-0000000e0b03');
 do $$ begin
   insert into public.rule_votes (rule_id, player_id, vote) values ('00000000-0000-4000-8000-0000000e0c01', '00000000-0000-4000-8000-0000000e0b03', 'for');
   insert into t_results (label, result) values ('guest votes on a rule', 'ok');
-exception when others then insert into t_results (label, result) values ('guest votes on a rule', 'refused'); end $$;
+exception when others then insert into t_results (label, result) values ('guest votes on a rule', case when sqlerrm like '%row-level security%' or sqlerrm like 'Guests%' then 'refused' else 'other error: ' || sqlerrm end); end $$;
 do $$ begin
   insert into public.rules (title, status, proposed_by) values ('guest rule', 'proposed', '00000000-0000-4000-8000-0000000e0b03');
   insert into t_results (label, result) values ('guest proposes a rule', 'ok');
-exception when others then insert into t_results (label, result) values ('guest proposes a rule', 'refused'); end $$;
+exception when others then insert into t_results (label, result) values ('guest proposes a rule', case when sqlerrm like '%row-level security%' or sqlerrm like 'Guests%' then 'refused' else 'other error: ' || sqlerrm end); end $$;
 do $$ begin
   perform public.cast_vote('00000000-0000-4000-8000-0000000e0c02', 'guilty', null);
   insert into t_results (label, result) values ('guest votes in the Tribunal', 'ok');
-exception when others then insert into t_results (label, result) values ('guest votes in the Tribunal', 'refused'); end $$;
+exception when others then insert into t_results (label, result) values ('guest votes in the Tribunal', case when sqlerrm like '%row-level security%' or sqlerrm like 'Guests%' then 'refused' else 'other error: ' || sqlerrm end); end $$;
 do $$ begin
   insert into public.posts (kind, body, player_id) values ('user', 'guest post', '00000000-0000-4000-8000-0000000e0b03');
   insert into t_results (label, result) values ('guest posts in the feed', 'ok');

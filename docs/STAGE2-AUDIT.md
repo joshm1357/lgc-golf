@@ -24,10 +24,15 @@ first; I build the app side on staging meanwhile only where it needs no new sign
 5. Fixes: `claim_player` only for players nobody has claimed (or the organiser hands a player over); a cool-down on
    wrong admin PINs (e.g. 5 tries per hour per sign-in).
 
+## Decision (Josh, 18 Oct)
+**No Apple sign-in for now** (only the App Store requires it; this is a web app). **Google + emailed link** now, through
+a free email service. **Facebook later** if the group asks — the code treats every provider the same, so it's one more
+button (needs a Meta developer app, a privacy-policy page and a data-deletion page).
+
 ## 3. What Josh needs to set up (before any provider is switched on) — STOP
 | What | Where | Notes |
 |---|---|---|
-| **Apple Developer Program** | developer.apple.com | Paid yearly membership (US$99 / about A$149 a year) — needed for Sign in with Apple. Then a Services ID, a Sign in with Apple key (.p8), Team ID and Key ID. **Costs money → your call.** |
+| ~~Apple Developer Program~~ | — | **Skipped for now** (decision above). |
 | **Google sign-in** | console.cloud.google.com → APIs & Services → Credentials | Free. OAuth consent screen (app name "The Golf Trip", your email) + an OAuth client (Web). |
 | **Email sending** | Supabase → Authentication → Emails → SMTP | Supabase's built-in email is for testing only (a handful per hour). A free plan of an email service (e.g. Resend or Postmark) is needed before outside groups use emailed links — **a new account → your call**. |
 | **Redirect URLs** | Supabase → Authentication → URL Configuration | Site URL and allowed redirects: `https://joshm1357.github.io/lgc-golf/`, later `https://*.thegolftrip.club/`, and `http://localhost:5173/` for testing. |

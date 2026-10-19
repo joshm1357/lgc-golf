@@ -50,3 +50,12 @@ purchase). Two ways:
 Message me "Google is set up on staging" (and email, if you did B). I'll then turn the buttons on in the staging build
 (`"sign_in": {"staging": "google,email"}` in `infra/cloudflare.json`, done 20 Oct on branch `sign-in-home`), test linking a phone-only player to Google and email (same scores, same groups), signing
 in on a second phone, and only then ask about live.
+
+## 5. Google's own button and branding (20 Oct)
+- **Google's own button** stops Google showing the Supabase address. In Google Cloud → the client → **Authorised
+  JavaScript origins**, list every address in `infra/cloudflare.json` → `google.button_hosts` (Google doesn't allow
+  wildcards). Put the **client ID** (public) in `google.client_id.staging` / `.live`. Other test links use the redirect.
+- **Branding:** Google Auth Platform → Branding: app name, logo (120×120), home page `https://thegolftrip.club`, privacy
+  `https://thegolftrip.club/privacy.html`, authorised domain `thegolftrip.club`. Then submit for brand verification
+  (a few business days). After that, Google shows "The Golf Trip" and the logo.
+- **Later, only if still needed:** a Supabase custom domain such as `auth.thegolftrip.club` (US$10/month on Pro).

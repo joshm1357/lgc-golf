@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { supabase, friendlyError } from '../lib/supabase.js';
 import { useSession } from '../lib/store.jsx';
 import { setCurrentGroup } from '../lib/group.js';
 import { inviteCode } from '../lib/invite.js';
+import { personalCode } from '../lib/personal.js';
 import { SIGN_IN, signInWith, signInWithEmail, verifyEmailCode } from '../lib/auth.js';
-import { cleanEmailCode, looksLikeEmail, clearFreshSignIn } from '../lib/home.js';
+import { cleanEmailCode, looksLikeEmail, clearFreshSignIn, markFreshSignIn } from '../lib/home.js';
+import { GOOGLE_CLIENT_ID, googleButtonHere, loadGoogle, makeNonce } from '../lib/google.js';
 import { GroupCrest } from '../components/Logo.jsx';
 import { savedLook, paintLook, DEFAULT_LOOK } from '../lib/theme.js';
 import { rememberSource } from '../lib/quick.js';
@@ -93,7 +95,7 @@ export default function Join() {
 const ON_NAVY_GHOST = { color: '#fff', borderColor: 'rgba(255,255,255,.5)', background: 'transparent' };
 
 /** The PIN (or pasted invite link) box. Used on every front-door screen. */
-export function PinForm({ onInvite, onJoined, autoFocus = false }) {
+export function PinForm({ onInvite, onJoined, autoFocus = false, linkFirst = false }) {
   const { refresh } = useSession();
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
@@ -103,6 +105,9 @@ export function PinForm({ onInvite, onJoined, autoFocus = false }) {
     e.preventDefault();
     const linkCode = inviteCode(pin);
     if (linkCode) { onInvite?.(linkCode); return; }
+    // Someone's personal link pasted in (an iPhone Home Screen app can't open links itself).
+    const mine = personalCode(pin);
+    if (mine) { window.location.hash = `#/me/${mine}`; return; }
     setBusy(true);
     setErr('');
     try {
@@ -128,16 +133,20 @@ export function PinForm({ onInvite, onJoined, autoFocus = false }) {
   return (
     <form onSubmit={submit} style={{ width: '100%', maxWidth: 340, display: 'flex', flexDirection: 'column', gap: 12 }}>
       <label className="field">
-        <span style={{ color: 'var(--on-navy-muted)' }}>Group PIN or invite link</span>
+        <span style={{ color: 'var(--on-navy-muted)' }}>{linkFirst ? 'Invite link (or group PIN)' : 'Group PIN or invite link'}</span>
         <input
           className="input" autoComplete="one-time-code" autoCapitalize="none" value={pin} autoFocus={autoFocus}
-          onChange={(e) => setPin(e.target.value)} placeholder="From the group chat"
-          style={{ fontSize: pin.length > 12 ? 15 : 24, textAlign: 'center', letterSpacing: pin.length > 12 ? 0 : '.3em', color: 'var(--text)' }}
+          onChange={(e) => setPin(e.target.value)} placeholder={linkFirst ? 'Paste it here' : 'From the group chat'}
+          style={linkFirst
+            ? { fontSize: !pin || pin.length > 12 ? 16 : 24, textAlign: 'center', letterSpacing: pin && pin.length <= 12 ? '.3em' : 0, color: 'var(--text)' }
+            : { fontSize: pin.length > 12 ? 15 : 24, textAlign: 'center', letterSpacing: pin.length > 12 ? 0 : '.3em', color: 'var(--text)' }}
         />
       </label>
       {err && <div className="err" style={{ color: '#FFB4AB' }}>{err}</div>}
       <button className="btn gold block" disabled={busy || pin.trim().length < 4}>{busy ? 'Checking…' : "Let's go"}</button>
-      <span className="small" style={{ color: 'var(--on-navy-muted)', textAlign: 'center' }}>Got an invite link? Paste it in the box (or just open it).</span>
+      <span className="small" style={{ color: 'var(--on-navy-muted)', textAlign: 'center' }}>{linkFirst
+        ? 'Tapping the link in the group chat works too. On an iPhone Home Screen app, copy the link and paste it here.'
+        : 'Got an invite link? Paste it in the box (or just open it).'}</span>
     </form>
   );
 }
@@ -201,8 +210,8 @@ function SignInHome() {
         <span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.2)' }} />or<span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.2)' }} />
       </div>
       {showPin
-        ? <PinForm onInvite={setPasted} autoFocus />
-        : <button type="button" className="btn ghost block" style={{ ...ON_NAVY_GHOST, maxWidth: 340 }} onClick={() => setShowPin(true)}>Got a PIN or invite link?</button>}
+        ? <PinForm onInvite={setPasted} autoFocus linkFirst />
+        : <button type="button" className="btn ghost block" style={{ ...ON_NAVY_GHOST, maxWidth: 340 }} onClick={() => setShowPin(true)}>Got an invite link?</button>}
       <a href="#/start" className="btn ghost block" style={{ ...ON_NAVY_GHOST, maxWidth: 340, borderColor: 'transparent', textDecoration: 'underline' }}>Start a new group</a>
       <span className="small" style={{ color: 'var(--on-navy-muted)' }}><a href="#/privacy" style={{ color: 'inherit' }}>Privacy</a> · <a href="#/terms" style={{ color: 'inherit' }}>Terms</a></span>
     </div>
@@ -227,11 +236,7 @@ export function SignInButtons({ returnHash = '', quiet = false }) {
   const primaryStyle = quiet ? ON_NAVY_GHOST : undefined;
   return (
     <div className="stack" style={{ width: '100%', maxWidth: 340, gap: 10 }}>
-      {SIGN_IN.includes('google') && (
-        <button type="button" className={primary} style={primaryStyle} disabled={busy} onClick={go(() => signInWith('google', returnHash))}>
-          <GoogleG /> Sign in with Google
-        </button>
-      )}
+      {SIGN_IN.includes('google') && <GoogleSignIn returnHash={returnHash} quiet={quiet} busy={busy} onError={(x) => setErr(friendlyError(x))} />}
       {SIGN_IN.includes('facebook') && <button type="button" className="btn ghost block" style={ON_NAVY_GHOST} disabled={busy} onClick={go(() => signInWith('facebook', returnHash))}>Sign in with Facebook</button>}
       {SIGN_IN.includes('email') && (sent
         ? (
@@ -258,6 +263,54 @@ export function SignInButtons({ returnHash = '', quiet = false }) {
       {err && <div className="err" role="alert" style={{ color: '#FFB4AB' }}>{err}</div>}
     </div>
   );
+}
+
+/**
+ * Sign in with Google. Where Google knows this address, Google's own button: Google shows our app, and the sign-in
+ * happens without leaving the app. Anywhere else (or if Google's script won't load): the redirect via Supabase.
+ */
+function GoogleSignIn({ returnHash, quiet, busy, onError }) {
+  const { refresh } = useSession();
+  const [mode, setMode] = useState(() => (googleButtonHere() ? 'loading' : 'redirect'));
+  const box = useRef(null);
+  useEffect(() => {
+    if (mode !== 'loading') return undefined;
+    let live = true;
+    (async () => {
+      try {
+        const id = await loadGoogle();
+        const { raw, hashed } = await makeNonce();
+        if (!live || !box.current) return;
+        id.initialize({
+          client_id: GOOGLE_CLIENT_ID, nonce: hashed, ux_mode: 'popup', auto_select: false, itp_support: true,
+          callback: async (resp) => {
+            try {
+              setCurrentGroup(null); // whoever used this phone before: don't carry their group across
+              markFreshSignIn();
+              const { error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: resp.credential, nonce: raw });
+              if (error) throw error;
+              await refresh();
+            } catch (e) { clearFreshSignIn(); onError(e); }
+          },
+        });
+        id.renderButton(box.current, { type: 'standard', theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill',
+          logo_alignment: 'center', width: Math.min(340, Math.max(200, box.current.offsetWidth || 300)) });
+        setMode('google');
+      } catch { if (live) setMode('redirect'); }
+    })();
+    return () => { live = false; };
+  }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (mode === 'redirect') {
+    const cls = quiet ? 'btn ghost block' : 'btn gold block';
+    return (
+      <button type="button" className={cls} style={quiet ? ON_NAVY_GHOST : undefined} disabled={busy}
+        onClick={() => signInWith('google', returnHash).catch(onError)}>
+        <GoogleG /> Sign in with Google
+      </button>
+    );
+  }
+  // Google draws its own button here (Google's rules say how it looks). Same height while it loads, so nothing jumps.
+  return <div ref={box} data-google-button={mode} aria-busy={mode === 'loading'} style={{ minHeight: 48, display: 'flex', alignItems: 'center', justifyContent: 'center' }} />;
 }
 
 /** Google's "G", drawn here so nothing loads from Google before you tap. */

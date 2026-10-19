@@ -817,3 +817,22 @@ With it off, the home screen is exactly as before (checked in a browser on a liv
 - **Later:** real email sending (Resend on thegolftrip.club) before outside groups. Supabase's built-in sender only
   reaches Josh's own address, a few an hour.
 - **Release checklist:** the repo rename to `thegolftrip-app` is step 9 of Part B in `docs/LAUNCH-HOSTING.md`.
+
+### Personal links, invite link first, Google's own button (20 Oct, same branch)
+- **Personal links** (`046_personal_links.sql`, `src/lib/personal.js`, `src/screens/PersonalLink.jsx`): an organiser sends
+  each player their own link (More → Group & invites → Personal links, with "1 of 12 signed in" and a line per player).
+  The player opens `#/me/CODE` ("G'day Mike, this link is just for you"), signs in like a new user, taps "Yes, I'm Mike",
+  and that sign-in becomes his player: same name, scores and history. One use, 14 days, organisers only; a new link
+  replaces the old; refused if someone else has already signed in as that player, or if this sign-in is already
+  someone else in the group; a phone-only sign-in can't use one. The old phone keeps working. Organisers see a
+  shortened email (m…@gmail.com). SQL check: `supabase/tests/personal_links.sql`, 25 results (incl. another group's
+  organiser seeing and doing nothing), applied and checked on staging.
+- **Invite link first:** the front door says "Got an invite link?"; the box is "Invite link (or group PIN)" and also
+  takes a pasted personal link. "You're not in a group yet" points people who played before to their personal link.
+  The live build's PIN screen is unchanged.
+- **Google's own button** (`src/lib/google.js`): on addresses Google knows (`infra/cloudflare.json` → `google.button_hosts`)
+  Google's button signs in without leaving the app (`signInWithIdToken`, with a one-time value), so the Supabase
+  address never shows. Anywhere else, or if Google's script won't load, the old redirect. Needs the Google client ID in
+  `infra/cloudflare.json` → `google.client_id.staging` (public). Privacy draft updated.
+- **Tested:** 169 unit tests; 67 phone-width checks in `signin-home-test.mjs` (adds the personal link, a used link,
+  Google's button with its one-time value, the organiser's card and its message); stage2/phone/start still pass.

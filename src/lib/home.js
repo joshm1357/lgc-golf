@@ -64,9 +64,9 @@ export function takeReturn(store = safeStore(), now = Date.now()) {
   } catch { return null; }
 }
 
-/** Screens that are themselves a choice of where to go (an invite, starting a group, a course's quick round). */
+/** Screens that are themselves a choice of where to go (an invite, a personal link, starting a group, a quick round). */
 export function choosesItsOwnWay(path) {
-  return /^\/(join|start|c)(\/|$)/.test(String(path || ''));
+  return /^\/(join|me|start|c)(\/|$)/.test(String(path || ''));
 }
 
 /** A 6-digit code, ignoring spaces people type or paste in ("123 456"). Returns '' if it isn't one. */

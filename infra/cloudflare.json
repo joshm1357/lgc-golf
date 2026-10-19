@@ -11,6 +11,14 @@
     "live": ""
   },
   "_sign_in": "e.g. \"google\" or \"google,email\" once that provider is set up for that database",
+  "google": {
+    "client_id": {
+      "staging": "",
+      "live": ""
+    },
+    "button_hosts": ["staging.thegolftrip.club", "app.thegolftrip.club", "sign-in-home.thegolftrip-app.pages.dev"]
+  },
+  "_google": "client_id is public (it's in every sign-in). Google's own button shows only on button_hosts, which must match the client's Authorised JavaScript origins in Google Cloud; everywhere else uses the redirect.",
   "domains": [
     {
       "name": "staging.thegolftrip.club",

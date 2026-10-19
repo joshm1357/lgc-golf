@@ -11,6 +11,8 @@ import { inviteCode } from './lib/invite.js';
 import { signInProblemFromUrl, SIGN_IN } from './lib/auth.js';
 import { frontDoor, isFreshSignIn, clearFreshSignIn, takeReturn, choosesItsOwnWay } from './lib/home.js';
 import YourGroups, { YourGroupsInside } from './screens/YourGroups.jsx';
+import PersonalLink from './screens/PersonalLink.jsx';
+import { personalCode } from './lib/personal.js';
 import ProfileSetup, { AwaitingApproval } from './screens/ProfileSetup.jsx';
 import Leaderboard from './screens/Leaderboard.jsx';
 import ScoreEntry from './screens/ScoreEntry.jsx';
@@ -99,6 +101,8 @@ function Gate() {
     );
   }
   if (loading) return <Loading />;
+  // A personal link ("Hi Mike, this link is just for you"): works whether or not this phone is in a group yet.
+  if (loc.pathname.startsWith('/me/')) return <PersonalLink code={personalCode(loc.pathname)} />;
   const banner = problem && <div className="err" role="alert" style={{ margin: 0, borderRadius: 0 }}>{problem}</div>;
   // The front door: sign in first (when it's switched on in this build), then Your groups, then into a group.
   // With sign-in off (the live L.G.C build), this is exactly the old rule: not in a group → the PIN screen.

@@ -56,6 +56,10 @@ score a round, turn on flight mode mid-round and back, Add to Home Screen.
 **Before:** A has passed. Releases v1.5 → v2.2 are on live (their own checklists in `docs/`). No trip is under way.
 A day before, ask L.G.C to open the app once with signal, so anything entered offline syncs.
 
+**The main way to move L.G.C (20 Oct): personal links.** Before step 5, the organiser sends each player their personal
+link from the new address (More → Group & invites → Personal links). Each player signs in there and is connected to
+their player and history. The hand-over page below stays as the backup for anyone who hasn't done it.
+
 **iPhones (found in review, needs one real test):** an iPhone home-screen app keeps its own storage, apart from Safari.
 So after the hand-over and "Add to Home Screen" again, the new icon may start signed out. Nothing is lost, because
 scores belong to the *player*, not the phone. The player enters the PIN and picks their name. The app then says
@@ -68,7 +72,8 @@ Test it on Josh's iPhone at the start of B, using a test player.
    into `domains` (a pull request, as always). Production deploys, and app.thegolftrip.club points at it.
 2. Supabase **live** → URL configuration: Site URL `https://app.thegolftrip.club/`. Add `https://app.thegolftrip.club/**`
    and keep the GitHub address for a month.
-3. Google OAuth (live client): add `https://app.thegolftrip.club` as an origin.
+3. Google OAuth (live client): add `https://app.thegolftrip.club` as an Authorised JavaScript origin (Google's own
+   button) and put the live client ID in `infra/cloudflare.json` → `google.client_id.live`.
 4. Live Edge Function secret `APP_URL=https://app.thegolftrip.club/`, then redeploy `notify`.
 5. **The move:** Claude sets `"github_pages_retired": true` in `infra/cloudflare.json` (a pull request into `main`).
    On merge, GitHub Pages publishes the hand-over page in place of the app. A later push can't put the old app back,

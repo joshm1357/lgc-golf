@@ -13,6 +13,7 @@ import { FONTS, DEFAULT_LOOK, LGC_LOOK, lookProblems, themeVars, applyLook } fro
 import { uploadPhoto } from '../lib/images.js';
 import { GroupCrest } from '../components/Logo.jsx';
 import { useRun, must } from '../lib/run.js';
+import { personalLink, personalMessage, signInLine } from '../lib/personal.js';
 
 export default function Group() {
   const { status } = useSession();
@@ -24,6 +25,7 @@ export default function Group() {
         <SignInCard />
         {status.is_admin && <InviteCard role="player" />}
         {status.is_admin && <InviteCard role="guest" />}
+        {status.is_admin && SIGN_IN.length > 0 && <PersonalLinksCard />}
         {status.is_admin && <Members />}
         {status.is_admin && <LookCard />}
         {status.is_admin && <FeaturesCard />}
@@ -188,6 +190,65 @@ function Members() {
         );
       })}
       <div className="small muted" style={{ padding: '8px 14px 12px' }}>{Object.entries(ROLE_HELP).map(([k, h]) => `${ROLE_LABEL[k]}: ${h}`).join(' ')}</div>
+    </div>
+  );
+}
+
+/**
+ * Personal links (organisers, once sign-in is switched on): send each player their own link. They sign in and that
+ * sign-in is connected to their player, with all their history. Server side: migration 046.
+ */
+function PersonalLinksCard() {
+  const { status } = useSession();
+  const data = useData();
+  const [rows, setRows] = useState(null);
+  const [hidden, setHidden] = useState(false);
+  const [busy, run] = useRun();
+  const load = useCallback(async () => {
+    const { data: d, error } = await supabase.rpc('player_sign_ins');
+    if (error) {
+      if (/PGRST202|Could not find the function/i.test(`${error.code} ${error.message}`)) { setHidden(true); return; } // older database
+      throw error;
+    }
+    setRows(Object.fromEntries((d || []).map((r) => [r.player_id, r])));
+  }, []);
+  useEffect(() => { load().catch(() => setHidden(true)); }, [load]);
+  if (hidden) return null;
+  const players = data.players.filter((p) => p.approved !== false).sort((a, b) => playerName(a).localeCompare(playerName(b)));
+  const done = rows ? players.filter((p) => rows[p.id]?.signed_in).length : 0;
+  const send = (p) => run(async () => {
+    const code = await must(supabase.rpc('create_player_link', { p_player: p.id }));
+    const link = personalLink(code);
+    const r = await shareText(personalMessage(playerName(p), status.group_name, link), `${playerName(p)}'s link`);
+    await load();
+    if (r === 'copied') toast(`${playerName(p)}'s link copied — paste it in a message to them`);
+    else if (r === 'failed') { window.prompt(`Copy ${playerName(p)}'s link and send it to them:`, link); }
+  });
+  return (
+    <div className="card">
+      <div style={{ padding: '12px 14px 4px' }}>
+        <strong>🔗 Personal links</strong>
+        <div className="small muted">Send each player their own link. They sign in, and they keep their name, scores and history on any phone. Each link works once and lasts 14 days.</div>
+        {rows && <div className="small" style={{ marginTop: 6, fontWeight: 700 }}>{done} of {players.length} signed in</div>}
+      </div>
+      {!rows ? <Loading /> : players.map((p) => {
+        const line = signInLine(rows[p.id]);
+        return (
+          <div key={p.id} className="row" style={{ gap: 10, padding: '10px 14px', borderTop: '1px solid var(--line-soft)', alignItems: 'center' }}>
+            <Avatar player={p} size={34} />
+            <span className="grow" style={{ minWidth: 0 }}>
+              <strong style={{ display: 'block' }}>{playerName(p)}</strong>
+              <span className="small" style={{ color: line.done ? 'var(--up)' : 'var(--muted)' }}>{line.done ? '✓ ' : ''}{line.word}</span>
+            </span>
+            {!line.done && (
+              <button type="button" className="btn ghost sm" disabled={busy} style={{ minHeight: 48, flex: 'none' }} onClick={() => send(p)}
+                aria-label={`${line.waiting ? 'Send a new link to' : 'Send a link to'} ${playerName(p)}`}>
+                {line.waiting ? 'Send again' : 'Send link'}
+              </button>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -121,6 +121,7 @@ describe('coming back from Google', () => {
   it('knows which screens are a choice of where to go', () => {
     expect(choosesItsOwnWay('/join/ABCDEFGH2345')).toBe(true);
     expect(choosesItsOwnWay('/start')).toBe(true);
+    expect(choosesItsOwnWay('/me/ABCDEFGH2345')).toBe(true);
     expect(choosesItsOwnWay('/start/new')).toBe(true);
     expect(choosesItsOwnWay('/c/bowral')).toBe(true);
     expect(choosesItsOwnWay('/')).toBe(false);

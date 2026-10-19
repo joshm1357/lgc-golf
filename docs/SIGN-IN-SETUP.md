@@ -18,7 +18,8 @@ In supabase.com → project **lgc-golf-staging** → Authentication:
 3. **Emails → Templates** — the app asks for a 6-digit code (typed in the app; an emailed link would open Safari, not the
    Home Screen app). Put `{{ .Token }}` in **both** of these, because a brand-new email gets the first one and a
    returning one gets the second:
-   - **Confirm sign up** — e.g. subject `Your The Golf Trip code: {{ .Token }}`, body `Your code is {{ .Token }}. Type it in the app.`
+   - **Confirm sign up** — subject `Your sign-in code for The Golf Trip: {{ .Token }}`; the body shows `{{ .Token }}` big
+     and says to type it into the app (exact text in the Chrome prompt).
    - **Magic link** — the same.
 
 ## 2. Google (free, about 15 minutes)

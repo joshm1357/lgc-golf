@@ -20,12 +20,13 @@ jobs:
       - name: Apply
         env:
           TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          ACCOUNT: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          if [ -z "${TOKEN:-}" ] || [ -z "${ACCOUNT:-}" ]; then echo "::notice title=Cloudflare not connected yet::Skipping."; exit 0; fi
+          if [ -z "${TOKEN:-}" ]; then echo "::notice title=Cloudflare not connected yet::Skipping."; exit 0; fi
           API=https://api.cloudflare.com/client/v4
           cf() { curl -sS -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$@"; }
+          ACCOUNT=$(cf "$API/accounts" | jq -r '.result[0].id // empty')
+          [ -n "$ACCOUNT" ] || { echo "::error::The token can't see a Cloudflare account."; exit 1; }
           PROJECT=$(jq -r .project infra/cloudflare.json); ZONE_NAME=$(jq -r .zone infra/cloudflare.json)
           ZONE=$(cf "$API/zones?name=$ZONE_NAME" | jq -r '.result[0].id // empty')
           [ -n "$ZONE" ] || { echo "::error::Can't see the zone $ZONE_NAME. Does the token have Zone Read + DNS Edit on it?"; exit 1; }

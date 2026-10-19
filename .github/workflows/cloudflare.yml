@@ -3,9 +3,9 @@ name: Cloudflare (dev links, staging, production)
 # Builds and puts every branch on Cloudflare Pages, project "thegolftrip-app". See docs/RELEASE-FLOW.md.
 #   any branch  → https://<branch>.thegolftrip-app.pages.dev        (staging database, red TEST tag)
 #   product     → also https://staging.thegolftrip.club             (set up by infra.yml)
-#   main        → production (live database). Only once the repo variable PRODUCTION_DEPLOY = true (release B).
-# Needs the repo secret CLOUDFLARE_API_TOKEN and the variable CLOUDFLARE_ACCOUNT_ID. Until they exist, it says so
-# and stops without failing. Dependabot's branches are skipped (they get the Check, not a link).
+#   main        → production (live database). Only once infra/cloudflare.json has "production_deploy": true (release B).
+# Needs one repo secret, CLOUDFLARE_API_TOKEN. Until it exists, it says so and stops without failing.
+# Settings live in infra/cloudflare.json, not in GitHub's or Cloudflare's screens. Dependabot's branches are skipped.
 on:
   push:
     branches: ['**']
@@ -28,24 +28,31 @@ env:
 
 jobs:
   deploy:
-    if: ${{ github.actor != 'dependabot[bot]' && (github.ref_name != 'main' || vars.PRODUCTION_DEPLOY == 'true') }}
+    if: ${{ github.actor != 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v5
       - name: Ready?
         id: ready
         env:
-          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          ACCOUNT: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          BRANCH: ${{ github.ref_name }}
         run: |
-          if [ -z "$TOKEN" ] || [ -z "$ACCOUNT" ]; then
-            echo "::notice title=Cloudflare not connected yet::Add the secret CLOUDFLARE_API_TOKEN and the variable CLOUDFLARE_ACCOUNT_ID (docs/RELEASE-FLOW.md). Skipping."
-            echo "go=false" >> "$GITHUB_OUTPUT"
+          go=true
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::notice title=Cloudflare not connected yet::Add the repo secret CLOUDFLARE_API_TOKEN (docs/RELEASE-FLOW.md). Skipping."; go=false
+          elif [ "$BRANCH" = "main" ] && [ "$(jq -r '.production_deploy' infra/cloudflare.json)" != "true" ]; then
+            echo "::notice title=Production is off::main isn't deployed to Cloudflare until release B (infra/cloudflare.json)."; go=false
           else
-            echo "go=true" >> "$GITHUB_OUTPUT"
+            # The account ID isn't secret; the token can see exactly one account, so ask Cloudflare for it.
+            ACC=$(curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" https://api.cloudflare.com/client/v4/accounts | jq -r '.result[0].id // empty')
+            [ -n "$ACC" ] || { echo "::error::The Cloudflare token can't see an account. Check its permissions."; exit 1; }
+            echo "account=$ACC" >> "$GITHUB_OUTPUT"
+            [ "$BRANCH" = "main" ] && W=live || W=staging
+            echo "sign_in=$(jq -r ".sign_in.$W // \"\"" infra/cloudflare.json)" >> "$GITHUB_OUTPUT"
           fi
+          echo "go=$go" >> "$GITHUB_OUTPUT"
 
-      - if: steps.ready.outputs.go == 'true'
-        uses: actions/checkout@v5
       - if: steps.ready.outputs.go == 'true'
         uses: actions/setup-node@v5
         with:
@@ -64,7 +71,7 @@ jobs:
           CF_PAGES_BRANCH: ${{ github.ref_name }}
           CF_PAGES_COMMIT_SHA: ${{ github.sha }}
           VITE_BASE: /
-          VITE_SIGN_IN: ${{ github.ref_name == 'main' && vars.SIGN_IN_LIVE || vars.SIGN_IN_STAGING }}
+          VITE_SIGN_IN: ${{ steps.ready.outputs.sign_in }}
         run: |
           if [ "$IS_MAIN" = "true" ]; then export VITE_SUPABASE_URL="$LIVE_DB" VITE_SUPABASE_KEY="$LIVE_KEY";
           else export VITE_SUPABASE_URL="$STAGING_DB" VITE_SUPABASE_KEY="$STAGING_KEY"; fi
@@ -74,7 +81,7 @@ jobs:
         name: Make sure the Cloudflare project exists
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.ready.outputs.account }}
         run: |
           code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PROJECT")
@@ -91,7 +98,7 @@ jobs:
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          accountId: ${{ steps.ready.outputs.account }}
           command: pages deploy dist --project-name=${{ env.PROJECT }} --branch=${{ github.ref_name }} --commit-hash=${{ github.sha }} --commit-dirty=true
 
       - if: steps.ready.outputs.go == 'true'

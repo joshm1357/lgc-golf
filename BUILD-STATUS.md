@@ -775,8 +775,12 @@ phone width `tests/e2e/stage10-test.mjs`.
 - The app works at any address: `VITE_BASE` (default `/lgc-golf/`, so GitHub Pages is unchanged). `sw.js` and the
   manifest work out their own address. `notify` reads `APP_URL`. There's a safety catch: a non-GitHub build must name
   its database.
-- `move-to-app-domain/` + `pages-move.yml` (manual, type MOVE): the hand-over page for moving L.G.C to
+- `move-to-app-domain/` (published by `deploy.yml` once `infra/cloudflare.json` says `github_pages_retired`): the hand-over page for moving L.G.C to
   app.thegolftrip.club without anyone losing their sign-in.
 - Tested: 138 tests pass; built at `/` and `/lgc-golf/`; checked in a real browser (offline copy, no missing files);
   hand-over checked with Supabase faked.
 - Plan and Josh's steps: `docs/LAUNCH-HOSTING.md`. Part A (staging.thegolftrip.club) is safe. Part B is a STOP.
+- Dev → staging → production (20 Oct): `cloudflare.yml` deploys every branch to Cloudflare Pages (`<branch>.thegolftrip-app.pages.dev`,
+  staging data, TEST tag, link posted on the pull request). `product` is also staging.thegolftrip.club (`infra.yml`). `main` goes to
+  production only when `infra/cloudflare.json` says so (release B). `check.yml` runs on every pull request. There's Dependabot weekly.
+  `.node-version` is 22. Settings live in `infra/cloudflare.json`; the only secret is `CLOUDFLARE_API_TOKEN`.

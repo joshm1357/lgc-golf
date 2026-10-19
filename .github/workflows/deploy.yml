@@ -16,23 +16,29 @@ concurrency:
 
 jobs:
   build:
-    # Off once L.G.C has moved to app.thegolftrip.club (repo variable APP_MOVED=true, set at launch step B5),
-    # so a push can't put the old app back over the hand-over page.
-    if: ${{ vars.APP_MOVED != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - name: What to publish
+        id: what
+        run: |
+          # Until release B: the app. From release B, step 5 ("github_pages_retired": true in infra/cloudflare.json):
+          # the hand-over page in move-to-app-domain/, which moves each phone to app.thegolftrip.club.
+          if [ "$(jq -r '.github_pages_retired // false' infra/cloudflare.json 2>/dev/null)" = "true" ]; then
+            echo "::notice title=GitHub Pages::Publishing the hand-over page (L.G.C has moved to app.thegolftrip.club)."
+            echo "path=move-to-app-domain" >> "$GITHUB_OUTPUT"
+          else echo "path=dist" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.what.outputs.path == 'dist'
+        uses: actions/setup-node@v5
         with:
           node-version-file: .node-version
           cache: npm
-      - run: npm ci
-      - run: npm test
-      - run: npm run build
+      - if: steps.what.outputs.path == 'dist'
+        run: npm ci && npm test && npm run build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: ${{ steps.what.outputs.path }}
   deploy:
     needs: build
     runs-on: ubuntu-latest

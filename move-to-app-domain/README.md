@@ -7,5 +7,5 @@ hands each phone over to `https://app.thegolftrip.club/`.
   keep the same user, group and scores. If the phone has scores that never synced, it stops and says so.
 - `sw.js`: replaces the old offline copy so phones stop opening the old app.
 
-How it's published: the workflow `.github/workflows/pages-move.yml` (run by hand) publishes this folder to GitHub
-Pages. At the same time, `deploy.yml` must stop publishing the app there. See `docs/LAUNCH-HOSTING.md`, step B5.
+How it's published: set `"github_pages_retired": true` in `infra/cloudflare.json` on `main`. `deploy.yml` then
+publishes this folder to GitHub Pages instead of the app. See `docs/LAUNCH-HOSTING.md`, step B5.

@@ -110,7 +110,7 @@ jobs:
           BRANCH: ${{ github.ref_name }}
         run: |
           LINK="${ALIAS:-$URL}"
-          [ "$BRANCH" = "main" ] && WHAT="Production (live data)" || WHAT="Test link (staging data, red TEST tag)"
+          [ "$BRANCH" = "main" ] && WHAT="Production - live data" || WHAT="Test link - staging data with red TEST tag"
           echo "::notice title=$WHAT::$LINK"
           printf '### %s\n%s\n\nThis exact version: %s\n' "$WHAT" "$LINK" "$URL" >> "$GITHUB_STEP_SUMMARY"
           # Put (or refresh) the link on this branch's open pull request.

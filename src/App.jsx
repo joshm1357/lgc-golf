@@ -9,7 +9,7 @@ import { DrawOverlay } from './components/DrawOverlay.jsx';
 import Join, { InviteJoin } from './screens/Join.jsx';
 import { inviteCode } from './lib/invite.js';
 import { signInProblemFromUrl, SIGN_IN } from './lib/auth.js';
-import { frontDoor, isFreshSignIn, clearFreshSignIn } from './lib/home.js';
+import { frontDoor, isFreshSignIn, clearFreshSignIn, takeReturn, choosesItsOwnWay } from './lib/home.js';
 import YourGroups, { YourGroupsInside } from './screens/YourGroups.jsx';
 import ProfileSetup, { AwaitingApproval } from './screens/ProfileSetup.jsx';
 import Leaderboard from './screens/Leaderboard.jsx';
@@ -72,6 +72,15 @@ function Gate() {
   const loc = useLocation();
   // Coming back from Google with a problem: it's in the address, not an error — say what happened.
   const [problem] = useState(() => signInProblemFromUrl());
+  // Back from Google: go to the page they left from (an invite, the wizard), kept on the phone (lib/auth.js back()).
+  useEffect(() => {
+    if (loading) return;
+    const to = takeReturn();
+    if (to && !inviteCode(window.location.hash) && /^#?\/?$/.test(window.location.hash)) window.location.hash = to;
+  }, [loading]);
+  // An invite, the start-a-group wizard or a course's quick round: they've chosen where to go, so don't send them
+  // to Your groups afterwards.
+  useEffect(() => { if (choosesItsOwnWay(loc.pathname)) clearFreshSignIn(); }, [loc.pathname]);
   // The public start page and the start-a-group wizard work whether or not you're in a group yet.
   if (loc.pathname === '/start' || loc.pathname.startsWith('/start/')) return <LazyArea resetKey="start" fallback={<Loading />}><Start /></LazyArea>;
   // Privacy and terms (drafts): anyone can read them.

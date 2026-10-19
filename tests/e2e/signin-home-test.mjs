@@ -58,12 +58,15 @@ async function fake(route) {
     return json(g && v.is_member ? member(g, v.groups) : v);
   }
   if (url.pathname === '/rest/v1/rpc/invite_info') return json({ group_id: G2, group_name: 'Test Group B', role: 'guest', already_in: false });
+  if (url.pathname === '/rest/v1/rpc/join_by_invite') { if (STATUS.afterJoin) STATUS.v = STATUS.afterJoin; return json(G2); }
   if (url.pathname.startsWith('/rest/v1/rpc/')) return json(null);
   if (url.pathname.startsWith('/rest/v1/')) return json(method === 'GET' ? (db[url.pathname.split('/')[3]] || []) : []);
   return json({});
 }
 
 const fails = [];
+// "Inside a group" checked positively: the tab bar is there (not just "the list isn't").
+const insideNow = async (page) => page.getByRole('link', { name: 'Leaderboard' }).first().isVisible().catch(() => false);
 const check = (ok, msg) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${msg}`); if (!ok) fails.push(msg); };
 const browser = await chromium.launch();
 
@@ -156,7 +159,8 @@ const tapSize = async (page, locator, label) => {
   await page.waitForTimeout(1500);
   check(await page.evaluate(() => localStorage.getItem('lgc-group')) === G2, 'pick a group: the phone remembers it');
   check(await page.evaluate(() => localStorage.getItem('tgt-fresh-sign-in')) === null, 'pick a group: "just signed in" cleared');
-  check(!(await page.getByText('Tap the one you want to go into.').isVisible().catch(() => false)), 'pick a group: goes in (not back to the list)');
+  await page.getByRole('link', { name: 'Leaderboard' }).first().waitFor({ timeout: 10000 }).catch(() => null);
+  check(await insideNow(page), 'pick a group: goes in (tab bar showing)');
 
   // 2c. The way back from inside: More → Your groups, and the crest at the top.
   await page.goto(`${SIGNIN}#/more`);
@@ -191,8 +195,9 @@ const tapSize = async (page, locator, label) => {
   const { ctx, page } = await phone({ session: 'signed' });
   await ctx.addInitScript(() => localStorage.setItem('tgt-fresh-sign-in', String(Date.now())));
   await page.goto(SIGNIN);
-  await page.waitForTimeout(2500);
-  check(!(await page.getByText('Tap the one you want to go into.').isVisible().catch(() => false)), 'one group: straight in');
+  await page.getByRole('link', { name: 'Leaderboard' }).first().waitFor({ timeout: 10000 }).catch(() => null);
+  check(await insideNow(page), 'one group: straight in (tab bar showing)');
+  check(await page.evaluate(() => localStorage.getItem('tgt-fresh-sign-in')) === null, 'one group: "just signed in" cleared once inside');
   await ctx.close();
 }
 
@@ -210,7 +215,35 @@ const tapSize = async (page, locator, label) => {
     page.waitForRequest((r) => r.url().includes('/auth/v1/authorize'), { timeout: 10000 }).catch(() => null),
     page.getByRole('button', { name: /Sign in with Google/ }).click(),
   ]);
-  check(!!auth && (new URL(auth.url()).searchParams.get('redirect_to') || '').endsWith('#/join/ABCDEFGH2345'), 'invite: Google brings them back to the same invite');
+  const rt = auth ? new URL(auth.url()).searchParams.get('redirect_to') || '' : '';
+  check(!!auth && !rt.includes('#'), 'invite: the address sent to Google has no # (Supabase puts the sign-in there)');
+  // The page has gone to Supabase by now, so read the app's own storage from the browser context.
+  const appStore = (await ctx.storageState()).origins.find((o) => o.origin === new URL(SIGNIN).origin)?.localStorage || [];
+  check((appStore.find((x) => x.name === 'tgt-return-to')?.value || '').includes('#/join/ABCDEFGH2345'), 'invite: the invite is kept on the phone for the way back');
+  await ctx.close();
+}
+
+// 5b. Back from Google after starting on an invite: the invite comes back; signed in, so no sign-in buttons.
+//     Then joining while "just signed in" with two groups goes into the new group, not back to the list.
+{
+  STATUS.v = { is_member: false, signed_in: true, groups: [] };
+  STATUS.afterJoin = member(GROUPS[1]);
+  const { ctx, page } = await phone({ session: 'signed' });
+  await ctx.addInitScript(() => {
+    if (sessionStorage.getItem('seeded')) return;
+    sessionStorage.setItem('seeded', '1');
+    localStorage.setItem('tgt-fresh-sign-in', String(Date.now()));
+    localStorage.setItem('tgt-return-to', JSON.stringify({ hash: '#/join/ABCDEFGH2345', at: Date.now() }));
+  });
+  await page.goto(SIGNIN);
+  await page.getByText('You’re invited to').waitFor({ timeout: 15000 });
+  check(true, 'back from Google: the invite they started from comes back');
+  check(!(await page.getByRole('button', { name: /Sign in with Google/ }).isVisible().catch(() => false)), 'invite, already signed in: no sign-in buttons');
+  check(await page.evaluate(() => localStorage.getItem('tgt-return-to')) === null, 'back from Google: the kept address is used once');
+  await page.getByRole('button', { name: 'Join', exact: true }).click();
+  await page.getByRole('link', { name: 'Leaderboard' }).first().waitFor({ timeout: 10000 }).catch(() => null);
+  check(await insideNow(page), 'joined by invite while "just signed in": goes into the group, not back to Your groups');
+  STATUS.afterJoin = null;
   await ctx.close();
 }
 

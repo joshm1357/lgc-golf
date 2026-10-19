@@ -19,7 +19,7 @@ function openGroup(id) {
   window.location.reload();
 }
 
-function GroupList({ rows, onPick, light }) {
+function GroupList({ rows, onPick, light, status }) {
   return (
     <div className={light ? 'card' : undefined} style={light ? undefined : { width: '100%', maxWidth: 340, display: 'flex', flexDirection: 'column', gap: 10 }}>
       {rows.map((g) => (
@@ -28,7 +28,7 @@ function GroupList({ rows, onPick, light }) {
           style={light
             ? { width: '100%', minHeight: 64, padding: '10px 14px', border: 0, borderTop: '1px solid var(--line-soft)', background: g.current ? 'var(--gold-soft)' : '#fff', textAlign: 'left', color: 'inherit', gap: 12 }
             : { width: '100%', minHeight: 64, padding: '10px 14px', borderRadius: 14, border: '1px solid rgba(255,255,255,.25)', background: 'rgba(255,255,255,.08)', textAlign: 'left', color: '#fff', gap: 12 }}>
-          <GroupCrest size={44} look={groupLook(g)} name={g.name} />
+          <GroupCrest size={44} look={groupLook(g, status)} name={g.name} />
           <span className="grow" style={{ minWidth: 0 }}>
             <strong style={{ fontSize: 17, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.name}</strong>
             <span className="small" style={{ color: light ? 'var(--muted)' : 'var(--on-navy-muted)' }}>{g.roleWord}{g.current && light ? ' · open now' : ''}</span>
@@ -58,7 +58,7 @@ export default function YourGroups() {
           {none ? 'Start one for your mates, or join the one they’re in.' : 'Tap the one you want to go into.'}
         </div>
       </div>
-      {!none && <GroupList rows={rows} onPick={(g) => openGroup(g.id)} />}
+      {!none && <GroupList rows={rows} status={status} onPick={(g) => openGroup(g.id)} />}
       {none && <a href="#/start" className="btn gold block" style={{ maxWidth: 340 }}>Start a new group</a>}
       {showPin
         ? <PinForm autoFocus onInvite={(c) => { window.location.hash = `#/join/${c}`; }} />
@@ -67,7 +67,7 @@ export default function YourGroups() {
       <div className="small" style={{ color: 'var(--on-navy-muted)', textAlign: 'center' }}>
         {user?.email ? <>Signed in as {user.email}. </> : null}
         <button type="button" onClick={() => { clearFreshSignIn(); supabase.auth.signOut().then(() => { window.location.hash = '#/'; window.location.reload(); }); }}
-          style={{ background: 'none', border: 0, color: '#fff', textDecoration: 'underline', padding: '12px 4px', font: 'inherit' }}>
+          style={{ background: 'none', border: 0, color: '#fff', textDecoration: 'underline', padding: '0 8px', minHeight: 48, font: 'inherit' }}>
           {user?.email ? 'Not you? Sign out' : 'Sign out'}
         </button>
       </div>
@@ -84,7 +84,7 @@ export function YourGroupsInside() {
     <div className="page">
       <Header back title="Your groups" sub={rows.length > 1 ? 'Tap one to switch' : 'Start a new group or join another'} />
       <div className="section stack" style={{ gap: 12 }}>
-        <GroupList light rows={rows} onPick={(g) => (g.current ? (window.location.hash = '#/') : openGroup(g.id))} />
+        <GroupList light rows={rows} status={status} onPick={(g) => (g.current ? (window.location.hash = '#/') : openGroup(g.id))} />
         <a href="#/start" className="btn block">Start a new group</a>
         {showPin
           ? (

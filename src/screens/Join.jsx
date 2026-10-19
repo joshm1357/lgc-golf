@@ -166,6 +166,7 @@ function ClassicJoin() {
 
 /** The new front door (sign-in switched on): sign in first; a PIN or invite link still works without an account. */
 function SignInHome() {
+  const { status } = useSession();
   const [pasted, setPasted] = useState(null);
   const [inviteLook, setInviteLook] = useState(null);
   const [showPin, setShowPin] = useState(false);
@@ -180,10 +181,10 @@ function SignInHome() {
       <div style={{ minHeight: '100vh', background: 'var(--navy)', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 18 }}>
         <GroupCrest size={120} look={inviteLook || savedLook()} name={inviteLook?.name} />
         <InviteJoin code={code} onLook={setInviteLook} />
-        <div className="stack" style={{ width: '100%', maxWidth: 340, gap: 8, borderTop: '1px solid rgba(255,255,255,.2)', paddingTop: 14 }}>
+        {!status?.signed_in && <div className="stack" style={{ width: '100%', maxWidth: 340, gap: 8, borderTop: '1px solid rgba(255,255,255,.2)', paddingTop: 14 }}>
           <span className="small" style={{ color: 'var(--on-navy-muted)', textAlign: 'center' }}>Got an account already? Sign in first and your scores stay with you on any phone.</span>
           <SignInButtons returnHash={`#/join/${code}`} quiet />
-        </div>
+        </div>}
       </div>
     );
   }
@@ -201,7 +202,7 @@ function SignInHome() {
       </div>
       {showPin
         ? <PinForm onInvite={setPasted} autoFocus />
-        : <button type="button" className="btn ghost block" style={{ ...ON_NAVY_GHOST, maxWidth: 340 }} aria-expanded="false" onClick={() => setShowPin(true)}>Got a PIN or invite link?</button>}
+        : <button type="button" className="btn ghost block" style={{ ...ON_NAVY_GHOST, maxWidth: 340 }} onClick={() => setShowPin(true)}>Got a PIN or invite link?</button>}
       <a href="#/start" className="btn ghost block" style={{ ...ON_NAVY_GHOST, maxWidth: 340, borderColor: 'transparent', textDecoration: 'underline' }}>Start a new group</a>
       <span className="small" style={{ color: 'var(--on-navy-muted)' }}><a href="#/privacy" style={{ color: 'inherit' }}>Privacy</a> · <a href="#/terms" style={{ color: 'inherit' }}>Terms</a></span>
     </div>
@@ -244,7 +245,7 @@ export function SignInButtons({ returnHash = '', quiet = false }) {
             <input className="input" inputMode="numeric" autoComplete="one-time-code" value={codeIn} onChange={(e) => setCodeIn(e.target.value)}
               placeholder="6-digit code" aria-label="6-digit code from the email" style={{ color: 'var(--text)', textAlign: 'center', fontSize: 24, letterSpacing: '.3em' }} />
             <button className="btn gold block" disabled={busy || !cleanEmailCode(codeIn)}>{busy ? 'Checking…' : 'Sign in'}</button>
-            <button type="button" className="btn ghost sm" style={ON_NAVY_GHOST} onClick={() => { setSent(false); setCodeIn(''); setErr(''); }}>Use a different email</button>
+            <button type="button" className="btn ghost block" style={ON_NAVY_GHOST} onClick={() => { setSent(false); setCodeIn(''); setErr(''); }}>Use a different email</button>
           </form>
         )
         : (

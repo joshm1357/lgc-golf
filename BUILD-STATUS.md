@@ -799,15 +799,21 @@ With it off, the home screen is exactly as before (checked in a browser on a liv
 - **Way back from inside:** More → Your groups, and tapping the crest at the top (`#/groups`). Without sign-in in the
   build, both only show for someone in more than one group.
 - **Logic** in `src/lib/home.js` (which screen to show, the "just signed in" flag, code and email checks, group list
-  order and crests) with 16 tests in `home.test.js`.
+  order and crests, the page to come back to after Google) with 20 tests in `home.test.js`.
+- **Coming back from Google:** the page they left (an invite, the wizard) is kept on the phone, not in the address sent
+  to Google, because Supabase puts the sign-in in the address's `#` part. Restored once, within 15 minutes.
 - **Database:** `045_your_groups.sql`. `my_status()`'s group list also carries each group's crest. Additive; applied to
   staging 20 Oct; live gets it at the next release.
-- **Tested:** 154 unit tests; both builds; `tests/e2e/signin-home-test.mjs` 40 phone-width checks (home, PIN folded,
+- **Tested:** 158 unit tests; both builds; `tests/e2e/signin-home-test.mjs` 46 phone-width checks (home, PIN folded,
   Google hand-off and return address, email code creates an account, Your groups, picking a group, the way back, no
-  group yet, one group straight in, invite as a guest, live build unchanged); `stage2`, `phone` and `start` browser
+  group yet, one group straight in, invite as a guest, back from Google to the invite, joining while just signed in
+  goes in, live build unchanged). Independent review: 2 must-fix and 8 smaller findings, all fixed; `stage2`, `phone` and `start` browser
   checks still pass on the live-style build.
 - **Josh's setup (staging only):** `knowledge/prompts/sign-in-chrome-prompt.md` in the Caddie folder; details in
   `docs/SIGN-IN-SETUP.md`. Both Supabase email templates ("Confirm sign up" and "Magic link") need `{{ .Token }}`.
+- **Check on a real iPhone:** Google sign-in from the Home Screen app (iPhone may finish it in Safari rather than the
+  app, the same issue as emailed links). If so, the email code is the way in on iPhone, and Google is for Android and
+  browsers.
 - **Later:** real email sending (Resend on thegolftrip.club) before outside groups. Supabase's built-in sender only
   reaches Josh's own address, a few an hour.
 - **Release checklist:** the repo rename to `thegolftrip-app` is step 9 of Part B in `docs/LAUNCH-HOSTING.md`.

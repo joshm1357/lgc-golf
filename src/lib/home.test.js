@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { frontDoor, markFreshSignIn, isFreshSignIn, clearFreshSignIn, cleanEmailCode, looksLikeEmail, groupRows, groupLook } from './home.js';
+import { frontDoor, markFreshSignIn, isFreshSignIn, clearFreshSignIn, cleanEmailCode, looksLikeEmail, groupRows, groupLook, rememberReturn, takeReturn, choosesItsOwnWay } from './home.js';
 
 const G1 = { id: 'g1', name: 'L.G.C', role: 'organiser', legacy: true };
 const G2 = { id: 'g2', name: 'Test Group B', role: 'player' };
@@ -98,5 +98,41 @@ describe('groupRows and groupLook', () => {
     expect(groupLook({ legacy: true })).toEqual({ crest_url: 'builtin:lgc' });
     expect(groupLook({ legacy: false })).toBe(null);
     expect(groupLook(null)).toBe(null);
+  });
+});
+
+describe('coming back from Google', () => {
+  it('keeps an app address once, for 15 minutes', () => {
+    const s = memStore();
+    rememberReturn('#/join/ABCDEFGH2345', s, 1000);
+    expect(takeReturn(s, 2000)).toBe('#/join/ABCDEFGH2345');
+    expect(takeReturn(s, 3000)).toBe(null); // used once
+    rememberReturn('#/start/new', s, 1000);
+    expect(takeReturn(s, 1000 + 15 * 60_000)).toBe(null); // too old
+  });
+  it('never keeps anything that isn’t an app address', () => {
+    const s = memStore();
+    rememberReturn('https://evil.example/', s);
+    rememberReturn('#/join/x?y=<script>', s);
+    expect(takeReturn(s)).toBe(null);
+    s.setItem('tgt-return-to', JSON.stringify({ hash: 'javascript:alert(1)', at: Date.now() }));
+    expect(takeReturn(s)).toBe(null);
+  });
+  it('knows which screens are a choice of where to go', () => {
+    expect(choosesItsOwnWay('/join/ABCDEFGH2345')).toBe(true);
+    expect(choosesItsOwnWay('/start')).toBe(true);
+    expect(choosesItsOwnWay('/start/new')).toBe(true);
+    expect(choosesItsOwnWay('/c/bowral')).toBe(true);
+    expect(choosesItsOwnWay('/')).toBe(false);
+    expect(choosesItsOwnWay('/club')).toBe(false);
+    expect(choosesItsOwnWay('/courses')).toBe(false);
+  });
+});
+
+describe('groupLook on a database without 045', () => {
+  it('uses the current group’s own look', () => {
+    expect(groupLook({ id: 'g1', current: true }, { legacy: true })).toEqual({ crest_url: 'builtin:lgc' });
+    expect(groupLook({ id: 'g1', current: true }, { look: { crest_url: 'https://x/c.png' } })).toEqual({ crest_url: 'https://x/c.png' });
+    expect(groupLook({ id: 'g2', current: false }, { legacy: true })).toBe(null);
   });
 });

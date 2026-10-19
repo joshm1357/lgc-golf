@@ -27,30 +27,30 @@ passed-across sign-in as the same user, and the page stops if the phone has unsy
 
 ## Part A: dev and staging addresses (no risk to L.G.C)
 How changes flow from now on (dev → staging → production): `docs/RELEASE-FLOW.md`.
-Josh's clicks are in the Chrome prompt `app-hosting-chrome-prompt.md` (in the Caddie folder, under knowledge/prompts).
-1. **Cloudflare Pages project `thegolftrip-app`**, connected to `joshm1357/lgc-golf`.
-   - Production branch `main`. **Automatic production deployments: off** until B.
-   - Preview deployments: **all non-production branches** (each gets `<branch>.thegolftrip-app.pages.dev`, and
-     Cloudflare posts the link on its pull request).
-   - Build command `npm test && npm run build`. Output folder `dist`. Root folder: blank.
-   - Variables, **Preview**: `VITE_BASE=/`, `VITE_SUPABASE_URL=https://ttkaojaqhckiwpgrpxkh.supabase.co`,
-     `VITE_SUPABASE_KEY=sb_publishable_5L3LKASJSYGFXt12_QMZfA_LFThnZIi`. (Node 22 comes from `.node-version`.)
-   - Variables, **Production**: `VITE_BASE=/`, `VITE_SUPABASE_URL=https://luogyzvrbedmicjejilr.supabase.co`,
-     `VITE_SUPABASE_KEY=sb_publishable_uNBEcPawkDZHYGeubyYyag_MwhYkhR7`.
-   - (These keys are publishable keys. They ship in every browser by design. The build refuses a branch other than `main` on the
-     live database, and refuses `main` on staging.)
-2. **Supabase staging → Authentication → URL configuration:** Site URL `https://staging.thegolftrip.club/`. Add redirect
-   URLs `https://staging.thegolftrip.club/**` and `https://*.thegolftrip-app.pages.dev/**` (every dev link).
-3. **GitHub branch protection** on `product` and `main`: require a pull request, plus the **Check** to pass.
-4. **Test pull request #1 on its own link** (`launch-hosting.thegolftrip-app.pages.dev`, posted on the pull request):
-   the TEST tag shows, the app opens, Add to Home Screen works. Then merge it.
-5. **staging.thegolftrip.club:** in the project, Custom domains → add `staging.thegolftrip.club`. Then in DNS, point
-   its CNAME at `product.thegolftrip-app.pages.dev`. Fallback: `https://product.thegolftrip-app.pages.dev`.
-6. **Google sign-in on staging** (`docs/SIGN-IN-SETUP.md`, section 2). Once it's on, add `VITE_SIGN_IN=google` to the
-   Preview variables and redeploy. Email sign-in waits for Resend.
-7. **End-to-end test on two phones** at staging.thegolftrip.club: start a group, invite the second phone by link and
-   QR, score a round, turn on flight mode mid-round and back, Add to Home Screen, then sign in with Google and check
-   the scores stayed.
+Everything runs from GitHub Actions, so Cloudflare settings live in this repo, not in its dashboard:
+- `.github/workflows/cloudflare.yml` builds and deploys every branch to the Pages project `thegolftrip-app`. It creates
+  the project the first time. It posts the test link on the pull request. `main` only deploys once the repo variable
+  `PRODUCTION_DEPLOY` is `true`.
+- `.github/workflows/infra.yml` applies `infra/cloudflare.json` (staging.thegolftrip.club → `product`) whenever that
+  file changes on `product`.
+- The database settings are in the workflow. A branch other than `main` always builds against staging, and the build
+  itself refuses anything else.
+
+**Josh's one-time job** (Chrome prompt `app-hosting-chrome-prompt.md`):
+1. Create a Cloudflare API token that can only edit Pages and the DNS of thegolftrip.club. Paste it into GitHub as
+   the secret `CLOUDFLARE_API_TOKEN`, and add the account ID as the variable `CLOUDFLARE_ACCOUNT_ID`.
+2. Turn on branch protection for `product` and `main` (pull request + Check ✅).
+
+**Then Claude does the rest:** pushes to pull request #1, which gives it its test link. After Josh's OK, Claude merges it.
+staging.thegolftrip.club then sets itself up.
+
+**Later, with Google sign-in** (`docs/SIGN-IN-SETUP.md`), in the same Chrome session:
+- Supabase staging → URL configuration: Site URL `https://staging.thegolftrip.club/`. Redirect URLs
+  `https://staging.thegolftrip.club/**` and `https://*.thegolftrip-app.pages.dev/**`.
+- Then the repo variable `SIGN_IN_STAGING=google`. Guest play (PIN and invite links) doesn't need any of this.
+
+**End-to-end test on two phones** at staging.thegolftrip.club: start a group, invite the second phone by link and QR,
+score a round, turn on flight mode mid-round and back, Add to Home Screen.
 
 ## Part B: L.G.C to app.thegolftrip.club (STOP: Josh's go-ahead)
 **Before:** A has passed. Releases v1.5 → v2.2 are on live (their own checklists in `docs/`). No trip is under way.
@@ -64,8 +64,9 @@ iPhone. Two ways to avoid even that:
 - (a) Before the move, players link Google or email (Stage 2), then sign in from the new icon.
 - (b) Later, a one-time "move code".
 Test it on Josh's iPhone at the start of B, using a test player.
-1. Cloudflare: add custom domain `app.thegolftrip.club` to `thegolftrip-app`. Turn automatic production deployments
-   on. Deploy `main`.
+1. Cloudflare: Claude sets the repo variable `PRODUCTION_DEPLOY=true` (via Josh's Chrome session if GitHub
+   blocks it), then moves `_at_release_B_add` into `domains` in `infra/cloudflare.json`. Production deploys and
+   app.thegolftrip.club points at it.
 2. Supabase **live** → URL configuration: Site URL `https://app.thegolftrip.club/`. Add `https://app.thegolftrip.club/**`
    and keep the GitHub address for a month.
 3. Google OAuth (live client): add `https://app.thegolftrip.club` as an origin.

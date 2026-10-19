@@ -1,0 +1,51 @@
+name: Cloudflare web addresses
+
+# Applies infra/cloudflare.json: for each name, attach it to the Pages project and point a CNAME at the right
+# branch (main = production; any other branch = its own <branch>.<project>.pages.dev). Adds or updates only;
+# it never deletes, and it stops rather than replace a record that isn't a CNAME (so mail records are safe).
+on:
+  push:
+    branches: [product]
+    paths: ['infra/**', '.github/workflows/infra.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Apply
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TOKEN:-}" ] || [ -z "${ACCOUNT:-}" ]; then echo "::notice title=Cloudflare not connected yet::Skipping."; exit 0; fi
+          API=https://api.cloudflare.com/client/v4
+          cf() { curl -sS -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$@"; }
+          PROJECT=$(jq -r .project infra/cloudflare.json); ZONE_NAME=$(jq -r .zone infra/cloudflare.json)
+          ZONE=$(cf "$API/zones?name=$ZONE_NAME" | jq -r '.result[0].id // empty')
+          [ -n "$ZONE" ] || { echo "::error::Can't see the zone $ZONE_NAME. Does the token have Zone Read + DNS Edit on it?"; exit 1; }
+          jq -c '.domains[]' infra/cloudflare.json | while read -r d; do
+            NAME=$(jq -r .name <<<"$d"); BRANCH=$(jq -r .branch <<<"$d")
+            if [ "$BRANCH" = "main" ]; then TARGET="$PROJECT.pages.dev"; else
+              ALIAS=$(echo "$BRANCH" | tr 'A-Z' 'a-z' | sed 's/[^a-z0-9]/-/g' | cut -c1-28 | sed 's/-*$//'); TARGET="$ALIAS.$PROJECT.pages.dev"; fi
+            # 1. Attach the name to the Pages project (fine if it's already there).
+            R=$(cf -X POST "$API/accounts/$ACCOUNT/pages/projects/$PROJECT/domains" -d "{\"name\":\"$NAME\"}")
+            if [ "$(jq -r .success <<<"$R")" = "true" ]; then echo "Attached $NAME"; else echo "Attach $NAME: $(jq -c '.errors' <<<"$R") (already attached is fine)"; fi
+            # 2. Point its CNAME at the right branch.
+            EXIST=$(cf "$API/zones/$ZONE/dns_records?name=$NAME")
+            TYPE=$(jq -r '.result[0].type // empty' <<<"$EXIST"); RID=$(jq -r '.result[0].id // empty' <<<"$EXIST")
+            BODY="{\"type\":\"CNAME\",\"name\":\"$NAME\",\"content\":\"$TARGET\",\"proxied\":true,\"comment\":\"Managed by lgc-golf infra.yml\"}"
+            if [ -z "$TYPE" ]; then R=$(cf -X POST "$API/zones/$ZONE/dns_records" -d "$BODY")
+            elif [ "$TYPE" = "CNAME" ]; then R=$(cf -X PUT "$API/zones/$ZONE/dns_records/$RID" -d "$BODY")
+            else echo "::error title=$NAME::Has a $TYPE record already. Not replacing it; ask Josh."; continue; fi
+            if [ "$(jq -r .success <<<"$R")" = "true" ]; then echo "::notice title=$NAME::now shows $BRANCH ($TARGET)";
+            else echo "::error title=$NAME::$(jq -c '.errors' <<<"$R")"; fi
+            # 3. Report the domain's status (Cloudflare checks it within a few minutes).
+            S=$(cf "$API/accounts/$ACCOUNT/pages/projects/$PROJECT/domains/$NAME" | jq -r '.result.status // "unknown"')
+            echo "::notice title=$NAME status::$S"
+          done

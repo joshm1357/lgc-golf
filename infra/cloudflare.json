@@ -1,0 +1,9 @@
+{
+  "_about": "Web addresses for the app on Cloudflare. Changing this file on product makes .github/workflows/infra.yml apply it. It only ever adds or points CNAME records for the names listed here; it never deletes anything and never touches mail (MX/TXT) records.",
+  "project": "thegolftrip-app",
+  "zone": "thegolftrip.club",
+  "domains": [
+    { "name": "staging.thegolftrip.club", "branch": "product" }
+  ],
+  "_at_release_B_add": { "name": "app.thegolftrip.club", "branch": "main" }
+}

@@ -13,7 +13,7 @@ Written 20 Oct 2026. Three steps, each with its own web address. Nothing reaches
    pull request into `product`.
 2. **Two things happen by themselves:**
    - **Check** (GitHub Actions) runs the tests and both builds. It shows ✅ or ❌ on the pull request.
-   - **Cloudflare** builds that branch and posts a link on the pull request, e.g.
+   - **Cloudflare** (`.github/workflows/cloudflare.yml`) builds that branch and posts a link on the pull request, e.g.
      `https://launch-hosting.thegolftrip-app.pages.dev`. Every new push updates the same link.
 3. **Josh tests the link on his phone.** A red **TEST** tag across the top shows the branch and version, so it's never
    mistaken for the real app. It uses staging data, so nothing he does there touches L.G.C.
@@ -35,7 +35,7 @@ Written 20 Oct 2026. Three steps, each with its own web address. Nothing reaches
 
 **If something's wrong after a release:**
 - **App:** roll back first, then fix. On Cloudflare: thegolftrip-app → Deployments → the previous production one →
-  "Rollback". It's instant. On GitHub Pages (until B): Actions → the last good deploy → "Re-run".
+  "Rollback". It's instant. Or Claude re-runs the Cloudflare workflow for the last good `main` commit. On GitHub Pages (until B): Actions → the last good deploy → "Re-run".
 - **Database:** changes are additive, so the previous app version keeps working against them. Nothing needs undoing
   to roll the app back. If data itself is damaged, restore from the step-1 snapshot (Claude does this, with Josh in the chat).
 
@@ -50,6 +50,11 @@ Written 20 Oct 2026. Three steps, each with its own web address. Nothing reaches
 - **Libraries:** every Monday, Dependabot opens a pull request with small updates grouped together. Big version
   jumps come one at a time. Each gets a test link and a Check like any other change. Merge the green ones after a quick look.
 - **Node version:** one file, `.node-version` (22). GitHub, Cloudflare and laptops all read it.
+
+## Where the settings live
+Everything that can live in code does: build settings and databases in `.github/workflows/cloudflare.yml`, web
+addresses in `infra/cloudflare.json`, and Node in `.node-version`. Josh's Chrome is only needed for things tied to his
+logins: creating access keys, GitHub's own settings, and Google and Supabase sign-in screens.
 
 ## Good to know
 - **All dev links share the one staging database.** Two branches tested at once see each other's test groups. That's

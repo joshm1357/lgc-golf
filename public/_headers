@@ -1,0 +1,14 @@
+# Cloudflare Pages reads this file (GitHub Pages ignores it). Basic safety settings for every page,
+# and "always check for a newer copy" on the files that decide which version a phone runs.
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: SAMEORIGIN
+/sw.js
+  Cache-Control: no-cache
+/asset-list.json
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+/
+  Cache-Control: no-cache

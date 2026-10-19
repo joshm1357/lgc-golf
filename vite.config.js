@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
 // The app is split into parts that load when a screen is first opened. This writes a list of every
@@ -14,17 +14,27 @@ function assetList() {
   };
 }
 
-// GitHub Pages serves the app from /lgc-golf/
-export default defineConfig({
-  base: '/lgc-golf/',
-  plugins: [react(), assetList()],
-  build: {
-    rollupOptions: {
-      output: {
-        // Only the starting file is called index-….js (the "New version ready" check looks for it).
-        chunkFileNames: 'assets/part-[name]-[hash].js',
+// Where the app lives. GitHub Pages serves it from /lgc-golf/ (the default, so that build is unchanged).
+// Cloudflare (app.thegolftrip.club, staging.thegolftrip.club) sets VITE_BASE=/ in its build settings.
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  const base = env.VITE_BASE || '/lgc-golf/';
+  // Safety catch: a build for any other address must say which database it uses. Without this, a
+  // forgotten setting would quietly point a test build at the live L.G.C database.
+  if (mode === 'production' && env.VITE_BASE && !env.VITE_SUPABASE_URL) {
+    throw new Error('VITE_BASE is set but VITE_SUPABASE_URL is not. Set both in the host\'s build settings.');
+  }
+  return {
+    base,
+    plugins: [react(), assetList()],
+    build: {
+      rollupOptions: {
+        output: {
+          // Only the starting file is called index-….js (the "New version ready" check looks for it).
+          chunkFileNames: 'assets/part-[name]-[hash].js',
+        },
       },
     },
-  },
-  test: { environment: 'node' },
+    test: { environment: 'node' },
+  };
 });

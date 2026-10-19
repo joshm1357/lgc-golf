@@ -9,7 +9,12 @@
 //   - Everything else (the database, maps, photos) goes straight to the network, untouched.
 //     Scores entered offline are queued by the app itself and sent when signal returns.
 const CACHE = 'lgc-shell-v2';
-const BASE = '/lgc-golf/';
+// The app's own folder, worked out from where this file is served: '/lgc-golf/' on GitHub Pages,
+// '/' on app.thegolftrip.club. So the same file works at either address.
+const BASE = new URL('./', self.location).pathname;
+const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const PAGE_CODE = new RegExp(`${esc(BASE)}assets/index-[^"'\\s)]+\\.js`);
+const ALL_CODE = new RegExp(`${esc(BASE)}assets/[^"'\\s)]+`, 'g');
 
 /** Every code/style file of the version on the server — including screens that load only when
  *  opened — from the list written at build time. Empty if it can't be fetched. */
@@ -32,8 +37,8 @@ async function saveShell(pageResponse) {
   const page = pageResponse || (await fetch(BASE, { cache: 'no-store' }));
   if (!page.ok) return;
   const html = await page.clone().text();
-  if (!/\/lgc-golf\/assets\/index-[^"'\s)]+\.js/.test(html)) return; // not our app
-  const fromPage = [...new Set(html.match(/\/lgc-golf\/assets\/[^"'\s)]+/g) || [])];
+  if (!PAGE_CODE.test(html)) return; // not our app
+  const fromPage = [...new Set(html.match(ALL_CODE) || [])];
   // The list only counts if it belongs to the same version as the page (it names the page's files).
   const parts = await allParts();
   const complete = parts.length > 0 && fromPage.every((u) => parts.includes(u));

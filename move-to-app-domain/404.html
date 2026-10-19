@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>The Golf Trip has moved</title>
+<style>
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #1F4B33; color: #fff;
+         font: 17px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; text-align: center; }
+  main { max-width: 340px; padding: 24px; }
+  h1 { font-size: 24px; margin: 0 0 8px; }
+  a.btn { display: inline-block; margin-top: 16px; padding: 14px 22px; border-radius: 10px; background: #E0B84A;
+          color: #1F4B33; font-weight: 700; text-decoration: none; min-height: 48px; box-sizing: border-box; }
+  .warn { background: rgba(0,0,0,.25); padding: 12px; border-radius: 8px; margin-top: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>The app has moved</h1>
+  <p id="msg">Taking you to <strong>app.thegolftrip.club</strong>…</p>
+  <a class="btn" id="go" href="https://app.thegolftrip.club/">Open the app</a>
+  <p style="font-size:14px;opacity:.85">Then add it to your home screen again: Share → Add to Home Screen.</p>
+</main>
+<script>
+// Hand-over from the old address (joshm1357.github.io/lgc-golf/) to app.thegolftrip.club.
+// Each phone's sign-in lives in this address's storage, which the new address can't see. So this page
+// swaps the saved sign-in for a fresh one and passes it across in the part of the link after #
+// (that part never goes to any server). The new app picks it up the same way it does after Google
+// sign-in, so the player stays the same user: same group, same scores, no PIN needed.
+// These two values are public by design; they're the same ones the old app shipped with.
+(async () => {
+  const NEW = 'https://app.thegolftrip.club/';
+  const DB = 'https://luogyzvrbedmicjejilr.supabase.co';
+  const KEY = 'sb_publishable_uNBEcPawkDZHYGeubyYyag_MwhYkhR7';
+  const go = document.getElementById('go');
+  const msg = document.getElementById('msg');
+  const keepPath = (location.hash || '').replace(/^#/, '');   // e.g. /join/CODE from an old invite link
+  const plain = NEW + (keepPath && !/access_token|refresh_token/.test(keepPath) ? '#' + keepPath : '');
+  go.href = plain;
+
+  // Scores entered offline that never reached the database live only on this phone, at this address.
+  // Don't leave them behind silently.
+  const waiting = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(v) ? v.length : 0; } catch { return 0; } };
+  const unsynced = waiting('lgc-score-queue') + waiting('lgc-outbox');
+  if (unsynced > 0) {
+    msg.innerHTML = '<span class="warn">This phone has <strong>' + unsynced + ' score' + (unsynced > 1 ? 's' : '') +
+      ' that never synced</strong>. Take a screenshot of your card and send it to your organiser, then tap below.</span>';
+    return;
+  }
+
+  let target = plain;
+  try {
+    const saved = JSON.parse(localStorage.getItem('lgc-auth') || 'null');
+    const refresh = saved && (saved.refresh_token || (saved.currentSession && saved.currentSession.refresh_token));
+    if (refresh) {
+      const res = await fetch(DB + '/auth/v1/token?grant_type=refresh_token', {
+        method: 'POST', headers: { apikey: KEY, 'content-type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refresh }),
+      });
+      if (res.ok) {
+        const s = await res.json();
+        if (s.access_token && s.refresh_token) {
+          const p = new URLSearchParams({
+            access_token: s.access_token, refresh_token: s.refresh_token, token_type: 'bearer',
+            expires_in: String(s.expires_in || 3600), expires_at: String(s.expires_at || ''), type: 'handover',
+          });
+          target = NEW + '#' + p.toString();
+          // This address is finished with: don't leave a usable sign-in behind.
+          try { localStorage.removeItem('lgc-auth'); } catch {}
+        }
+      }
+    }
+  } catch { /* no signal or nothing saved: the plain link still works (re-enter the PIN once) */ }
+  go.href = target;
+  location.replace(target);
+})();
+</script>
+</body>
+</html>

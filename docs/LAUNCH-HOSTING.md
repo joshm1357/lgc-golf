@@ -25,27 +25,32 @@ Checked: all 138 tests pass. The GitHub Pages build's page and code files are by
 copy saved 33 files, and the app opens with no signal. The hand-over was tested with Supabase faked: the new app adopts the
 passed-across sign-in as the same user, and the page stops if the phone has unsynced scores.
 
-## Part A: test address (no risk to L.G.C)
+## Part A: dev and staging addresses (no risk to L.G.C)
+How changes flow from now on (dev → staging → production): `docs/RELEASE-FLOW.md`.
 Josh's clicks are in the Chrome prompt `app-hosting-chrome-prompt.md` (in the Caddie folder, under knowledge/prompts).
 1. **Cloudflare Pages project `thegolftrip-app`**, connected to `joshm1357/lgc-golf`.
    - Production branch `main`. **Automatic production deployments: off** until B.
-   - Preview deployments: custom branches, `product` only.
+   - Preview deployments: **all non-production branches** (each gets `<branch>.thegolftrip-app.pages.dev`, and
+     Cloudflare posts the link on its pull request).
    - Build command `npm test && npm run build`. Output folder `dist`. Root folder: blank.
    - Variables, **Preview**: `VITE_BASE=/`, `VITE_SUPABASE_URL=https://ttkaojaqhckiwpgrpxkh.supabase.co`,
      `VITE_SUPABASE_KEY=sb_publishable_5L3LKASJSYGFXt12_QMZfA_LFThnZIi`, `NODE_VERSION=20`.
    - Variables, **Production**: `VITE_BASE=/`, `VITE_SUPABASE_URL=https://luogyzvrbedmicjejilr.supabase.co`,
      `VITE_SUPABASE_KEY=sb_publishable_uNBEcPawkDZHYGeubyYyag_MwhYkhR7`, `NODE_VERSION=20`.
-   - (These keys are publishable keys. They ship in every browser by design.)
-2. **staging.thegolftrip.club:** in the project, Custom domains → add `staging.thegolftrip.club`. Then in DNS, point
-   its CNAME at `product.thegolftrip-app.pages.dev`. Fallback: test on `https://product.thegolftrip-app.pages.dev`.
-3. **Supabase staging → Authentication → URL configuration:** Site URL `https://staging.thegolftrip.club/`. Add redirect
-   URLs `https://staging.thegolftrip.club/**` and `https://product.thegolftrip-app.pages.dev/**`.
-4. **Google sign-in on staging** (`docs/SIGN-IN-SETUP.md`, section 2). Add `https://staging.thegolftrip.club` as an
-   authorised JavaScript origin. Once that's done, add `VITE_SIGN_IN=google` to the Preview variables and redeploy.
-   Email sign-in waits for Resend.
-5. **End-to-end test on two phones:** start a group, invite the second phone by link and QR, score a round, turn on
-   flight mode mid-round and back, Add to Home Screen, then sign in with Google and check the scores stayed.
-6. Merge `launch-hosting` into `product` (this is safe: GitHub Pages builds the same as before).
+   - (These keys are publishable keys. They ship in every browser by design. The build refuses a branch other than `main` on the
+     live database, and refuses `main` on staging.)
+2. **Supabase staging → Authentication → URL configuration:** Site URL `https://staging.thegolftrip.club/`. Add redirect
+   URLs `https://staging.thegolftrip.club/**` and `https://*.thegolftrip-app.pages.dev/**` (every dev link).
+3. **GitHub branch protection** on `product` and `main`: require a pull request, plus the **Check** to pass.
+4. **Test pull request #1 on its own link** (`launch-hosting.thegolftrip-app.pages.dev`, posted on the pull request):
+   the TEST tag shows, the app opens, Add to Home Screen works. Then merge it.
+5. **staging.thegolftrip.club:** in the project, Custom domains → add `staging.thegolftrip.club`. Then in DNS, point
+   its CNAME at `product.thegolftrip-app.pages.dev`. Fallback: `https://product.thegolftrip-app.pages.dev`.
+6. **Google sign-in on staging** (`docs/SIGN-IN-SETUP.md`, section 2). Once it's on, add `VITE_SIGN_IN=google` to the
+   Preview variables and redeploy. Email sign-in waits for Resend.
+7. **End-to-end test on two phones** at staging.thegolftrip.club: start a group, invite the second phone by link and
+   QR, score a round, turn on flight mode mid-round and back, Add to Home Screen, then sign in with Google and check
+   the scores stayed.
 
 ## Part B: L.G.C to app.thegolftrip.club (STOP: Josh's go-ahead)
 **Before:** A has passed. Releases v1.5 → v2.2 are on live (their own checklists in `docs/`). No trip is under way.

@@ -10,6 +10,8 @@
 --  * The phone the player used before keeps working (it's another member row for the same player). An organiser
 --    can remove it from Members once they've signed in there too.
 --  * If someone has already signed in as that player, the link is refused (an organiser sorts it out).
+--  * The link gives the role the player has when it's made (an organiser's link makes an organiser; the card and the
+--    confirm screen say so). Unapproved players get no link.
 -- Words: a "group" is a golf group; a "player" is a row in players; a "member" is a sign-in in group_members.
 
 create table if not exists public.player_links (
@@ -21,8 +23,13 @@ create table if not exists public.player_links (
   expires_at timestamptz not null default now() + interval '14 days',
   used_at timestamptz,
   used_by uuid references auth.users(id) on delete set null,
-  revoked_at timestamptz
+  revoked_at timestamptz,
+  -- The role the link gives, fixed when it's made (the player's best role then), so the organiser card can say
+  -- "this link makes them an organiser" before it's sent.
+  role text not null default 'player' check (role in ('organiser', 'player', 'guest'))
 );
+-- (staging had the first version of this table for a few hours; this adds the role there and is skipped elsewhere)
+alter table public.player_links add column if not exists role text not null default 'player' check (role in ('organiser', 'player', 'guest'));
 create index if not exists player_links_group_id_idx on public.player_links (group_id);
 create index if not exists player_links_player_id_idx on public.player_links (player_id);
 create index if not exists player_links_created_by_idx on public.player_links (created_by);
@@ -36,17 +43,22 @@ revoke all on public.player_links from anon, authenticated;
 -- ------------------------------------------------------------------ Make (or remake) a player's link
 create or replace function public.create_player_link(p_player uuid)
 returns text language plpgsql security definer set search_path = '' as $$
-declare v_g uuid := private.current_group(); v_token text;
+declare v_g uuid := private.current_group(); v_token text; v_role text;
 begin
   if not private.is_group_organiser(v_g) then raise exception 'Only an organiser can send personal links'; end if;
   if not exists (select 1 from public.players where id = p_player and group_id = v_g) then raise exception 'No such player'; end if;
+  if exists (select 1 from public.players where id = p_player and approved is false) then
+    raise exception 'Approve this player first';
+  end if;
+  select m.role into v_role from public.group_members m where m.group_id = v_g and m.player_id = p_player
+   order by case m.role when 'organiser' then 1 when 'player' then 2 else 3 end limit 1;
   update public.player_links set revoked_at = now() where player_id = p_player and used_at is null and revoked_at is null;
   loop
     v_token := private.random_code(12);
     exit when not exists (select 1 from public.player_links where token = v_token)
           and not exists (select 1 from public.group_invites where token = v_token);
   end loop;
-  insert into public.player_links (token, group_id, player_id) values (v_token, v_g, p_player);
+  insert into public.player_links (token, group_id, player_id, role) values (v_token, v_g, p_player, coalesce(v_role, 'player'));
   return v_token;
 end $$;
 
@@ -66,8 +78,12 @@ begin
       'player_name', coalesce(nullif(trim(p.nickname), ''), p.name),
       'state', case when l.used_at is not null then 'used' when l.revoked_at is not null then 'replaced'
                     when l.expires_at <= now() then 'expired' else 'ok' end,
-      'mine', l.used_by = auth.uid()
-              or exists (select 1 from public.group_members m where m.group_id = g.id and m.user_id = auth.uid() and m.player_id = p.id),
+      -- Already done for this sign-in. A phone-only sign-in that's already this player (the old phone) isn't done:
+      -- it still has to sign in properly.
+      'mine', not coalesce((select is_anonymous from auth.users where id = auth.uid()), true)
+              and (l.used_by = auth.uid()
+                   or exists (select 1 from public.group_members m where m.group_id = g.id and m.user_id = auth.uid() and m.player_id = p.id)),
+      'role', l.role,
       'signed_in', not coalesce((select is_anonymous from auth.users where id = auth.uid()), true),
       'look', json_build_object('short_name', g.short_name, 'crest_url', g.crest_url, 'primary', g.colour_primary,
                                 'accent', g.colour_accent, 'font', g.font, 'name', g.name))
@@ -92,7 +108,8 @@ begin
   end if;
   perform private.pin_check();
   select * into l from public.player_links where token = upper(trim(p_token)) for update;
-  if l.token is null then perform private.pin_fail('invite'); raise exception 'That link isn''t right — ask your organiser for a new one'; end if;
+  -- A wrong code: counted towards the wrong-guess limit, and null back (an exception would undo the count).
+  if l.token is null then perform private.pin_fail('invite'); return null; end if;
   -- Already done (e.g. tapped twice): nothing more to do.
   if l.used_by = v_me then return l.group_id; end if;
   if l.used_at is not null then raise exception 'That link has already been used — ask your organiser for a new one'; end if;
@@ -107,10 +124,8 @@ begin
   if v_mine.user_id is not null and v_mine.player_id is not null and v_mine.player_id <> l.player_id then
     raise exception 'This sign-in is already someone else in this group — ask your organiser to sort it out';
   end if;
-  -- Keep the player's role (the best one any of their sign-ins has), so an organiser stays an organiser.
-  select m.role into v_role from public.group_members m where m.group_id = l.group_id and m.player_id = l.player_id
-   order by case m.role when 'organiser' then 1 when 'player' then 2 else 3 end limit 1;
-  v_role := coalesce(v_role, 'player');
+  -- The role the link was made with (the organiser saw it on the card when sending).
+  v_role := l.role;
   if v_mine.user_id is null then
     insert into public.group_members (group_id, user_id, player_id, role) values (l.group_id, v_me, l.player_id, v_role);
   else
@@ -144,6 +159,8 @@ begin
                  where m.group_id = v_g and m.player_id = p.id and coalesce(u.is_anonymous, true)),
       'link_waiting', exists (select 1 from public.player_links l where l.player_id = p.id and l.used_at is null
                               and l.revoked_at is null and l.expires_at > now()),
+      'role', (select m.role from public.group_members m where m.group_id = v_g and m.player_id = p.id
+               order by case m.role when 'organiser' then 1 when 'player' then 2 else 3 end limit 1),
       'link_expires', (select max(l.expires_at) from public.player_links l where l.player_id = p.id and l.used_at is null
                        and l.revoked_at is null and l.expires_at > now())
     ))

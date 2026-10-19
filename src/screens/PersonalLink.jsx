@@ -29,6 +29,7 @@ export default function PersonalLink({ code }) {
   useEffect(() => {
     let live = true;
     if (!code) { setInfo(null); return undefined; } // not a real code: say so without asking the server
+    if (!SIGN_IN.length) { setInfo(null); setErr('Signing in isn’t switched on in this version of the app yet.'); return undefined; }
     (async () => {
       try {
         await ensureSignedIn(); // a phone-only sign-in is enough to read who the link is for
@@ -50,6 +51,7 @@ export default function PersonalLink({ code }) {
     try {
       const { data, error } = await supabase.rpc('claim_player_link', { p_token: code });
       if (error) throw error;
+      if (!data) { setErr('That link isn’t right — ask your organiser for a new one.'); return; }
       goInto(data);
     } catch (e) {
       setErr(friendlyError(e));
@@ -108,6 +110,9 @@ export default function PersonalLink({ code }) {
           {screen === 'sign-in' && (SIGN_IN.length
             ? <SignInButtons returnHash={`#/me/${code}`} />
             : <div style={muted}>Signing in isn’t switched on in this version of the app yet.</div>)}
+          {screen === 'confirm' && info?.role === 'organiser' && (
+            <div className="small" style={{ ...muted, maxWidth: 340, color: '#fff' }}>This link also makes you an organiser of {group}.</div>
+          )}
           {screen === 'confirm' && (
             <button type="button" className="btn gold block" style={{ maxWidth: 340 }} disabled={busy} onClick={claim}>
               {busy ? 'Connecting…' : `Yes, I’m ${name}`}

@@ -298,6 +298,18 @@ const tapSize = async (page, locator, label) => {
   await ctx.close();
 }
 
+// 5c2. Mike opens his link on his OLD phone (already Mike, phone-only): he still has to sign in, not "all set".
+{
+  STATUS.v = null;
+  LINK.info = { group_id: G1, group_name: 'L.G.C', player_name: 'Mike', state: 'ok', mine: true, signed_in: false, role: 'player', look: null };
+  const { ctx, page } = await phone({ session: 'anon' });
+  await page.goto(`${SIGNIN}#/me/MYKEMYKE2345`);
+  await page.getByText('G’day Mike 👋').waitFor({ timeout: 15000 });
+  check(!(await page.getByText(/You’re all set/).isVisible().catch(() => false)), 'old phone: not told it’s all set');
+  check(await page.getByRole('button', { name: /Sign in with Google/ }).isVisible(), 'old phone: asked to sign in properly');
+  await ctx.close();
+}
+
 // 5d. A used personal link someone else opens.
 {
   STATUS.v = null;

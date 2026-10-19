@@ -19,10 +19,11 @@ export function personalLink(code, base = typeof window !== 'undefined' ? `${win
 }
 
 /** The message that goes with it, ready for Messenger or WhatsApp. */
-export function personalMessage(name, groupName, link) {
+export function personalMessage(name, groupName, link, role = 'player') {
   const who = String(name || '').trim() || 'mate';
   const group = String(groupName || '').trim() || 'the group';
-  return `G'day ${who}, here's your own link for ${group} on The Golf Trip. Tap it and sign in, and your scores and history stay with you on any phone. It's just for you, so please don't share it (it works once and lasts 14 days): ${link}`;
+  const organiser = role === 'organiser' ? ` It also makes you an organiser of ${group}, so keep it to yourself.` : '';
+  return `G'day ${who}, here's your own link for ${group} on The Golf Trip. Tap it and sign in, and your scores and history stay with you on any phone. It's just for you, so please don't share it (it works once and lasts 14 days).${organiser} ${link}`;
 }
 
 /** One player's line on the organiser's Personal links card. */
@@ -40,7 +41,8 @@ export function signInLine(row, now = Date.now()) {
 /** What the "Hi Mike" screen shows, from player_link_info and whether this phone is signed in properly. */
 export function linkScreen(info, signedIn) {
   if (!info) return 'bad';
-  if (info.mine) return 'done';
+  // Done only for a proper sign-in: the old phone is already this player, but still has to sign in.
+  if (info.mine && signedIn) return 'done';
   if (info.state === 'used') return 'used';
   if (info.state === 'expired') return 'expired';
   if (info.state === 'replaced') return 'replaced';

@@ -20,16 +20,26 @@ insert into auth.users (id, instance_id, aud, role, is_anonymous, email) values
   ('00000000-0000-4000-8000-0000000f0a03', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', false, 'mike@example.com'),
   ('00000000-0000-4000-8000-0000000f0a04', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', false, 'nosy@example.com'),
   ('00000000-0000-4000-8000-0000000f0a05', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', true, null),
-  ('00000000-0000-4000-8000-0000000f0a06', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', false, 'pq@example.com');
+  ('00000000-0000-4000-8000-0000000f0a06', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', false, 'pq@example.com'),
+  ('00000000-0000-4000-8000-0000000f0a07', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', true, null),
+  ('00000000-0000-4000-8000-0000000f0a08', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', false, 'pat@example.com'),
+  ('00000000-0000-4000-8000-0000000f0a09', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', true, null),
+  ('00000000-0000-4000-8000-0000000f0a10', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', false, 'gina@example.com');
 insert into public.players (id, group_id, name, nickname, handicap) values
   ('00000000-0000-4000-8000-0000000f0b01', '00000000-0000-4000-8000-00000000f000', 'P Organiser', null, 10),
   ('00000000-0000-4000-8000-0000000f0b02', '00000000-0000-4000-8000-00000000f000', 'Mike Morris', 'Mike', 18),
   ('00000000-0000-4000-8000-0000000f0b03', '00000000-0000-4000-8000-00000000f000', 'Sam Smith', null, 20),
-  ('00000000-0000-4000-8000-0000000f0b10', '00000000-0000-4000-8000-00000000f100', 'Q Organiser', null, 9);
+  ('00000000-0000-4000-8000-0000000f0b10', '00000000-0000-4000-8000-00000000f100', 'Q Organiser', null, 9),
+  ('00000000-0000-4000-8000-0000000f0b04', '00000000-0000-4000-8000-00000000f000', 'Pat Co-organiser', null, 12),
+  ('00000000-0000-4000-8000-0000000f0b05', '00000000-0000-4000-8000-00000000f000', 'Gina Guest', null, 30);
+insert into public.players (id, group_id, name, handicap, approved) values
+  ('00000000-0000-4000-8000-0000000f0b06', '00000000-0000-4000-8000-00000000f000', 'Not Approved Yet', 25, false);
 insert into public.group_members (group_id, user_id, player_id, role) values
   ('00000000-0000-4000-8000-00000000f000', '00000000-0000-4000-8000-0000000f0a01', '00000000-0000-4000-8000-0000000f0b01', 'organiser'),
   ('00000000-0000-4000-8000-00000000f000', '00000000-0000-4000-8000-0000000f0a02', '00000000-0000-4000-8000-0000000f0b02', 'player'),
-  ('00000000-0000-4000-8000-00000000f100', '00000000-0000-4000-8000-0000000f0a06', '00000000-0000-4000-8000-0000000f0b10', 'organiser');
+  ('00000000-0000-4000-8000-00000000f100', '00000000-0000-4000-8000-0000000f0a06', '00000000-0000-4000-8000-0000000f0b10', 'organiser'),
+  ('00000000-0000-4000-8000-00000000f000', '00000000-0000-4000-8000-0000000f0a07', '00000000-0000-4000-8000-0000000f0b04', 'organiser'),
+  ('00000000-0000-4000-8000-00000000f000', '00000000-0000-4000-8000-0000000f0a09', '00000000-0000-4000-8000-0000000f0b05', 'guest');
 insert into public.handicap_history (group_id, player_id, old_handicap, new_handicap, reason) values
   ('00000000-0000-4000-8000-00000000f000', '00000000-0000-4000-8000-0000000f0b02', 20, 18, 'Tribunal');
 
@@ -57,6 +67,17 @@ insert into t_results (label, result)
          (x->>'phones') || ' / ' || (x->>'signed_in') || ' / ' || (x->>'link_waiting')
   from json_array_elements(public.player_sign_ins()) x where x->>'player_id' = '00000000-0000-4000-8000-0000000f0b02';
 
+insert into t_tok values ('pat', public.create_player_link('00000000-0000-4000-8000-0000000f0b04'));
+insert into t_tok values ('gina', public.create_player_link('00000000-0000-4000-8000-0000000f0b05'));
+do $$ begin
+  perform public.create_player_link('00000000-0000-4000-8000-0000000f0b06');
+  insert into t_results (label, result) values ('link for an unapproved player', 'made');
+exception when others then insert into t_results (label, result) values ('link for an unapproved player', 'refused'); end $$;
+insert into t_results (label, result)
+  select 'organiser sees the role a link gives: Pat / Gina', string_agg(x->>'role', ' / ' order by x->>'player_id')
+  from json_array_elements(public.player_sign_ins()) x
+  where x->>'player_id' in ('00000000-0000-4000-8000-0000000f0b04', '00000000-0000-4000-8000-0000000f0b05');
+
 -- ================= Mike's old phone (phone-only player) can't make links or see sign-ins =================
 set local request.jwt.claims to '{"sub":"00000000-0000-4000-8000-0000000f0a02","role":"authenticated"}';
 do $$ begin
@@ -67,6 +88,8 @@ do $$ begin
   perform public.player_sign_ins();
   insert into t_results (label, result) values ('player sees who''s signed in', 'yes');
 exception when others then insert into t_results (label, result) values ('player sees who''s signed in', 'refused'); end $$;
+
+insert into t_results (label, result) select 'Mike''s old phone opens his link: done already?', (public.player_link_info(v)->>'mine') from t_tok where k = 'mike';
 
 -- ================= pq — organiser of group Q can't see P's =================
 set local request.jwt.claims to '{"sub":"00000000-0000-4000-8000-0000000f0a06","role":"authenticated"}';
@@ -126,6 +149,17 @@ do $$ begin
 exception when others then insert into t_results (label, result) values ('someone else uses Mike''s used link', 'refused: ' || left(sqlerrm, 31)); end $$;
 insert into t_results (label, result) select 'nosy is in group P', exists (select 1 from public.group_members where group_id = '00000000-0000-4000-8000-00000000f000' and user_id = '00000000-0000-4000-8000-0000000f0a04')::text;
 insert into t_results (label, result) values ('wrong link', coalesce(public.player_link_info('ZZZZZZZZZZZZ')::text, 'null'));
+
+insert into t_results (label, result) values ('wrong code used', coalesce(public.claim_player_link('ZZZZZZZZZZZZ')::text, 'null'));
+
+-- ================= Pat (co-organiser) and Gina (guest) use their links: they keep their role =================
+set local request.jwt.claims to '{"sub":"00000000-0000-4000-8000-0000000f0a08","role":"authenticated"}';
+insert into t_results (label, result) select 'Pat''s link says it gives', (public.player_link_info(v)->>'role') from t_tok where k = 'pat';
+select public.claim_player_link(v) from t_tok where k = 'pat';
+insert into t_results (label, result) select 'Pat after using it', role from public.group_members where user_id = '00000000-0000-4000-8000-0000000f0a08';
+set local request.jwt.claims to '{"sub":"00000000-0000-4000-8000-0000000f0a10","role":"authenticated"}';
+select public.claim_player_link(v) from t_tok where k = 'gina';
+insert into t_results (label, result) select 'Gina (guest) after using hers', role from public.group_members where user_id = '00000000-0000-4000-8000-0000000f0a10';
 
 -- ================= po — organiser sees Mike signed in =================
 set local request.jwt.claims to '{"sub":"00000000-0000-4000-8000-0000000f0a01","role":"authenticated"}';

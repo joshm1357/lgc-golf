@@ -824,9 +824,11 @@ With it off, the home screen is exactly as before (checked in a browser on a liv
   The player opens `#/me/CODE` ("G'day Mike, this link is just for you"), signs in like a new user, taps "Yes, I'm Mike",
   and that sign-in becomes his player: same name, scores and history. One use, 14 days, organisers only; a new link
   replaces the old; refused if someone else has already signed in as that player, or if this sign-in is already
-  someone else in the group; a phone-only sign-in can't use one. The old phone keeps working. Organisers see a
-  shortened email (m…@gmail.com). SQL check: `supabase/tests/personal_links.sql`, 25 results (incl. another group's
-  organiser seeing and doing nothing), applied and checked on staging.
+  someone else in the group; a phone-only sign-in can't use one; unapproved players get none. The link gives the role
+  the player has when it's made (an organiser's link says so on the card, in the message and on the confirm screen).
+  The old phone keeps working, and opening the link there asks to sign in (it isn't "done"). Wrong codes count towards
+  the wrong-guess limit. Organisers see a shortened email (m…@gmail.com). SQL check: `supabase/tests/personal_links.sql`,
+  33 results (incl. another group's organiser seeing and doing nothing), applied and checked on staging.
 - **Invite link first:** the front door says "Got an invite link?"; the box is "Invite link (or group PIN)" and also
   takes a pasted personal link. "You're not in a group yet" points people who played before to their personal link.
   The live build's PIN screen is unchanged.
@@ -834,5 +836,8 @@ With it off, the home screen is exactly as before (checked in a browser on a liv
   Google's button signs in without leaving the app (`signInWithIdToken`, with a one-time value), so the Supabase
   address never shows. Anywhere else, or if Google's script won't load, the old redirect. Needs the Google client ID in
   `infra/cloudflare.json` → `google.client_id.staging` (public). Privacy draft updated.
-- **Tested:** 169 unit tests; 67 phone-width checks in `signin-home-test.mjs` (adds the personal link, a used link,
+- **Independent review:** 1 must-fix (the old phone was told "all set") and 3 should-fix (role fixed on the link, wrong
+  codes counted, live-build wording), all fixed; Google's button now shows "Signing in…" and gets a new one-time value
+  after a failed try.
+- **Tested:** 169 unit tests; 69 phone-width checks in `signin-home-test.mjs` (adds the personal link, a used link,
   Google's button with its one-time value, the organiser's card and its message); stage2/phone/start still pass.

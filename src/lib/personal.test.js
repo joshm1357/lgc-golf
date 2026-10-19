@@ -30,6 +30,8 @@ describe('personalLink and personalMessage', () => {
     expect(m).toContain('https://x/#/me/ABC');
     expect(m).toContain("don't share it");
     expect(personalMessage('', '', 'L')).toContain("G'day mate");
+    expect(m).not.toContain('organiser');
+    expect(personalMessage('Pat', 'L.G.C', 'L', 'organiser')).toContain('makes you an organiser of L.G.C');
   });
 });
 
@@ -54,6 +56,7 @@ describe('linkScreen', () => {
   it('picks the right screen', () => {
     expect(linkScreen(null, false)).toBe('bad');
     expect(linkScreen({ mine: true, state: 'used' }, true)).toBe('done');
+    expect(linkScreen({ mine: true, state: 'ok' }, false)).toBe('sign-in'); // the old phone: still has to sign in
     expect(linkScreen({ state: 'used' }, true)).toBe('used');
     expect(linkScreen({ state: 'expired' }, false)).toBe('expired');
     expect(linkScreen({ state: 'replaced' }, false)).toBe('replaced');

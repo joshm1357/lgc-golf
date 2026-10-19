@@ -219,7 +219,7 @@ function PersonalLinksCard() {
   const send = (p) => run(async () => {
     const code = await must(supabase.rpc('create_player_link', { p_player: p.id }));
     const link = personalLink(code);
-    const r = await shareText(personalMessage(playerName(p), status.group_name, link), `${playerName(p)}'s link`);
+    const r = await shareText(personalMessage(playerName(p), status.group_name, link, rows?.[p.id]?.role), `${playerName(p)}'s link`);
     await load();
     if (r === 'copied') toast(`${playerName(p)}'s link copied — paste it in a message to them`);
     else if (r === 'failed') { window.prompt(`Copy ${playerName(p)}'s link and send it to them:`, link); }
@@ -237,7 +237,7 @@ function PersonalLinksCard() {
           <div key={p.id} className="row" style={{ gap: 10, padding: '10px 14px', borderTop: '1px solid var(--line-soft)', alignItems: 'center' }}>
             <Avatar player={p} size={34} />
             <span className="grow" style={{ minWidth: 0 }}>
-              <strong style={{ display: 'block' }}>{playerName(p)}</strong>
+              <strong style={{ display: 'block' }}>{playerName(p)}{rows[p.id]?.role === 'organiser' && <span className="small" style={{ fontWeight: 600, color: 'var(--muted)' }}> · organiser (their link makes them one)</span>}</strong>
               <span className="small" style={{ color: line.done ? 'var(--up)' : 'var(--muted)' }}>{line.done ? '✓ ' : ''}{line.word}</span>
             </span>
             {!line.done && (

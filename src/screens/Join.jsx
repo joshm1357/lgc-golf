@@ -272,6 +272,7 @@ export function SignInButtons({ returnHash = '', quiet = false }) {
 function GoogleSignIn({ returnHash, quiet, busy, onError }) {
   const { refresh } = useSession();
   const [mode, setMode] = useState(() => (googleButtonHere() ? 'loading' : 'redirect'));
+  const [working, setWorking] = useState(false);
   const box = useRef(null);
   useEffect(() => {
     if (mode !== 'loading') return undefined;
@@ -284,13 +285,21 @@ function GoogleSignIn({ returnHash, quiet, busy, onError }) {
         id.initialize({
           client_id: GOOGLE_CLIENT_ID, nonce: hashed, ux_mode: 'popup', auto_select: false, itp_support: true,
           callback: async (resp) => {
+            setWorking(true);
             try {
               setCurrentGroup(null); // whoever used this phone before: don't carry their group across
               markFreshSignIn();
               const { error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: resp.credential, nonce: raw });
               if (error) throw error;
               await refresh();
-            } catch (e) { clearFreshSignIn(); onError(e); }
+            } catch (e) {
+              clearFreshSignIn();
+              onError(e);
+              if (box.current) box.current.innerHTML = '';
+              setMode('loading'); // draw the button again with a new one-time value
+            } finally {
+              setWorking(false);
+            }
           },
         });
         id.renderButton(box.current, { type: 'standard', theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill',
@@ -310,7 +319,13 @@ function GoogleSignIn({ returnHash, quiet, busy, onError }) {
     );
   }
   // Google draws its own button here (Google's rules say how it looks). Same height while it loads, so nothing jumps.
-  return <div ref={box} data-google-button={mode} aria-busy={mode === 'loading'} style={{ minHeight: 48, display: 'flex', alignItems: 'center', justifyContent: 'center' }} />;
+  return (
+    <div style={{ position: 'relative' }}>
+      <div ref={box} data-google-button={mode} aria-busy={mode === 'loading' || working}
+        style={{ minHeight: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: working ? 0.4 : 1, pointerEvents: working ? 'none' : undefined }} />
+      {working && <div role="status" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>Signing in…</div>}
+    </div>
+  );
 }
 
 /** Google's "G", drawn here so nothing loads from Google before you tap. */

@@ -10,6 +10,7 @@ import { GroupCrest, GolfTripCrest } from '../components/Logo.jsx';
 import { Header } from '../components/ui.jsx';
 import { PinForm } from './Join.jsx';
 import { paintLook, DEFAULT_LOOK } from '../lib/theme.js';
+import { SIGN_IN } from '../lib/auth.js';
 
 /** Go into a group. Everything on screen belongs to the old group, so start fresh in the new one. */
 function openGroup(id) {
@@ -91,11 +92,11 @@ export function YourGroupsInside() {
           ? (
             // The PIN box is styled for the navy front door; give it a navy panel here too.
             <div style={{ background: 'var(--navy)', color: '#fff', borderRadius: 14, padding: 16, display: 'flex', justifyContent: 'center' }}>
-              <PinForm autoFocus linkFirst onJoined={(id) => openGroup(typeof id === 'string' ? id : status?.group_id)}
+              <PinForm autoFocus linkFirst={SIGN_IN.length > 0} onJoined={(id) => openGroup(typeof id === 'string' ? id : status?.group_id)}
                 onInvite={(c) => { window.location.hash = `#/join/${c}`; }} />
             </div>
           )
-          : <button type="button" className="btn ghost block" onClick={() => setShowPin(true)}>Join another with an invite link</button>}
+          : <button type="button" className="btn ghost block" onClick={() => setShowPin(true)}>{SIGN_IN.length > 0 ? 'Join another with an invite link' : 'Join another with a PIN or invite link'}</button>}
         {!status?.signed_in && <p className="note">To keep your groups on a new phone, add a sign-in in <Link to="/group">Group & invites</Link>.</p>}
       </div>
     </div>

@@ -79,6 +79,14 @@ Test it on Josh's iPhone at the start of B, using a test player.
    notifications back on." (Notifications belong to an address, so each phone has to allow them again.)
 8. After about a month: remove the GitHub address from Supabase redirects. Make the repo private (this turns off
    GitHub Pages, and the hand-over page with it). Cloudflare keeps building from a private repo.
+9. **Rename the repo to `thegolftrip-app`** (decided 20 Oct: one product, one repo, named for the product; it also
+   keeps the business tidy to sell). Same day as step 8, never before: until the GitHub address is retired, a rename
+   would break the live app's address on every L.G.C phone, because GitHub doesn't redirect Pages addresses. Claude
+   does it: GitHub → Settings → rename (old git and web links redirect by themselves), then tidies the branches so only
+   `main` (production) and `product` (staging) stay, as in `docs/RELEASE-FLOW.md` (the old `stage-*` branches are
+   all merged into `product`), updates `package.json`'s name, `links.md` in
+   the Caddie folder, and any clone's remote. Cloudflare is unaffected (it builds from GitHub Actions, not a
+   linked repo). A STOP, because it touches GitHub settings in Josh's account.
 
 **Rollback (B):** in Cloudflare, remove the custom domain. Set `"github_pages_retired"` back to `false` and re-run `deploy.yml`, which puts the
 app back at the GitHub address. Phones that already moved will need the PIN once.

@@ -784,3 +784,30 @@ phone width `tests/e2e/stage10-test.mjs`.
   staging data, TEST tag, link posted on the pull request). `product` is also staging.thegolftrip.club (`infra.yml`). `main` goes to
   production only when `infra/cloudflare.json` says so (release B). `check.yml` runs on every pull request. There's Dependabot weekly.
   `.node-version` is 22. Settings live in `infra/cloudflare.json`; the only secret is `CLOUDFLARE_API_TOKEN`.
+
+## Sign in first, then Your groups (20 Oct 2026, branch `sign-in-home`, pull request into `product`)
+Only when sign-in is switched on in the build (`infra/cloudflare.json` → `sign_in`; on for staging builds, off for live).
+With it off, the home screen is exactly as before (checked in a browser on a live-style build).
+- **Home:** The Golf Trip crest and name; **Sign in with Google**; **Email me a code** (a 6-digit code typed in the app).
+  Email now makes an account if there isn't one, so new organisers can sign up. Underneath: "Got a PIN or invite
+  link?" (the PIN box, folded away) and "Start a new group". The Golf Trip's own colours, never L.G.C's.
+- **No sign-up before the first tee still holds:** an invite link or PIN joins as a guest with no account. On an invite,
+  signing in is offered underneath and Google brings them back to the same invite.
+- **Your groups** (`src/screens/YourGroups.jsx`): after a fresh sign-in with two or more groups, pick one (crest, name,
+  role). One group: straight in (decided: one less tap). No groups: "You're not in a group yet" with Start a new group /
+  Join with a PIN or invite link, and "Not you? Sign out". Replaces the old "No account found…" warning.
+- **Way back from inside:** More → Your groups, and tapping the crest at the top (`#/groups`). Without sign-in in the
+  build, both only show for someone in more than one group.
+- **Logic** in `src/lib/home.js` (which screen to show, the "just signed in" flag, code and email checks, group list
+  order and crests) with 16 tests in `home.test.js`.
+- **Database:** `045_your_groups.sql`. `my_status()`'s group list also carries each group's crest. Additive; applied to
+  staging 20 Oct; live gets it at the next release.
+- **Tested:** 154 unit tests; both builds; `tests/e2e/signin-home-test.mjs` 40 phone-width checks (home, PIN folded,
+  Google hand-off and return address, email code creates an account, Your groups, picking a group, the way back, no
+  group yet, one group straight in, invite as a guest, live build unchanged); `stage2`, `phone` and `start` browser
+  checks still pass on the live-style build.
+- **Josh's setup (staging only):** `knowledge/prompts/sign-in-chrome-prompt.md` in the Caddie folder; details in
+  `docs/SIGN-IN-SETUP.md`. Both Supabase email templates ("Confirm sign up" and "Magic link") need `{{ .Token }}`.
+- **Later:** real email sending (Resend on thegolftrip.club) before outside groups. Supabase's built-in sender only
+  reaches Josh's own address, a few an hour.
+- **Release checklist:** the repo rename to `thegolftrip-app` is step 9 of Part B in `docs/LAUNCH-HOSTING.md`.

@@ -8,7 +8,9 @@ import { DrawOverlay } from './components/DrawOverlay.jsx';
 // Loaded straight away: the first screens people see and score entry (must work with no signal).
 import Join, { InviteJoin } from './screens/Join.jsx';
 import { inviteCode } from './lib/invite.js';
-import { signInProblemFromUrl } from './lib/auth.js';
+import { signInProblemFromUrl, SIGN_IN } from './lib/auth.js';
+import { frontDoor, isFreshSignIn, clearFreshSignIn } from './lib/home.js';
+import YourGroups, { YourGroupsInside } from './screens/YourGroups.jsx';
 import ProfileSetup, { AwaitingApproval } from './screens/ProfileSetup.jsx';
 import Leaderboard from './screens/Leaderboard.jsx';
 import ScoreEntry from './screens/ScoreEntry.jsx';
@@ -89,7 +91,11 @@ function Gate() {
   }
   if (loading) return <Loading />;
   const banner = problem && <div className="err" role="alert" style={{ margin: 0, borderRadius: 0 }}>{problem}</div>;
-  if (!status?.is_member) return <>{banner}<Join /></>;
+  // The front door: sign in first (when it's switched on in this build), then Your groups, then into a group.
+  // With sign-in off (the live L.G.C build), this is exactly the old rule: not in a group → the PIN screen.
+  const door = frontDoor({ signInOn: SIGN_IN.length > 0, status, fresh: isFreshSignIn(), hasInvite: !!inviteCode(window.location.hash) });
+  if (door === 'join' || door === 'home') return <>{banner}<Join /></>;
+  if (door === 'your-groups') return <>{banner}<YourGroups /></>;
   return (
     <DataProvider>
       {banner}
@@ -104,6 +110,8 @@ function Inside() {
   const loc = useLocation();
   // New screens open at the top, so a tap can't land on a button further down the next page.
   useEffect(() => { window.scrollTo(0, 0); }, [loc.pathname]);
+  // In a group now: a fresh sign-in has done its job (next time, straight back into this group).
+  useEffect(() => { clearFreshSignIn(); }, []);
   const [waiting, setWaiting] = useState(outboxCount());
   useEffect(() => {
     startOutbox();
@@ -145,6 +153,7 @@ function Inside() {
         <Route path="/rules" element={<Rulebook />} />
         <Route path="/courses/:courseId/greens" element={<GreenMapper />} />
         <Route path="/group" element={<Group />} />
+        <Route path="/groups" element={<YourGroupsInside />} />
         <Route path="/history" element={<History />} />
         <Route path="/round-ready" element={<RoundReady />} />
         <Route path="/join/:code" element={<JoinInsideRoute />} />

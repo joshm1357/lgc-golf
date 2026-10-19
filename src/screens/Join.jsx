@@ -3,12 +3,13 @@ import { supabase, friendlyError } from '../lib/supabase.js';
 import { useSession } from '../lib/store.jsx';
 import { setCurrentGroup } from '../lib/group.js';
 import { inviteCode } from '../lib/invite.js';
-import { SIGN_IN, signInWith, signInWithEmail, verifyEmailCode, isEmptyNewAccount } from '../lib/auth.js';
+import { SIGN_IN, signInWith, signInWithEmail, verifyEmailCode } from '../lib/auth.js';
+import { cleanEmailCode, looksLikeEmail, clearFreshSignIn } from '../lib/home.js';
 import { GroupCrest } from '../components/Logo.jsx';
-import { savedLook, paintLook } from '../lib/theme.js';
+import { savedLook, paintLook, DEFAULT_LOOK } from '../lib/theme.js';
 import { rememberSource } from '../lib/quick.js';
 
-async function ensureSignedIn() {
+export async function ensureSignedIn() {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) {
     const { error } = await supabase.auth.signInAnonymously();
@@ -84,20 +85,24 @@ export function InviteJoin({ code, inside = false, onLook }) {
 }
 
 export default function Join() {
-  const { refresh, status, user } = useSession();
+  // Sign-in switched off in this build (the live L.G.C app and GitHub Pages): the screen exactly as before.
+  if (!SIGN_IN.length) return <ClassicJoin />;
+  return <SignInHome />;
+}
+
+const ON_NAVY_GHOST = { color: '#fff', borderColor: 'rgba(255,255,255,.5)', background: 'transparent' };
+
+/** The PIN (or pasted invite link) box. Used on every front-door screen. */
+export function PinForm({ onInvite, onJoined, autoFocus = false }) {
+  const { refresh } = useSession();
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const [pasted, setPasted] = useState(null);
-  const [inviteLook, setInviteLook] = useState(null);
-  // An invite link opened in the browser, or pasted into the box (on iPhone the Home Screen app is separate from
-  // Safari, so a link tapped in a chat opens Safari — pasting it here is how the Home Screen app joins).
-  const code = inviteCode(window.location.hash) || pasted;
 
   async function submit(e) {
     e.preventDefault();
     const linkCode = inviteCode(pin);
-    if (linkCode) { setPasted(linkCode); return; }
+    if (linkCode) { onInvite?.(linkCode); return; }
     setBusy(true);
     setErr('');
     try {
@@ -111,7 +116,8 @@ export default function Join() {
         return;
       }
       if (typeof data === 'string') setCurrentGroup(data);
-      await refresh();
+      clearFreshSignIn();
+      if (onJoined) onJoined(data); else await refresh();
     } catch (e2) {
       setErr(friendlyError(e2));
     } finally {
@@ -120,31 +126,36 @@ export default function Join() {
   }
 
   return (
+    <form onSubmit={submit} style={{ width: '100%', maxWidth: 340, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <label className="field">
+        <span style={{ color: 'var(--on-navy-muted)' }}>Group PIN or invite link</span>
+        <input
+          className="input" autoComplete="one-time-code" autoCapitalize="none" value={pin} autoFocus={autoFocus}
+          onChange={(e) => setPin(e.target.value)} placeholder="From the group chat"
+          style={{ fontSize: pin.length > 12 ? 15 : 24, textAlign: 'center', letterSpacing: pin.length > 12 ? 0 : '.3em', color: 'var(--text)' }}
+        />
+      </label>
+      {err && <div className="err" style={{ color: '#FFB4AB' }}>{err}</div>}
+      <button className="btn gold block" disabled={busy || pin.trim().length < 4}>{busy ? 'Checking…' : "Let's go"}</button>
+      <span className="small" style={{ color: 'var(--on-navy-muted)', textAlign: 'center' }}>Got an invite link? Paste it in the box (or just open it).</span>
+    </form>
+  );
+}
+
+/** Today's home screen (PIN first). Shown whenever sign-in isn't switched on in the build. */
+function ClassicJoin() {
+  const [pasted, setPasted] = useState(null);
+  const [inviteLook, setInviteLook] = useState(null);
+  // An invite link opened in the browser, or pasted into the box (on iPhone the Home Screen app is separate from
+  // Safari, so a link tapped in a chat opens Safari — pasting it here is how the Home Screen app joins).
+  const code = inviteCode(window.location.hash) || pasted;
+  return (
     <div style={{ minHeight: '100vh', background: 'var(--navy)', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 18 }}>
       <GroupCrest size={code ? 120 : 170} look={inviteLook || savedLook()} name={inviteLook?.name} />
-      {isEmptyNewAccount(status, user) && (
-        <div className="stack" style={{ width: '100%', maxWidth: 340, gap: 8, textAlign: 'center' }}>
-          <div className="err" style={{ color: '#FFB4AB' }}>No account found for that sign-in. If you’ve used the app before, open it on your old phone and add this sign-in there first (More → Group & invites). Or join with an invite link below.</div>
-          <button type="button" className="btn ghost sm" style={{ color: '#fff', borderColor: 'rgba(255,255,255,.5)' }} onClick={() => supabase.auth.signOut().then(() => window.location.reload())}>Sign out</button>
-        </div>
-      )}
-      {code ? <><InviteJoin code={code} onLook={setInviteLook} />{SIGN_IN.length > 0 && <ReturningSignIn />}</> : (
+      {code ? <InviteJoin code={code} onLook={setInviteLook} /> : (
         <>
           <div style={{ fontFamily: 'var(--display)', fontSize: 34, fontWeight: 700 }}>{savedLook()?.short_name ? `${savedLook().short_name} Golf` : 'The Golf Trip'}</div>
-          <form onSubmit={submit} style={{ width: '100%', maxWidth: 340, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <label className="field">
-              <span style={{ color: 'var(--on-navy-muted)' }}>Group PIN or invite link</span>
-              <input
-                className="input" autoComplete="one-time-code" autoCapitalize="none" value={pin}
-                onChange={(e) => setPin(e.target.value)} placeholder="From the group chat"
-                style={{ fontSize: pin.length > 12 ? 15 : 24, textAlign: 'center', letterSpacing: pin.length > 12 ? 0 : '.3em', color: 'var(--text)' }}
-              />
-            </label>
-            {err && <div className="err" style={{ color: '#FFB4AB' }}>{err}</div>}
-            <button className="btn gold block" disabled={busy || pin.trim().length < 4}>{busy ? 'Checking…' : "Let's go"}</button>
-            <span className="small" style={{ color: 'var(--on-navy-muted)', textAlign: 'center' }}>Got an invite link? Paste it in the box (or just open it).</span>
-          </form>
-          {SIGN_IN.length > 0 && <ReturningSignIn />}
+          <PinForm onInvite={setPasted} />
           <a href="#/start" className="small" style={{ color: '#fff', fontWeight: 700, textAlign: 'center', borderTop: '1px solid rgba(255,255,255,.2)', paddingTop: 14, width: '100%', maxWidth: 340 }}>Running a golf group? Start your own →</a>
           <span className="small" style={{ color: 'var(--on-navy-muted)' }}><a href="#/privacy" style={{ color: 'inherit' }}>Privacy</a> · <a href="#/terms" style={{ color: 'inherit' }}>Terms</a></span>
         </>
@@ -153,32 +164,109 @@ export default function Join() {
   );
 }
 
-/** Already signed up on another phone? Sign in to the same account (only shown once providers are set up). */
-function ReturningSignIn() {
+/** The new front door (sign-in switched on): sign in first; a PIN or invite link still works without an account. */
+function SignInHome() {
+  const [pasted, setPasted] = useState(null);
+  const [inviteLook, setInviteLook] = useState(null);
+  const [showPin, setShowPin] = useState(false);
+  const code = inviteCode(window.location.hash) || pasted;
+  // A brand-new phone has no group look yet: show The Golf Trip's own colours, never L.G.C's.
+  useEffect(() => { if (!code && !savedLook()) paintLook(DEFAULT_LOOK, null); }, [code]);
+
+  if (code) {
+    // An invite: join as a guest straight away (no account needed before the first tee). Signing in is optional,
+    // and brings them back to this same invite.
+    return (
+      <div style={{ minHeight: '100vh', background: 'var(--navy)', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 18 }}>
+        <GroupCrest size={120} look={inviteLook || savedLook()} name={inviteLook?.name} />
+        <InviteJoin code={code} onLook={setInviteLook} />
+        <div className="stack" style={{ width: '100%', maxWidth: 340, gap: 8, borderTop: '1px solid rgba(255,255,255,.2)', paddingTop: 14 }}>
+          <span className="small" style={{ color: 'var(--on-navy-muted)', textAlign: 'center' }}>Got an account already? Sign in first and your scores stay with you on any phone.</span>
+          <SignInButtons returnHash={`#/join/${code}`} quiet />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ minHeight: '100vh', background: 'var(--navy)', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 }}>
+      <GroupCrest size={130} look={savedLook()} />
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontFamily: 'var(--display)', fontSize: 36, fontWeight: 700, lineHeight: 1.05 }}>The Golf Trip</div>
+        <div style={{ color: 'var(--on-navy-muted)', marginTop: 6 }}>Your golf group’s home: scores, trips and the honour board.</div>
+      </div>
+      <SignInButtons />
+      <div role="separator" style={{ width: '100%', maxWidth: 340, display: 'flex', alignItems: 'center', gap: 10, color: 'var(--on-navy-muted)' }} className="small">
+        <span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.2)' }} />or<span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.2)' }} />
+      </div>
+      {showPin
+        ? <PinForm onInvite={setPasted} autoFocus />
+        : <button type="button" className="btn ghost block" style={{ ...ON_NAVY_GHOST, maxWidth: 340 }} aria-expanded="false" onClick={() => setShowPin(true)}>Got a PIN or invite link?</button>}
+      <a href="#/start" className="btn ghost block" style={{ ...ON_NAVY_GHOST, maxWidth: 340, borderColor: 'transparent', textDecoration: 'underline' }}>Start a new group</a>
+      <span className="small" style={{ color: 'var(--on-navy-muted)' }}><a href="#/privacy" style={{ color: 'inherit' }}>Privacy</a> · <a href="#/terms" style={{ color: 'inherit' }}>Terms</a></span>
+    </div>
+  );
+}
+
+/** Sign in with Google, or have a 6-digit code emailed. Makes an account if there isn't one. */
+export function SignInButtons({ returnHash = '', quiet = false }) {
+  const { refresh } = useSession();
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [codeIn, setCodeIn] = useState('');
+  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const go = (fn) => async (e) => {
+    e?.preventDefault?.();
+    setBusy(true);
+    setErr('');
+    try { await fn(); } catch (x) { setErr(friendlyError(x)); } finally { setBusy(false); }
+  };
+  const primary = quiet ? 'btn ghost block' : 'btn gold block';
+  const primaryStyle = quiet ? ON_NAVY_GHOST : undefined;
   return (
-    <div className="stack" style={{ width: '100%', maxWidth: 340, gap: 8, borderTop: '1px solid rgba(255,255,255,.2)', paddingTop: 14 }}>
-      <span className="small" style={{ color: 'var(--on-navy-muted)', textAlign: 'center' }}>Signed in before, on another phone?</span>
-      {SIGN_IN.includes('google') && <button type="button" className="btn ghost block" style={{ color: '#fff', borderColor: 'rgba(255,255,255,.5)' }} onClick={() => signInWith('google').catch((e) => setErr(friendlyError(e)))}>Sign in with Google</button>}
-      {SIGN_IN.includes('facebook') && <button type="button" className="btn ghost block" style={{ color: '#fff', borderColor: 'rgba(255,255,255,.5)' }} onClick={() => signInWith('facebook').catch((e) => setErr(friendlyError(e)))}>Sign in with Facebook</button>}
+    <div className="stack" style={{ width: '100%', maxWidth: 340, gap: 10 }}>
+      {SIGN_IN.includes('google') && (
+        <button type="button" className={primary} style={primaryStyle} disabled={busy} onClick={go(() => signInWith('google', returnHash))}>
+          <GoogleG /> Sign in with Google
+        </button>
+      )}
+      {SIGN_IN.includes('facebook') && <button type="button" className="btn ghost block" style={ON_NAVY_GHOST} disabled={busy} onClick={go(() => signInWith('facebook', returnHash))}>Sign in with Facebook</button>}
       {SIGN_IN.includes('email') && (sent
         ? (
           // A 6-digit code, typed here — an emailed link would open Safari, not the Home Screen app.
-          <form className="row" style={{ gap: 6 }} onSubmit={(e) => { e.preventDefault(); verifyEmailCode(email, codeIn).then(() => window.location.reload(), (x) => setErr(friendlyError(x))); }}>
-            <input className="input grow" inputMode="numeric" value={codeIn} onChange={(e) => setCodeIn(e.target.value)} placeholder="6-digit code from the email" style={{ color: 'var(--text)' }} />
-            <button className="btn gold" disabled={codeIn.trim().length < 6}>Sign in</button>
+          <form className="stack" style={{ gap: 8 }} onSubmit={go(async () => {
+            setCurrentGroup(null); // whoever used this phone before: don't carry their group across
+            await verifyEmailCode(email, cleanEmailCode(codeIn));
+            await refresh();
+          })}>
+            <span className="small" style={{ color: 'var(--on-navy-muted)', textAlign: 'center' }}>We’ve emailed a 6-digit code to <strong style={{ color: '#fff' }}>{email.trim()}</strong>. It can take a minute (check junk too).</span>
+            <input className="input" inputMode="numeric" autoComplete="one-time-code" value={codeIn} onChange={(e) => setCodeIn(e.target.value)}
+              placeholder="6-digit code" aria-label="6-digit code from the email" style={{ color: 'var(--text)', textAlign: 'center', fontSize: 24, letterSpacing: '.3em' }} />
+            <button className="btn gold block" disabled={busy || !cleanEmailCode(codeIn)}>{busy ? 'Checking…' : 'Sign in'}</button>
+            <button type="button" className="btn ghost sm" style={ON_NAVY_GHOST} onClick={() => { setSent(false); setCodeIn(''); setErr(''); }}>Use a different email</button>
           </form>
         )
         : (
-          <form className="row" style={{ gap: 6 }} onSubmit={(e) => { e.preventDefault(); signInWithEmail(email).then(() => setSent(true), (x) => setErr(friendlyError(x))); }}>
-            <input className="input grow" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Your email" style={{ color: 'var(--text)' }} />
-            <button className="btn gold" disabled={!email.includes('@')}>Email me a code</button>
+          <form className="stack" style={{ gap: 8 }} onSubmit={go(async () => { await signInWithEmail(email); setSent(true); })}>
+            <input className="input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)}
+              placeholder="Your email" aria-label="Your email" style={{ color: 'var(--text)' }} />
+            <button className="btn ghost block" style={ON_NAVY_GHOST} disabled={busy || !looksLikeEmail(email)}>{busy ? 'Sending…' : 'Email me a code'}</button>
           </form>
         ))}
-      {err && <div className="err" style={{ color: '#FFB4AB' }}>{err}</div>}
+      {err && <div className="err" role="alert" style={{ color: '#FFB4AB' }}>{err}</div>}
     </div>
+  );
+}
+
+/** Google's "G", drawn here so nothing loads from Google before you tap. */
+function GoogleG() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true" style={{ flex: 'none', background: '#fff', borderRadius: '50%', padding: 2 }}>
+      <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.6 2.5 30.2 0 24 0 14.6 0 6.6 5.4 2.6 13.2l7.8 6.1C12.3 13.6 17.7 9.5 24 9.5z" />
+      <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.6 5.9c4.4-4.1 7-10.1 7-17.6z" />
+      <path fill="#FBBC05" d="M10.4 28.7c-.5-1.4-.8-3-.8-4.7s.3-3.3.8-4.7l-7.8-6.1C1 16.5 0 20.1 0 24s1 7.5 2.6 10.8l7.8-6.1z" />
+      <path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.9 2.3-8.3 2.3-6.3 0-11.7-4.1-13.6-9.8l-7.8 6.1C6.6 42.6 14.6 48 24 48z" />
+    </svg>
   );
 }

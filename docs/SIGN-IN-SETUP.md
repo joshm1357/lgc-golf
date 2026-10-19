@@ -11,11 +11,18 @@ In supabase.com → project **lgc-golf-staging** → Authentication:
    - Turn on **Allow manual linking** — this lets a phone-only player add Google or email to the *same* account, so
      they keep their scores.
    - **Email** provider: on.
-2. **URL Configuration**
-   - Site URL: `https://joshm1357.github.io/lgc-golf/`
-   - Redirect URLs — add: `https://joshm1357.github.io/lgc-golf/` and `http://localhost:5173/lgc-golf/`
+2. **URL Configuration** (updated 20 Oct for the Cloudflare addresses)
+   - Site URL: `https://staging.thegolftrip.club/`
+   - Redirect URLs — add: `https://staging.thegolftrip.club/**`, `https://*.thegolftrip-app.pages.dev/**` (every test
+     link) and `http://localhost:5173/**`
+3. **Emails → Templates** — the app asks for a 6-digit code (typed in the app; an emailed link would open Safari, not the
+   Home Screen app). Put `{{ .Token }}` in **both** of these, because a brand-new email gets the first one and a
+   returning one gets the second:
+   - **Confirm sign up** — e.g. subject `Your The Golf Trip code: {{ .Token }}`, body `Your code is {{ .Token }}. Type it in the app.`
+   - **Magic link** — the same.
 
 ## 2. Google (free, about 15 minutes)
+(Done in the Chrome prompt `knowledge/prompts/sign-in-chrome-prompt.md` in the Caddie folder.)
 1. console.cloud.google.com → create a project called **The Golf Trip**.
 2. APIs & Services → **OAuth consent screen**: External; app name *The Golf Trip*; your email as support and developer
    contact. Save. (Publishing status can stay "Testing" while we test — add your own Google account as a test user.)
@@ -25,6 +32,9 @@ In supabase.com → project **lgc-golf-staging** → Authentication:
    **Google** → enable → paste → save.
 
 ## 3. Email sending — one thing to decide first
+**For testing (20 Oct):** Supabase's built-in sender is enough. It only sends to the people on the Supabase team (Josh's
+own address) and only a few an hour. **Before outside groups:** Resend on `thegolftrip.club` (option A below), noted for
+the launch list.
 The emailed sign-in link needs a proper email sender (Supabase's built-in one is for testing only). Free services such
 as Resend send to *anyone* only once you own and verify a **domain** (e.g. `thegolftrip.club`, which is a Stage 9
 purchase). Two ways:
@@ -37,5 +47,5 @@ purchase). Two ways:
 
 ## 4. Tell me
 Message me "Google is set up on staging" (and email, if you did B). I'll then turn the buttons on in the staging build
-(`VITE_SIGN_IN=google,email`), test linking a phone-only player to Google and email (same scores, same groups), signing
+(`"sign_in": {"staging": "google,email"}` in `infra/cloudflare.json`, done 20 Oct on branch `sign-in-home`), test linking a phone-only player to Google and email (same scores, same groups), signing
 in on a second phone, and only then ask about live.

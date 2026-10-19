@@ -34,9 +34,9 @@ Josh's clicks are in the Chrome prompt `app-hosting-chrome-prompt.md` (in the Ca
      Cloudflare posts the link on its pull request).
    - Build command `npm test && npm run build`. Output folder `dist`. Root folder: blank.
    - Variables, **Preview**: `VITE_BASE=/`, `VITE_SUPABASE_URL=https://ttkaojaqhckiwpgrpxkh.supabase.co`,
-     `VITE_SUPABASE_KEY=sb_publishable_5L3LKASJSYGFXt12_QMZfA_LFThnZIi`, `NODE_VERSION=22`.
+     `VITE_SUPABASE_KEY=sb_publishable_5L3LKASJSYGFXt12_QMZfA_LFThnZIi`. (Node 22 comes from `.node-version`.)
    - Variables, **Production**: `VITE_BASE=/`, `VITE_SUPABASE_URL=https://luogyzvrbedmicjejilr.supabase.co`,
-     `VITE_SUPABASE_KEY=sb_publishable_uNBEcPawkDZHYGeubyYyag_MwhYkhR7`, `NODE_VERSION=22`.
+     `VITE_SUPABASE_KEY=sb_publishable_uNBEcPawkDZHYGeubyYyag_MwhYkhR7`.
    - (These keys are publishable keys. They ship in every browser by design. The build refuses a branch other than `main` on the
      live database, and refuses `main` on staging.)
 2. **Supabase staging → Authentication → URL configuration:** Site URL `https://staging.thegolftrip.club/`. Add redirect

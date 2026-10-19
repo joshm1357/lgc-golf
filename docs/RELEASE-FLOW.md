@@ -19,8 +19,25 @@ Written 20 Oct 2026. Three steps, each with its own web address. Nothing reaches
    mistaken for the real app. It uses staging data, so nothing he does there touches L.G.C.
 4. **Merge** when it's right. GitHub won't allow it until Check is ✅. `staging.thegolftrip.club` updates in about a
    minute: that's the next version, all together.
-5. **Release:** when staging has what we want, a pull request from `product` into `main` is the release. It follows the
-   release checklist in `docs/` (database changes on live first, then merge). Production updates itself.
+5. **Release** (a STOP; Josh says "go vX.Y"): see "A release, step by step" below.
+
+## A release, step by step
+1. **Snapshot first.** Claude takes a read-only copy of the live data into the Caddie folder (`backups/`, never synced
+   to GitHub). Until Supabase Pro (which keeps daily backups), this is the only copy, so it is never skipped.
+2. **Database changes on live**, in order, from that version's release checklist (`docs/RELEASE-vX.Y.md`). They're
+   additive only, so the app version phones are running keeps working throughout.
+3. **Pull request `product` → `main`.** Check ✅, merge. Production builds itself (GitHub Pages until release B, then
+   app.thegolftrip.club).
+4. **Tag it:** `vX.Y` on `main`, so we can always get back to exactly this version.
+5. **Smoke test on your phone, on production:** open the app, see the leaderboard, enter and delete a test score in a
+   practice round, open the Feed.
+6. Write it up: one dated line in the Caddie folder's `decisions.md`, plus BUILD-STATUS.
+
+**If something's wrong after a release:**
+- **App:** roll back first, then fix. On Cloudflare: thegolftrip-app → Deployments → the previous production one →
+  "Rollback". It's instant. On GitHub Pages (until B): Actions → the last good deploy → "Re-run".
+- **Database:** changes are additive, so the previous app version keeps working against them. Nothing needs undoing
+  to roll the app back. If data itself is damaged, restore from the step-1 snapshot (Claude does this, with Josh in the chat).
 
 ## Built-in safety catches
 - A dev or staging build **cannot** use the live database. The build stops with an error if Cloudflare's settings point a
@@ -28,6 +45,11 @@ Written 20 Oct 2026. Three steps, each with its own web address. Nothing reaches
 - A production build **cannot** use the staging database (the same check the other way round).
 - Dev and staging are hidden from search engines and carry the TEST tag. Production has neither.
 - `product` and `main` only change through a pull request with a ✅ Check (GitHub branch protection).
+
+## Kept up to date automatically
+- **Libraries:** every Monday, Dependabot opens a pull request with small updates grouped together. Big version
+  jumps come one at a time. Each gets a test link and a Check like any other change. Merge the green ones after a quick look.
+- **Node version:** one file, `.node-version` (22). GitHub, Cloudflare and laptops all read it.
 
 ## Good to know
 - **All dev links share the one staging database.** Two branches tested at once see each other's test groups. That's

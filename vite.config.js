@@ -16,12 +16,12 @@ function assetList() {
 
 // Where the app lives. GitHub Pages serves it from /lgc-golf/ (the default, so that build is unchanged).
 // Cloudflare (app.thegolftrip.club, staging.thegolftrip.club) sets VITE_BASE=/ in its build settings.
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const base = env.VITE_BASE || '/lgc-golf/';
   // Safety catch: a build for any other address must say which database it uses. Without this, a
   // forgotten setting would quietly point a test build at the live L.G.C database.
-  if (mode === 'production' && env.VITE_BASE && !env.VITE_SUPABASE_URL) {
+  if (command === 'build' && env.VITE_BASE && !env.VITE_SUPABASE_URL) {
     throw new Error('VITE_BASE is set but VITE_SUPABASE_URL is not. Set both in the host\'s build settings.');
   }
   return {

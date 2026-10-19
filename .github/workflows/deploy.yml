@@ -16,6 +16,9 @@ concurrency:
 
 jobs:
   build:
+    # Off once L.G.C has moved to app.thegolftrip.club (repo variable APP_MOVED=true, set at launch step B5),
+    # so a push can't put the old app back over the hand-over page.
+    if: ${{ vars.APP_MOVED != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

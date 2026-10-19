@@ -21,6 +21,7 @@
   <p id="msg">Taking you to <strong>app.thegolftrip.club</strong>…</p>
   <a class="btn" id="go" href="https://app.thegolftrip.club/">Open the app</a>
   <p style="font-size:14px;opacity:.85">Then add it to your home screen again: Share → Add to Home Screen.</p>
+  <p style="font-size:14px;opacity:.85">If the new app asks for the group PIN, pull down to reload it once first. If it still asks, enter the PIN and pick your name; your organiser can give your name back to you.</p>
 </main>
 <script>
 // Hand-over from the old address (joshm1357.github.io/lgc-golf/) to app.thegolftrip.club.
@@ -39,15 +40,14 @@
   const plain = NEW + (keepPath && !/access_token|refresh_token/.test(keepPath) ? '#' + keepPath : '');
   go.href = plain;
 
-  // Scores entered offline that never reached the database live only on this phone, at this address.
-  // Don't leave them behind silently.
+  // Things entered offline that never reached the database (scores, posts) live only here, at this
+  // address, and can't be moved. If there are any, still hand the sign-in across, but don't jump away
+  // without saying so.
   const waiting = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(v) ? v.length : 0; } catch { return 0; } };
   const unsynced = waiting('lgc-score-queue') + waiting('lgc-outbox');
-  if (unsynced > 0) {
-    msg.innerHTML = '<span class="warn">This phone has <strong>' + unsynced + ' score' + (unsynced > 1 ? 's' : '') +
-      ' that never synced</strong>. Take a screenshot of your card and send it to your organiser, then tap below.</span>';
-    return;
-  }
+
+  // Stop the old offline copy first, so it can't reload this page halfway through the hand-over.
+  try { if (navigator.serviceWorker) for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister(); } catch {}
 
   let target = plain;
   try {
@@ -73,6 +73,11 @@
     }
   } catch { /* no signal or nothing saved: the plain link still works (re-enter the PIN once) */ }
   go.href = target;
+  if (unsynced > 0) {
+    msg.innerHTML = '<span class="warn">This phone has <strong>' + unsynced + ' thing' + (unsynced > 1 ? 's' : '') +
+      ' (scores or posts) that never synced</strong>, so they can\'t come across. Tell your organiser what they were, then tap below.</span>';
+    return;
+  }
   location.replace(target);
 })();
 </script>

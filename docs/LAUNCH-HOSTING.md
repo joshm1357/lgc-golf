@@ -20,7 +20,8 @@ Nothing here touches the live database or the live app until B, and B is a STOP.
 - The `notify` function reads its app link from the `APP_URL` secret. If that's not set, it uses the GitHub Pages address.
 - `move-to-app-domain/`: the hand-over page for B (see B5).
 
-Checked: all 138 tests pass. A real browser was tested at both `/` and `/lgc-golf/`: no missing files, the offline
+Checked: all 138 tests pass. The GitHub Pages build's page and code files are byte-identical to before
+(an independent review confirmed this). A real browser was tested at both `/` and `/lgc-golf/`: no missing files, the offline
 copy saved 33 files, and the app opens with no signal. The hand-over was tested with Supabase faked: the new app adopts the
 passed-across sign-in as the same user, and the page stops if the phone has unsynced scores.
 
@@ -48,13 +49,24 @@ Josh's clicks are in the Chrome prompt `app-hosting-chrome-prompt.md` (in the Ca
 
 ## Part B: L.G.C to app.thegolftrip.club (STOP: Josh's go-ahead)
 **Before:** A has passed. Releases v1.5 → v2.2 are on live (their own checklists in `docs/`). No trip is under way.
+A day before, ask L.G.C to open the app once with signal, so anything entered offline syncs.
+
+**iPhones (found in review, needs one real test):** an iPhone home-screen app keeps its own storage, apart from Safari.
+So after the hand-over and "Add to Home Screen" again, the new icon may start signed out. Nothing is lost, because
+scores belong to the *player*, not the phone. The player enters the PIN and picks their name. The app then says
+"Someone has already picked that name", and the organiser gives the name back (Players → assign). That's one tap per
+iPhone. Two ways to avoid even that:
+- (a) Before the move, players link Google or email (Stage 2), then sign in from the new icon.
+- (b) Later, a one-time "move code".
+Test it on Josh's iPhone at the start of B, using a test player.
 1. Cloudflare: add custom domain `app.thegolftrip.club` to `thegolftrip-app`. Turn automatic production deployments
    on. Deploy `main`.
 2. Supabase **live** → URL configuration: Site URL `https://app.thegolftrip.club/`. Add `https://app.thegolftrip.club/**`
    and keep the GitHub address for a month.
 3. Google OAuth (live client): add `https://app.thegolftrip.club` as an origin.
 4. Live Edge Function secret `APP_URL=https://app.thegolftrip.club/`, then redeploy `notify`.
-5. **The move:** change `deploy.yml` so it no longer runs on push (`workflow_dispatch` only). Then run the action
+5. **The move:** in GitHub → Settings → Secrets and variables → Actions → Variables, add `APP_MOVED` = `true`.
+   This switches off `deploy.yml`, so a push can't put the old app back. Then run the action
    "Move to app.thegolftrip.club" and type `MOVE`. The old address becomes the hand-over page. It refreshes each phone's sign-in
    and passes it to the new address, so players keep their user, group and scores with no PIN.
 6. Website: merge the `open-app-link` branch in `thegolftrip-site`. That adds "Open the app" to the header.
@@ -63,7 +75,7 @@ Josh's clicks are in the Chrome prompt `app-hosting-chrome-prompt.md` (in the Ca
 8. After about a month: remove the GitHub address from Supabase redirects. Make the repo private (this turns off
    GitHub Pages, and the hand-over page with it). Cloudflare keeps building from a private repo.
 
-**Rollback (B):** in Cloudflare, remove the custom domain. Restore `deploy.yml` to run on push and re-run it, which puts the
+**Rollback (B):** in Cloudflare, remove the custom domain. Delete the `APP_MOVED` variable and re-run `deploy.yml`, which puts the
 app back at the GitHub address. Phones that already moved will need the PIN once.
 
 ## Not part of this (still open)

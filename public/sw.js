@@ -13,7 +13,10 @@ const CACHE = 'lgc-shell-v2';
 // '/' on app.thegolftrip.club. So the same file works at either address.
 const BASE = new URL('./', self.location).pathname;
 const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const PAGE_CODE = new RegExp(`${esc(BASE)}assets/index-[^"'\\s)]+\\.js`);
+const PAGE_CODE = new RegExp(`["'=]${esc(BASE)}assets/index-[^"'\\s)]+\\.js`); // inside the page's own src="…"
+// Cloudflare answers a missing file with the app's page (status 200), not a 404. Never save that page
+// under a code, icon or manifest name.
+const isHtml = (res) => (res.headers.get('content-type') || '').includes('text/html');
 const ALL_CODE = new RegExp(`${esc(BASE)}assets/[^"'\\s)]+`, 'g');
 
 /** Every code/style file of the version on the server — including screens that load only when
@@ -146,7 +149,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith((async () => {
       try {
         const fresh = await fetch(req);
-        if (fresh.ok) (await caches.open(CACHE)).put(req, fresh.clone());
+        if (fresh.ok && !isHtml(fresh)) (await caches.open(CACHE)).put(req, fresh.clone());
         return fresh;
       } catch {
         const saved = await caches.match(req);
@@ -161,7 +164,7 @@ self.addEventListener('fetch', (event) => {
       const saved = await caches.match(req);
       if (saved) return saved;
       const fresh = await fetch(req);
-      if (fresh.ok) {
+      if (fresh.ok && !isHtml(fresh)) {
         const c = await caches.open(CACHE);
         c.put(req, fresh.clone());
       }

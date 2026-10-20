@@ -456,7 +456,7 @@ function YourData() {
       )}
       {asking === 'account' && (
         <div className="stack" style={{ gap: 6 }}>
-          <span className="small">Delete your account? You’ll leave every group you’re in and your sign-in is removed. Your scores stay in each group’s history. (If you’re the only organiser of a group, hand it over or delete it first.)</span>
+          <span className="small">Delete your account? You’ll leave every group you’re in and your sign-in is removed. Your scores stay in each group’s history. (If you’re the only organiser of a group, hand it over or delete it first.) A group you deleted in the last 7 days can’t be brought back once your account is gone.</span>
           <label className="row small" style={{ gap: 8 }}>
             <input type="checkbox" checked={removeName} onChange={(e) => setRemoveName(e.target.checked)} style={{ width: 22, height: 22, flex: 'none' }} />
             Also take my name and selfie off the history — my profile, the honour board and the app’s own feed posts show “Former player”
@@ -469,7 +469,7 @@ function YourData() {
       )}
       {asking === 'group' && (
         <div className="stack" style={{ gap: 6 }}>
-          <span className="small">Delete {status.group_name} for everyone? It disappears straight away. For 7 days an organiser can bring it back from Your groups; after that every score, trip, plan, photo link and chat in it goes for good. Download the group’s data first if you want a copy.</span>
+          <span className="small">Delete {status.group_name} for everyone? It disappears straight away. For 7 days an organiser can bring it back from Your groups; after that every score, trip, plan, photo and chat in it goes for good. Want a copy? Download the group’s data first (a deleted group can’t be downloaded unless it’s brought back).</span>
           <label className="field"><span>Type the group’s name to delete it</span><input className="input" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={status.group_name} /></label>
           <div className="row" style={{ gap: 8 }}>
             <button type="button" className="btn sm" disabled={busy || typed.trim().toLowerCase() !== String(status.group_name || '').trim().toLowerCase()} onClick={deleteGroup}>Delete the group</button>

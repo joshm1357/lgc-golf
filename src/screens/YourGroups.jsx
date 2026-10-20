@@ -61,7 +61,7 @@ function DeletedGroups({ light }) {
     if (error) { setErr(error.message.replace(/^.*?ERROR:\s*/, '')); return; }
     openGroup(g.id);
   };
-  const until = (d) => new Date(d).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+  const until = (d) => new Date(d).toLocaleString('en-AU', { hour: 'numeric', minute: '2-digit', weekday: 'short', day: 'numeric', month: 'short' });
   const muted = { color: light ? 'var(--muted)' : 'var(--on-navy-muted)' };
   return (
     <div style={{ width: '100%', maxWidth: light ? undefined : 340, display: 'flex', flexDirection: 'column', gap: 8 }}>

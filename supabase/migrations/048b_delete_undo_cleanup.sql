@@ -7,8 +7,10 @@ create or replace function private.purge_group(p_group uuid)
 returns void language plpgsql security definer set search_path = '' as $$
 declare t record; v_left int; v_pass int := 0;
 begin
-  if p_group is null or not exists (select 1 from public.groups where id = p_group and deleted_at is not null and not legacy) then
-    raise exception 'Only a deleted group can be purged';
+  -- Lock the group first, so an undo at the same moment either wins or waits.
+  perform 1 from public.groups where id = p_group for update;
+  if p_group is null or not exists (select 1 from public.groups where id = p_group and deleted_at < now() - interval '7 days' and not legacy) then
+    raise exception 'Only a group deleted more than 7 days ago can be purged';
   end if;
   -- Child tables first: go round until every table with this group's rows is empty (rows that other rows still point
   -- at are tried again next time round). If anything is left, nothing is deleted.

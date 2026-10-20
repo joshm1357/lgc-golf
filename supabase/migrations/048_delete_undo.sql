@@ -17,7 +17,10 @@ create or replace function public.delete_group(p_group uuid, p_confirm_name text
 returns void language plpgsql security definer set search_path = '' as $$
 declare g record;
 begin
-  if p_group is null or not private.is_group_organiser(p_group) then raise exception 'Only an organiser can do that'; end if;
+  -- Membership checked directly (is_group_organiser leaves deleted groups out), so a second tap says it's deleted.
+  if p_group is null or not exists (select 1 from public.group_members where group_id = p_group and user_id = auth.uid() and role = 'organiser') then
+    raise exception 'Only an organiser can do that';
+  end if;
   if coalesce((select is_anonymous from auth.users where id = auth.uid()), true) then
     raise exception 'Add a sign-in first (Group & invites) — then you can delete the group';
   end if;
@@ -56,7 +59,8 @@ returns json language sql stable security definer set search_path = '' as $$
   select coalesce(json_agg(json_build_object('id', g.id, 'name', g.name, 'crest_url', g.crest_url, 'deleted_at', g.deleted_at,
                                              'undo_until', g.deleted_at + interval '7 days') order by g.deleted_at desc), '[]'::json)
   from public.groups g join public.group_members gm on gm.group_id = g.id and gm.user_id = auth.uid() and gm.role = 'organiser'
-  where g.deleted_at is not null and g.deleted_at > now() - interval '7 days';
+  where g.deleted_at is not null and g.deleted_at > now() - interval '7 days'
+    and not coalesce((select is_anonymous from auth.users where id = auth.uid()), true);
 $$;
 revoke all on function public.my_deleted_groups() from public, anon;
 grant execute on function public.my_deleted_groups() to authenticated;
@@ -143,3 +147,40 @@ language sql stable security definer set search_path = '' as $$
   select exists (select 1 from public.group_members gm join public.groups gr on gr.id = gm.group_id
                  where gm.group_id = g and gm.user_id = auth.uid() and gm.role = 'organiser' and gr.deleted_at is null);
 $$;
+
+-- Review fixes (21 Oct). Server paths that don't use the helpers above (the Claude connector, reminders, Clubhouse TV,
+-- Tribunal defence) all go through feature_on / require_feature: a deleted group has every feature off, core included.
+create or replace function public.feature_on(p_group uuid, p_key text)
+returns boolean language plpgsql stable security definer set search_path = '' as $$
+declare f public.feature_catalogue; v boolean;
+begin
+  if exists (select 1 from public.groups where id = p_group and deleted_at is not null) then return false; end if;
+  select * into f from public.feature_catalogue where key = p_key;
+  if f.key is null then return true; end if;           -- core things are always on
+  select enabled into v from public.group_features where group_id = p_group and feature_key = p_key;
+  v := coalesce(v, f.default_on) and private.tier_allows(p_group, f.tier);
+  if v and f.parent is not null then return public.feature_on(p_group, f.parent); end if;
+  return v;
+end $$;
+revoke all on function public.feature_on(uuid, text) from public, anon;
+grant execute on function public.feature_on(uuid, text) to authenticated, service_role;
+
+-- My player in a deleted group: none (the fifth 022 helper).
+create or replace function private.my_player_id(g uuid) returns uuid
+language sql stable security definer set search_path = '' as $$
+  select gm.player_id from public.group_members gm join public.groups gr on gr.id = gm.group_id
+  where gm.group_id = g and gm.user_id = auth.uid() and gr.deleted_at is null;
+$$;
+
+-- No role changes in a deleted group either (a personal link for an existing member updates their row).
+create or replace function private.no_changes_in_deleted_groups() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  if exists (select 1 from public.groups where id = new.group_id and deleted_at is not null) then
+    raise exception 'That group has been deleted';
+  end if;
+  return new;
+end $$;
+revoke all on function private.no_changes_in_deleted_groups() from public, anon, authenticated;
+create or replace trigger group_members_not_deleted_update before update on public.group_members
+  for each row execute function private.no_changes_in_deleted_groups();

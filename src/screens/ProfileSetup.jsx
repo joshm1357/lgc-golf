@@ -4,6 +4,8 @@ import { useData, useSession, playerName } from '../lib/store.jsx';
 import { uploadPhoto } from '../lib/images.js';
 import { Avatar, Icon, Loading, PhotoButtons, Sheet, toast } from '../components/ui.jsx';
 import { QuickJoin } from './QuickRound.jsx';
+import { SIGN_IN } from '../lib/auth.js';
+import { personalCode } from '../lib/personal.js';
 
 function PhotoCircle({ preview, player }) {
   return (
@@ -103,6 +105,7 @@ function PickOrAdd() {
       <div className="section stack" style={{ paddingBottom: 24 }}>
         {mode === 'pick' ? (
           <>
+            {SIGN_IN.length > 0 && <PersonalLinkHint />}
             <div className="card">
               {players.map((p) => (
                 <button key={p.id} type="button" className="lb-row" style={{ gridTemplateColumns: '40px 1fr auto' }} onClick={() => { setChosen(p); setFile(null); setErr(''); }}>
@@ -167,5 +170,23 @@ export function AwaitingApproval({ player }) {
         <button type="button" className="btn ghost" onClick={() => setPickInstead(true)}>Actually, I'm on the list</button>
       </div>
     </div>
+  );
+}
+
+// Players who already have history should use the personal link their organiser sent: it signs them in properly and
+// connects their scores. Picking a name here only works on this phone.
+function PersonalLinkHint() {
+  const [text, setText] = useState('');
+  const code = personalCode(text);
+  return (
+    <form className="card pad stack" style={{ gap: 8, borderColor: 'var(--gold)', background: 'var(--gold-soft)' }}
+      onSubmit={(e) => { e.preventDefault(); if (code) { window.location.hash = `#/me/${code}`; } }}>
+      <strong>Got a personal link from your organiser?</strong>
+      <span className="small">Open it instead. It signs you in and brings your scores and history to any phone. Tap it in your messages, or paste it here.</span>
+      <div className="row" style={{ gap: 6 }}>
+        <input className="input grow" value={text} onChange={(e) => setText(e.target.value)} placeholder="https://…/#/me/…" autoCapitalize="none" aria-label="Your personal link" />
+        <button className="btn" disabled={!code}>Open</button>
+      </div>
+    </form>
   );
 }

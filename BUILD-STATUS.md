@@ -841,3 +841,13 @@ With it off, the home screen is exactly as before (checked in a browser on a liv
   after a failed try.
 - **Tested:** 169 unit tests; 69 phone-width checks in `signin-home-test.mjs` (adds the personal link, a used link,
   Google's button with its one-time value, the organiser's card and its message); stage2/phone/start still pass.
+
+### Staging refreshed from live (20 Oct)
+- Staging L.G.C now has the real history from live: 17 players, 3 rounds, 144 scores, honour board, handicap history,
+  Tribunal, rules, posts, reactions, plans (all counts match live). Never copied: sign-ins, pay details, phone
+  notification details, locations. Repeatable steps: `docs/STAGING-REFRESH.md` (+ `supabase/staging/refresh_helper.sql`).
+- The old staging test trip is locked so South Coast 2026 shows as current. Josh's Google sign-in on staging is freed from
+  "Josh Stage" (still organiser) and has a personal link for the real Joshua Moran (organiser).
+- Email codes on staging are waiting on custom SMTP (Resend): the form is filled in Supabase, Josh pastes the key and saves;
+  then both email templates get `{{ .Token }}`.
+- The laptop layout is Stage 11c (not this branch).

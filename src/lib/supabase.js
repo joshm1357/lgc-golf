@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { currentGroup, scopeRequest } from './group.js';
+import { previewOf, blockedWhileViewing, READ_ONLY_MESSAGE } from './preview.js';
 
 // These two values are public by design (they ship in every browser).
 // The data is protected by the group PIN and Row Level Security in the database.
@@ -12,6 +13,15 @@ const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY || 'sb_publishable_uNBEcP
 function groupFetch(input, init = {}) {
   const g = currentGroup();
   const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input?.url;
+  // Viewing as a player (preview.js): read only. Any change is refused here, before it leaves the phone.
+  const viewing = previewOf();
+  if (viewing) {
+    const m = (init.method || (typeof input === 'object' && !(input instanceof URL) && input.method) || 'GET').toUpperCase();
+    if (blockedWhileViewing(url, m, viewing)) {
+      return Promise.resolve(new Response(JSON.stringify({ message: READ_ONLY_MESSAGE(viewing.name), code: 'VIEWING' }),
+        { status: 403, headers: { 'content-type': 'application/json' } }));
+    }
+  }
   if (!g || !url || !url.includes('/rest/v1/')) return fetch(input, init);
   const method = (init.method || (typeof input === 'object' && input.method) || 'GET').toUpperCase();
   const scoped = scopeRequest(url, method, g);

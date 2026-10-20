@@ -1,5 +1,6 @@
 // Golf courses have patchy signal. Score saves queue on the phone and send when signal returns.
 import { supabase } from './supabase.js';
+import { previewOf, READ_ONLY_MESSAGE } from './preview.js';
 
 const KEY = 'lgc-score-queue';
 const listeners = new Set();
@@ -51,6 +52,9 @@ const keyOf = (r) => `${r.round_id}|${r.subject_id}|${r.hole}`;
 
 /** Save a score: try now, queue if it fails. Returns true if it reached the server. */
 export async function saveScore(row) {
+  // Viewing as a player is read only: never queue a score that would later send as the organiser.
+  const viewing = previewOf();
+  if (viewing) throw new Error(READ_ONLY_MESSAGE(viewing.name));
   // Replace any queued version of the same hole.
   const q = read().filter((r) => keyOf(r) !== keyOf(row));
   write([...q, { ...row, queued_at: new Date().toISOString() }]);
@@ -59,7 +63,7 @@ export async function saveScore(row) {
 
 // Only database rule/constraint/data errors are permanent. Everything else
 // (no signal — e.g. Safari's "Load failed" — timeouts, server hiccups, expired login) is kept and retried.
-const isPermanent = (error) => /^(42|23|22)/.test(error?.code || '');
+const isPermanent = (error) => error?.code !== 'VIEWING' && /^(42|23|22)/.test(error?.code || '');
 const strip = ({ queued_at, ...r }) => r; // eslint-disable-line no-unused-vars
 
 function timeoutSignal(ms) {
@@ -84,6 +88,7 @@ function removeSent(sentRows) {
 // One send at a time; a save that arrives mid-send waits its turn, then sends.
 let current = null;
 export async function flush() {
+  if (previewOf()) return false; // viewing as someone: the queue waits until Stop
   while (current) {
     try { await current; } catch { /* the earlier send's problem, not ours */ }
   }

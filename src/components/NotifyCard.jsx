@@ -2,6 +2,7 @@
 // straight away, one daily digest at a time you pick, or only the important ones. Kept out of the planner so the
 // More tab doesn't have to load the whole planner.
 import React, { useCallback, useEffect, useState } from 'react';
+import { previewOf } from '../lib/preview.js';
 import { useRun, must } from '../lib/run.js';
 import { notify, pushState, enablePush, disablePush, isIOS } from '../lib/push.js';
 import { supabase } from '../lib/supabase.js';
@@ -15,6 +16,7 @@ const MODES = [
 const hourLabel = (h) => (h === 0 ? '12 am' : h < 12 ? `${h} am` : h === 12 ? '12 pm' : `${h - 12} pm`);
 
 export function NotifyCard({ compact }) {
+  if (previewOf()) return null; // viewing as someone: notifications belong to this phone's real owner
   const [state, setState] = useState(null);
   const [busy, run] = useRun();
   const refresh = useCallback(() => pushState().then(setState), []);

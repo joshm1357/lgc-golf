@@ -37,6 +37,7 @@ const db = {
 };
 const rpcs = [];
 let member = true;
+let noPlayer = false;
 function filterRows(rows, params) {
   return rows.filter((r) => {
     for (const [k, v] of params) {
@@ -56,7 +57,7 @@ async function fakeSupabase(route) {
   if (method === 'OPTIONS') return json({});
   if (url.pathname.startsWith('/rest/v1/rpc/my_status')) {
     return json(member
-      ? { is_member: true, is_admin: true, player_id: P1, group_name: 'L.G.C', group_id: GROUP, role: 'organiser', legacy: true, signed_in: true, groups: [{ id: GROUP, name: 'L.G.C', slug: 'lgc', role: 'organiser' }] }
+      ? { is_member: true, is_admin: !noPlayer, player_id: noPlayer ? null : P1, group_name: 'L.G.C', group_id: GROUP, role: 'organiser', legacy: true, signed_in: true, groups: [{ id: GROUP, name: 'L.G.C', slug: 'lgc', role: 'organiser' }] }
       : { is_member: false, signed_in: false, groups: [] });
   }
   if (url.pathname.startsWith('/rest/v1/rpc/')) {
@@ -267,6 +268,25 @@ for (const w of [768, 1280, 1920]) {
   check(!(await page.getByText('invite-only').first().isVisible().catch(() => false)), 'new groups on (staging): #/start opens the wizard');
   await page.screenshot({ path: `${SHOTS}/375-start-open.png` });
   member = true;
+  await ctx.close();
+}
+
+// 8. "Who are you?" (in the group, no player yet): the new app points to the personal link; the live-style build doesn't.
+{
+  noPlayer = true;
+  const { ctx, page } = await newPage(375, 812, { phone: true });
+  await page.goto(SIGNIN + '#/');
+  await page.getByText('Who are you?').waitFor({ timeout: 15000 });
+  check(await page.getByText('Got a personal link from your organiser?').isVisible(), 'who are you (new app): points to the personal link');
+  await page.getByLabel('Your personal link').fill('https://staging.thegolftrip.club/#/me/MP4UEPCG88DT');
+  await page.getByRole('button', { name: 'Open', exact: true }).click();
+  await page.waitForTimeout(800);
+  check(await page.evaluate(() => window.location.hash === '#/me/MP4UEPCG88DT'), 'who are you: pasting the link opens it');
+  await page.screenshot({ path: `${SHOTS}/375-who-are-you.png` });
+  await page.goto(LIVE + '#/');
+  await page.getByText('Who are you?').waitFor({ timeout: 15000 });
+  check(!(await page.getByText('Got a personal link from your organiser?').isVisible().catch(() => false)), 'who are you (live-style build): unchanged');
+  noPlayer = false;
   await ctx.close();
 }
 

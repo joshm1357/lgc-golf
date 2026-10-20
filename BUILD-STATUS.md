@@ -919,3 +919,36 @@ screen, "Viewing as Mike · read only", and Stop.
   screens; push on/off; auth writes; stricter block-list; queues; draw presence; read-only list wording).
 - **Tested:** 184 unit tests (`preview.test.js` 9); `view-as-test.mjs` 14; beta 47; signin-home 69; every other browser
   check passes.
+
+## 7-day undo on deleting a group (21 Oct 2026, branch `delete-undo`; agreed 20 Oct, Stage 2)
+- **Deleting a group hides it straight away** for everyone. It's nobody's current group, it's gone from Your groups,
+  its rows can't be read or changed (the access-rule helpers `my_group_ids`, `is_group_member` and
+  `is_group_organiser` leave it out), and nobody can join it (trigger on `group_members`).
+- **Bring back within 7 days:** Your groups → "Deleted recently" → Bring back (any organiser of that group, signed in
+  properly). `undo_delete_group`, `my_deleted_groups`.
+- **After 7 days** the daily clean-up removes it for good (`private.purge_group`, which is the old delete_group body).
+  This part is in **048b** because it contains DELETE statements, so it waits for Josh's approval (staging, then live).
+  Without it, a group deleted more than 7 days ago would stay hidden but unrecoverable. That's why the two go together.
+- **Old app versions** calling `delete_group` get the hiding too.
+- **Database:** `048_delete_undo.sql` applied to staging 21 Oct (with its review fixes); `048b_delete_undo_cleanup.sql`
+  not yet (needs Josh's approval). **048 and 048b go together**: don't merge this branch, or put 048 on live, until 048b
+  is on staging and `supabase/tests/delete_undo_purge.sql` has run.
+- **Tested:** `supabase/tests/delete_undo.sql` 20 results on staging as `delete_undo.expected.txt` (a player can't
+  delete; the organiser deletes; it's hidden from both, rows unreadable; a player can't bring it back; nobody can join;
+  the organiser brings it back; after 8 days it can't come back; L.G.C can't be deleted).
+  `tests/e2e/delete-undo-test.mjs` 3 (Deleted recently, until when, Bring back).
+- **To update after 048b:** `supabase/tests/stage9_delete.sql` still expects delete_group to remove rows straight away.
+- **Independent review (21 Oct): 2 must-fix, 4 should-fix.**
+  - Fixed: 048 and 048b ship together (this branch stays unmerged until 048b is approved). Server paths that skip the
+    access helpers (Claude connector, reminders, Clubhouse TV, Tribunal defence) are covered through `feature_on`: a
+    deleted group has every feature off, core included. `my_player_id` leaves deleted groups out. No role changes in a
+    deleted group (a personal link for an existing member can't promote anyone there). A second delete says "already
+    deleted". The purge locks the group and re-checks the 7 days. Only signed-in organisers see "Deleted recently".
+    The deadline shows the time. The account deletion and group deletion wording now covers the undo and downloads.
+  - Tests: `delete_undo_fixes.sql` 11 results on staging as expected; `delete_undo_purge.sql` is written and runs
+    after 048b.
+  - Not fixed (noted for Stage 2): (a) a phone with a deleted group still open can file new rows into the person's
+    other group. This existed before, after being removed from a group; the fix is a strict group check on writes plus
+    the app reloading when the database picks another group. (b) `invite_info` and `player_link_info` still describe a
+    deleted group (joining is refused). (c) Players aren't told their group was deleted. (d) Clean-up failures only go
+    to the database log.

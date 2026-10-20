@@ -1,13 +1,33 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink, Link } from 'react-router-dom';
 import { useFeature, useSession } from '../lib/store.jsx';
 import { GroupCrest } from './Logo.jsx';
 import { Icon } from './ui.jsx';
 import { openFeedback } from './Feedback.jsx';
+import { DESKTOP } from '../lib/beta.js';
+
+/** Is the screen laptop-wide? Follows the window as it's resized. */
+function useDesktop() {
+  const q = `(min-width: ${DESKTOP}px)`;
+  const [on, setOn] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.(q).matches);
+  useEffect(() => {
+    const m = window.matchMedia?.(q);
+    if (!m) return undefined;
+    const f = () => setOn(m.matches);
+    m.addEventListener?.('change', f);
+    return () => m.removeEventListener?.('change', f);
+  }, [q]);
+  return on;
+}
 
 // Stage 1 light desktop: on a screen 1024 px wide or more, this sidebar replaces the bottom tab bar (styles.css shows
 // one or the other). Same places, same feature switches, plus the screens a phone keeps under More.
 export function Sidebar() {
+  // Only on the page at laptop width, so phones get exactly the page they had before.
+  return useDesktop() ? <SidebarNav /> : null;
+}
+
+function SidebarNav() {
   const { status } = useSession();
   const on = {
     feed: useFeature('feed'), side_comps: useFeature('side_comps'), planner: useFeature('planner'),

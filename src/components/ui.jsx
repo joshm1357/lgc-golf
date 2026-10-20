@@ -123,6 +123,12 @@ export function Sheet({ title, onClose, children }) {
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = prev; };
   }, []);
+  // A keyboard closes it with Esc (laptops); phones are unchanged.
+  useEffect(() => {
+    const key = (e) => { if (e.key === 'Escape') onClose?.(); };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, [onClose]);
   return (
     <div className="sheet-bg" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="sheet" role="dialog" aria-modal="true" aria-label={title}>

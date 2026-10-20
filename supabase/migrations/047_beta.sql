@@ -32,7 +32,7 @@ begin
 end $$;
 revoke all on function private.new_groups_guard() from public, anon, authenticated;
 
-create trigger groups_new_groups_guard before insert on public.groups
+create or replace trigger groups_new_groups_guard before insert on public.groups
   for each row execute function private.new_groups_guard();
 
 -- So the app can say so before anyone fills in the wizard.

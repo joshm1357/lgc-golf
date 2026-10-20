@@ -5,6 +5,7 @@ import { useSession } from '../lib/store.jsx';
 import { setCurrentGroup } from '../lib/group.js';
 import { useRun, must } from '../lib/run.js';
 import { defaultComps, sourceFrom, rememberSource, rememberedSource, forgetSource, countScan } from '../lib/quick.js';
+import { NEW_GROUPS } from '../lib/beta.js';
 import { readHandicap, localToday } from '../lib/history.js';
 import { parTotal } from '../lib/scoring.js';
 import { paintLook, DEFAULT_LOOK } from '../lib/theme.js';
@@ -87,7 +88,7 @@ function FindACourse() {
           </a>
         ))}
         {rows?.some((r) => r.osm) && <span className="small muted">Some course details © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors.</span>}
-        {rows && !rows.length && !err && <span className="small muted">No courses by that name yet. Groups add them as they play — or <a href="#/start">start a group</a> and add yours.</span>}
+        {rows && !rows.length && !err && <span className="small muted">No courses by that name yet. Groups add them as they play{NEW_GROUPS ? <> — or <a href="#/start">start a group</a> and add yours</> : null}.</span>}
       </div>
     </>
   );
@@ -147,8 +148,12 @@ function Course({ slug }) {
         {!starting ? (
           <>
             {par3 && <div className="card pad small" style={{ borderColor: 'var(--gold)' }}>🎯 Closest to the pin on hole {par3}? Start your round below (or open the app you’re scoring in) — then scan again to log it.</div>}
-            <button type="button" className="btn gold block" style={{ minHeight: 64, fontSize: 20 }} onClick={() => setStarting(true)}>⛳ Start a round with your mates</button>
-            <span className="small muted" style={{ textAlign: 'center' }}>Live scores and a leaderboard on everyone’s phone. No app store, no sign-up — your mates just tap a link.</span>
+            {NEW_GROUPS ? (
+              <>
+                <button type="button" className="btn gold block" style={{ minHeight: 64, fontSize: 20 }} onClick={() => setStarting(true)}>⛳ Start a round with your mates</button>
+                <span className="small muted" style={{ textAlign: 'center' }}>Live scores and a leaderboard on everyone’s phone. No app store, no sign-up — your mates just tap a link.</span>
+              </>
+            ) : <div className="card pad small">Playing here with your group? Score in your group’s app. Starting a round from this page opens soon.</div>}
             {greens.length > 0 && (
               <LazyArea fallback={null} quiet>
                 <CourseMap className="map" markers={greens.map((h) => ({ id: `g${h.n}`, lat: h.green.lat, lng: h.green.lng, popup: `Hole ${h.n} · par ${h.par}` }))} osm={course.holes.some((h) => h.osm)} animate={false} />
@@ -158,7 +163,7 @@ function Course({ slug }) {
             <Scorecard holes={course.holes} />
             {course.verified && <span className="small muted">✓ Hole data checked by the club.</span>}
             {course.osm && <span className="small muted">Course details © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors.</span>}
-            <a href="#/start" className="small" style={{ fontWeight: 700, textAlign: 'center' }}>Run a golf group? Start your own →</a>
+            {NEW_GROUPS && <a href="#/start" className="small" style={{ fontWeight: 700, textAlign: 'center' }}>Run a golf group? Start your own →</a>}
             <span className="small muted" style={{ textAlign: 'center' }}><a href="#/privacy">Privacy</a> · <a href="#/terms">Terms</a></span>
             {!course.club && <a href="#/club" className="small muted" style={{ textAlign: 'center' }}>Work at this club? Claim this page</a>}
           </>
@@ -184,7 +189,7 @@ function ListedOnly({ course }) {
           <a className="btn ghost block" href={`https://www.openstreetmap.org/?mlat=${course.lat}&mlon=${course.lng}#map=15/${course.lat}/${course.lng}`} target="_blank" rel="noopener noreferrer">📍 Where it is</a>
         )}
         {course.osm && <span className="small muted">Course details © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors.</span>}
-        <a href="#/start" className="small" style={{ fontWeight: 700, textAlign: 'center' }}>Run a golf group? Start your own →</a>
+        {NEW_GROUPS && <a href="#/start" className="small" style={{ fontWeight: 700, textAlign: 'center' }}>Run a golf group? Start your own →</a>}
             <span className="small muted" style={{ textAlign: 'center' }}><a href="#/privacy">Privacy</a> · <a href="#/terms">Terms</a></span>
         {!course.club && <a href="#/club" className="small muted" style={{ textAlign: 'center' }}>Work at this club? Claim this page and add your hole data</a>}
       </div>

@@ -7,7 +7,7 @@ import { FEEDBACK_KINDS, FEEDBACK_MAX, checkFeedback, canInstall, onInstallOffer
 import { Sheet, Seg } from './ui.jsx';
 
 // Stage 1 (beta): "Tell Josh". What someone types goes to Josh's screen with their name, the screen they were on
-// and the app version, so he can find the problem. Nothing else is sent.
+// the app version and the browser, so he can find the problem. Nothing else is sent.
 
 let openSet = null;
 /** Open the feedback sheet from anywhere (the sidebar, More). */
@@ -46,7 +46,7 @@ function FeedbackSheet({ start, onClose }) {
           <textarea className="textarea" value={text} maxLength={FEEDBACK_MAX + 50} autoFocus
             onChange={(e) => { setText(e.target.value); setError(''); }} />
         </label>
-        <div className="row between small muted"><span>Josh sees your name, this screen and the app version.</span><span>{text.trim().length}/{FEEDBACK_MAX}</span></div>
+        <div className="row between small muted"><span>Josh sees your name, this screen, the app version and your browser.</span><span>{text.trim().length}/{FEEDBACK_MAX}</span></div>
         {error && <div className="err" role="alert">{error}</div>}
         <button type="button" className="btn gold block" onClick={send} disabled={busy}>{busy ? 'Sending…' : 'Send to Josh'}</button>
       </div>

@@ -84,6 +84,8 @@ const browser = await chromium.launch();
 
 async function phone({ session } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  // The beta's one-time What's new note (beta-test.mjs checks it) would cover these screens: mark it seen.
+  await ctx.addInitScript(() => { try { localStorage.setItem('tgt-whats-new', 'beta-1'); } catch { /* fine */ } });
   await ctx.route(STAGING, fake);
   await ctx.route(LIVEDB, fake);
   // A stand-in for Google's sign-in page, so tapping "Sign in with Google" never leaves this test.
@@ -375,7 +377,8 @@ const tapSize = async (page, locator, label) => {
   await page.getByLabel('Group PIN or invite link').waitFor({ timeout: 15000 });
   check(await page.getByRole('button', { name: "Let's go" }).isVisible(), 'live build: PIN box first, as today');
   check(!(await page.getByRole('button', { name: /Sign in with Google/ }).isVisible().catch(() => false)), 'live build: no sign-in buttons');
-  check(await page.getByText('Running a golf group? Start your own →').isVisible(), 'live build: same "Start your own" link');
+  // Changed on 20 Oct (Stage 1 beta): new groups are off on live until Stage 2, so the start link is hidden.
+  check(!(await page.getByText('Running a golf group? Start your own →').isVisible()), 'live build: no "Start your own" link while new groups are off');
   check(!(await page.locator('#test-marker').isVisible().catch(() => false)), 'live build: no TEST tag');
   await page.screenshot({ path: `${SHOTS}/s8-live-unchanged.png`, fullPage: true });
   await ctx.close();

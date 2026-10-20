@@ -1,4 +1,5 @@
 -- Stage 7 test: starting a new group. STAGING only, after 034 and 034b. Rolled back; results in the error message.
+update private.platform_flags set is_on = true where key = 'new_groups_open';  -- 047: new groups on for this test (rolled back)
 create temp table t_results (n serial, label text, result text);
 grant all on t_results to authenticated;
 grant all on sequence t_results_n_seq to authenticated;

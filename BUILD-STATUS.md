@@ -869,7 +869,8 @@ as soon as possible. Plan: DEV-PLAN.md → "The road to beta".
   "Start a new group" link, and #/start says "invite-only for now". The database is the real lock: a trigger on
   `groups` refuses new groups (and quick rounds) from app users while `private.platform_flags.new_groups_open` is off,
   except platform admins (Josh). Migrations and the SQL editor aren't affected. Staging has it on; live starts off.
-- **Database (047_beta.sql):** additive only (no DROPs). Applied to staging 20 Oct; live gets it with v2.2.
+- **Database (047_beta.sql + 047b_beta_review_fixes.sql):** additive only (no DROPs). Both applied to staging 20 Oct; live
+  gets them with v2.2, before the front end ships.
 - **Tested:** 175 unit tests (6 new in `beta.test.js`); `supabase/tests/beta.sql` 18 results on staging, all as
   `beta.expected.txt` (closed: stranger refused, Josh allowed; open: stranger allowed; feedback sent, checked, rate
   limit 20 a day, table unreadable, only Josh sees and ticks it); `tests/e2e/beta-test.mjs` 42 browser checks: phone
@@ -878,3 +879,24 @@ as soon as possible. Plan: DEV-PLAN.md → "The road to beta".
 - **At release (v2.2, live):** run 047; then make Josh a platform admin on live
   (`insert into public.platform_admins (user_id) values ('<Josh's live user id>');`) so he sees Feedback and can still
   start groups. Leave `new_groups_open` off until Stage 2.
+- **Independent review (20 Oct): 1 must-fix and 5 should-fix, all fixed.**
+  - Must-fix: the desktop rules hit every `.app` on the page, so on a laptop score entry shifted right twice and
+    ProfileSetup and others had a blank strip. Now only the shell with the sidebar (`.app.with-side`) changes, and
+    score entry sits in the page column.
+  - The sidebar is only put on the page at 1024 px and up (`useDesktop`), so phones get exactly the page they had.
+  - Course pages: no quick round button or start links while new groups are off ("opens soon" note instead).
+    Stay cards opened at #/start still count their scan when it's closed.
+  - Focus outline only where there's a mouse and 768 px or wider (phones unchanged), navy on light pages and gold on
+    navy.
+  - Chrome's own "Add to Home screen" prompt is kept on phones; only computers hold it for Install.
+  - Feedback (047b) needs a group, with a 300-a-day cap across the app. The column is `from_group`, so deleting a group
+    keeps the words. Josh's list leaves done items out in the database. The privacy line now mentions the browser.
+  - Older staging tests open `new_groups_open` first (rolled back).
+  - Also: the trigger is `create or replace`; What's new is for L.G.C only; Esc closes sheets; Josh's Feedback tab
+    shows load errors; desktop pages have room under Enter score; sidebar links are 48 px.
+  - Still open: the 7-day undo on deleting a group (agreed 20 Oct) isn't built. It goes in Stage 2, before other groups;
+    L.G.C can't be deleted from the app.
+- **Tested after fixes:** 175 unit tests; `beta.sql` 22 results as expected on staging; all 15 browser checks pass (333 checks:
+  beta 44, signin-home 69, phone 17, start 20, quick 21, stage2 19, club 40, features 9, look 17, trips 18, history 17,
+  rulebook 10, stage9 23, stage10 15, courses 14). A few older checks now look inside `.page` or mark the What's new
+  note seen, and signin-home expects no "Start your own" on the live build (decided).

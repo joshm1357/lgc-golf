@@ -19,7 +19,7 @@ export function checkFeedback(kind, message) {
   const text = String(message || '').replace(/\r\n/g, '\n').trim();
   if (!FEEDBACK_KINDS.some((k) => k.value === kind)) return { text, error: 'Pick what kind of feedback it is' };
   if (text.length < 3) return { text, error: 'Type a few words first' };
-  if (text.length > FEEDBACK_MAX) return { text, error: `That’s ${text.length} characters — keep it under ${FEEDBACK_MAX}` };
+  if (text.length > FEEDBACK_MAX) return { text, error: `That’s ${text.length} characters — keep it under 1,000` };
   return { text, error: '' };
 }
 
@@ -54,7 +54,13 @@ const listeners = new Set();
 const tell = () => listeners.forEach((f) => f(!!offer));
 export function watchInstallOffer() {
   if (typeof window === 'undefined') return;
-  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); offer = e; tell(); });
+  window.addEventListener('beforeinstallprompt', (e) => {
+    // Phones keep Chrome's own "Add to Home screen" prompt; only on a computer do we hold it for the button in More.
+    let computer = false;
+    try { computer = window.matchMedia(`(min-width: ${DESKTOP}px) and (pointer: fine)`).matches; } catch { /* phone */ }
+    if (!computer) return;
+    e.preventDefault(); offer = e; tell();
+  });
   window.addEventListener('appinstalled', () => { offer = null; tell(); });
 }
 export function canInstall() { return !!offer; }

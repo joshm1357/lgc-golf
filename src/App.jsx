@@ -10,6 +10,7 @@ import { FeedbackHost } from './components/Feedback.jsx';
 import { WhatsNew } from './components/WhatsNew.jsx';
 import { NEW_GROUPS } from './lib/beta.js';
 import { supabase } from './lib/supabase.js';
+import { sourceFrom, countScan } from './lib/quick.js';
 // Loaded straight away: the first screens people see and score entry (must work with no signal).
 import Join, { InviteJoin } from './screens/Join.jsx';
 import { inviteCode } from './lib/invite.js';
@@ -77,11 +78,22 @@ function DrawOverlayIfOn() {
 // Starting a group is off on live until Stage 2 (friends' beta): say so, instead of a wizard the database would refuse.
 // Josh (a platform admin) can still start one; the database decides who that is.
 function StartOrClosed() {
+  const loc = useLocation();
   const [open, setOpen] = useState(NEW_GROUPS ? true : null);
   useEffect(() => {
     if (NEW_GROUPS) return;
     supabase.rpc('new_groups_open').then(({ data }) => setOpen(data === true), () => setOpen(false));
   }, []);
+  // Closed: the wizard (which counts a stay card's scan) doesn't open, so count it here, once a visit.
+  useEffect(() => {
+    if (open !== false) return;
+    const src = sourceFrom(loc.search);
+    if (!src?.ref || !src.placement) return;
+    const key = `lgc-scan-${src.ref}-${src.placement}-start`;
+    let counted = false;
+    try { counted = !!sessionStorage.getItem(key); sessionStorage.setItem(key, '1'); } catch { /* fine */ }
+    if (!counted) countScan(supabase, { ref: src.ref, placement: src.placement, slug: null }).catch(() => {});
+  }, [open, loc.search]);
   if (open === null) return <Loading />;
   if (open) return <LazyArea resetKey="start" fallback={<Loading />}><Start /></LazyArea>;
   return (
@@ -168,7 +180,7 @@ function Inside() {
   const hideTabs = loc.pathname.startsWith('/score/');
   const offline = data.offline || (typeof navigator !== 'undefined' && navigator.onLine === false);
   return (
-    <div className="app">
+    <div className="app with-side">
       <Sidebar />
       {waiting > 0 && !offline && <div className="sync" role="status">📤 {waiting} post{waiting === 1 ? '' : 's'} or entr{waiting === 1 ? 'y' : 'ies'} waiting to send…</div>}
       {offline && <div className="sync" role="status">📵 No signal — showing the copy saved on this phone. Scores you enter are kept and sent when signal comes back.</div>}

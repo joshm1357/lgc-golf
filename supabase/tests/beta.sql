@@ -1,6 +1,7 @@
 -- Beta checks (047, 20 Oct 2026). STAGING only. Everything is rolled back; the results come back as the error message
 -- ("RESULTS: ..."). Expected answers are in beta.expected.txt.
--- Group F: fo — organiser; fp — player. stranger — signed in, in no group. josh — a platform admin.
+-- Group F: fo — organiser; fp — player. stranger — signed in, in no group (starts one later). josh — a platform admin.
+-- loner (fea05) — phone-only sign-in, never in a group.
 
 create temp table t_results (n serial, label text, result text);
 grant all on t_results to authenticated;
@@ -13,7 +14,8 @@ insert into auth.users (id, instance_id, aud, role, is_anonymous, email) values
   ('00000000-0000-4000-8000-0000000fea01', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', false, 'fo@example.com'),
   ('00000000-0000-4000-8000-0000000fea02', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', false, 'fp@example.com'),
   ('00000000-0000-4000-8000-0000000fea03', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', false, 'stranger@example.com'),
-  ('00000000-0000-4000-8000-0000000fea04', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', false, 'josh@example.com');
+  ('00000000-0000-4000-8000-0000000fea04', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', false, 'josh@example.com'),
+  ('00000000-0000-4000-8000-0000000fea05', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', true, null);
 insert into public.platform_admins (user_id) values ('00000000-0000-4000-8000-0000000fea04');
 insert into public.players (id, group_id, name, nickname, handicap) values
   ('00000000-0000-4000-8000-0000000feb01', '00000000-0000-4000-8000-0000000fe000', 'F Organiser', null, 10),
@@ -83,6 +85,13 @@ do $$ begin
   insert into t_results (label, result) values ('21st in a day', 'sent');
 exception when others then insert into t_results (label, result) values ('21st in a day', 'refused: ' || left(sqlerrm, 14)); end $$;
 
+set local request.jwt.claims to '{"sub":"00000000-0000-4000-8000-0000000fea05","role":"authenticated"}';
+do $$ begin perform set_config('request.headers', '{}', true); end $$;
+do $$ begin
+  perform public.send_feedback('idea', 'I am in no group at all');
+  insert into t_results (label, result) values ('someone in no group', 'sent');
+exception when others then insert into t_results (label, result) values ('someone in no group', 'refused: ' || left(sqlerrm, 20)); end $$;
+
 set local request.jwt.claims to '{"role":"authenticated"}';
 do $$ begin
   perform public.send_feedback('idea', 'nobody signed in');
@@ -101,6 +110,21 @@ do $$ declare v uuid; begin
   perform public.admin_feedback_done(v, true);
   insert into t_results (label, result) values ('josh ticks it done', (select (e->>'done') from json_array_elements(public.admin_feedback(30)) e where (e->>'id')::uuid = v));
 end $$;
+
+insert into t_results (label, result)
+  select 'josh list without done items', (select count(*)::text from json_array_elements(public.admin_feedback(30, false)) e where e->>'group_name' = 'Test Group F');
+
+-- An organiser deletes the group: the feedback's words stay (no group name any more).
+set local request.jwt.claims to '{"sub":"00000000-0000-4000-8000-0000000fea01","role":"authenticated"}';
+do $$ begin perform set_config('request.headers', '{"x-group-id":"00000000-0000-4000-8000-0000000fe000"}', true); end $$;
+do $$ begin
+  perform public.delete_group('00000000-0000-4000-8000-0000000fe000', 'Test Group F');
+  insert into t_results (label, result) values ('organiser deletes group F', 'deleted');
+exception when others then insert into t_results (label, result) values ('organiser deletes group F', 'refused: ' || left(sqlerrm, 30)); end $$;
+reset role;
+insert into t_results (label, result)
+  select 'feedback after the group is deleted', count(*)::text || ' kept, group ' || coalesce(max(from_group::text), 'cleared')
+  from public.beta_feedback where message = 'Weather on the trip page please';
 
 reset role;
 do $$ begin

@@ -93,6 +93,24 @@ async function newPage(width, height = 900, { phone = false, seenNote = true } =
   page.on('pageerror', (e) => fails.push(`page error: ${e}`));
   return { ctx, page };
 }
+// Compare two screenshots in a blank page: how many pixels differ, and by how much at most (0–255).
+async function pixelDiff(a, b) {
+  const page = await browser.newPage();
+  const r = await page.evaluate(async ([x, y]) => {
+    const load = (src) => new Promise((ok) => { const i = new Image(); i.onload = () => ok(i); i.src = src; });
+    const [ia, ib] = await Promise.all([load(x), load(y)]);
+    const px = (im) => { const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const g = c.getContext('2d'); g.drawImage(im, 0, 0); return g.getImageData(0, 0, im.width, im.height).data; };
+    if (ia.width !== ib.width || ia.height !== ib.height) return { count: Infinity, max: 255 };
+    const da = px(ia), db = px(ib); let count = 0, max = 0;
+    for (let i = 0; i < da.length; i += 4) {
+      const d = Math.max(Math.abs(da[i] - db[i]), Math.abs(da[i + 1] - db[i + 1]), Math.abs(da[i + 2] - db[i + 2]));
+      if (d > 0) { count += 1; if (d > max) max = d; }
+    }
+    return { count, max };
+  }, [`data:image/png;base64,${a.toString('base64')}`, `data:image/png;base64,${b.toString('base64')}`]);
+  await page.close();
+  return r;
+}
 const noSideScroll = (page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
 const visible = (page, sel) => page.evaluate((s) => { const el = document.querySelector(s); if (!el) return false; const r = el.getBoundingClientRect(); return getComputedStyle(el).display !== 'none' && r.width > 0 && r.height > 0; }, sel);
 
@@ -110,7 +128,9 @@ for (const [hash, text, name] of [['#/', 'Saturday', 'leaderboard'], ['#/feed', 
   }
   fs.writeFileSync(`${SHOTS}/375-${name}-before.png`, shots[0]);
   fs.writeFileSync(`${SHOTS}/375-${name}-after.png`, shots[1]);
-  check(Buffer.compare(shots[0], shots[1]) === 0, `375 px ${name}: identical to the product branch, pixel for pixel`);
+  const diff = Buffer.compare(shots[0], shots[1]) === 0 ? { count: 0, max: 0 } : await pixelDiff(shots[0], shots[1]);
+  // Allow edge smoothing (a handful of pixels, small colour change); any real layout change moves thousands.
+  check(diff.count <= 40 && diff.max <= 60, `375 px ${name}: same as the product branch (${diff.count} pixels differ, biggest change ${diff.max})`);
 }
 
 // 2. Phone: no sidebar, bottom bar there; More has the beta card; no sideways scroll.
@@ -151,6 +171,18 @@ for (const w of [768, 1280, 1920]) {
     }
     await page.screenshot({ path: `${SHOTS}/${w}-feed.png` });
   }
+  await ctx.close();
+}
+
+// 3b. Score entry has its own .app inside the shell: on a laptop it must sit in the page column, not shift right again.
+{
+  const { ctx, page } = await newPage(1280, 900);
+  await page.goto(LIVE + `#/score/${ROUND}`);
+  await page.waitForTimeout(2500);
+  const box = await page.evaluate(() => { const els = [...document.querySelectorAll('.app .app')]; const r = els[0]?.getBoundingClientRect(); return r ? { left: r.left, width: r.width } : null; });
+  check(box && box.left >= 248 && box.left < 420 && box.width <= 900, `1280 px: score entry sits in the page column (left ${box && Math.round(box.left)}, width ${box && Math.round(box.width)})`);
+  check(await noSideScroll(page), '1280 px: score entry has no sideways scroll');
+  await page.screenshot({ path: `${SHOTS}/1280-score.png` });
   await ctx.close();
 }
 

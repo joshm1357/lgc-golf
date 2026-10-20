@@ -109,10 +109,12 @@ function Feedback() {
   const [showDone, setShowDone] = useState(false);
   const [rows, setRows] = useState(null);
   const [busy, run] = useRun();
-  const load = useCallback(() => supabase.rpc('admin_feedback', { p_days: days }).then(({ data }) => setRows(data || [])), [days]);
+  const [err, setErr] = useState('');
+  const load = useCallback(() => supabase.rpc('admin_feedback', { p_days: days, p_include_done: showDone })
+    .then(({ data, error }) => { setErr(error ? error.message : ''); setRows(error ? [] : data || []); }), [days, showDone]);
   useEffect(() => { setRows(null); load(); }, [load]);
   const tick = (r) => run(() => must(supabase.rpc('admin_feedback_done', { p_id: r.id, p_done: !r.done })).then(load));
-  const shown = rows?.filter((r) => showDone || !r.done);
+  const shown = rows;
   return (
     <div className="stack" style={{ gap: 10 }}>
       <div className="row">
@@ -122,7 +124,8 @@ function Feedback() {
         <label className="row small" style={{ gap: 6 }}><input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> Show done</label>
       </div>
       {rows == null && <span className="muted">Loading…</span>}
-      {shown && !shown.length && <span className="muted">Nothing new.</span>}
+      {err && <div className="err" role="alert">Couldn’t load feedback: {err}</div>}
+      {shown && !shown.length && !err && <span className="muted">Nothing new.</span>}
       {shown?.map((r) => (
         <div key={r.id} className="card pad stack" style={{ gap: 4, opacity: r.done ? 0.6 : 1 }}>
           <div className="row between small"><strong>{KIND[r.kind] || r.kind}</strong><span className="muted">{new Date(r.created_at).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' })}</span></div>

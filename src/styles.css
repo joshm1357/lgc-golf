@@ -256,3 +256,7 @@ img { max-width: 100%; }
   .side-link.active { background: var(--navy-2); color: #fff; box-shadow: inset 3px 0 0 var(--gold); }
   .side-feedback { border: 1px solid rgba(255, 255, 255, .22); }
 }
+
+/* View as a player (21 Oct 2026): a bar across the top while an organiser is viewing as someone. */
+.viewing-bar { position: sticky; top: 0; z-index: 45; display: flex; align-items: center; gap: 10px; padding: calc(8px + env(safe-area-inset-top, 0px)) 12px 8px; background: var(--court); color: #fff; font-size: 14px; }
+@media (min-width: 1024px) { .app.with-side > .viewing-bar { max-width: 900px; width: 100%; margin: 0 auto; border-radius: 0 0 12px 12px; } }

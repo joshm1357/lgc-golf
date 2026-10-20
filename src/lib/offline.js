@@ -1,5 +1,6 @@
 // Golf courses have patchy signal. Score saves queue on the phone and send when signal returns.
 import { supabase } from './supabase.js';
+import { previewOf, READ_ONLY_MESSAGE } from './preview.js';
 
 const KEY = 'lgc-score-queue';
 const listeners = new Set();
@@ -51,6 +52,9 @@ const keyOf = (r) => `${r.round_id}|${r.subject_id}|${r.hole}`;
 
 /** Save a score: try now, queue if it fails. Returns true if it reached the server. */
 export async function saveScore(row) {
+  // Viewing as a player is read only: never queue a score that would later send as the organiser.
+  const viewing = previewOf();
+  if (viewing) throw new Error(READ_ONLY_MESSAGE(viewing.name));
   // Replace any queued version of the same hole.
   const q = read().filter((r) => keyOf(r) !== keyOf(row));
   write([...q, { ...row, queued_at: new Date().toISOString() }]);

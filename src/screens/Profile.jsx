@@ -9,6 +9,7 @@ import { honourOrder, winnerNames } from '../lib/history.js';
 const namedIn = (winners, name) => winnerNames(winners).some((w) => w.toLowerCase() === String(name).toLowerCase());
 import { uploadPhoto } from '../lib/images.js';
 import { Header, Avatar, Icon, Loading, toast, PhotoButtons } from '../components/ui.jsx';
+import { ViewAsButton } from '../components/Viewing.jsx';
 
 /** Everything we know about a player: Stableford rounds, Ambrose results, trophies, comps, Tribunal, handicap. */
 export function usePlayerHistory(playerId) {
@@ -112,7 +113,8 @@ export default function Profile() {
     else { toast('Saved'); setEdit(false); data.reload(); }
   }
 
-  const canEdit = isMe || status.is_admin;
+  // Viewing as a player is read only, so no editing there.
+  const canEdit = (isMe || status.is_admin) && !status.viewing;
   return (
     <div className="page">
       <Header back title={p.name} sub={p.nickname ? `“${p.nickname}”` : 'Player profile'} />
@@ -128,6 +130,7 @@ export default function Profile() {
             <div className="small muted">Changes only via the admin or the Tribunal</div>
           </div>
         </div>
+        <ViewAsButton player={p} />
         {canEdit && <PhotoButtons onPick={changePhoto} facing="user" cameraLabel={busy ? 'Uploading…' : 'New selfie'} libraryLabel="Choose photo" />}
         {canEdit && (edit ? (
           <div className="card pad stack">

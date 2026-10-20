@@ -9,6 +9,7 @@
 //   - No signal is never a reason to give up: items wait up to 7 days. A real refusal (e.g. the round
 //     has been locked, the photo can't be read) drops that one item and says so; the rest carry on.
 import { supabase } from './supabase.js';
+import { previewOf, READ_ONLY_MESSAGE } from './preview.js';
 import { uploadPhoto } from './images.js';
 import { groupFolder } from './group.js';
 
@@ -96,6 +97,9 @@ async function insert(table, row) {
  * Returns { sent: true, row } or { sent: false } (queued). Throws only for a real refusal.
  */
 export async function sendOrQueue(table, row, opts = {}) {
+  // Viewing as a player is read only: nothing goes in the outbox (it would send later as the organiser).
+  const viewing = previewOf();
+  if (viewing) throw new Error(READ_ONLY_MESSAGE(viewing.name));
   const id = row.id || uuid();
   const item = { id, table, row: { ...row, id }, queued_at: new Date().toISOString() };
   // The photo's folder is fixed now (with this group), so it lands in the right group even if it

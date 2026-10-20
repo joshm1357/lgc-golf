@@ -1,6 +1,7 @@
 // App-wide state: who I am, and the shared reference data (players, trips, rounds, teams…).
 // Everything re-loads automatically when the database changes (Supabase Realtime).
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { previewOf, viewAsStatus } from './preview.js';
 import { supabase } from './supabase.js';
 import { pendingScores, onQueueChange, freeCacheSpace } from './offline.js';
 import { currentGroup, setCurrentGroup, GROUP_TABLES } from './group.js';
@@ -53,7 +54,8 @@ export function SessionProvider({ children }) {
     if (!error && data) cacheSet(`status-${session.user.id}`, data);
     // No signal: use who I was last time on this phone, so the app still opens.
     const cached = error ? cacheGet(`status-${session.user.id}`) : null;
-    const status = error ? cached : data;
+    // An organiser viewing as one of their players (preview.js): the app works as that player, read only.
+    const status = viewAsStatus(error ? cached : data, previewOf());
     // The database says which group I'm in (the one this phone asked for, if I'm still in it).
     if (status?.group_id) setCurrentGroup(status.group_id);
     setState({ loading: false, user: session.user, status, offline: !!(error && cached) });

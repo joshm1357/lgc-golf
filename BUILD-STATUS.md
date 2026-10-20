@@ -784,3 +784,70 @@ phone width `tests/e2e/stage10-test.mjs`.
   staging data, TEST tag, link posted on the pull request). `product` is also staging.thegolftrip.club (`infra.yml`). `main` goes to
   production only when `infra/cloudflare.json` says so (release B). `check.yml` runs on every pull request. There's Dependabot weekly.
   `.node-version` is 22. Settings live in `infra/cloudflare.json`; the only secret is `CLOUDFLARE_API_TOKEN`.
+
+## Sign in first, then Your groups (20 Oct 2026, branch `sign-in-home`, pull request into `product`)
+Only when sign-in is switched on in the build (`infra/cloudflare.json` → `sign_in`; on for staging builds, off for live).
+With it off, the home screen is exactly as before (checked in a browser on a live-style build).
+- **Home:** The Golf Trip crest and name; **Sign in with Google**; **Email me a code** (a 6-digit code typed in the app).
+  Email now makes an account if there isn't one, so new organisers can sign up. Underneath: "Got a PIN or invite
+  link?" (the PIN box, folded away) and "Start a new group". The Golf Trip's own colours, never L.G.C's.
+- **No sign-up before the first tee still holds:** an invite link or PIN joins as a guest with no account. On an invite,
+  signing in is offered underneath and Google brings them back to the same invite.
+- **Your groups** (`src/screens/YourGroups.jsx`): after a fresh sign-in with two or more groups, pick one (crest, name,
+  role). One group: straight in (decided: one less tap). No groups: "You're not in a group yet" with Start a new group /
+  Join with a PIN or invite link, and "Not you? Sign out". Replaces the old "No account found…" warning.
+- **Way back from inside:** More → Your groups, and tapping the crest at the top (`#/groups`). Without sign-in in the
+  build, both only show for someone in more than one group.
+- **Logic** in `src/lib/home.js` (which screen to show, the "just signed in" flag, code and email checks, group list
+  order and crests, the page to come back to after Google) with 20 tests in `home.test.js`.
+- **Coming back from Google:** the page they left (an invite, the wizard) is kept on the phone, not in the address sent
+  to Google, because Supabase puts the sign-in in the address's `#` part. Restored once, within 15 minutes.
+- **Database:** `045_your_groups.sql`. `my_status()`'s group list also carries each group's crest. Additive; applied to
+  staging 20 Oct; live gets it at the next release.
+- **Tested:** 158 unit tests; both builds; `tests/e2e/signin-home-test.mjs` 46 phone-width checks (home, PIN folded,
+  Google hand-off and return address, email code creates an account, Your groups, picking a group, the way back, no
+  group yet, one group straight in, invite as a guest, back from Google to the invite, joining while just signed in
+  goes in, live build unchanged). Independent review: 2 must-fix and 8 smaller findings, all fixed; `stage2`, `phone` and `start` browser
+  checks still pass on the live-style build.
+- **Josh's setup (staging only):** `knowledge/prompts/sign-in-chrome-prompt.md` in the Caddie folder; details in
+  `docs/SIGN-IN-SETUP.md`. Both Supabase email templates ("Confirm sign up" and "Magic link") need `{{ .Token }}`.
+- **Check on a real iPhone:** Google sign-in from the Home Screen app (iPhone may finish it in Safari rather than the
+  app, the same issue as emailed links). If so, the email code is the way in on iPhone, and Google is for Android and
+  browsers.
+- **Later:** real email sending (Resend on thegolftrip.club) before outside groups. Supabase's built-in sender only
+  reaches Josh's own address, a few an hour.
+- **Release checklist:** the repo rename to `thegolftrip-app` is step 9 of Part B in `docs/LAUNCH-HOSTING.md`.
+
+### Personal links, invite link first, Google's own button (20 Oct, same branch)
+- **Personal links** (`046_personal_links.sql`, `src/lib/personal.js`, `src/screens/PersonalLink.jsx`): an organiser sends
+  each player their own link (More → Group & invites → Personal links, with "1 of 12 signed in" and a line per player).
+  The player opens `#/me/CODE` ("G'day Mike, this link is just for you"), signs in like a new user, taps "Yes, I'm Mike",
+  and that sign-in becomes his player: same name, scores and history. One use, 14 days, organisers only; a new link
+  replaces the old; refused if someone else has already signed in as that player, or if this sign-in is already
+  someone else in the group; a phone-only sign-in can't use one; unapproved players get none. The link gives the role
+  the player has when it's made (an organiser's link says so on the card, in the message and on the confirm screen).
+  The old phone keeps working, and opening the link there asks to sign in (it isn't "done"). Wrong codes count towards
+  the wrong-guess limit. Organisers see a shortened email (m…@gmail.com). SQL check: `supabase/tests/personal_links.sql`,
+  33 results (incl. another group's organiser seeing and doing nothing), applied and checked on staging.
+- **Invite link first:** the front door says "Got an invite link?"; the box is "Invite link (or group PIN)" and also
+  takes a pasted personal link. "You're not in a group yet" points people who played before to their personal link.
+  The live build's PIN screen is unchanged.
+- **Google's own button** (`src/lib/google.js`): on addresses Google knows (`infra/cloudflare.json` → `google.button_hosts`)
+  Google's button signs in without leaving the app (`signInWithIdToken`, with a one-time value), so the Supabase
+  address never shows. Anywhere else, or if Google's script won't load, the old redirect. Needs the Google client ID in
+  `infra/cloudflare.json` → `google.client_id.staging` (public). Privacy draft updated.
+- **Independent review:** 1 must-fix (the old phone was told "all set") and 3 should-fix (role fixed on the link, wrong
+  codes counted, live-build wording), all fixed; Google's button now shows "Signing in…" and gets a new one-time value
+  after a failed try.
+- **Tested:** 169 unit tests; 69 phone-width checks in `signin-home-test.mjs` (adds the personal link, a used link,
+  Google's button with its one-time value, the organiser's card and its message); stage2/phone/start still pass.
+
+### Staging refreshed from live (20 Oct)
+- Staging L.G.C now has the real history from live: 17 players, 3 rounds, 144 scores, honour board, handicap history,
+  Tribunal, rules, posts, reactions, plans (all counts match live). Never copied: sign-ins, pay details, phone
+  notification details, locations. Repeatable steps: `docs/STAGING-REFRESH.md` (+ `supabase/staging/refresh_helper.sql`).
+- The old staging test trip is locked so South Coast 2026 shows as current. Josh's Google sign-in on staging is freed from
+  "Josh Stage" (still organiser) and has a personal link for the real Joshua Moran (organiser).
+- Email codes on staging are waiting on custom SMTP (Resend): the form is filled in Supabase, Josh pastes the key and saves;
+  then both email templates get `{{ .Token }}`.
+- The laptop layout is Stage 11c (not this branch).

@@ -50,6 +50,8 @@ jobs:
             echo "account=$ACC" >> "$GITHUB_OUTPUT"
             [ "$BRANCH" = "main" ] && W=live || W=staging
             echo "sign_in=$(jq -r ".sign_in.$W // \"\"" infra/cloudflare.json)" >> "$GITHUB_OUTPUT"
+            echo "google_id=$(jq -r ".google.client_id.$W // \"\"" infra/cloudflare.json)" >> "$GITHUB_OUTPUT"
+            echo "google_hosts=$(jq -r '(.google.button_hosts // []) | join(",")' infra/cloudflare.json)" >> "$GITHUB_OUTPUT"
           fi
           echo "go=$go" >> "$GITHUB_OUTPUT"
 
@@ -72,6 +74,8 @@ jobs:
           CF_PAGES_COMMIT_SHA: ${{ github.sha }}
           VITE_BASE: /
           VITE_SIGN_IN: ${{ steps.ready.outputs.sign_in }}
+          VITE_GOOGLE_CLIENT_ID: ${{ steps.ready.outputs.google_id }}
+          VITE_GOOGLE_HOSTS: ${{ steps.ready.outputs.google_hosts }}
         run: |
           if [ "$IS_MAIN" = "true" ]; then export VITE_SUPABASE_URL="$LIVE_DB" VITE_SUPABASE_KEY="$LIVE_KEY";
           else export VITE_SUPABASE_URL="$STAGING_DB" VITE_SUPABASE_KEY="$STAGING_KEY"; fi

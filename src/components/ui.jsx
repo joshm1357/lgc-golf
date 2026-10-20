@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, Link, useNavigate } from 'react-router-dom';
 import { GroupCrest } from './Logo.jsx';
 import { useFeature, useSession } from '../lib/store.jsx';
+import { SIGN_IN } from '../lib/auth.js';
 
 // ---------- Icons (simple stroke icons) ----------
 const P = { fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' };
@@ -219,5 +220,9 @@ export function UpdateBanner() {
 
 function HeaderCrest() {
   const { status } = useSession() || {};
-  return <GroupCrest size={46} look={status?.look || (status && status.legacy !== false ? { crest_url: 'builtin:lgc' } : null)} name={status?.group_name} />;
+  const crest = <GroupCrest size={46} look={status?.look || (status && status.legacy !== false ? { crest_url: 'builtin:lgc' } : null)} name={status?.group_name} />;
+  // Tapping the crest goes back to Your groups. Builds without sign-in only do this for someone in more than one
+  // group, so L.G.C's live app is unchanged.
+  if (!status?.is_member || !(SIGN_IN.length > 0 || (status.groups?.length || 0) > 1)) return crest;
+  return <Link to="/groups" aria-label="Your groups" style={{ display: 'block', padding: 1, margin: -1, borderRadius: '50%' }}>{crest}</Link>;
 }

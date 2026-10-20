@@ -40,7 +40,8 @@ export function Privacy() {
       <H>What the app keeps, and who sees it</H>
       <L items={[
         <><strong>Signing in.</strong> You can start with no details at all (a “phone-only” sign-in). If you add Google or an
-          email address, we keep that email so you can sign in again. Group members don’t see it.</>,
+          email address, we keep that email so you can sign in again. Other players don’t see it; your group’s organisers see
+          a shortened version (like m…@gmail.com) so they know you’ve signed in.</>,
         <><strong>Your profile in a group.</strong> Name, nickname, handicap and its history, a selfie if you take one, and
           any payment details you choose to add for the group (like a PayID). Everyone in that group sees these.</>,
         <><strong>Golf.</strong> Scores, teams, side comps (closest-to-the-pin and longest-drive entries include where on the
@@ -91,7 +92,8 @@ export function Privacy() {
         <><strong>Google Fonts</strong> (the lettering) and <strong>Esri</strong> (satellite map pictures) — your phone fetches these directly.</>,
         <><strong>OpenStreetMap</strong> — course names and locations, and greens. If an organiser imports greens, the course’s
           location is sent to OpenStreetMap’s servers to look them up.</>,
-        <><strong>Google or Facebook</strong> — only if you choose to sign in with them.</>,
+        <><strong>Google or Facebook</strong> — only if you choose to sign in with them. The sign-in screen loads Google’s
+          sign-in button from Google.</>,
         <><strong>Claude (Anthropic)</strong> — only if your group switches on the Claude connector: then the group’s names,
           handicaps, scores and plans can be read by Claude when your organiser asks it to.</>,
       ]} />

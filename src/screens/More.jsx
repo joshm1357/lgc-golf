@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useData, useSession, playerName, useFeature } from '../lib/store.jsx';
 import { Header, Icon, Avatar } from '../components/ui.jsx';
 import { NotifyCard } from '../components/NotifyCard.jsx';
+import { SIGN_IN } from '../lib/auth.js';
 
 export default function More() {
   const { status } = useSession();
@@ -10,7 +11,11 @@ export default function More() {
   const me = data.playersById[status.player_id];
   const pending = status.is_admin ? data.players.filter((p) => p.approved === false).length : 0;
   const on = { location: useFeature('location'), rule_voting: useFeature('rule_voting'), trophies: useFeature('trophies'), tribunal: useFeature('tribunal'), notifications: useFeature('notifications') };
+  const manyGroups = (status.groups?.length || 0) > 1;
   const items = [
+    // The way back to Your groups (switch group, start one, join another). Builds without sign-in only show it
+    // to someone in more than one group, so L.G.C's live app looks the same as before.
+    (SIGN_IN.length > 0 || manyGroups) && { to: '/groups', icon: Icon.user, label: 'Your groups', sub: manyGroups ? 'Switch group, start a new one or join another' : 'Start a new group or join another' },
     on.location && { to: '/map', icon: Icon.pin, label: 'Where’s everyone', sub: 'Course map with each group’s location' },
     { to: '/rules', icon: Icon.book, label: 'The Rulebook', sub: on.rule_voting ? 'Our rules and bonuses — propose and vote on changes' : 'Our rules and bonuses' },
     on.trophies && { to: '/trophies', icon: Icon.trophy, label: 'The Trophy Room', sub: status.legacy ? 'BD, Putt Buddies, Noodle Cup and the honour boards' : 'Trophies and the honour boards' },

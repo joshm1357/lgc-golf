@@ -8,7 +8,11 @@ import { DrawOverlay } from './components/DrawOverlay.jsx';
 // Loaded straight away: the first screens people see and score entry (must work with no signal).
 import Join, { InviteJoin } from './screens/Join.jsx';
 import { inviteCode } from './lib/invite.js';
-import { signInProblemFromUrl } from './lib/auth.js';
+import { signInProblemFromUrl, SIGN_IN } from './lib/auth.js';
+import { frontDoor, isFreshSignIn, clearFreshSignIn, takeReturn, choosesItsOwnWay } from './lib/home.js';
+import YourGroups, { YourGroupsInside } from './screens/YourGroups.jsx';
+import PersonalLink from './screens/PersonalLink.jsx';
+import { personalCode } from './lib/personal.js';
 import ProfileSetup, { AwaitingApproval } from './screens/ProfileSetup.jsx';
 import Leaderboard from './screens/Leaderboard.jsx';
 import ScoreEntry from './screens/ScoreEntry.jsx';
@@ -70,6 +74,15 @@ function Gate() {
   const loc = useLocation();
   // Coming back from Google with a problem: it's in the address, not an error — say what happened.
   const [problem] = useState(() => signInProblemFromUrl());
+  // Back from Google: go to the page they left from (an invite, the wizard), kept on the phone (lib/auth.js back()).
+  useEffect(() => {
+    if (loading) return;
+    const to = takeReturn();
+    if (to && !inviteCode(window.location.hash) && /^#?\/?$/.test(window.location.hash)) window.location.hash = to;
+  }, [loading]);
+  // An invite, the start-a-group wizard or a course's quick round: they've chosen where to go, so don't send them
+  // to Your groups afterwards.
+  useEffect(() => { if (choosesItsOwnWay(loc.pathname)) clearFreshSignIn(); }, [loc.pathname]);
   // The public start page and the start-a-group wizard work whether or not you're in a group yet.
   if (loc.pathname === '/start' || loc.pathname.startsWith('/start/')) return <LazyArea resetKey="start" fallback={<Loading />}><Start /></LazyArea>;
   // Privacy and terms (drafts): anyone can read them.
@@ -88,8 +101,14 @@ function Gate() {
     );
   }
   if (loading) return <Loading />;
+  // A personal link ("Hi Mike, this link is just for you"): works whether or not this phone is in a group yet.
+  if (loc.pathname.startsWith('/me/')) return <PersonalLink code={personalCode(loc.pathname)} />;
   const banner = problem && <div className="err" role="alert" style={{ margin: 0, borderRadius: 0 }}>{problem}</div>;
-  if (!status?.is_member) return <>{banner}<Join /></>;
+  // The front door: sign in first (when it's switched on in this build), then Your groups, then into a group.
+  // With sign-in off (the live L.G.C build), this is exactly the old rule: not in a group → the PIN screen.
+  const door = frontDoor({ signInOn: SIGN_IN.length > 0, status, fresh: isFreshSignIn(), hasInvite: !!inviteCode(window.location.hash) });
+  if (door === 'join' || door === 'home') return <>{banner}<Join /></>;
+  if (door === 'your-groups') return <>{banner}<YourGroups /></>;
   return (
     <DataProvider>
       {banner}
@@ -104,6 +123,8 @@ function Inside() {
   const loc = useLocation();
   // New screens open at the top, so a tap can't land on a button further down the next page.
   useEffect(() => { window.scrollTo(0, 0); }, [loc.pathname]);
+  // In a group now: a fresh sign-in has done its job (next time, straight back into this group).
+  useEffect(() => { clearFreshSignIn(); }, []);
   const [waiting, setWaiting] = useState(outboxCount());
   useEffect(() => {
     startOutbox();
@@ -145,6 +166,7 @@ function Inside() {
         <Route path="/rules" element={<Rulebook />} />
         <Route path="/courses/:courseId/greens" element={<GreenMapper />} />
         <Route path="/group" element={<Group />} />
+        <Route path="/groups" element={<YourGroupsInside />} />
         <Route path="/history" element={<History />} />
         <Route path="/round-ready" element={<RoundReady />} />
         <Route path="/join/:code" element={<JoinInsideRoute />} />

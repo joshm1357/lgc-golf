@@ -7,10 +7,18 @@
   "github_pages_retired": false,
   "_github_pages_retired": "true only at release B, step 5: stops deploy.yml so a push can't put the old app back over the hand-over page",
   "sign_in": {
-    "staging": "",
+    "staging": "google,email",
     "live": ""
   },
   "_sign_in": "e.g. \"google\" or \"google,email\" once that provider is set up for that database",
+  "google": {
+    "client_id": {
+      "staging": "716054617925-qp2bvst6o36st4ijc47tkvo21eug3me7.apps.googleusercontent.com",
+      "live": ""
+    },
+    "button_hosts": ["staging.thegolftrip.club", "app.thegolftrip.club", "sign-in-home.thegolftrip-app.pages.dev"]
+  },
+  "_google": "client_id is public (it's in every sign-in). Google's own button shows only on button_hosts, which must match the client's Authorised JavaScript origins in Google Cloud; everywhere else uses the redirect.",
   "domains": [
     {
       "name": "staging.thegolftrip.club",

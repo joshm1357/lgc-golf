@@ -137,7 +137,8 @@ await ctx.setOffline(true);
 for (const [hash, text] of [['#/tribunal', 'Tribunal'], ['#/plan', 'Ideas and voting'], ['#/comps', 'Closest'], ['#/admin', 'Admin']]) {
   await page.evaluate((h) => { window.location.hash = h; }, hash);
   let ok = false;
-  try { await page.getByText(text).first().waitFor({ timeout: 6000 }); ok = true; } catch { /* fail below */ }
+  // Scoped to the page: on a laptop build the (hidden on phones) sidebar has the same words.
+  try { await page.locator('.page').getByText(text).first().waitFor({ timeout: 6000 }); ok = true; } catch { /* fail below */ }
   check(ok, `offline: ${hash} opens`);
 }
 await page.screenshot({ path: `${SHOTS}/2-offline-admin.png` });

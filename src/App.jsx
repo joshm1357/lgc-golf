@@ -5,6 +5,12 @@ import { SessionProvider, DataProvider, useSession, useData, useFeature } from '
 import { TabBar, Toaster, Loading, UpdateBanner, toast } from './components/ui.jsx';
 import { lazyScreen, LazyArea } from './lib/lazy.jsx';
 import { DrawOverlay } from './components/DrawOverlay.jsx';
+import { Sidebar } from './components/Sidebar.jsx';
+import { FeedbackHost } from './components/Feedback.jsx';
+import { WhatsNew } from './components/WhatsNew.jsx';
+import { NEW_GROUPS } from './lib/beta.js';
+import { supabase } from './lib/supabase.js';
+import { sourceFrom, countScan } from './lib/quick.js';
 // Loaded straight away: the first screens people see and score entry (must work with no signal).
 import Join, { InviteJoin } from './screens/Join.jsx';
 import { inviteCode } from './lib/invite.js';
@@ -69,6 +75,36 @@ function DrawOverlayIfOn() {
   return useFeature('draw') ? <DrawOverlay /> : null;
 }
 
+// Starting a group is off on live until Stage 2 (friends' beta): say so, instead of a wizard the database would refuse.
+// Josh (a platform admin) can still start one; the database decides who that is.
+function StartOrClosed() {
+  const loc = useLocation();
+  const [open, setOpen] = useState(NEW_GROUPS ? true : null);
+  useEffect(() => {
+    if (NEW_GROUPS) return;
+    supabase.rpc('new_groups_open').then(({ data }) => setOpen(data === true), () => setOpen(false));
+  }, []);
+  // Closed: the wizard (which counts a stay card's scan) doesn't open, so count it here, once a visit.
+  useEffect(() => {
+    if (open !== false) return;
+    const src = sourceFrom(loc.search);
+    if (!src?.ref || !src.placement) return;
+    const key = `lgc-scan-${src.ref}-${src.placement}-start`;
+    let counted = false;
+    try { counted = !!sessionStorage.getItem(key); sessionStorage.setItem(key, '1'); } catch { /* fine */ }
+    if (!counted) countScan(supabase, { ref: src.ref, placement: src.placement, slug: null }).catch(() => {});
+  }, [open, loc.search]);
+  if (open === null) return <Loading />;
+  if (open) return <LazyArea resetKey="start" fallback={<Loading />}><Start /></LazyArea>;
+  return (
+    <div style={{ minHeight: '100vh', background: 'var(--navy)', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, padding: 24, textAlign: 'center' }}>
+      <div className="hdr-title">The Golf Trip is invite-only for now</div>
+      <div style={{ maxWidth: 360, color: 'var(--on-navy-muted)' }}>We’re testing it with our first groups. Got an invite link from your organiser? Open it to join your group.</div>
+      <a href="#/" className="btn gold" style={{ minWidth: 200 }}>Back</a>
+    </div>
+  );
+}
+
 function Gate() {
   const { loading, status } = useSession();
   const loc = useLocation();
@@ -84,7 +120,7 @@ function Gate() {
   // to Your groups afterwards.
   useEffect(() => { if (choosesItsOwnWay(loc.pathname)) clearFreshSignIn(); }, [loc.pathname]);
   // The public start page and the start-a-group wizard work whether or not you're in a group yet.
-  if (loc.pathname === '/start' || loc.pathname.startsWith('/start/')) return <LazyArea resetKey="start" fallback={<Loading />}><Start /></LazyArea>;
+  if (loc.pathname === '/start' || loc.pathname.startsWith('/start/')) return <StartOrClosed />;
   // Privacy and terms (drafts): anyone can read them.
   if (loc.pathname === '/privacy') return <LazyArea resetKey="privacy" fallback={<Loading />}><Privacy /></LazyArea>;
   if (loc.pathname === '/terms') return <LazyArea resetKey="terms" fallback={<Loading />}><Terms /></LazyArea>;
@@ -144,7 +180,8 @@ function Inside() {
   const hideTabs = loc.pathname.startsWith('/score/');
   const offline = data.offline || (typeof navigator !== 'undefined' && navigator.onLine === false);
   return (
-    <div className="app">
+    <div className="app with-side">
+      <Sidebar />
       {waiting > 0 && !offline && <div className="sync" role="status">📤 {waiting} post{waiting === 1 ? '' : 's'} or entr{waiting === 1 ? 'y' : 'ies'} waiting to send…</div>}
       {offline && <div className="sync" role="status">📵 No signal — showing the copy saved on this phone. Scores you enter are kept and sent when signal comes back.</div>}
       <LazyArea resetKey={loc.pathname} fallback={<Loading />}>
@@ -176,6 +213,8 @@ function Inside() {
       {!hideTabs && <TabBar />}
       <DrawOverlayIfOn />
       <UpdateBanner />
+      <FeedbackHost />
+      <WhatsNew />
       <Toaster />
     </div>
   );

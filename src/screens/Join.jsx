@@ -10,6 +10,7 @@ import { GOOGLE_CLIENT_ID, googleButtonHere, loadGoogle, makeNonce } from '../li
 import { GroupCrest } from '../components/Logo.jsx';
 import { savedLook, paintLook, DEFAULT_LOOK } from '../lib/theme.js';
 import { rememberSource } from '../lib/quick.js';
+import { NEW_GROUPS } from '../lib/beta.js';
 
 export async function ensureSignedIn() {
   const { data: { session } } = await supabase.auth.getSession();
@@ -165,7 +166,7 @@ function ClassicJoin() {
         <>
           <div style={{ fontFamily: 'var(--display)', fontSize: 34, fontWeight: 700 }}>{savedLook()?.short_name ? `${savedLook().short_name} Golf` : 'The Golf Trip'}</div>
           <PinForm onInvite={setPasted} />
-          <a href="#/start" className="small" style={{ color: '#fff', fontWeight: 700, textAlign: 'center', borderTop: '1px solid rgba(255,255,255,.2)', paddingTop: 14, width: '100%', maxWidth: 340 }}>Running a golf group? Start your own →</a>
+          {NEW_GROUPS && <a href="#/start" className="small" style={{ color: '#fff', fontWeight: 700, textAlign: 'center', borderTop: '1px solid rgba(255,255,255,.2)', paddingTop: 14, width: '100%', maxWidth: 340 }}>Running a golf group? Start your own →</a>}
           <span className="small" style={{ color: 'var(--on-navy-muted)' }}><a href="#/privacy" style={{ color: 'inherit' }}>Privacy</a> · <a href="#/terms" style={{ color: 'inherit' }}>Terms</a></span>
         </>
       )}
@@ -212,7 +213,7 @@ function SignInHome() {
       {showPin
         ? <PinForm onInvite={setPasted} autoFocus linkFirst />
         : <button type="button" className="btn ghost block" style={{ ...ON_NAVY_GHOST, maxWidth: 340 }} onClick={() => setShowPin(true)}>Got an invite link?</button>}
-      <a href="#/start" className="btn ghost block" style={{ ...ON_NAVY_GHOST, maxWidth: 340, borderColor: 'transparent', textDecoration: 'underline' }}>Start a new group</a>
+      {NEW_GROUPS && <a href="#/start" className="btn ghost block" style={{ ...ON_NAVY_GHOST, maxWidth: 340, borderColor: 'transparent', textDecoration: 'underline' }}>Start a new group</a>}
       <span className="small" style={{ color: 'var(--on-navy-muted)' }}><a href="#/privacy" style={{ color: 'inherit' }}>Privacy</a> · <a href="#/terms" style={{ color: 'inherit' }}>Terms</a></span>
     </div>
   );

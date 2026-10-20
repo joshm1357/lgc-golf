@@ -13,6 +13,24 @@ Kept up to date at the end of every build. The shared copy for comments is a Cla
 | 1.3 | Sun 18 Oct (evening) | **Coming up** (any number of future trips and rounds): votes on dates/location/anything, Who's in + lock-in, details, day-by-day plan, bring list, jobs, shared costs with custom splits + who-pays-who + payment details, rooms & cars (live draw), organiser's checklist (suggestions only), anyone can suggest a trip or round. **The Rulebook** (rules, what they apply to, propose → vote → admin decides). **Phone notifications** + daily 9am reminders, Share-to-Messenger nudges, add-to-calendar. **Offline**: the app opens and scoring works with no signal. Bottom bar: Map moved into More; Coming up added. |
 | 1.4 | Sun 18 Oct (night) | **GPS distances** to the front/middle/back and today's pin (anyone can drop the pin while the round is live), **shot planner** (tap up to 3 targets — distance from you or the tee to each, then on to the pin), greens filled from OpenStreetMap or tapped in by the admin, course map saved for offline. **Rules drive round set-up** (CTP/LD value and minimum drives come from the Rulebook). **Plan → trip** (admin button). **More offline**: feed posts and comp entries (with photos) queue and send later. **L.G.C connector** for Claude (safe actions: leaderboard, enter scores, confirm comps, post, organise). |
 
+## The road to beta (agreed with Josh, 20 Oct 2026)
+Living plan: the Claude Doc "The Golf Trip — Road to beta". One installable web app for phone and laptop (no app stores).
+Each stage opens only when the one before meets its gate.
+
+| Stage | Who | What | Gate |
+|---|---|---|---|
+| 0. Pull it together | No one new | #1 launch-hosting and #2 sign-in-home merged (done 20 Oct); email codes on staging | Josh signed in as himself on staging, phone and laptop |
+| 1. The L.G.C beta | L.G.C | v1.5 → v2.2 on live (now including 045–047 and `beta-1`), app.thegolftrip.club, sign-in, personal links, light desktop, Tell Josh | Players signed in on their own links; next trip in Trips; feedback sorted |
+| 2. Friends' beta | 2–5 groups Josh knows | Fixes from feedback, new groups switched on, Turnstile, Supabase Pro, privacy and terms with the ABN, Caddie live | 3 groups run a round with no help |
+| 3. Signature features (v2.3) | Same groups | 11b governance, 12 Replay, 14 plate pilot, 13 connect your assistant, 11c full desktop; 15 later | Groups come back for a second trip |
+| 4. Public launch | Anyone | Start your group on the website, pilot club, Future Golf | 5–10 active groups outside L.G.C |
+| 5. Earn (v3) | Paying groups | 16 trip finder, 17 premium and payments, paid reel | First trip paid through the app |
+
+**Stage 1 build (`beta-1`, 20 Oct):** light desktop (sidebar at 1024 px and up, wider column at 768 px, phones unchanged),
+"Tell Josh" feedback (047, Josh's screen → Feedback), What's new (once per phone, sign-in builds only), Install on this
+computer, and new groups off on live (`infra/cloudflare.json` → `new_groups`; the database refuses too until the
+`new_groups_open` flag is on).
+
 ## Next — v1.5: finish and fix up (built 18 Oct, waiting for Josh's OK to go live)
 
 Nothing here changes how L.G.C plays. Branch `v1.5`; tested on the staging database `lgc-golf-staging`.

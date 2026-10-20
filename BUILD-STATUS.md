@@ -900,3 +900,22 @@ as soon as possible. Plan: DEV-PLAN.md → "The road to beta".
   beta 44, signin-home 69, phone 17, start 20, quick 21, stage2 19, club 40, features 9, look 17, trips 18, history 17,
   rulebook 10, stage9 23, stage10 15, courses 14). A few older checks now look inside `.page` or mark the What's new
   note seen, and signin-home expects no "Start your own" on the live build (decided).
+
+## View as a player (21 Oct 2026, branch `view-as`)
+Josh asked to see the app exactly as a player saw it ("that's critical"). An organiser opens a player's profile and
+taps **View the app as Mike**: the app works as Mike's (his scorecard, profile, a player's More), with a bar on every
+screen, "Viewing as Mike · read only", and Stop.
+- **Read only, enforced on the phone:** `src/lib/preview.js` + `supabase.js` refuse every request that isn't a read,
+  apart from token refresh, sign-out and a short list of read-only functions. The score queue and outbox neither take
+  nor send anything while viewing (queued items from before wait until Stop and are never dropped). Notifications,
+  draw-room presence and sign-in changes are off.
+- **Grants nothing:** it's client-side only, and an organiser can already read everything in their group. It lives
+  in one browser tab (`sessionStorage`). It stops by itself if it no longer applies (another group, no longer an
+  organiser, the player has gone) and on sign-out. Not offered for unapproved players.
+- **Who are you?** (sign-in builds): points people with history to their organiser's personal link, with a paste box.
+- **Known:** the role is always shown as "player" (a guest or co-organiser is shown as a player). A few things that
+  belong to the phone's real owner (notification settings, sign-in details) aren't shown as the player's.
+- **Independent review:** 3 must-fix and 5 should-fix, all fixed (viewing outliving its session; no Stop bar on some
+  screens; push on/off; auth writes; stricter block-list; queues; draw presence; read-only list wording).
+- **Tested:** 184 unit tests (`preview.test.js` 9); `view-as-test.mjs` 14; beta 47; signin-home 69; every other browser
+  check passes.

@@ -63,7 +63,7 @@ export async function saveScore(row) {
 
 // Only database rule/constraint/data errors are permanent. Everything else
 // (no signal — e.g. Safari's "Load failed" — timeouts, server hiccups, expired login) is kept and retried.
-const isPermanent = (error) => /^(42|23|22)/.test(error?.code || '');
+const isPermanent = (error) => error?.code !== 'VIEWING' && /^(42|23|22)/.test(error?.code || '');
 const strip = ({ queued_at, ...r }) => r; // eslint-disable-line no-unused-vars
 
 function timeoutSignal(ms) {
@@ -88,6 +88,7 @@ function removeSent(sentRows) {
 // One send at a time; a save that arrives mid-send waits its turn, then sends.
 let current = null;
 export async function flush() {
+  if (previewOf()) return false; // viewing as someone: the queue waits until Stop
   while (current) {
     try { await current; } catch { /* the earlier send's problem, not ours */ }
   }

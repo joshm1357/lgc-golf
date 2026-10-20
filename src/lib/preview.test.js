@@ -21,8 +21,18 @@ describe('blockedWhileViewing', () => {
     expect(blockedWhileViewing(`${BASE}/storage/v1/object/photos/a.jpg`, 'POST', V)).toBe(true);
     expect(blockedWhileViewing(`${BASE}/functions/v1/notify`, 'POST', V)).toBe(true);
   });
-  it('keeps the organiser signed in', () => {
+  it('keeps the organiser signed in, but no other sign-in change', () => {
     expect(blockedWhileViewing(`${BASE}/auth/v1/token?grant_type=refresh_token`, 'POST', V)).toBe(false);
+    expect(blockedWhileViewing(`${BASE}/auth/v1/logout`, 'POST', V)).toBe(false);
+    expect(blockedWhileViewing(`${BASE}/auth/v1/user`, 'GET', V)).toBe(false);
+    expect(blockedWhileViewing(`${BASE}/auth/v1/user`, 'PUT', V)).toBe(true);
+    expect(blockedWhileViewing(`${BASE}/auth/v1/otp`, 'POST', V)).toBe(true);
+    expect(blockedWhileViewing(`${BASE}/auth/v1/token?grant_type=password`, 'POST', V)).toBe(true);
+  });
+  it("refuses anything else that isn't a read", () => {
+    expect(blockedWhileViewing(`${BASE}/realtime/v1/api/broadcast`, 'POST', V)).toBe(true);
+    expect(blockedWhileViewing(`${BASE}/graphql/v1`, 'POST', V)).toBe(true);
+    expect(blockedWhileViewing(`${BASE}/rest/v1/rpc/invite_info`, 'POST', V)).toBe(true);
   });
 });
 

@@ -6,6 +6,7 @@
 //   done     → all picks revealed; admin locks in or scraps
 //   locked   → teams written to the round
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { previewOf } from '../lib/preview.js';
 import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useRealtime, useSession, playerName } from '../lib/store.jsx';
 import { REVEAL_MS, SPIN_MS, makeDraw, makeGroupDraw } from '../lib/draw.js';
@@ -112,7 +113,7 @@ function useWatchers(drawId, me, enabled) {
     if (!enabled || !me) return undefined;
     const ch = supabase.channel(`draw-room-${drawId}`, { config: { presence: { key: me } } });
     ch.on('presence', { event: 'sync' }, () => setIds(Object.keys(ch.presenceState())));
-    ch.subscribe((s) => { if (s === 'SUBSCRIBED') ch.track({ at: Date.now() }); });
+    ch.subscribe((s) => { if (s === 'SUBSCRIBED' && !previewOf()) ch.track({ at: Date.now() }); }); // viewing as someone: watch, don't appear as them
     return () => { supabase.removeChannel(ch); };
   }, [drawId, me, enabled]);
   return ids;

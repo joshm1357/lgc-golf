@@ -4,7 +4,7 @@ import { supabase } from './supabase.js';
 // and nothing extra to install: the report goes to our own database. It sends the error message, where in the code
 // it happened, the screen (without anything after '?', and never an invite code) and the app version — no names.
 
-const IGNORE = /ResizeObserver loop|^Script error\.?$|Load failed|Failed to fetch|NetworkError|AbortError|aborted|cancell?ed|dynamically imported module|Importing a module script failed/i;
+const IGNORE = /ResizeObserver loop|^Script error\.?$|Load failed|Failed to fetch|NetworkError|AbortError|aborted|cancell?ed|dynamically imported module|Importing a module script failed|so changes are off/i;
 const MAX_PER_VISIT = 10;
 const seen = new Set();
 

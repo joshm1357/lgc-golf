@@ -10,6 +10,12 @@ function restart(hash) {
   window.location.reload();
 }
 
+/** Stops viewing straight away (used when the viewed player has gone from the group). */
+export function StopViewing() {
+  React.useEffect(() => { stopPreview(); restart('#/'); }, []);
+  return null;
+}
+
 export function ViewingBar() {
   const { status } = useSession();
   if (!status?.viewing) return null;
@@ -25,7 +31,8 @@ export function ViewingBar() {
 /** On a player's profile, for an organiser: see the app the way this player sees it. */
 export function ViewAsButton({ player }) {
   const { status } = useSession();
-  if (!status?.is_admin || status.viewing || !player || player.id === status.player_id) return null;
+  // Not for yourself, or for someone not approved yet (they'd only see the waiting screen).
+  if (!status?.is_admin || status.viewing || !player || player.id === status.player_id || player.approved === false) return null;
   const name = player.nickname || player.name;
   const go = () => { startPreview({ player_id: player.id, name, group_id: status.group_id }); restart('#/'); };
   return (

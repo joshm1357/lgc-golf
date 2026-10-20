@@ -98,6 +98,7 @@ await page.locator('.page .hdr-title', { hasText: 'More' }).waitFor({ timeout: 1
 const moreText = await page.locator('.page').innerText();
 check(moreText.includes('Signed in as Mike') || moreText.includes('Mike'), 'More shows Mike as the person');
 check(!moreText.includes('Trips, courses, players, rounds'), 'no organiser Admin entry while viewing');
+check(!(await page.getByText('Notifications', { exact: false }).first().isVisible().catch(() => false)), 'no notifications card while viewing (they belong to this phone)');
 await page.screenshot({ path: `${SHOTS}/3-more-as-mike.png` });
 
 // 3. A change is refused before it leaves the phone.
@@ -128,6 +129,13 @@ const p2 = await ctx.newPage();
 await p2.goto(`${BASE}#/`);
 await p2.waitForTimeout(2000);
 check(!(await p2.locator('.viewing-bar').isVisible().catch(() => false)), 'another tab is not viewing');
+
+// 6. Viewing that no longer applies (e.g. another group) stops by itself, so the phone isn't left read only.
+await p2.evaluate(() => sessionStorage.setItem('tgt-preview', JSON.stringify({ player_id: 'x', name: 'Ghost', group_id: 'another-group' })));
+await p2.reload();
+await p2.waitForTimeout(2500);
+check(!(await p2.locator('.viewing-bar').isVisible().catch(() => false)), 'viewing for another group: no bar');
+check(await p2.evaluate(() => sessionStorage.getItem('tgt-preview') === null), 'viewing for another group: stopped by itself');
 
 await browser.close();
 console.log(fails.length ? `\n${fails.length} FAILED:\n- ${fails.join('\n- ')}` : '\nAll checks passed.');

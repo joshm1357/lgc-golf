@@ -8,7 +8,7 @@ import { DrawOverlay } from './components/DrawOverlay.jsx';
 import { Sidebar } from './components/Sidebar.jsx';
 import { FeedbackHost } from './components/Feedback.jsx';
 import { WhatsNew } from './components/WhatsNew.jsx';
-import { ViewingBar } from './components/Viewing.jsx';
+import { ViewingBar, StopViewing } from './components/Viewing.jsx';
 import { NEW_GROUPS } from './lib/beta.js';
 import { supabase } from './lib/supabase.js';
 import { sourceFrom, countScan } from './lib/quick.js';
@@ -139,7 +139,7 @@ function Gate() {
   }
   if (loading) return <Loading />;
   // A personal link ("Hi Mike, this link is just for you"): works whether or not this phone is in a group yet.
-  if (loc.pathname.startsWith('/me/')) return <PersonalLink code={personalCode(loc.pathname)} />;
+  if (loc.pathname.startsWith('/me/')) return <><ViewingBar /><PersonalLink code={personalCode(loc.pathname)} /></>;
   const banner = problem && <div className="err" role="alert" style={{ margin: 0, borderRadius: 0 }}>{problem}</div>;
   // The front door: sign in first (when it's switched on in this build), then Your groups, then into a group.
   // With sign-in off (the live L.G.C build), this is exactly the old rule: not in a group → the PIN screen.
@@ -172,12 +172,14 @@ function Inside() {
   if (!data.ready) {
     return data.error ? <div className="empty">Couldn't load: {data.error.message}. Pull down to refresh.</div> : <Loading />;
   }
+  // Viewing as a player who isn't in the group's list any more: stop viewing (Viewing.jsx).
+  if (status.viewing && !data.playersById[status.player_id]) return <StopViewing />;
   // An invite link opened while still picking a name (or waiting for approval) still works.
-  if (loc.pathname.startsWith('/join/') && (!status.player_id || !data.playersById[status.player_id])) return <JoinInsideRoute code={loc.pathname.slice(6)} />;
-  if (!status.player_id) return <ProfileSetup />;
+  if (loc.pathname.startsWith('/join/') && (!status.player_id || !data.playersById[status.player_id])) return <><ViewingBar /><JoinInsideRoute code={loc.pathname.slice(6)} /></>;
+  if (!status.player_id) return <><ViewingBar /><ProfileSetup /></>;
   const me = data.playersById[status.player_id];
-  if (!me) return <ProfileSetup />;
-  if (me.approved === false && !status.is_admin) return <AwaitingApproval player={me} />;
+  if (!me) return <><ViewingBar /><ProfileSetup /></>;
+  if (me.approved === false && !status.is_admin) return <><ViewingBar /><AwaitingApproval player={me} /></>;
   const hideTabs = loc.pathname.startsWith('/score/');
   const offline = data.offline || (typeof navigator !== 'undefined' && navigator.onLine === false);
   return (
@@ -185,7 +187,7 @@ function Inside() {
       <Sidebar />
       <ViewingBar />
       {waiting > 0 && !offline && <div className="sync" role="status">📤 {waiting} post{waiting === 1 ? '' : 's'} or entr{waiting === 1 ? 'y' : 'ies'} waiting to send…</div>}
-      {offline && <div className="sync" role="status">📵 No signal — showing the copy saved on this phone. Scores you enter are kept and sent when signal comes back.</div>}
+      {offline && <div className="sync" role="status">📵 No signal — showing the copy saved on this phone.{status.viewing ? '' : ' Scores you enter are kept and sent when signal comes back.'}</div>}
       <LazyArea resetKey={loc.pathname} fallback={<Loading />}>
       <Routes>
         <Route path="/" element={<Leaderboard />} />

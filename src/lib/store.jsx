@@ -1,7 +1,7 @@
 // App-wide state: who I am, and the shared reference data (players, trips, rounds, teams…).
 // Everything re-loads automatically when the database changes (Supabase Realtime).
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { previewOf, viewAsStatus } from './preview.js';
+import { previewOf, viewAsStatus, stopPreview } from './preview.js';
 import { supabase } from './supabase.js';
 import { pendingScores, onQueueChange, freeCacheSpace } from './offline.js';
 import { currentGroup, setCurrentGroup, GROUP_TABLES } from './group.js';
@@ -55,7 +55,11 @@ export function SessionProvider({ children }) {
     // No signal: use who I was last time on this phone, so the app still opens.
     const cached = error ? cacheGet(`status-${session.user.id}`) : null;
     // An organiser viewing as one of their players (preview.js): the app works as that player, read only.
-    const status = viewAsStatus(error ? cached : data, previewOf());
+    const viewing = previewOf();
+    const status = viewAsStatus(error ? cached : data, viewing);
+    // Viewing that no longer applies (another group, no longer an organiser, nothing loaded): stop it, so this phone
+    // isn't left refusing every change with no Stop bar.
+    if (viewing && !status?.viewing) stopPreview();
     // The database says which group I'm in (the one this phone asked for, if I'm still in it).
     if (status?.group_id) setCurrentGroup(status.group_id);
     setState({ loading: false, user: session.user, status, offline: !!(error && cached) });
@@ -68,6 +72,7 @@ export function SessionProvider({ children }) {
     refresh();
     const { data: sub } = supabase.auth.onAuthStateChange((evt) => {
       if (evt === 'SIGNED_OUT') {
+        stopPreview();
         freeCacheSpace(); // the saved offline copies belong to whoever was signed in
         clearLook();
         setCurrentGroup(null);

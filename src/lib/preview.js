@@ -6,10 +6,11 @@
 
 const KEY = 'tgt-preview';
 
-/** Database reads that go through rpc() (a POST) and change nothing — still allowed while viewing as someone. */
+/** Functions called with rpc() (a POST) that only read app data — still allowed while viewing as someone.
+ * (report_error only files an app problem report for Josh; it changes nothing anyone sees.) */
 export const READ_RPCS = new Set([
-  'my_status', 'find_courses', 'course_page', 'search_courses', 'library_course', 'tv_board', 'player_link_info',
-  'partner_courses_for', 'new_groups_open', 'my_club', 'invite_info', 'booking_disclosure', 'report_error',
+  'my_status', 'find_courses', 'course_page', 'search_courses', 'library_course', 'tv_board',
+  'partner_courses_for', 'new_groups_open', 'my_club', 'booking_disclosure', 'report_error',
   'club_stats', 'club_enquiries',
 ]);
 
@@ -30,16 +31,21 @@ function safeSession() {
   try { return typeof sessionStorage !== 'undefined' ? sessionStorage : null; } catch { return null; }
 }
 
-/** Should this request be refused because we're only viewing? Reads pass; any change is stopped. */
+/** Should this request be refused because we're only viewing? Reads pass; any change is stopped — everything that
+ * isn't a read is refused unless it's on the short lists here. */
 export function blockedWhileViewing(url, method, viewing) {
   if (!viewing || !url) return false;
   const m = String(method || 'GET').toUpperCase();
-  if (url.includes('/auth/v1/')) return false; // keeping the organiser signed in (token refresh) is fine
   if (m === 'GET' || m === 'HEAD' || m === 'OPTIONS') return false;
+  // Staying signed in (token refresh) and signing out are fine; any other change to the sign-in is not.
+  if (/\/auth\/v1\/token\?(.*&)?grant_type=refresh_token/.test(url) || /\/auth\/v1\/logout/.test(url)) return false;
   const rpc = url.match(/\/rest\/v1\/rpc\/([a-z_0-9]+)/i);
   if (rpc) return !READ_RPCS.has(rpc[1]);
-  return url.includes('/rest/v1/') || url.includes('/storage/v1/') || url.includes('/functions/v1/');
+  return true;
 }
+
+/** Shorthand for the guards: are we viewing as someone in this tab right now? */
+export function viewingNow() { return previewOf(); }
 
 /** The status the app works from while viewing: the player instead of the organiser, with a player's rights. */
 export function viewAsStatus(status, viewing) {
@@ -53,4 +59,4 @@ export function viewAsStatus(status, viewing) {
   };
 }
 
-export const READ_ONLY_MESSAGE = (name) => `You’re viewing as ${name || 'a player'}, so changes are off. Tap Stop at the top to make changes.`;
+export const READ_ONLY_MESSAGE = (name) => `You’re viewing as ${name || 'a player'}, so changes are off. Press Stop at the top to make changes.`;

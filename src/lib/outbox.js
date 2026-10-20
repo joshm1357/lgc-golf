@@ -64,6 +64,7 @@ const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xx
 
 /** A refusal that won't change by trying again: a database rule, or a photo the phone can't read/send. */
 function isPermanent(e) {
+  if (e?.code === 'VIEWING' || e?.statusCode === 'VIEWING' || /viewing as/i.test(e?.message || '')) return false;
   if (/^(42|23|22)/.test(e?.code || '')) return true;
   if (e?.localPhoto) return true;
   const st = Number(e?.statusCode || e?.status || 0);
@@ -128,6 +129,7 @@ export async function sendOrQueue(table, row, opts = {}) {
 let flushing = false;
 export async function flushOutbox() {
   if (flushing || !read().length) return;
+  if (previewOf()) return; // viewing as someone: the outbox waits until Stop
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
   flushing = true;
   try {

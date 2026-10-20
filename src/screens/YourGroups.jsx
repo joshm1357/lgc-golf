@@ -42,6 +42,44 @@ function GroupList({ rows, onPick, light, status }) {
   );
 }
 
+/** Groups this person deleted (as an organiser) in the last 7 days, with "Bring back". Hidden when there are none,
+ * or on a database without the 7-day undo yet. */
+function DeletedGroups({ light }) {
+  const [rows, setRows] = useState([]);
+  const [busy, setBusy] = useState(null);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    let live = true;
+    supabase.rpc('my_deleted_groups').then(({ data, error }) => { if (live && !error && Array.isArray(data)) setRows(data); }, () => {});
+    return () => { live = false; };
+  }, []);
+  if (!rows.length) return null;
+  const back = async (g) => {
+    setBusy(g.id); setErr('');
+    const { error } = await supabase.rpc('undo_delete_group', { p_group: g.id });
+    setBusy(null);
+    if (error) { setErr(error.message.replace(/^.*?ERROR:\s*/, '')); return; }
+    openGroup(g.id);
+  };
+  const until = (d) => new Date(d).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+  const muted = { color: light ? 'var(--muted)' : 'var(--on-navy-muted)' };
+  return (
+    <div style={{ width: '100%', maxWidth: light ? undefined : 340, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div className="small" style={{ ...muted, fontWeight: 700 }}>Deleted recently</div>
+      {rows.map((g) => (
+        <div key={g.id} className="row" style={{ gap: 10, padding: '10px 14px', borderRadius: 14, border: light ? '1px solid var(--line)' : '1px dashed rgba(255,255,255,.35)', background: light ? '#fff' : 'transparent' }}>
+          <span className="grow" style={{ minWidth: 0 }}>
+            <strong style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.name}</strong>
+            <span className="small" style={muted}>You can bring it back until {until(g.undo_until)}</span>
+          </span>
+          <button type="button" className="btn sm gold" disabled={busy === g.id} onClick={() => back(g)}>{busy === g.id ? 'Bringing back…' : 'Bring back'}</button>
+        </div>
+      ))}
+      {err && <div className="err" role="alert">{err}</div>}
+    </div>
+  );
+}
+
 /** Before you're in a group: a full navy screen, like the home screen. */
 export default function YourGroups() {
   const { status, user } = useSession();
@@ -61,6 +99,7 @@ export default function YourGroups() {
         </div>
       </div>
       {!none && <GroupList rows={rows} status={status} onPick={(g) => openGroup(g.id)} />}
+      <DeletedGroups />
       {none && NEW_GROUPS && <a href="#/start" className="btn gold block" style={{ maxWidth: 340 }}>Start a new group</a>}
       {showPin
         ? <PinForm autoFocus linkFirst onInvite={(c) => { window.location.hash = `#/join/${c}`; }} />
@@ -88,6 +127,7 @@ export function YourGroupsInside() {
       <Header back title="Your groups" sub={rows.length > 1 ? 'Tap one to switch' : (NEW_GROUPS ? 'Start a new group or join another' : 'Join another group')} />
       <div className="section stack" style={{ gap: 12 }}>
         <GroupList light rows={rows} status={status} onPick={(g) => (g.current ? (window.location.hash = '#/') : openGroup(g.id))} />
+        <DeletedGroups light />
         {NEW_GROUPS && <a href="#/start" className="btn block">Start a new group</a>}
         {showPin
           ? (

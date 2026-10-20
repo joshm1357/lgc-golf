@@ -430,7 +430,7 @@ function YourData() {
     setCurrentGroup(null);
     await refresh?.();
     window.location.hash = '#/';
-  }, 'Group deleted');
+  }, 'Group deleted. You can bring it back from Your groups for 7 days.');
   return (
     <div className="card pad stack" style={{ gap: 8 }}>
       <strong>🔒 Your data</strong>
@@ -469,7 +469,7 @@ function YourData() {
       )}
       {asking === 'group' && (
         <div className="stack" style={{ gap: 6 }}>
-          <span className="small">Delete {status.group_name} for everyone? Every score, trip, plan, photo link and chat in it goes, and it can’t be undone. Download the group’s data first if you want a copy.</span>
+          <span className="small">Delete {status.group_name} for everyone? It disappears straight away. For 7 days an organiser can bring it back from Your groups; after that every score, trip, plan, photo link and chat in it goes for good. Download the group’s data first if you want a copy.</span>
           <label className="field"><span>Type the group’s name to delete it</span><input className="input" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={status.group_name} /></label>
           <div className="row" style={{ gap: 8 }}>
             <button type="button" className="btn sm" disabled={busy || typed.trim().toLowerCase() !== String(status.group_name || '').trim().toLowerCase()} onClick={deleteGroup}>Delete the group</button>

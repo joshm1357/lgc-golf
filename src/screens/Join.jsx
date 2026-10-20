@@ -246,7 +246,7 @@ export function SignInButtons({ returnHash = '', quiet = false }) {
             await verifyEmailCode(email, cleanEmailCode(codeIn));
             await refresh();
           })}>
-            <span className="small" style={{ color: 'var(--on-navy-muted)', textAlign: 'center' }}>We’ve emailed a 6-digit code to <strong style={{ color: '#fff' }}>{email.trim()}</strong>. It can take a minute (check junk too).</span>
+            <span className="small" style={{ color: 'var(--on-navy-muted)', textAlign: 'center' }}>We’ve emailed a 6-digit code to <strong style={{ color: '#fff' }}>{email.trim()}</strong>. It can take a minute (check junk too). If the email has a sign-in link instead, open it on this phone.</span>
             <input className="input" inputMode="numeric" autoComplete="one-time-code" value={codeIn} onChange={(e) => setCodeIn(e.target.value)}
               placeholder="6-digit code" aria-label="6-digit code from the email" style={{ color: 'var(--text)', textAlign: 'center', fontSize: 24, letterSpacing: '.3em' }} />
             <button className="btn gold block" disabled={busy || !cleanEmailCode(codeIn)}>{busy ? 'Checking…' : 'Sign in'}</button>

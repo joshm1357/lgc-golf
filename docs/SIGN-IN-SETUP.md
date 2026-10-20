@@ -15,7 +15,8 @@ In supabase.com → project **lgc-golf-staging** → Authentication:
    - Site URL: `https://staging.thegolftrip.club/`
    - Redirect URLs — add: `https://staging.thegolftrip.club/**`, `https://*.thegolftrip-app.pages.dev/**` (every test
      link) and `http://localhost:5173/**`
-3. **Emails → Templates** — the app asks for a 6-digit code (typed in the app; an emailed link would open Safari, not the
+3. **Emails → Templates** (found 20 Oct: Supabase only lets you edit templates once **custom SMTP** is set up, so until
+   then emails carry a sign-in link, which works in a browser but not in an iPhone Home Screen app). The app asks for a 6-digit code (typed in the app; an emailed link would open Safari, not the
    Home Screen app). Put `{{ .Token }}` in **both** of these, because a brand-new email gets the first one and a
    returning one gets the second:
    - **Confirm sign up** — subject `Your sign-in code for The Golf Trip: {{ .Token }}`; the body shows `{{ .Token }}` big

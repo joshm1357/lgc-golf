@@ -919,3 +919,20 @@ screen, "Viewing as Mike · read only", and Stop.
   screens; push on/off; auth writes; stricter block-list; queues; draw presence; read-only list wording).
 - **Tested:** 184 unit tests (`preview.test.js` 9); `view-as-test.mjs` 14; beta 47; signin-home 69; every other browser
   check passes.
+
+## 7-day undo on deleting a group (21 Oct 2026, branch `delete-undo`; agreed 20 Oct, Stage 2)
+- **Deleting a group hides it straight away** for everyone. It's nobody's current group, it's gone from Your groups,
+  its rows can't be read or changed (the access-rule helpers `my_group_ids`, `is_group_member` and
+  `is_group_organiser` leave it out), and nobody can join it (trigger on `group_members`).
+- **Bring back within 7 days:** Your groups → "Deleted recently" → Bring back (any organiser of that group, signed in
+  properly). `undo_delete_group`, `my_deleted_groups`.
+- **After 7 days** the daily clean-up removes it for good (`private.purge_group`, which is the old delete_group body).
+  This part is in **048b** because it contains DELETE statements: it waits for Josh's approval (staging, then live).
+  Until it runs, a deleted group just stays hidden and restorable.
+- **Old app versions** calling `delete_group` get the hiding too.
+- **Database:** `048_delete_undo.sql` applied to staging 21 Oct; `048b_delete_undo_cleanup.sql` not yet (approval).
+- **Tested:** `supabase/tests/delete_undo.sql` 20 results on staging as `delete_undo.expected.txt` (a player can't
+  delete; the organiser deletes; it's hidden from both, rows unreadable; a player can't bring it back; nobody can join;
+  the organiser brings it back; after 8 days it can't come back; L.G.C can't be deleted).
+  `tests/e2e/delete-undo-test.mjs` 3 (Deleted recently, until when, Bring back).
+- **To update after 048b:** `supabase/tests/stage9_delete.sql` still expects delete_group to remove rows straight away.

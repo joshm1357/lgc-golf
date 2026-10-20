@@ -851,3 +851,30 @@ With it off, the home screen is exactly as before (checked in a browser on a liv
 - Email codes on staging are waiting on custom SMTP (Resend): the form is filled in Supabase, Josh pastes the key and saves;
   then both email templates get `{{ .Token }}`.
 - The laptop layout is Stage 11c (not this branch).
+
+## Stage 1, the L.G.C beta (20 Oct 2026, branch `beta-1`, pull request into `product`)
+Agreed with Josh 20 Oct: one installable web app on phone and laptop, L.G.C only for the first beta, a light desktop,
+as soon as possible. Plan: DEV-PLAN.md → "The road to beta".
+- **Light desktop.** 1024 px and up: a fixed sidebar (`src/components/Sidebar.jsx`: crest and group name → Your groups,
+  Leaderboard, Feed, Comps, Trips, Trophy Room, Tribunal, Rulebook, Courses, Group & invites, More, and Tell Josh)
+  replaces the bottom bar; pages up to 900 px wide; sheets become centred dialogs; the Enter score button and toasts
+  centre on the page. 768–1023 px: one wider column (760 px) with the bottom bar. Under 768 px: nothing changes.
+  Keyboard: a gold focus outline everywhere (`:focus-visible`). Install on this computer: a card in More when Chrome or
+  Edge offers it (`beforeinstallprompt`). Front end only.
+- **Tell Josh** (`src/components/Feedback.jsx`): More → beta card, or the sidebar. Idea / Something's wrong / Like it,
+  up to 1,000 characters. Sends the words, the screen and the app version (`send_feedback`); Josh sees the name.
+  Josh's screen (#/club/josh) → Feedback, with Mark done. No signal: it says so and keeps the words.
+- **What's new** (`src/components/WhatsNew.jsx`): once per phone, only on builds with sign-in (never the old GitHub build).
+- **New groups off on live.** `infra/cloudflare.json` → `new_groups` (`staging: "on"`, `live: ""`) hides every
+  "Start a new group" link, and #/start says "invite-only for now". The database is the real lock: a trigger on
+  `groups` refuses new groups (and quick rounds) from app users while `private.platform_flags.new_groups_open` is off,
+  except platform admins (Josh). Migrations and the SQL editor aren't affected. Staging has it on; live starts off.
+- **Database (047_beta.sql):** additive only (no DROPs). Applied to staging 20 Oct; live gets it with v2.2.
+- **Tested:** 175 unit tests (6 new in `beta.test.js`); `supabase/tests/beta.sql` 18 results on staging, all as
+  `beta.expected.txt` (closed: stranger refused, Josh allowed; open: stranger allowed; feedback sent, checked, rate
+  limit 20 a day, table unreadable, only Josh sees and ticks it); `tests/e2e/beta-test.mjs` 42 browser checks: phone
+  leaderboard, feed, trips and rulebook pixel-identical to `product` at 375 px; 768/1280/1920 px layouts with no sideways
+  scroll; sidebar links and the current page; keyboard Tab + Enter; Tell Josh; What's new once; new groups off and on.
+- **At release (v2.2, live):** run 047; then make Josh a platform admin on live
+  (`insert into public.platform_admins (user_id) values ('<Josh's live user id>');`) so he sees Feedback and can still
+  start groups. Leave `new_groups_open` off until Stage 2.

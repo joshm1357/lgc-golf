@@ -52,6 +52,7 @@ jobs:
             echo "sign_in=$(jq -r ".sign_in.$W // \"\"" infra/cloudflare.json)" >> "$GITHUB_OUTPUT"
             echo "google_id=$(jq -r ".google.client_id.$W // \"\"" infra/cloudflare.json)" >> "$GITHUB_OUTPUT"
             echo "google_hosts=$(jq -r '(.google.button_hosts // []) | join(",")' infra/cloudflare.json)" >> "$GITHUB_OUTPUT"
+            echo "new_groups=$(jq -r ".new_groups.$W // \"\"" infra/cloudflare.json)" >> "$GITHUB_OUTPUT"
           fi
           echo "go=$go" >> "$GITHUB_OUTPUT"
 
@@ -76,6 +77,7 @@ jobs:
           VITE_SIGN_IN: ${{ steps.ready.outputs.sign_in }}
           VITE_GOOGLE_CLIENT_ID: ${{ steps.ready.outputs.google_id }}
           VITE_GOOGLE_HOSTS: ${{ steps.ready.outputs.google_hosts }}
+          VITE_NEW_GROUPS: ${{ steps.ready.outputs.new_groups }}
         run: |
           if [ "$IS_MAIN" = "true" ]; then export VITE_SUPABASE_URL="$LIVE_DB" VITE_SUPABASE_KEY="$LIVE_KEY";
           else export VITE_SUPABASE_URL="$STAGING_DB" VITE_SUPABASE_KEY="$STAGING_KEY"; fi

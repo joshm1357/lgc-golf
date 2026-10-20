@@ -12,15 +12,16 @@ export default function JoshPage({ Top }) {
   const [tab, setTab] = useState('numbers');
   return (
     <>
-      <Top title="Josh’s screen" sub="Counts only — no names" />
+      <Top title="Josh’s screen" sub="Counts only, except feedback" />
       <div className="stack" style={{ maxWidth: 640, margin: '0 auto', padding: 16, gap: 12 }}>
         <a href="#/club" className="small">← Back</a>
         <div className="seg light" role="group" aria-label="Show">
-          {[['numbers', 'Numbers'], ['problems', 'App problems'], ['stays', 'Stay cards']].map(([k, label]) => (
+          {[['numbers', 'Numbers'], ['feedback', 'Feedback'], ['problems', 'App problems'], ['stays', 'Stay cards']].map(([k, label]) => (
             <button key={k} type="button" aria-pressed={tab === k} onClick={() => setTab(k)}>{label}</button>
           ))}
         </div>
         {tab === 'numbers' && <Numbers />}
+        {tab === 'feedback' && <Feedback />}
         {tab === 'problems' && <Problems />}
         {tab === 'stays' && <Stays />}
       </div>
@@ -96,6 +97,41 @@ function Numbers() {
           <span className="small muted">Scans count each phone once a day. Groups = started from that code; Played = scored a round; Back / trip = came back or planned a trip.</span>
         </>
       )}
+    </div>
+  );
+}
+
+const KIND = { idea: '💡 Idea', problem: '🔧 Something’s wrong', like: '👍 Like it' };
+
+// Beta feedback from "Tell Josh" (047). Unlike the numbers, this shows who sent it, so Josh can ask them more.
+function Feedback() {
+  const [days, setDays] = useState(30);
+  const [showDone, setShowDone] = useState(false);
+  const [rows, setRows] = useState(null);
+  const [busy, run] = useRun();
+  const load = useCallback(() => supabase.rpc('admin_feedback', { p_days: days }).then(({ data }) => setRows(data || [])), [days]);
+  useEffect(() => { setRows(null); load(); }, [load]);
+  const tick = (r) => run(() => must(supabase.rpc('admin_feedback_done', { p_id: r.id, p_done: !r.done })).then(load));
+  const shown = rows?.filter((r) => showDone || !r.done);
+  return (
+    <div className="stack" style={{ gap: 10 }}>
+      <div className="row">
+        <select className="select grow" value={days} onChange={(e) => setDays(Number(e.target.value))} aria-label="Period">
+          <option value={7}>Last 7 days</option><option value={30}>Last 30 days</option><option value={90}>Last 90 days</option><option value={365}>Last year</option>
+        </select>
+        <label className="row small" style={{ gap: 6 }}><input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> Show done</label>
+      </div>
+      {rows == null && <span className="muted">Loading…</span>}
+      {shown && !shown.length && <span className="muted">Nothing new.</span>}
+      {shown?.map((r) => (
+        <div key={r.id} className="card pad stack" style={{ gap: 4, opacity: r.done ? 0.6 : 1 }}>
+          <div className="row between small"><strong>{KIND[r.kind] || r.kind}</strong><span className="muted">{new Date(r.created_at).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' })}</span></div>
+          <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{r.message}</div>
+          <span className="small muted">{r.player_name || 'Someone'} · {r.group_name || 'no group'} · {r.path || '—'} · version {r.version || '?'}</span>
+          <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} disabled={busy} onClick={() => tick(r)}>{r.done ? 'Not done' : 'Mark done'}</button>
+        </div>
+      ))}
+      <span className="small muted">From More → Tell Josh. Each one has the sender’s name, the screen they were on and the app version.</span>
     </div>
   );
 }

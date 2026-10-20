@@ -11,6 +11,7 @@ import { Header } from '../components/ui.jsx';
 import { PinForm } from './Join.jsx';
 import { paintLook, DEFAULT_LOOK } from '../lib/theme.js';
 import { SIGN_IN } from '../lib/auth.js';
+import { NEW_GROUPS } from '../lib/beta.js';
 
 /** Go into a group. Everything on screen belongs to the old group, so start fresh in the new one. */
 function openGroup(id) {
@@ -56,16 +57,16 @@ export default function YourGroups() {
       <div style={{ textAlign: 'center' }}>
         <div style={{ fontFamily: 'var(--display)', fontSize: 32, fontWeight: 700 }}>{none ? 'You’re not in a group yet' : 'Your groups'}</div>
         <div className="small" style={{ color: 'var(--on-navy-muted)', marginTop: 4 }}>
-          {none ? 'Start one for your mates, or join theirs with the invite link from the group chat.' : 'Tap the one you want to go into.'}
+          {none ? (NEW_GROUPS ? 'Start one for your mates, or join theirs with the invite link from the group chat.' : 'Join your group with the invite link from the group chat.') : 'Tap the one you want to go into.'}
         </div>
       </div>
       {!none && <GroupList rows={rows} status={status} onPick={(g) => openGroup(g.id)} />}
-      {none && <a href="#/start" className="btn gold block" style={{ maxWidth: 340 }}>Start a new group</a>}
+      {none && NEW_GROUPS && <a href="#/start" className="btn gold block" style={{ maxWidth: 340 }}>Start a new group</a>}
       {showPin
         ? <PinForm autoFocus linkFirst onInvite={(c) => { window.location.hash = `#/join/${c}`; }} />
         : <button type="button" className="btn ghost block" style={ghost} onClick={() => setShowPin(true)}>{none ? 'Join with an invite link' : 'Join another with an invite link'}</button>}
       {none && <div className="small" style={{ color: 'var(--on-navy-muted)', textAlign: 'center', maxWidth: 340 }}>Played before without signing in? Ask your organiser for your personal link. It brings your scores and history with you.</div>}
-      {!none && <a href="#/start" className="btn ghost block" style={{ ...ghost, borderColor: 'transparent', textDecoration: 'underline' }}>Start a new group</a>}
+      {!none && NEW_GROUPS && <a href="#/start" className="btn ghost block" style={{ ...ghost, borderColor: 'transparent', textDecoration: 'underline' }}>Start a new group</a>}
       <div className="small" style={{ color: 'var(--on-navy-muted)', textAlign: 'center' }}>
         {user?.email ? <>Signed in as {user.email}. </> : null}
         <button type="button" onClick={() => { clearFreshSignIn(); supabase.auth.signOut().then(() => { window.location.hash = '#/'; window.location.reload(); }); }}
@@ -84,10 +85,10 @@ export function YourGroupsInside() {
   const rows = groupRows(status?.groups, status?.group_id);
   return (
     <div className="page">
-      <Header back title="Your groups" sub={rows.length > 1 ? 'Tap one to switch' : 'Start a new group or join another'} />
+      <Header back title="Your groups" sub={rows.length > 1 ? 'Tap one to switch' : (NEW_GROUPS ? 'Start a new group or join another' : 'Join another group')} />
       <div className="section stack" style={{ gap: 12 }}>
         <GroupList light rows={rows} status={status} onPick={(g) => (g.current ? (window.location.hash = '#/') : openGroup(g.id))} />
-        <a href="#/start" className="btn block">Start a new group</a>
+        {NEW_GROUPS && <a href="#/start" className="btn block">Start a new group</a>}
         {showPin
           ? (
             // The PIN box is styled for the navy front door; give it a navy panel here too.

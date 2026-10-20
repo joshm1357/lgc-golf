@@ -14,6 +14,7 @@ import { uploadPhoto } from '../lib/images.js';
 import { GroupCrest } from '../components/Logo.jsx';
 import { useRun, must } from '../lib/run.js';
 import { personalLink, personalMessage, signInLine } from '../lib/personal.js';
+import { NEW_GROUPS } from '../lib/beta.js';
 
 export default function Group() {
   const { status } = useSession();
@@ -281,7 +282,7 @@ function JoinAnother() {
         <input className="input grow" value={text} onChange={(e) => setText(e.target.value)} placeholder="https://…/#/join/…" autoCapitalize="none" />
         <button className="btn" disabled={!code}>Open</button>
       </div>
-      <a href="#/start" className="small" style={{ fontWeight: 700 }}>Or start a new group of your own →</a>
+      {NEW_GROUPS && <a href="#/start" className="small" style={{ fontWeight: 700 }}>Or start a new group of your own →</a>}
     </form>
   );
 }
@@ -420,7 +421,7 @@ function YourData() {
     if (error) throw notYet(error) ? new Error('Coming soon — Josh is switching this on.') : error;
     try { Object.keys(localStorage).filter((k) => k.startsWith('lgc-')).forEach((k) => localStorage.removeItem(k)); } catch { /* fine */ }
     await supabase.auth.signOut().catch(() => {});
-    window.location.hash = '#/start';
+    window.location.hash = NEW_GROUPS ? '#/start' : '#/';
     window.location.reload();
   });
   const deleteGroup = () => run(async () => {

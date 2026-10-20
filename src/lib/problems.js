@@ -20,7 +20,7 @@ export function safePath(path) {
     .replace(/(access_token|refresh_token|provider_token|token_hash|error_description|code)=.*$/, '').slice(0, 200);
 }
 
-function appVersion() {
+export function appVersion() {
   try {
     const src = [...document.scripts].map((s) => s.src).find((s) => /\/index-[\w-]+\.js/.test(s)) || '';
     return (src.match(/\/index-([\w-]+)\.js/) || [])[1] || 'dev';

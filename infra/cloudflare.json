@@ -13,7 +13,7 @@
   "_sign_in": "e.g. \"google\" or \"google,email\" once that provider is set up for that database",
   "google": {
     "client_id": {
-      "staging": "",
+      "staging": "716054617925-qp2bvst6o36st4ijc47tkvo21eug3me7.apps.googleusercontent.com",
       "live": ""
     },
     "button_hosts": ["staging.thegolftrip.club", "app.thegolftrip.club", "sign-in-home.thegolftrip-app.pages.dev"]

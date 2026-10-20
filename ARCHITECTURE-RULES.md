@@ -56,3 +56,7 @@ A mobile web app for a group of mates' golf weekends. Live scoring, a live leade
 - **Plain language, Australian English, mobile first** (375px, one hand, sunlight), as before.
 - **Branding (replaces rule 10):** brand values come from the current group (Stage 4); until then they live in
   `src/styles.css` (`:root`) and `src/components/Logo.jsx`.
+- **Dev → staging → production (from 20 Oct 2026, `docs/RELEASE-FLOW.md`):** work on a branch and open a pull request
+  into `product`. Never push straight to `product` or `main`. Give Josh the branch's preview link
+  (`<branch>.thegolftrip-app.pages.dev`) to test, and merge only after his OK with the Check ✅. A release is a pull
+  request from `product` into `main`, at a STOP.

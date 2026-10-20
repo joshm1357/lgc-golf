@@ -12,7 +12,9 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 import webpush from 'npm:web-push@3.6.7';
 
-const APP = 'https://joshm1357.github.io/lgc-golf/';
+// The app's web address for links in notifications. Set APP_URL in the function's secrets when the app moves
+// (e.g. https://app.thegolftrip.club/); until then it's the GitHub Pages address.
+const APP = Deno.env.get('APP_URL') || 'https://joshm1357.github.io/lgc-golf/';
 const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
   auth: { persistSession: false, autoRefreshToken: false },
 });

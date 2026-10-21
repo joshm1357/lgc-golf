@@ -11,6 +11,7 @@ import SharePicture from '../components/SharePicture.jsx';
 import { boardCard } from '../lib/shareCard.js';
 import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
 import { GamesChip } from '../components/GamesChip.jsx';
+import { TeeGroupsBoard } from './TeeGroups.jsx';
 
 const DrawSetup = lazyScreen(() => import('../components/DrawSetup.jsx'), 'default', { inline: true });
 
@@ -133,6 +134,7 @@ export default function Leaderboard() {
         )}
       </Header>
       <RoundChips round={round} onChoose={choose} />
+      <TeeGroupsBoard round={round} />
 
       {winner && (
         <div className="winner">

@@ -10,6 +10,7 @@ import DrawSetup from '../components/DrawSetup.jsx';
 import { FindCourse, ShareCourse } from '../components/CourseLibrary.jsx';
 import { OwnCompsAdmin, RoundOwnComps } from './OwnComps.jsx';
 import { RoundGames } from './Games.jsx';
+import { TeeGroupsCard } from './TeeGroups.jsx';
 
 async function run(fn, okMsg) {
   try {
@@ -348,6 +349,7 @@ function RoundCard({ round }) {
       )}
       {sideCompsOn && <RoundOwnComps round={round} onSaved={data.reload} />}
       <RoundGames round={round} />
+      <TeeGroupsCard round={round} />
       <RoundRules round={round} />
       {round.format === 'ambrose' && drawOn && <DrawButton round={round} />}
       {round.format === 'ambrose' || round.format === 'fourball' ? <TeamsEditor round={round} pairs={round.format === 'fourball'} /> : <StablefordPlayers round={round} />}

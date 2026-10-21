@@ -136,7 +136,7 @@ await page.screenshot({ path: `${SHOTS}/2-done.png`, fullPage: true });
 
 // 4. Ask about our history: linked from More, example chips, an answer.
 await page.goto(`${BASE}#/more`);
-await page.getByText('Ask about our history').click();
+await page.getByText('✨ Ask the AI helper').click();
 await page.getByRole('button', { name: 'Best Stableford round ever?' }).click();
 await page.getByText(/Bluey’s 44 points at Kurri/).waitFor({ timeout: 10000 });
 check(true, 'a history answer shows');
@@ -163,7 +163,7 @@ await page.waitForTimeout(500);
 check(!(await page.getByText('✨ Set it up for me').isVisible().catch(() => false)), 'switched off: no "Set it up for me" box');
 await page.goto(`${BASE}#/more`);
 await page.getByText('Group & invites').waitFor({ timeout: 10000 });
-check(!(await page.getByText('Ask about our history').isVisible().catch(() => false)), 'switched off: no Ask in More');
+check(!(await page.getByText('✨ Ask the AI helper').isVisible().catch(() => false)), 'switched off: no Ask in More');
 await page.goto(`${BASE}#/ask`);
 await page.getByText('The AI helper is switched off for this group.').waitFor({ timeout: 10000 });
 check(true, 'switched off: /ask says so');

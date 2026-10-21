@@ -47,3 +47,30 @@ Nothing is saved until the organiser taps **Do it**. After that, everything show
 4. Review by an independent agent (security: prompt injection from course names, the cost cap, RLS), then staging, then live.
 
 Estimate: one focused session after the key is in.
+
+---
+
+## v2 (built 21 Oct 2026, branch `ov2-ai`) — AI as a core part of the app, on any provider
+
+Josh: "AI should be core in the product, at least to test whether people want to use it … I will use an API that can
+use Kimi or something cheap."
+
+- **Any provider.** The `ai-helper` function talks to the model through one small adapter
+  (`supabase/functions/ai-helper/providers.ts`), chosen by Supabase secrets — nothing in code:
+  - `AI_PROVIDER` = `openai` (any OpenAI-compatible Chat Completions API with tools: Moonshot Kimi, OpenRouter,
+    DeepSeek, Together, Groq, OpenAI…) or `anthropic`. Left out: `openai` if `AI_BASE_URL` is set, else
+    `anthropic` if `ANTHROPIC_API_KEY` is set.
+  - `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL` (the provider's model id — check its model list; it must support
+    tool / function calling).
+  - Optional caps: `AI_GROUP_MONTHLY_CAP` (default 60), `AI_PERSON_DAILY_CAP` (default 10).
+  - Cheap models are sloppier, so replies are read forgivingly (arguments as text or object, broken JSON repaired
+    or asked for once, a plan nudged for once, missing token counts estimated).
+- **Where it shows up:** "✨ Set it up for me" (setup guide), "✨ Plan it with AI" (Trips tab, organisers: dates
+  and place votes, jobs, bring list, rough costs → confirm card → Create it), "✨ Ask" (More, the Trips tab and the
+  leaderboard: what's on, who's leading, what someone needs on the last holes, and the group's history).
+- **Did people want it?** Every answer has 👍 / 👎. Josh's Wishes screen has an "✨ AI helper" tab: questions a
+  week by area, groups using it, 👍 share, cap hits, what went wrong, tokens by model. Counts only, never text
+  (migration 065: `helper_log` columns, `rate_helper()`, `admin_ai_usage()`).
+- **Guardrails unchanged:** feature switch, organisers only for setup / plan writes, guests refused, confirm before
+  any write (checked again on the server), fixed read-only tool list, prompt-injection guard, cap checked (after
+  this question's row goes in, so parallel requests can't slip past) before the model is called.

@@ -28,7 +28,7 @@ export default function More() {
     on.tribunal && { to: '/tribunal', icon: Icon.gavel, label: 'Handicap Tribunal', sub: 'Lodge a case, vote, see verdicts' },
     // Running jokes are for the replay and awards' commentary, not a public list: organisers only (Josh, 21 Oct).
     on.in_jokes && status.is_admin && { to: '/in-jokes', icon: Icon.hot, label: 'Running jokes (organisers)', sub: 'Private — used in the replay and award commentary' },
-    on.ai_helper && { to: '/ask', icon: Icon.feed, label: 'Ask about our history', sub: 'Who’s won the most, best rounds, handicaps — in plain words' },
+    on.ai_helper && { to: '/ask', icon: Icon.feed, label: '✨ Ask the AI helper', sub: 'What’s on, who’s leading, who’s won the most — in plain words' },
     useFeature('stats') && { to: '/stats', icon: Icon.board, label: 'Stats & season ladder', sub: 'Order of merit, records and head-to-heads' },
     { to: '/courses', icon: Icon.map, label: 'Courses', sub: 'Every course and its history' },
     on.notifications && !status.viewing && notifyItem(),

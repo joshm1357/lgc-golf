@@ -10,6 +10,7 @@ import { STAGE_LABEL, sortTrips, stillToDecide, suggestionOptions, defaultCloses
 import { notify, shareText } from '../lib/push.js';
 import { useRun, must } from '../lib/run.js';
 import { NotifyCard } from '../components/NotifyCard.jsx';
+import { TripsAi } from './AiPlanner.jsx';
 
 const TABLES = ['plans', 'plan_rsvps', 'plan_polls', 'plan_options'];
 
@@ -81,6 +82,7 @@ export default function Trips() {
         ))}
         <button type="button" className="btn gold block" style={{ minHeight: 56 }} onClick={() => setSuggesting(true)}>💡 Suggest a trip or round</button>
         <span className="small muted" style={{ textAlign: 'center' }}>{votesOn ? 'Everyone votes on when and where; ' : 'Everyone says if they’re in; '}{status.is_admin ? 'you lock it in' : 'the admin locks it in'}.</span>
+        <TripsAi />
 
         {past.length > 0 && <span className="label" style={{ marginTop: 6 }}>Past trips</span>}
         {past.map((x) => <PastCard key={x.plan.id} plan={x.plan} stage={x.stage} photo={photos[x.plan.trip_id]} rounds={data.rounds.filter((r) => x.plan.trip_id && r.trip_id === x.plan.trip_id).length}

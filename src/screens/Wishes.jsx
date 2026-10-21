@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { Header, Loading } from '../components/ui.jsx';
 import { groupWishes, failRate, topTools, toolName, errorName } from '../lib/wishes.js';
+import AiUsage from '../components/AiUsage.jsx';
 
 // The connector's learning loop (Stage 13, migration 057): Josh's Wishes screen, #/wishes. Platform admins only —
 // the database refuses everyone else, and this screen says so.
@@ -45,7 +46,7 @@ export default function Wishes() {
       {refused ? <div className="empty">Only Josh can see this.</div> : (
         <div className="section stack" style={{ gap: 12, paddingBottom: 24 }}>
           <div className="seg light" role="group" aria-label="Show">
-            {[['wishes', 'Wished for'], ['calls', 'Tool calls']].map(([k, label]) => (
+            {[['wishes', 'Wished for'], ['calls', 'Tool calls'], ['ai', '✨ AI helper']].map(([k, label]) => (
               <button key={k} type="button" aria-pressed={tab === k} onClick={() => setTab(k)}>{label}</button>
             ))}
           </div>
@@ -56,6 +57,7 @@ export default function Wishes() {
           {!state.loading && state.error && <div className="err" role="alert">Couldn’t load: {state.error}</div>}
           {!state.loading && !state.error && tab === 'wishes' && <WishList grouped={grouped} />}
           {!state.loading && !state.error && tab === 'calls' && <Calls st={st} />}
+          {!state.loading && !state.error && tab === 'ai' && <AiUsage days={days} />}
           <p className="note" style={{ margin: '4px 4px 0' }}>
             Counts and one-line jobs only. The assistant’s chats and what it was asked are never seen here.
             Each release, pick the 1–3 most-wanted jobs to move up a step: the assistant does it → its own tool → a one-tap button → automatic.

@@ -7,13 +7,16 @@ const assertEquals = (a: unknown, b: unknown) => nodeAssert.deepStrictEqual(a, b
 const assertMatch = (s: string, re: RegExp) => nodeAssert.match(s, re);
 const assertStringIncludes = (s: string, part: string) => nodeAssert.ok(String(s).includes(part), `expected “${s}” to include “${part}”`);
 import {
-  applyPlan, asData, capCheck, clean, helperRequest, historyTool, indexHistory, isoDate, planSummary, roundTable,
+  applyPlan, asData, capCheck, clean, errorKind, helperRequest, historyTool, indexHistory, isoDate, planSummary, roundTable,
   runLoop, setupSystem, historySystem, validatePlan, zonedStart, zonedToday, LIMITS, NOT_ON_YET, TOOL_NAMES,
   type Deps, type History, type PlanContext,
 } from './logic.ts';
+import type { AiConfig } from './providers.ts';
 
 // deno-lint-ignore no-explicit-any
 type Any = any;
+// A fake provider set-up (the key is not real; nothing goes over the network in these tests).
+export const ANTHROPIC: AiConfig = { provider: 'anthropic', baseUrl: 'https://api.anthropic.com/v1', apiKey: 'test-key-not-real', model: 'example-model-id', caps: { groupPerMonth: 60, personPerDay: 10 } };
 
 // ------------------------------------------------------------------ Fixtures
 const LIB_KURRI = '11111111-0000-4000-8000-000000000001';
@@ -177,12 +180,12 @@ function fakeDeps(over: Partial<Deps> & { library?: Any[] } = {}) {
   ];
   const d: Deps = {
     status: { is_member: true, is_admin: true, group_id: 'g1', group_name: 'L.G.C' },
-    apiKey: 'test-key-not-real',
+    ai: ANTHROPIC,
     fetchFn: (() => { throw new Error('no network in tests'); }) as unknown as typeof fetch,
     now: () => new Date('2026-10-21T03:00:00Z'),
     featureOn: async () => true,
     usage: async () => ({ month: 3, today: 1 }),
-    logStart: async (mode) => { log.push({ start: mode }); return log.length; },
+    logStart: async (row) => { log.push({ start: row.mode, area: row.area }); return log.length; },
     logEnd: async (id, row) => { log.push({ end: id, ...row }); },
     planContext: async () => ctx({ library: Object.fromEntries(library.map((l) => [l.id, { ...l, holes: holes18 }])) }),
     setupTool: async (name, input) => {
@@ -196,6 +199,20 @@ function fakeDeps(over: Partial<Deps> & { library?: Any[] } = {}) {
       insertTrip: async (row) => { writes.push(['trip', row]); return 'new-trip'; },
       copyLibraryCourse: async (id) => { writes.push(['copy', id]); return `copy-of-${id}`; },
       insertRound: async (row) => { writes.push(['round', row]); },
+    },
+    tripPlanContext: async () => ({ today: '2026-10-21', tasksOn: true, library: { [LIB_KURRI]: { id: LIB_KURRI, name: 'Kurri Kurri Golf Club', area: 'Kurri Kurri NSW' }, [LIB_CYPRESS]: { id: LIB_CYPRESS, name: 'Cypress Lakes Golf & Country Club', area: 'Pokolbin NSW' } } }),
+    planTool: async (name, input) => {
+      toolCalls.push(name);
+      if (name === 'courses_near') return { near: input.place, courses: [{ id: LIB_KURRI, name: 'Kurri Kurri Golf Club', km: 3 }, { id: LIB_CYPRESS, name: 'Cypress Lakes Golf & Country Club', km: 20 }] };
+      if (name === 'past_trips') return [{ name: 'Hunter 2025', where: 'Hunter Valley' }];
+      return { count: 12, names: [] };
+    },
+    planDb: {
+      insertPlan: async (row) => { writes.push(['plan', row]); return 'new-plan'; },
+      startVotes: async (id, dates, places, closes) => { writes.push(['votes', { id, dates, places, closes }]); },
+      insertItems: async (rows) => { writes.push(['items', rows]); },
+      rsvpIn: async (id) => { writes.push(['rsvp', id]); },
+      post: async (id, body) => { writes.push(['post', { id, body }]); },
     },
     ...over,
   };
@@ -224,22 +241,23 @@ Deno.test('setup: the model finds a course then proposes → a checked plan come
   assertEquals(out.plan.trip.name, 'Kurri day');
   assertEquals(out.plan.rounds[0].ctp_holes, [2, 6, 11, 15]);
   assertEquals(out.summary[1], 'Add a course from the library: Kurri Kurri Golf Club');
-  assertEquals(out.remaining, { month: 56, today: 8 });
+  assertEquals(out.remaining, { month: 57, today: 9 }); // usage (3 this month, 1 today) already includes this one
   assertEquals(writes.length, 0); // proposing never writes
   assertEquals(toolCalls, ['find_course']);
   assertEquals(model.calls.length, 2);
   // The API call itself: the right model, headers, a modest max_tokens, and the request inside tags.
   const first = model.calls[0];
   assertEquals(first.url, 'https://api.anthropic.com/v1/messages');
-  assertEquals(first.req.model, 'claude-haiku-5-5');
+  assertEquals(first.req.model, 'example-model-id'); // from the AI_MODEL secret, never hard-coded
   assertEquals(first.req.max_tokens, 1024);
   assertEquals((first.headers as Any)['anthropic-version'], '2023-06-01');
   assertEquals(first.req.messages[0].content, '<request>Kurri on Thursday 22 Oct, stableford, ctp on the par 3s</request>');
   // Logged: one row started before the call, finished with token counts (no text).
-  assertEquals(log[0], { start: 'setup' });
+  assertEquals(log[0], { start: 'setup', area: 'setup' });
   assertEquals(log[1].ok, true);
   assertEquals(log[1].input_tokens, 200);
-  assertEquals(Object.keys(log[1]).sort(), ['end', 'input_tokens', 'ms', 'ok', 'output_tokens']);
+  assertEquals(Object.keys(log[1]).sort(), ['end', 'error', 'input_tokens', 'ms', 'ok', 'output_tokens']);
+  assertEquals(out.log_id, 1); // so the app can send 👍 / 👎 for this answer
 });
 
 Deno.test('setup: a bad proposal goes back to the model to fix, then the fixed one is accepted', async () => {
@@ -282,17 +300,78 @@ Deno.test('injected text in a course name changes nothing: no extra tools, no wr
   assert(!/[<>]/.test(JSON.stringify(out.plan)), 'no angle brackets reach the app');
 });
 
-Deno.test('cap reached → refused before any API call (and nothing logged)', async () => {
+Deno.test('cap reached → refused before any API call (logged only as a cap hit, which never counts)', async () => {
   const model = fakeModel([() => [{ type: 'text', text: 'should not be called' }]]);
-  const { d, log } = fakeDeps({ fetchFn: model.fetchFn, usage: async () => ({ month: 60, today: 0 }) });
+  // usage() counts this question's own row too (it goes in first): 61 this month = 60 before this one.
+  const { d, log } = fakeDeps({ fetchFn: model.fetchFn, usage: async () => ({ month: 61, today: 1 }) });
   const out: Any = await helperRequest({ mode: 'history', text: 'Who won the most trips?' }, d);
   assertEquals(out.capped, true);
   assertMatch(out.error, /all 60 helper questions/);
   assertEquals(model.calls.length, 0);
-  assertEquals(log.length, 0);
-  const daily = await helperRequest({ mode: 'history', text: 'Who won the most trips?' }, fakeDeps({ fetchFn: model.fetchFn, usage: async () => ({ month: 2, today: 10 }) }).d);
+  assertEquals(log[0], { start: 'history', area: 'ask' });
+  assertEquals([log[1].error, log[1].capped, log[1].ok], ['capped', true, false]);
+  const daily = await helperRequest({ mode: 'history', text: 'Who won the most trips?' }, fakeDeps({ fetchFn: model.fetchFn, usage: async () => ({ month: 2, today: 11 }) }).d);
   assertMatch(String(daily.error), /10 times today/);
   assertEquals(model.calls.length, 0);
+});
+
+Deno.test('caps come from the secrets (AI_GROUP_MONTHLY_CAP / AI_PERSON_DAILY_CAP)', async () => {
+  const model = fakeModel([() => [{ type: 'text', text: 'should not be called' }]]);
+  const ai = { ...ANTHROPIC, caps: { groupPerMonth: 5, personPerDay: 2 } };
+  const out: Any = await helperRequest({ mode: 'ask', text: 'Who is leading?' }, fakeDeps({ ai, fetchFn: model.fetchFn, usage: async () => ({ month: 6, today: 1 }) }).d);
+  assertMatch(out.error, /all 5 helper questions/);
+  const day: Any = await helperRequest({ mode: 'ask', text: 'Who is leading?' }, fakeDeps({ ai, fetchFn: model.fetchFn, usage: async () => ({ month: 1, today: 3 }) }).d);
+  assertMatch(day.error, /2 times today/);
+  assertEquals(model.calls.length, 0);
+});
+
+Deno.test('cap race: 15 questions at once never get more than the daily 10 through', async () => {
+  const model = fakeModel([() => [{ type: 'text', text: 'Bluey.' }]]);
+  const rows: { capped: boolean }[] = [];
+  const pause = () => new Promise((r) => setTimeout(r, Math.random() * 5));
+  const { d } = fakeDeps({
+    fetchFn: model.fetchFn,
+    logStart: async () => { await pause(); rows.push({ capped: false }); return rows.length; },
+    usage: async () => { await pause(); const n = rows.filter((r) => !r.capped).length; return { month: n, today: n }; },
+    logEnd: async (id, row) => { if (row.capped && id != null) rows[Number(id) - 1].capped = true; },
+  });
+  const outs: Any[] = await Promise.all(Array.from({ length: 15 }, () => helperRequest({ mode: 'history', text: 'Who won?' }, d)));
+  const answered = outs.filter((o) => o.answer).length;
+  assert(answered <= 10, `${answered} got through`);
+  assertEquals(model.calls.length, answered);
+  assertEquals(outs.filter((o) => o.capped).length, 15 - answered);
+  // One at a time: exactly 10, then the 11th is refused.
+  rows.length = 0;
+  const seq: Any[] = [];
+  for (let i = 0; i < 11; i++) seq.push(await helperRequest({ mode: 'history', text: 'Who won?' }, d));
+  assertEquals(seq.filter((o) => o.answer).length, 10);
+  assertMatch(seq[10].error, /10 times today/);
+});
+
+Deno.test('the usage log is down → refused, never a free question', async () => {
+  const model = fakeModel([() => [{ type: 'text', text: 'should not be called' }]]);
+  const noRow: Any = await helperRequest({ mode: 'history', text: 'Who won?' }, fakeDeps({ fetchFn: model.fetchFn, logStart: async () => null }).d);
+  assertMatch(noRow.error, /couldn’t start/);
+  const { d, log } = fakeDeps({ fetchFn: model.fetchFn, usage: async () => { throw new Error('connection refused at 10.0.0.1'); } });
+  const noCount: Any = await helperRequest({ mode: 'history', text: 'Who won?' }, d);
+  assertMatch(noCount.error, /couldn’t start/);
+  assertEquals([log[1].error, log[1].capped], ['cap_check', true]);
+  assertEquals(model.calls.length, 0);
+});
+
+Deno.test('guests (quick-round links) can’t use the helper in any mode; logs never hold error text', async () => {
+  const model = fakeModel([() => [{ type: 'text', text: 'should not be called' }]]);
+  for (const mode of ['history', 'ask', 'setup', 'plan', 'apply', 'plan_apply']) {
+    const { d, log } = fakeDeps({ fetchFn: model.fetchFn, status: { is_member: true, is_admin: true, group_id: 'g1', role: 'guest' } });
+    const out: Any = await helperRequest({ mode, text: 'Who won?', plan: {} }, d);
+    assertMatch(out.error, /for the group’s players/);
+    assertEquals(log.length, 0);
+  }
+  assertEquals(model.calls.length, 0);
+  assertEquals(errorKind(new Error('duplicate key value (name)=(Bluey)')), 'Error');
+  assertEquals(errorKind(new TypeError('x is undefined')), 'TypeError');
+  assertEquals(errorKind({ code: 'PGRST116', message: 'secret' }), 'PGRST116');
+  assertEquals(errorKind('a string with spaces'), 'Error');
 });
 
 Deno.test('feature off, no key, players setting up, people outside the group → refused before any API call', async () => {
@@ -300,7 +379,7 @@ Deno.test('feature off, no key, players setting up, people outside the group →
   const off: Any = await helperRequest({ mode: 'history', text: 'Who won?' }, fakeDeps({ fetchFn: model.fetchFn, featureOn: async () => false }).d);
   assertMatch(off.error, /switched off for this group/);
   assertEquals(off.off, true);
-  const nokey: Any = await helperRequest({ mode: 'history', text: 'Who won?' }, fakeDeps({ fetchFn: model.fetchFn, apiKey: null }).d);
+  const nokey: Any = await helperRequest({ mode: 'history', text: 'Who won?' }, fakeDeps({ fetchFn: model.fetchFn, ai: null }).d);
   assertEquals(nokey.error, NOT_ON_YET);
   const player: Any = await helperRequest({ mode: 'setup', text: 'Kurri Thursday' }, fakeDeps({ fetchFn: model.fetchFn, status: { is_member: true, is_admin: false, group_id: 'g1' } }).d);
   assertMatch(player.error, /Only an organiser/);
@@ -310,6 +389,15 @@ Deno.test('feature off, no key, players setting up, people outside the group →
   assertMatch(outsider.error, /not in this group/);
   const unknown: Any = await helperRequest({ mode: 'sql', text: 'x' }, fakeDeps({ fetchFn: model.fetchFn }).d);
   assertEquals(unknown.error, 'Unknown request.');
+  const proto: Any = await helperRequest({ mode: 'constructor', text: 'x' }, fakeDeps({ fetchFn: model.fetchFn }).d);
+  assertEquals(proto.error, 'Unknown request.');
+  // Planning: organisers only, and the planner must be on.
+  const playerPlan: Any = await helperRequest({ mode: 'plan', text: 'Weekend away in March' }, fakeDeps({ fetchFn: model.fetchFn, status: { is_member: true, is_admin: false, group_id: 'g1' } }).d);
+  assertMatch(playerPlan.error, /Only an organiser can plan/);
+  const playerCreate: Any = await helperRequest({ mode: 'plan_apply', plan: {} }, fakeDeps({ fetchFn: model.fetchFn, status: { is_member: true, is_admin: false, group_id: 'g1' } }).d);
+  assertMatch(playerCreate.error, /Only an organiser/);
+  const plannerOff: Any = await helperRequest({ mode: 'plan', text: 'Weekend away in March' }, fakeDeps({ fetchFn: model.fetchFn, featureOn: async (k) => k !== 'planner' }).d);
+  assertMatch(plannerOff.error, /Trips planner is switched off/);
   assertEquals(model.calls.length, 0);
 });
 
@@ -325,7 +413,7 @@ Deno.test('the loop stops after 6 model calls', async () => {
 Deno.test('API errors become friendly words', async () => {
   for (const [status, re] of [[401, /key isn’t working/], [529, /busy/], [400, /couldn’t answer/]] as const) {
     const fetchFn = (async () => new Response('{}', { status })) as unknown as typeof fetch;
-    const r = await runLoop({ fetchFn, apiKey: 'k', system: 's', tools: [], allowed: new Set(), userText: 'q', exec: async () => null });
+    const r = await runLoop({ ai: ANTHROPIC, fetchFn, system: 's', tools: [], allowed: new Set(), userText: 'q', exec: async () => null });
     assertEquals(r.kind, 'error');
     assertMatch((r as Any).message, re);
   }
@@ -348,7 +436,7 @@ Deno.test('apply: re-checks the plan, makes the trip, copies library courses, ad
   assertEquals(writes[0][1], { name: 'Hunter Valley 2026', start_date: '2026-10-22', end_date: '2026-10-24' });
   assertEquals(writes[3][1], { trip_id: 'new-trip', course_id: `copy-of-${LIB_KURRI}`, play_date: '2026-10-22', format: 'stableford', name: 'Thursday — Kurri Kurri', ctp_holes: [2, 6, 11, 15], ld_holes: [] });
   assertEquals(writes[5][1].course_id, OWN_VINTAGE);
-  assertEquals(log[0], { start: 'apply' });
+  assertEquals(log[0], { start: 'apply', area: 'apply' });
 });
 
 Deno.test('apply: a tampered plan is refused with nothing written', async () => {

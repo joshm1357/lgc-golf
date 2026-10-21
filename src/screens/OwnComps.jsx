@@ -7,6 +7,8 @@ import { sendOrQueue } from '../lib/outbox.js';
 import { Avatar, Sheet, toast, timeAgo, PhotoButtons, Icon } from '../components/ui.jsx';
 import { useRun, must } from '../lib/run.js';
 import { HOW, compsForRound, sortOwnEntries, beats, parseHoles } from '../lib/sidecomps.js';
+import { compKind, wonText } from '../lib/sidecomplib.js';
+import { CompLibrary, TallyComp, AutoComp } from './SideCompLibrary.jsx';
 
 /** The group's own side comps, live. */
 export function useOwnDefs() {
@@ -26,7 +28,15 @@ export function useRoundOwnComps(round) {
 }
 
 // ------------------------------------------------------------------ The comp, inside Comps
-export function OwnComp({ round, comp, playerIds }) {
+/** Dots get a +1 per player, comps from the scores show live standings, the rest are measured or picked. */
+export function OwnComp(props) {
+  const kind = compKind(props.comp);
+  if (kind === 'tally') return <TallyComp {...props} />;
+  if (kind === 'auto') return <AutoComp {...props} />;
+  return <MeasuredComp {...props} />;
+}
+
+function MeasuredComp({ round, comp, playerIds }) {
   const data = useData();
   const { status } = useSession();
   const [entries, setEntries] = useState([]);
@@ -160,7 +170,7 @@ function OwnEntryForm({ round, comp, hole, leader, playerIds, onClose, onSaved }
 }
 
 // ------------------------------------------------------------------ Organiser: the group's comps (Admin)
-export function OwnCompsAdmin() {
+export function OwnCompsAdmin({ trip } = {}) {
   const [defs, reload] = useOwnDefs();
   const [busy, run] = useRun();
   const [name, setName] = useState('');
@@ -175,13 +185,15 @@ export function OwnCompsAdmin() {
   const live = defs.filter((d) => !d.retired);
   return (
     <div className="stack" style={{ gap: 10 }}>
-      <div className="small muted">Closest to pin and longest drive are always there. Add your group’s own, then switch them on for a round in the round’s settings.</div>
+      <div className="small muted">Closest to pin and longest drive are always there. Add more from the list — greenies, sandies, most birdies, the snake… — or make your own.</div>
+      <CompLibrary defs={defs} reload={reload} trip={trip} />
       {live.map((d) => (
         <div key={d.id} className="row" style={{ gap: 8 }}>
-          <div className="grow"><strong>{d.emoji} {d.name}</strong><div className="small muted">{HOW.find((h) => h.value === d.how)?.label}{d.unit ? ` · ${d.unit}` : ''}</div></div>
+          <div className="grow"><strong>{d.emoji} {d.name}</strong><div className="small muted">{wonText(d)}</div></div>
           <button type="button" className="btn ghost sm" disabled={busy} onClick={() => run(async () => { await must(supabase.from('side_comp_defs').update({ retired: true }).eq('id', d.id)); await reload(); }, 'Side comp put away (its winners stay)')}>Put away</button>
         </div>
       ))}
+      <span className="label" style={{ marginTop: 6 }}>Make your own</span>
       <div className="card pad stack" style={{ gap: 8 }}>
         <div className="row" style={{ gap: 8 }}>
           <label className="field" style={{ width: 72 }}><span>Emoji</span><input className="input" value={emoji} maxLength={4} onChange={(e) => setEmoji(e.target.value)} placeholder="⛳" /></label>
@@ -229,7 +241,8 @@ export function RoundOwnComps({ round, onSaved }) {
               if (on) delete next[d.id]; else next[d.id] = '';
               setDraft(next);
             }}>{d.emoji} {d.name}</button>
-            {on && <input className="input" style={{ maxWidth: 200, minHeight: 38 }} value={draft[d.id]} inputMode="numeric" placeholder="Holes, or blank = whole round"
+            {on && d.scoring === 'auto' && <span className="small muted">From the scores</span>}
+            {on && d.scoring !== 'auto' && <input className="input" style={{ maxWidth: 200, minHeight: 38 }} value={draft[d.id]} inputMode="numeric" placeholder="Holes, or blank = whole round"
               onChange={(e) => setDraft({ ...draft, [d.id]: e.target.value })} />}
           </div>
         );

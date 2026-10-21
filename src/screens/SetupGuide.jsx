@@ -278,8 +278,8 @@ function ExtrasStep({ trip, sideCompsOn, cupOn }) {
           {!rounds.length && <div className="small muted">Add a round first (step 3).</div>}
           {rounds.map((r) => <RoundExtras key={r.id} round={r} />)}
           <details className="card pad">
-            <summary><strong>Your own side comps</strong> <span className="small muted">— longest putt, best shot of the day…</span></summary>
-            <div style={{ marginTop: 10 }}><OwnCompsAdmin /></div>
+            <summary><strong>More side comps</strong> <span className="small muted">— pick from the list: greenies, sandies, most birdies, the snake…</span></summary>
+            <div style={{ marginTop: 10 }}><OwnCompsAdmin trip={trip} /></div>
           </details>
         </>
       ) : (

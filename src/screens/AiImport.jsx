@@ -17,7 +17,7 @@ import { must } from '../lib/run.js';
 import { readHandicap } from '../lib/history.js';
 import { Rate, Remaining } from './AiHelper.jsx';
 import {
-  MAX_TEXT, MAX_PHOTOS, IMPORT_EXAMPLE, SECTIONS, buildReview, itemLine, picked, handicapPlayer, startingHandicap, tripRow,
+  MAX_TEXT, MAX_PHOTOS, IMPORT_EXAMPLE, SECTIONS, buildReview, itemLine, picked, handicapRows, startingHandicap, tripRow,
   honourRows, ruleRows, summaryLine, readFileText, fitSize, readImportReply, rematch, itemProblem, findPlayer, findTrip,
 } from '../lib/aiimport.js';
 
@@ -147,14 +147,9 @@ function ImportFlow({ about }) {
       const allTrips = [...data.trips, ...madeTrips];
       // 3. Winners onto the honour board (needs the Trophy Room switched on).
       if (p.winners.length && trophiesOn) n.winners = await must(supabase.rpc('import_honours', { p_rows: honourRows(p.winners, allPlayers, allTrips) }));
-      // 4. Past handicaps, for players now in the group.
-      const hcRows = [];
-      for (const h of p.handicaps) {
-        const who = handicapPlayer(h, data.players, p.players);
-        const id = who?.id || made.find((m) => m.name === who?.data?.name?.trim())?.id;
-        if (id) hcRows.push({ player_id: id, date: h.data.date, handicap: Number(h.data.handicap) });
-        else n.skipped++;
-      }
+      // 4. Past handicaps, for players now in the group (including the ones just made).
+      const { rows: hcRows, skipped } = handicapRows(p.handicaps, allPlayers);
+      n.skipped = skipped;
       if (hcRows.length) n.handicaps = await must(supabase.rpc('import_handicaps', { p_rows: hcRows }));
       // 5. Rules, as normal rules (version 1).
       if (p.rules.length) {

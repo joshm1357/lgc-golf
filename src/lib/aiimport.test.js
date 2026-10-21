@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   findPlayer, findTrip, trophyNames, honourLabel, buildReview, itemLine, picked, handicapPlayer, startingHandicap, tripRow,
-  honourRows, ruleRows, summaryLine, readImportReply, rematch, itemProblem, fileKind, capText, docxText, xlsxText, unzip, fitSize, MAX_TEXT,
+  honourRows, ruleRows, summaryLine, readImportReply, rematch, itemProblem, handicapRows, fileKind, capText, docxText, xlsxText, unzip, fitSize, MAX_TEXT,
 } from './aiimport.js';
 
 const players = [
@@ -101,6 +101,12 @@ describe('Add these: the rows', () => {
     expect(handicapPlayer({ data: { player: 'Nobody' } }, players, p.players)).toBe(null);
     expect(startingHandicap(p.players[0], p.handicaps)).toBe(19.5);
     expect(startingHandicap({ data: { name: 'X', nickname: '' } }, p.handicaps)).toBe(18);
+  });
+  it('makes handicap rows once the new players exist, skipping unknown names', () => {
+    const all = [...players, { id: 'g', name: 'Pete Green', nickname: 'Greeny' }];
+    expect(handicapRows([...p.handicaps, { data: { player: 'Nobody', date: '2020-01-01', handicap: 3 } }], all)).toEqual({
+      rows: [{ player_id: 'g', date: '2021-03-01', handicap: 22 }, { player_id: 'g', date: '2022-01-01', handicap: 19.5 }], skipped: 1,
+    });
   });
   it('makes locked past trips, dated 1 January when only the year is known', () => {
     expect(tripRow(p.trips[0])).toEqual({ name: 'Port Stephens 2021', start_date: '2021-01-01', end_date: '2021-01-01', status: 'locked' });

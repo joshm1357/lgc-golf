@@ -154,6 +154,19 @@ export function handicapPlayer(h, players, newPlayers) {
     || newPlayers.find((n) => [n.data.name, n.data.nickname].filter(Boolean).some((x) => low(x) === low(h.data.player))) || null;
 }
 
+/** import_handicaps rows for the ticked handicaps, once every player is in the group (`players` includes the ones
+ *  just made). Ones with no player by that name are skipped and counted. */
+export function handicapRows(handicaps, players) {
+  const rows = [];
+  let skipped = 0;
+  for (const h of handicaps) {
+    const p = findPlayer(h.data.player, null, players);
+    if (p) rows.push({ player_id: p.id, date: h.data.date, handicap: Number(h.data.handicap) });
+    else skipped++;
+  }
+  return { rows, skipped };
+}
+
 /** A new player's starting handicap: the latest from the ticked history, else 18 (the app's usual default). */
 export function startingHandicap(player, handicaps) {
   const mine = handicaps.filter((h) => [player.data.name, player.data.nickname].filter(Boolean).some((x) => low(x) === low(h.data.player)))

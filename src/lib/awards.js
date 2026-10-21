@@ -262,12 +262,16 @@ export function momentChanged(saved, now) {
   return saved.title !== now.title || (saved.detail || null) !== (now.detail || null) || ids(saved.winner_player_ids) !== ids(now.winner_player_ids);
 }
 
-/** Moments for the leaderboard card: the last few hours, newest first, not hidden on this phone. */
+const WEIGHT = { trophy: 0, round: 1, cup: 2, ctp: 3, ld: 3 };
+/** Moments for the leaderboard card: the last few hours, newest first (things decided in the same couple of minutes:
+ *  trophy, then round, then Cup, then side comps), not hidden on this phone. */
 export function recentMoments(list, { now = Date.now(), hours = RECENT_HOURS, hidden = [] } = {}) {
   const since = now - hours * 3600000;
+  const at = (m) => new Date(m.created_at).getTime();
+  const slot = (m) => Math.floor(at(m) / 120000);
   return (list || [])
-    .filter((m) => new Date(m.created_at).getTime() >= since && !hidden.includes(m.id))
-    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+    .filter((m) => at(m) >= since && !hidden.includes(m.id))
+    .sort((a, b) => slot(b) - slot(a) || (WEIGHT[a.kind] ?? 9) - (WEIGHT[b.kind] ?? 9) || at(b) - at(a));
 }
 
 /** Who may change a moment's photo: anyone while there's none; then whoever took it, or an organiser. */

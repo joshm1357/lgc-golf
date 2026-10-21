@@ -219,6 +219,11 @@ describe('the card', () => {
     ];
     expect(recentMoments(list, { now, hidden: ['4'] }).map((m) => m.id)).toEqual(['2', '1']);
   });
+  it('decided together: the round before its side comps', () => {
+    const now = Date.parse('2026-10-21T10:00:00Z');
+    const list = [{ id: 'c', kind: 'ctp', created_at: '2026-10-21T09:00:01Z' }, { id: 'r', kind: 'round', created_at: '2026-10-21T09:00:00Z' }];
+    expect(recentMoments(list, { now }).map((m) => m.id)).toEqual(['r', 'c']);
+  });
   it('photo: anyone first, then whoever took it or an organiser', () => {
     expect(canChangePhoto({ photo_url: null }, { playerId: 'p' })).toBe(true);
     expect(canChangePhoto({ photo_url: 'x', photo_by: 'q' }, { playerId: 'p' })).toBe(false);

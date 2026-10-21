@@ -31,8 +31,15 @@ function useLive(table, enabled, query) {
   }, [table, enabled]);
   useEffect(() => { load(); }, [load]);
   useRealtime(enabled ? [table] : [], load);
+  // This phone just changed it: show that now, without waiting for the live update.
+  useEffect(() => {
+    const ev = `tgt-reload-${table}`;
+    window.addEventListener(ev, load);
+    return () => window.removeEventListener(ev, load);
+  }, [table, load]);
   return state;
 }
+const changed = () => window.dispatchEvent(new Event('tgt-reload-award_moments'));
 
 /** Watches for things being decided and records each one once. Renders nothing. */
 export function AwardWatcher() {
@@ -86,14 +93,14 @@ function Watch({ rounds, today }) {
         if (tried.current.has(m.key)) continue;
         tried.current.add(m.key);
         supabase.from('award_moments').upsert(m, { onConflict: 'group_id,key', ignoreDuplicates: true })
-          .then(({ error }) => { if (error && !error.code) tried.current.delete(m.key); }) // no signal: try again later
+          .then(({ error }) => { if (!error) changed(); else if (!error.code) tried.current.delete(m.key); }) // no signal: try again later
           .catch(() => tried.current.delete(m.key));
       } else if (status.is_admin && momentChanged(was, m) && !tried.current.has(`fix:${m.key}:${m.title}:${m.detail}`)) {
         // A score was fixed after it was recorded: the organiser's phone puts it right (a new winner loses the photo).
         tried.current.add(`fix:${m.key}:${m.title}:${m.detail}`);
         const winnersChanged = [...(was.winner_player_ids || [])].sort().join() !== [...m.winner_player_ids].sort().join();
         supabase.from('award_moments').update({ title: m.title, detail: m.detail, winner_player_ids: m.winner_player_ids, ...(winnersChanged ? { photo_url: null } : {}) })
-          .eq('id', was.id).then(() => {}, () => {});
+          .eq('id', was.id).then(changed, () => {});
       }
     }
   }, [saved, side, matches, sides, synced, data, sideOn, trophiesOn, cupOn, status.is_admin, today, idKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -111,6 +118,7 @@ function Watch({ rounds, today }) {
   return null;
 }
 
+const onNavy = { background: 'transparent', color: '#fff', borderColor: 'rgba(255,255,255,.45)' };
 const HIDE_KEY = 'tgt-awards-hidden';
 const readHidden = () => { try { return JSON.parse(localStorage.getItem(HIDE_KEY) || '[]'); } catch { return []; } };
 
@@ -160,6 +168,7 @@ function AwardCard({ moment: m, big, onHide }) {
       if (error) throw error;
       setShown(url);
       setPicking(false);
+      changed();
       toast('Photo added 📸');
     } catch (e) {
       toast(friendlyError(e));
@@ -170,7 +179,7 @@ function AwardCard({ moment: m, big, onHide }) {
   const navy = big;
   return (
     <div className="card" style={{ overflow: 'hidden', position: 'relative', background: navy ? 'var(--navy)' : 'var(--gold-soft)', borderColor: navy ? 'var(--navy)' : 'var(--gold)', color: navy ? '#fff' : 'inherit' }}>
-      {shown && big && <img src={shown} alt={`Winner’s photo: ${m.title.replace(/^\S+\s/, '')}`} style={{ width: '100%', maxHeight: 340, objectFit: 'cover', display: 'block', background: '#E6EAEF' }} />}
+      {shown && big && <img src={shown} alt={`Winner’s photo: ${m.title.replace(/^\S+\s/, '')}`} style={{ width: '100%', maxHeight: 260, objectFit: 'cover', display: 'block', background: '#E6EAEF' }} />}
       <div className="pad row" style={{ gap: 12, alignItems: 'flex-start' }}>
         {(!big || !shown) && (shown
           ? <img src={shown} alt="" style={{ width: 64, height: 64, borderRadius: 12, objectFit: 'cover', flex: 'none' }} />
@@ -184,18 +193,18 @@ function AwardCard({ moment: m, big, onHide }) {
           <div style={{ fontFamily: big ? 'var(--display)' : undefined, fontSize: big ? 22 : 16, fontWeight: 700, lineHeight: 1.15 }}>{m.title}</div>
           {m.detail && <div className="small" style={{ opacity: 0.85, lineHeight: 1.35 }}>{m.detail}</div>}
         </div>
-        <button type="button" className="btn ghost sm" onClick={onHide} aria-label="Hide this card" style={{ flex: 'none', minWidth: 40, color: navy ? '#fff' : undefined, borderColor: navy ? 'rgba(255,255,255,.35)' : undefined }}>✕</button>
+        <button type="button" className="btn ghost sm" onClick={onHide} aria-label="Hide this card" style={{ flex: 'none', minWidth: 40, ...(navy ? onNavy : {}) }}>✕</button>
       </div>
       {canPhoto && (
         <div className="pad" style={{ paddingTop: 0 }}>
           {busy ? <div className="small" role="status">Uploading the photo…</div>
-            : !shown || picking ? (
+            : (!shown && big) || picking ? (
               <div style={navy ? { background: '#fff', borderRadius: 12, padding: 6 } : undefined}>
                 <PhotoButtons onPick={save} cameraLabel="Take the winner’s photo" libraryLabel="Choose one" />
               </div>
             ) : (
-              <button type="button" className="btn ghost sm" style={navy ? { color: '#fff', borderColor: 'rgba(255,255,255,.35)' } : undefined} onClick={() => setPicking(true)}>
-                {organiser ? '🔁 Swap photo' : '📸 Retake photo'}
+              <button type="button" className="btn ghost sm" style={navy ? onNavy : undefined} onClick={() => setPicking(true)}>
+                {!shown ? '📸 Add the winner’s photo' : organiser ? '🔁 Swap photo' : '📸 Retake photo'}
               </button>
             )}
         </div>

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   KINDS, PRESETS, presetSettings, effectiveSettings, settingsProblems, decidesFor, electorate, tally, evaluate,
   canRaise, canVote, canDecide, tripInProgress, whenItApplies, isDue, canApproveMidTrip, tripsSince, termStatus,
-  termLabel, challengeBlock, verdictWord, verdictLine, verdictCard, voteWords,
+  termLabel, challengeBlock, verdictWord, verdictLine, verdictCard, voteWords, closesIn, ruleLine, applyWords,
 } from './governance.js';
 
 const S = (o = {}) => ({ ...presetSettings('majority', 'other'), min_turnout: 0, ...o });
@@ -265,5 +265,27 @@ describe('words', () => {
     expect(verdictWord({ kind: 'change_rule', status: 'failed' })).toBe('Failed');
     expect(verdictCard(c, 'Mike', '4–1')).toMatchObject({ big: 'GUILTY', title: 'Mike', sub: 'Penalty: buys the first round · Vote 4–1' });
     expect(voteWords('other').for).toBe('Guilty');
+  });
+});
+
+describe('wording', () => {
+  const now = new Date('2026-10-21T00:00:00Z');
+  it('time left', () => {
+    expect(closesIn('2026-10-23T00:00:00Z', now)).toBe('closes in 2 days');
+    expect(closesIn('2026-10-21T05:00:00Z', now)).toBe('closes in 5 hours');
+    expect(closesIn('2026-10-21T00:20:00Z', now)).toBe('closes in 20 min');
+    expect(closesIn('2026-10-20T00:00:00Z', now)).toBe('voting has closed');
+  });
+  it('rule lines', () => {
+    expect(ruleLine('change_rule', presetSettings('majority', 'change_rule'))).toBe('Majority of players · at least half must vote · closes after 2 days · from the next trip');
+    expect(ruleLine('handicap', presetSettings('lgc', 'handicap'))).toMatch(/closes once everyone has voted/);
+    expect(ruleLine('other', { ...presetSettings('club', 'handicap'), committee_id: 'c1' }, [{ id: 'c1', name: 'Handicap Committee' }])).toMatch(/^Handicap Committee/);
+    expect(ruleLine('trip_decision', { decides: 'trip_organiser' })).toMatch(/trip’s organiser/);
+  });
+  it('apply words', () => {
+    expect(applyWords({ kind: 'change_rule', status: 'passed', apply_state: 'waiting_next_trip' }, 'Mudgee 2027')).toBe('Changes from Mudgee 2027');
+    expect(applyWords({ kind: 'governance', status: 'passed', apply_state: 'next_round' })).toMatch(/next round/);
+    expect(applyWords({ kind: 'other', status: 'passed', apply_state: 'applied' })).toBe('');
+    expect(applyWords({ status: 'failed', apply_state: 'none' })).toBe('');
   });
 });

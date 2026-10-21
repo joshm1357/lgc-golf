@@ -333,3 +333,41 @@ export function verdictCard(c, subjectName = '', tallyText = '') {
     sub: [c.status === 'passed' && c.penalty ? `Penalty: ${c.penalty}` : '', tallyText ? `Vote ${tallyText}` : ''].filter(Boolean).join(' · ').slice(0, 70),
   };
 }
+
+/** "closes in 2 days" / "closes in 5 hours" / "closes in 20 min" / "voting has closed". */
+export function closesIn(closesAt, now = new Date()) {
+  if (!closesAt) return '';
+  const ms = new Date(closesAt) - now;
+  if (ms <= 0) return 'voting has closed';
+  const h = ms / 3600000;
+  if (h >= 36) return `closes in ${Math.round(h / 24)} days`;
+  if (h >= 1.5) return `closes in ${Math.round(h)} hours`;
+  if (h >= 1) return 'closes in an hour';
+  return `closes in ${Math.max(1, Math.round(ms / 60000))} min`;
+}
+
+/** One line on how a kind of case is decided, e.g. "Majority of players · at least half must vote · closes after 2 days". */
+export function ruleLine(kind, s, committees = []) {
+  const who = s.decides === 'committee' ? (committees.find((c) => c.id === s.committee_id)?.name || 'A committee') : DECIDES[s.decides] || s.decides;
+  if (kind === 'trip_decision') return `${who} picks the winner of a trip vote`;
+  if (kind === 'handicap') {
+    const how = s.decides === 'players_majority' ? 'closes once everyone has voted, or the chair closes it' : s.decides === 'committee' ? 'closes once the committee has voted, or the chair closes it' : 'the chair closes it';
+    return `${s.decides === 'organiser' ? 'The chair (an organiser) decides' : who} · ${how}`;
+  }
+  const bits = [who];
+  const t = Number(s.min_turnout);
+  if (s.decides !== 'organiser' && t > 0) bits.push(t >= 1 ? 'everyone must vote' : `at least ${t === 0.5 ? 'half' : `${Math.round(t * 100)}%`} must vote`);
+  if (s.decides !== 'organiser') bits.push(`closes after ${Number(s.close_hours) % 24 === 0 ? `${Number(s.close_hours) / 24} day${Number(s.close_hours) === 24 ? '' : 's'}` : `${s.close_hours} hours`}`);
+  if (s.tie_break === 'organiser' && s.decides !== 'organiser') bits.push('ties: an organiser’s casting vote');
+  if (TIMED_KINDS.has(kind)) bits.push(EFFECT[s.takes_effect]?.toLowerCase());
+  return bits.filter(Boolean).join(' · ');
+}
+
+/** What a passed case is waiting for, in words. */
+export function applyWords(c, nextTripName = 'the next trip') {
+  if (c.status !== 'passed' || !TIMED_KINDS.has(c.kind)) return '';
+  if (c.apply_state === 'waiting_next_trip') return `Changes from ${nextTripName}`;
+  if (c.apply_state === 'next_round') return 'Approved mid-trip: starts from the next round';
+  if (c.apply_state === 'applied') return c.approved_at ? 'In force (approved mid-trip)' : 'In force';
+  return '';
+}

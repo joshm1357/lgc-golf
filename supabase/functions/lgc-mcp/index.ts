@@ -160,6 +160,7 @@ async function featureOn(c: Ctx, key: string) {
 const TOOL_FEATURE: Record<string, string> = {
   confirm_side_comp: 'side_comps', post_to_feed: 'feed', plan_details: 'planner', set_rsvp: 'planner',
   add_job: 'planner_tasks', create_poll: 'planner_tasks', add_cost: 'planner_costs',
+  raise_case: 'tribunal', list_cases: 'tribunal', read_verdict: 'tribunal',
 };
 async function post(c: Ctx, text: string) {
   if (!(await featureOn(c, 'feed'))) return; // no feed: nothing to post to
@@ -424,6 +425,75 @@ const TOOLS: Tool[] = [
     async run(_a, c) {
       const rules = await must(db.from('rules').select('*').eq('group_id', c.g).in('status', ['active', 'proposed']).order('sort')) as Record<string, any>[];
       return rules.map((r) => `${r.status === 'proposed' ? '[up for a vote] ' : ''}${r.title}${r.value ? ` (${r.value})` : ''} — applies to ${r.applies_to.join(', ')}${r.detail ? `: ${r.detail}` : ''}`).join('\n') || 'No rules yet.';
+    },
+  },
+  // ---------- the Tribunal (Stage 11b, migration 061). Assistants raise cases and read verdicts; they never vote,
+  // decide or approve (the database refuses the service role those functions, and there's no tool for them).
+  {
+    name: 'raise_case',
+    description: "Raise a case with the group's Tribunal. kind: 'other' (anything else, e.g. a silly charge about a player, optional penalty in words), 'ruling' (a question about a rule), 'change_rule' / 'scrap_rule' (challenge a rule in force), or 'new_rule'. The group's own decision rules decide it — you can't vote. Keep it friendly: roast the golf and the mates, never who someone is. Handicap cases go through the app.",
+    inputSchema: {
+      type: 'object', required: ['kind', 'title'],
+      properties: {
+        kind: { type: 'string', enum: ['other', 'ruling', 'change_rule', 'scrap_rule', 'new_rule'] },
+        title: str('The charge, question or rule (3–140 characters)'), body: str('The case (optional)'),
+        about: str('Player it is about (name; optional)'), rule: str('Rule title (for ruling / change_rule / scrap_rule)'),
+        new_title: str('change_rule / new_rule: what the rule should say'), new_value: str('Worth / amount (optional)'), new_detail: str('Details (optional)'),
+        answer: str('ruling: suggested ruling (optional)'), penalty: str('other: penalty in words if guilty (optional) — never money'),
+      },
+    },
+    async run(a, c) {
+      const subject = a.about ? findPlayer(await players(c), a.about) : null;
+      let ruleId: string | null = null;
+      if (['ruling', 'change_rule', 'scrap_rule'].includes(a.kind)) {
+        const rules = await must(db.from('rules').select('id,title').eq('group_id', c.g).eq('status', 'active')) as { id: string; title: string }[];
+        const w = String(a.rule || '').trim().toLowerCase();
+        const hit = rules.filter((r) => r.id === a.rule || r.title.toLowerCase() === w || (w && r.title.toLowerCase().includes(w)));
+        if (hit.length !== 1) fail(hit.length ? `"${a.rule}" matches ${hit.map((r) => r.title).join(' and ')} — be more specific.` : `No rule in force called "${a.rule}". Use list_rules.`);
+        ruleId = hit[0].id;
+      }
+      const proposal = a.kind === 'change_rule' ? { title: a.new_title || '', value: a.new_value || '', detail: a.new_detail || '' }
+        : a.kind === 'new_rule' ? { detail: a.new_detail || a.body || '', value: a.new_value || '' }
+          : a.kind === 'ruling' ? { answer: a.answer || null } : {};
+      const id = await must(db.rpc('connector_raise_case', {
+        p_group: c.g, p_author: c.author, p_kind: a.kind, p_title: a.kind === 'new_rule' ? (a.new_title || a.title) : a.title,
+        p_body: a.kind === 'new_rule' ? null : a.body || null, p_subject: subject?.id || null, p_rule: ruleId, p_proposal: proposal,
+        p_penalty: a.kind === 'other' ? a.penalty || null : null,
+      }));
+      return `Case raised (id=${id}). The group decides it by its own rules in the app's Tribunal — read_verdict tells you how it went.`;
+    },
+  },
+  {
+    name: 'list_cases',
+    description: "The Tribunal's open cases and recent verdicts (handicap cases too).",
+    inputSchema: { type: 'object', properties: {} },
+    async run(_a, c) {
+      const all = await players(c);
+      const [cs, hc] = await Promise.all([
+        must(db.from('cases').select('id,kind,title,status,stage,subject_id,votes_for,votes_against,closes_at,created_at').eq('group_id', c.g).eq('hidden', false).order('created_at', { ascending: false }).limit(20)),
+        must(db.from('tribunal_cases').select('id,accused_id,proposed_change,status,verdict,guilty_votes,not_guilty_votes,created_at').eq('group_id', c.g).order('created_at', { ascending: false }).limit(10)),
+      ]) as [Record<string, any>[], Record<string, any>[]];
+      const who = (id: string) => pname(all.find((p) => p.id === id));
+      const lines = [
+        ...cs.map((x) => `[${x.status}] ${x.kind}: ${x.title}${x.subject_id ? ` (about ${who(x.subject_id)})` : ''}${x.status === 'open' ? (x.stage === 'voting' ? ` — voting closes ${String(x.closes_at).slice(0, 16).replace('T', ' ')}` : ' — with the organisers') : ` — ${x.votes_for ?? 0}–${x.votes_against ?? 0}`} (id=${x.id})`),
+        ...hc.map((x) => `[${x.status}] handicap: The Lads v ${who(x.accused_id)} (proposed ${x.proposed_change > 0 ? '+' : ''}${x.proposed_change})${x.verdict ? ` — ${x.verdict === 'upheld' ? 'GUILTY' : 'NOT GUILTY'} ${x.guilty_votes}–${x.not_guilty_votes}` : ''}`),
+      ];
+      return lines.join('\n') || 'No cases yet.';
+    },
+  },
+  {
+    name: 'read_verdict',
+    description: 'Read one case: where it stands, the verdict, any penalty (in words) and whether a change waits for the next trip. Pass the id from list_cases or raise_case.',
+    inputSchema: { type: 'object', required: ['case_id'], properties: { case_id: str('Case id') } },
+    async run(a, c) {
+      const x = await must(db.from('cases').select('*').eq('id', a.case_id).eq('group_id', c.g).eq('hidden', false).maybeSingle()) as Record<string, any> | null;
+      if (!x) return fail('No such case in this group — check the id with list_cases.');
+      const all = await players(c);
+      const subject = x.subject_id ? pname(all.find((p) => p.id === x.subject_id)) : null;
+      if (x.status === 'open') return `${x.title}: still being heard (${x.stage === 'voting' ? `voting closes ${String(x.closes_at).slice(0, 16).replace('T', ' ')}` : 'an organiser decides'}).`;
+      const word = x.kind === 'other' ? (x.status === 'passed' ? 'GUILTY' : 'NOT GUILTY') : x.status === 'passed' ? 'Passed' : x.status === 'failed' ? 'Failed' : 'Withdrawn';
+      const wait = x.apply_state === 'waiting_next_trip' ? ' It takes effect from the next trip.' : x.apply_state === 'next_round' ? ' Approved mid-trip: it starts from the next round.' : '';
+      return `${x.title}${subject ? ` (about ${subject})` : ''}: ${word} ${x.votes_for ?? 0}–${x.votes_against ?? 0}. ${x.reason || ''}${x.verdict ? ` Verdict: ${x.verdict}.` : ''}${x.status === 'passed' && x.penalty ? ` Penalty: ${x.penalty}.` : ''}${wait}`;
     },
   },
   {

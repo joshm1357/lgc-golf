@@ -1,6 +1,7 @@
 // Stage 9: share cards — a winner, a final leaderboard or a Tribunal verdict as a picture for the group chat, with a
 // small "Made with The Golf Trip". Drawn on the phone (no outside service, nothing to install).
 import { isNetFormat } from './board.js';
+import { verdictCard } from './governance.js';
 
 const W = 1080;
 const H = 1350;
@@ -29,6 +30,8 @@ export function cardContent(kind, d = {}) {
       sub: d.votes ? `Vote ${d.votes}${d.overruled ? ' · chair overruled' : ''}` : '',
     };
   }
+  // Any Tribunal case (Stage 11b): the verdict only, never the discussion.
+  if (kind === 'case') return verdictCard(d.case || {}, d.subject || '', d.tally || '');
   return { eyebrow: '', title: '' };
 }
 

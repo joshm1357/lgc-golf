@@ -44,7 +44,10 @@ type Msg = { title: string; body: string; url: string; tag?: string };
 const ALWAYS_NOW = new Set(['draw_open', 'test']);
 /** What "only important" people still get: the draw room, a job given to them or due, money, their trip tomorrow. */
 // 'award': a winner decided (migration 054 queues these from the database; they go out with the hourly send).
-const IMPORTANT = new Set(['draw_open', 'test', 'job_assigned', 'job_due', 'payment_recorded', 'nudge_kitty', 'trip_tomorrow', 'award']);
+// Tribunal (061, queued from the database): a case about you, your committee's case, a case over to the organisers or
+// needing a casting vote, a report, a term ending, and "voting closes tomorrow".
+const IMPORTANT = new Set(['draw_open', 'test', 'job_assigned', 'job_due', 'payment_recorded', 'nudge_kitty', 'trip_tomorrow', 'award',
+  'case_about_you', 'case_committee', 'case_fallback', 'case_casting', 'case_report', 'case_closing', 'term_ending']);
 
 /** Which feature each kind of message belongs to (Stage 3): nothing goes out for a switched-off feature. */
 const KIND_FEATURE: Record<string, string> = {
@@ -54,6 +57,8 @@ const KIND_FEATURE: Record<string, string> = {
   nudge_rsvp: 'planner', trip_week: 'planner', trip_tomorrow: 'planner', comment: 'planner',
   nudge_kitty: 'planner_costs', payment_recorded: 'planner_costs', groups_set: 'planner_rooms',
   rule_proposed: 'rule_voting', draw_open: 'draw', award: 'awards',
+  case_new: 'tribunal', case_about_you: 'tribunal', case_committee: 'tribunal', case_fallback: 'tribunal', case_casting: 'tribunal',
+  case_report: 'tribunal', case_closing: 'tribunal', case_verdict: 'tribunal', term_ending: 'committees',
   // rule_decided: not tied to voting — organisers deciding rules is part of the Rulebook itself.
 };
 /** Is a feature on for group g? (An older database without switches: everything on.) */

@@ -16,6 +16,7 @@ import { useRun, must } from '../lib/run.js';
 import { personalLink, personalMessage, signInLine } from '../lib/personal.js';
 import { NEW_GROUPS } from '../lib/beta.js';
 import { InJokesLink } from './InJokes.jsx';
+import { GovernanceLink } from './Cases.jsx';
 
 export default function Group() {
   const { status } = useSession();
@@ -33,6 +34,7 @@ export default function Group() {
         {status.is_admin && <FeaturesCard />}
         {status.is_admin && status.legacy && <AdminPinCard />}
         <InJokesLink />
+        <GovernanceLink />
         <JoinAnother />
         <YourData />
         {!status.is_admin && <div className="small muted">You’re a {ROLE_LABEL[status.role] || 'member'} here — {ROLE_HELP[status.role] || ''} Ask an organiser for an invite link to bring someone in.</div>}

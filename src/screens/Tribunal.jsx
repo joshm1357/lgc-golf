@@ -6,6 +6,7 @@ import { uploadPhoto } from '../lib/images.js';
 import { usePlayerHistory } from './Profile.jsx';
 import { Header, Avatar, Icon, Sheet, PhotoButtons, timeAgo, toast, Loading } from '../components/ui.jsx';
 import SharePicture from '../components/SharePicture.jsx';
+import { useGovernance, useRaisableKinds, CaseRowNew, RaiseCase } from './Cases.jsx';
 
 function fmtChange(n) {
   const v = Number(n);
@@ -28,26 +29,40 @@ function useCases() {
   return { cases, votes, reload: load };
 }
 
+// The Tribunal (Stage 11b): handicap cases (today's tables) and every other kind of case, in one list.
 export default function Tribunal() {
   const data = useData();
   const { status } = useSession();
   const { cases, votes, reload } = useCases();
+  const g = useGovernance();
+  const kinds = useRaisableKinds(g?.ok ? g : null);
   const [lodging, setLodging] = useState(false);
+  const [raising, setRaising] = useState(false);
   if (!cases) return <Loading />;
-  const open = cases.filter((c) => c.status === 'open');
-  const closed = cases.filter((c) => c.status === 'closed');
+  // Newer kinds of case (an older database without them: just the Handicap Tribunal, as before).
+  const others = g?.ok ? g.cases : [];
+  const all = [
+    ...cases.map((c) => ({ at: c.created_at, open: c.status === 'open', el: <CaseRow key={c.id} c={c} votes={votes.filter((v) => v.case_id === c.id)} /> })),
+    ...others.map((c) => ({ at: c.created_at, open: c.status === 'open', el: <CaseRowNew key={c.id} c={c} g={g} /> })),
+  ].sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  const open = all.filter((x) => x.open);
+  const closed = all.filter((x) => !x.open);
+  const handicapOn = !g?.ok || kinds.includes('handicap') || status?.role === 'organiser';
+  const raise = () => (kinds.filter((k) => k !== 'handicap').length ? setRaising(true) : setLodging(true));
   return (
     <div className="page">
-      <Header court back title="Handicap Tribunal" sub="Lodge a case. The lads decide. The chair has the final say." />
+      <Header court back title="The Tribunal" sub="Raise a case — serious or silly. The group decides." />
       <div className="section stack">
-        {status?.role !== 'guest' && <button type="button" className="btn gold block" onClick={() => setLodging(true)}>{Icon.gavel(20)}<span>Lodge a case</span></button>}
+        {status?.role !== 'guest' && (kinds.length > 0 || !g?.ok) && <button type="button" className="btn gold block" onClick={raise}>{Icon.gavel(20)}<span>Raise a case</span></button>}
         {open.length > 0 && <span className="label">Open cases</span>}
-        {open.map((c) => <CaseRow key={c.id} c={c} votes={votes.filter((v) => v.case_id === c.id)} />)}
+        {open.map((x) => x.el)}
         {closed.length > 0 && <span className="label">Past verdicts</span>}
-        {closed.map((c) => <CaseRow key={c.id} c={c} votes={votes.filter((v) => v.case_id === c.id)} />)}
-        {!cases.length && <div className="empty">Court is in session, but nobody's been accused yet.</div>}
+        {closed.map((x) => x.el)}
+        {!all.length && <div className="empty">Court is in session, but nobody's been accused yet.</div>}
+        {g?.ok && <Link to="/governance" className="small muted" style={{ textAlign: 'center' }}>Who decides what →</Link>}
       </div>
-      {lodging && <LodgeCase onClose={() => setLodging(false)} onDone={reload} players={data.players} />}
+      {lodging && handicapOn && <LodgeCase onClose={() => setLodging(false)} onDone={reload} players={data.players} />}
+      {raising && <RaiseCase g={g} onClose={() => setRaising(false)} onHandicap={() => setLodging(true)} />}
     </div>
   );
 }

@@ -36,7 +36,14 @@ export const FEATURES = [
   { key: 'tee_groups', name: 'Tee groups', description: 'Fair groups of four for each round — new partners each day, handicaps mixed.', newGroup: false },
   { key: 'replay', name: 'Round replay', description: 'Watch a finished round as a 60-second animated replay.', newGroup: true },
   { key: 'in_jokes', name: 'In-jokes', description: 'Your group’s nicknames and running jokes, used in awards and replays.', newGroup: false },
-  { key: 'ai_helper', name: 'AI helper', description: 'Ask the app in plain words: set up a trip for you, or answer questions about your group’s history.', newGroup: false },
+  { key: 'ai_helper', name: 'AI helper', description: 'Ask the app in plain words: set up a trip for you, or answer questions about your group’s history.', newGroup: true },
+  { key: 'rule_challenges', name: 'Rule challenges', description: 'Anyone can challenge a rule: change it, scrap it or ask for a ruling.', parent: 'tribunal', newGroup: true },
+  { key: 'other_cases', name: '“Anything else” cases', description: 'Raise anything with the Tribunal — that shirt on day 2.', parent: 'tribunal', newGroup: true },
+  { key: 'committees', name: 'Committees and terms', description: 'Named committees (e.g. Handicap Committee) with seats and terms.', parent: 'tribunal', newGroup: false },
+  { key: 'stats', name: 'Player stats and season ladder', description: 'Each player’s scoring, best and worst holes, head-to-heads, and an order of merit across trips.', newGroup: true },
+  { key: 'trip_finder', name: 'Trip finder', description: 'Which courses suit the group: tee-time windows, drive times and course facts, ranked on a map.', parent: 'planner', newGroup: false },
+  { key: 'weather', name: 'Weather on the trip', description: 'The forecast for the trip’s place in the week before.', parent: 'planner', newGroup: true },
+  { key: 'dinner_awards', name: 'Fines and dinner awards', description: 'Nominate and vote for the trip’s awards and fines at dinner.', newGroup: false },
 ].map((f) => ({ parent: null, tier: 'free', ...f }));
 
 export const FEATURE_BY_KEY = Object.fromEntries(FEATURES.map((f) => [f.key, f]));

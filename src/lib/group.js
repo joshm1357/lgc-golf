@@ -28,6 +28,8 @@ export const GROUP_TABLES = new Set([
   'side_comp_defs', 'side_comp_entries',
   // Overnight build (054 award moments, 056 tee groups, 058 in-jokes)
   'award_moments', 'tee_groups', 'in_jokes',
+  // The AI helper's usage log (migration 059; only the edge function reads it)
+  'helper_log',
 ]);
 
 let current = (() => {

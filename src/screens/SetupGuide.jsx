@@ -12,6 +12,7 @@ import { InviteCard } from './Group.jsx';
 import { OwnCompsAdmin, RoundOwnComps } from './OwnComps.jsx';
 import { upcomingTrips, tripDays, dayLabel, roundName, setupSteps, nextAction } from '../lib/setupguide.js';
 import { parseHoles } from '../lib/sidecomps.js';
+import { SetupHelperBox } from './AiHelper.jsx';
 
 const FORMATS = [
   { value: 'stableford', label: 'Stableford (individual)' },
@@ -59,6 +60,7 @@ export default function SetupGuide() {
     <div className="page">
       <Header back title="Set up your trip" sub={`${doneCount} of ${needed} done`} />
       <div className="section stack" style={{ gap: 10 }}>
+        <SetupHelperBox onApplied={(id) => { if (id) setTripId(id); setOpen('players'); }} />
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${needed}, 1fr)`, gap: 4 }} aria-hidden="true">
           {steps.filter((s) => !s.optional).map((s) => <span key={s.key} style={{ height: 6, borderRadius: 3, background: s.done ? 'var(--gold)' : 'var(--line-soft, #E3E7EC)' }} />)}
         </div>

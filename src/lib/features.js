@@ -31,6 +31,11 @@ export const FEATURES = [
   { key: 'booking_links', name: 'Booking links', description: 'Buttons on a trip to find accommodation, a course and directions, with your place and dates filled in.', newGroup: false },
   { key: 'clubhouse_tv', name: 'Clubhouse TV leaderboard', description: 'Show your round on the clubhouse TV — first names only, and only for rounds you choose.', newGroup: false },
   { key: 'cup', name: 'Team match play (Ryder Cup)', description: 'Two teams, match play matches (singles or Ambrose pairs) scored hole by hole, and a live team points board.', newGroup: false },
+  { key: 'awards', name: 'Award moments', description: 'When a round, side comp or trophy is decided: a winner card, the winner’s photo, a pinned post and a buzz.', newGroup: false },
+  { key: 'games', name: 'Games and side bets', description: 'Skins, Nassau and other games worked out from the scores, with a running tally.', newGroup: false },
+  { key: 'tee_groups', name: 'Tee groups', description: 'Fair groups of four for each round — new partners each day, handicaps mixed.', newGroup: false },
+  { key: 'replay', name: 'Round replay', description: 'Watch a finished round as a 60-second animated replay.', newGroup: true },
+  { key: 'in_jokes', name: 'In-jokes', description: 'Your group’s nicknames and running jokes, used in awards and replays.', newGroup: false },
 ].map((f) => ({ parent: null, tier: 'free', ...f }));
 
 export const FEATURE_BY_KEY = Object.fromEntries(FEATURES.map((f) => [f.key, f]));

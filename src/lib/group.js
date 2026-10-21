@@ -26,6 +26,8 @@ export const GROUP_TABLES = new Set([
   'cup_sides', 'cup_matches',
   // A group's own side comps (migration 051)
   'side_comp_defs', 'side_comp_entries',
+  // Overnight build (054 award moments, 056 tee groups, 058 in-jokes)
+  'award_moments', 'tee_groups', 'in_jokes',
 ]);
 
 let current = (() => {

@@ -10,6 +10,7 @@ import { QuickRoundDone } from './QuickRound.jsx';
 import SharePicture from '../components/SharePicture.jsx';
 import { boardCard } from '../lib/shareCard.js';
 import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
+import { AwardCards } from '../components/Awards.jsx';
 
 const DrawSetup = lazyScreen(() => import('../components/DrawSetup.jsx'), 'default', { inline: true });
 
@@ -132,6 +133,7 @@ export default function Leaderboard() {
         )}
       </Header>
       <RoundChips round={round} onChoose={choose} />
+      <AwardCards />
 
       {winner && (
         <div className="winner">

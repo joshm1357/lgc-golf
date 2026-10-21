@@ -1,12 +1,20 @@
 import { describe, it, expect } from 'vitest';
-import { guideTrip, tripDays, dayLabel, roundName, setupSteps, nextAction } from './setupguide.js';
+import { guideTrip, upcomingTrips, tripDays, dayLabel, roundName, setupSteps, nextAction } from './setupguide.js';
 
 const trip = { id: 't1', name: '6th Ryder Cup', start_date: '2026-10-22', end_date: '2026-10-24', status: 'active' };
 
 describe('guided setup', () => {
-  it('picks the newest trip that isn’t locked', () => {
-    expect(guideTrip([{ id: 'a', status: 'active' }, { id: 'b', status: 'locked' }]).id).toBe('a');
-    expect(guideTrip([{ id: 'b', status: 'locked' }])).toBe(null);
+  it('picks the nearest trip that isn’t over, whatever its status; never a past one', () => {
+    const trips = [
+      { id: 'past', status: 'active', start_date: '2026-04-10', end_date: '2026-04-12' },
+      { id: 'planned', status: 'locked', start_date: '2026-11-20', end_date: '2026-11-22' }, // locked in from the planner
+      { id: 'soon', status: 'active', start_date: '2026-10-22', end_date: '2026-10-24' },
+    ];
+    expect(guideTrip(trips, '2026-10-21').id).toBe('soon');
+    expect(upcomingTrips(trips, '2026-10-21').map((t) => t.id)).toEqual(['soon', 'planned']);
+    expect(guideTrip(trips, '2026-10-23').id).toBe('soon'); // mid-trip still counts
+    expect(guideTrip([trips[0]], '2026-10-21')).toBe(null); // only a past trip: make a new one
+    expect(guideTrip([{ id: 'nodate', status: 'active' }], '2026-10-21').id).toBe('nodate');
   });
   it('lists the days of a trip and names them', () => {
     expect(tripDays(trip)).toEqual(['2026-10-22', '2026-10-23', '2026-10-24']);
@@ -29,19 +37,23 @@ describe('guided setup', () => {
       { id: 'r1', trip_id: 't1', name: 'Friday — Cypress Lakes', play_date: '2026-10-23', status: 'setup', ctp_holes: [], ld_holes: [] },
       { id: 'r2', trip_id: 't1', name: 'Saturday — The Vintage', play_date: '2026-10-24', status: 'setup', ctp_holes: [3], ld_holes: [] },
     ];
-    const steps = setupSteps({ trips: [trip], courses: [{ name: 'Cypress Lakes' }], rounds, players: [{ id: 1 }, { id: 2 }] });
+    const steps = setupSteps({ trips: [trip], courses: [{ name: 'Cypress Lakes' }], rounds, players: [{ id: 1 }, { id: 2 }] }, {}, trip);
     expect(steps.map((s) => s.done)).toEqual([true, true, true, true, true]);
     expect(steps[2].summary).toContain('nothing on Thursday');
-    expect(nextAction(steps, rounds, '2026-10-21')).toMatchObject({ kind: 'start', round: { id: 'r1' } });
-    expect(nextAction(steps, rounds, '2026-10-23').label).toContain('is today');
+    expect(nextAction(steps, rounds, '2026-10-21')).toMatchObject({ kind: 'ready', round: { id: 'r1' } });
+    expect(nextAction(steps, rounds, '2026-10-21').label).toContain('start it on the day');
+    expect(nextAction(steps, rounds, '2026-10-23')).toMatchObject({ kind: 'start', round: { id: 'r1' } });
+    expect(nextAction(steps, rounds, '2026-10-23', () => false)).toMatchObject({ kind: 'players', round: { id: 'r1' } });
+    // A round with no date doesn't jump ahead of a dated one.
+    expect(nextAction(steps, [{ id: 'x', status: 'setup', name: 'X' }, ...rounds], '2026-10-23').round.id).toBe('r1');
   });
   it('a Cup isn’t ready while anyone has no team', () => {
     const players = [{ id: 1, cup_side: 'a' }, { id: 2, cup_side: null }];
-    const steps = setupSteps({ trips: [trip], courses: [{}], rounds: [{ trip_id: 't1' }], players }, { cup: true });
+    const steps = setupSteps({ trips: [trip], courses: [{}], rounds: [{ trip_id: 't1' }], players }, { cup: true }, trip);
     expect(steps[3]).toMatchObject({ done: false, summary: '2 in · 1 not on a team yet' });
   });
   it('unapproved players don’t count', () => {
-    const steps = setupSteps({ trips: [trip], courses: [], rounds: [], players: [{ id: 1 }, { id: 2, approved: false }] });
+    const steps = setupSteps({ trips: [trip], courses: [], rounds: [], players: [{ id: 1 }, { id: 2, approved: false }] }, {}, trip);
     expect(steps[3].done).toBe(false);
   });
 });

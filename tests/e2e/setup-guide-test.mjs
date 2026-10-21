@@ -77,8 +77,15 @@ async function fake(route) {
     if (method === 'GET') return json(filterRows(rows, url.searchParams));
     if (method === 'POST') {
       const body = JSON.parse(req.postData() || '{}');
-      for (const b of Array.isArray(body) ? body : [body]) rows.push({ id: crypto.randomUUID(), group_id: GROUP, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), holes: {}, ...(table === 'rounds' ? { status: 'setup', ctp_holes: [], ld_holes: [], own_comps: [] } : {}), ...b });
-      return json([], 201);
+      const made = [];
+      for (const b of Array.isArray(body) ? body : [body]) {
+        const row = { id: crypto.randomUUID(), group_id: GROUP, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), holes: {}, ...(table === 'rounds' ? { status: 'setup', ctp_holes: [], ld_holes: [], own_comps: [] } : {}), ...b };
+        rows.push(row);
+        made.push(row);
+      }
+      // .select().single() asks for the row back as one object.
+      if (/vnd\.pgrst\.object/.test(req.headers().accept || '')) return json(made[0], 201);
+      return json(url.searchParams.has('select') ? made : [], 201);
     }
     if (method === 'PATCH') {
       const id = eqOf(url.searchParams, 'id');
@@ -158,9 +165,22 @@ await page.reload();
 await page.getByText('4 of 4 done').waitFor({ timeout: 10000 });
 check(true, 'two players in: 4 of 4 done');
 
-// 6. Next up: start Friday; extras: closest to pin on the par 3s.
-check(await page.getByRole('button', { name: 'Start Friday — Cypress Lakes' }).isVisible(), 'next up offers to start Friday');
-await page.getByRole('button', { name: /Extras/ }).click();
+// 6. Next up: Friday has no teams yet, so it says to pick who's playing (not "Start").
+check(await page.getByText('Friday — Cypress Lakes: pick who’s playing').isVisible(), 'next up: Friday needs its teams first');
+check(!(await page.getByRole('button', { name: 'Start Friday — Cypress Lakes' }).isVisible().catch(() => false)), 'no Start button for a round with nobody in it');
+// Teams made, but Friday isn't today: "start it on the day".
+db.teams.push({ id: 'tm1', round_id: db.rounds[0].id, name: 'Team 1', handicap: 8, created_at: now });
+db.team_players.push({ team_id: 'tm1', player_id: K }, { team_id: 'tm1', player_id: ids[0] });
+await page.reload();
+await page.getByText(/All set\. Next up: Friday — Cypress Lakes on Friday 23 Oct — start it on the day/).waitFor({ timeout: 10000 });
+check(true, 'next up: all set, start it on the day');
+// On the day: Start appears.
+const d = new Date();
+db.rounds[0].play_date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+await page.reload();
+await page.getByRole('button', { name: 'Start Friday — Cypress Lakes' }).waitFor({ timeout: 10000 });
+check(true, 'on the day: next up offers Start');
+await page.getByRole('button', { name: /^5 Extras|Extras/ }).first().click();
 await page.getByRole('button', { name: /Use the par 3s/ }).click();
 await page.getByRole('button', { name: 'Save holes' }).click();
 await page.waitForTimeout(800);

@@ -10,9 +10,24 @@ const parse = (s) => {
 };
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-/** The trip being set up: the newest one that isn't finished (locked). */
-export function guideTrip(trips) {
-  return (trips || []).find((t) => t.status !== 'locked') || null;
+const todayStr = () => iso(new Date());
+
+/**
+ * The trips that could be the one being set up: anything not over yet (its last day is today or later), nearest
+ * first, whatever its status ("locked" also means "locked in, not started" for a trip from the planner); then any
+ * open trip with no dates yet. Past trips are never offered, so they can't be renamed by mistake.
+ */
+export function upcomingTrips(trips, today = todayStr()) {
+  const list = trips || [];
+  const dated = list.filter((t) => (t.end_date || t.start_date) && (t.end_date || t.start_date) >= today)
+    .sort((a, b) => String(a.start_date || '').localeCompare(String(b.start_date || '')));
+  const undated = list.filter((t) => !t.start_date && !t.end_date && t.status === 'active');
+  return [...dated, ...undated];
+}
+
+/** The trip being set up: the nearest one that isn't over (see upcomingTrips), or null. */
+export function guideTrip(trips, today = todayStr()) {
+  return upcomingTrips(trips, today)[0] || null;
 }
 
 /** Every day of the trip, as 'YYYY-MM-DD' (at most 10). No start date: none. */
@@ -40,10 +55,10 @@ export function roundName(day, courseName) {
 
 /**
  * The five steps, each { key, title, done, summary, optional }.
- * data: { trips, courses, rounds, players }; on: { cup, side_comps } (features switched on).
+ * data: { trips, courses, rounds, players }; on: { cup, side_comps } (features switched on); trip: the trip being set
+ * up (default: guideTrip).
  */
-export function setupSteps(data, on = {}) {
-  const trip = guideTrip(data.trips);
+export function setupSteps(data, on = {}, trip = guideTrip(data.trips)) {
   const days = tripDays(trip);
   const rounds = trip ? (data.rounds || []).filter((r) => r.trip_id === trip.id) : [];
   const courses = data.courses || [];
@@ -76,15 +91,22 @@ export function setupSteps(data, on = {}) {
   ];
 }
 
-/** What to do next: the first step not done (skipping the optional one), else the next round to start. */
-export function nextAction(steps, rounds, todayIso) {
+/**
+ * What to do next: the first step not done (skipping the optional one); then the next round — who's playing it if
+ * nobody is yet, "start it" only on its day, otherwise "all set". hasPlayers(round) says if a round has its
+ * players / teams / pairs.
+ */
+export function nextAction(steps, rounds, todayIso, hasPlayers = () => true) {
   const todo = steps.find((s) => !s.done && !s.optional);
   if (todo) return { kind: 'step', key: todo.key, label: todo.title };
   const live = (rounds || []).find((r) => r.status === 'live');
   if (live) return { kind: 'live', round: live, label: `${live.name} is live` };
+  // Dated rounds in date order, rounds with no date last.
   const upcoming = (rounds || []).filter((r) => r.status === 'setup')
-    .sort((a, b) => String(a.play_date || '').localeCompare(String(b.play_date || '')));
+    .sort((a, b) => (a.play_date ? 0 : 1) - (b.play_date ? 0 : 1) || String(a.play_date || '').localeCompare(String(b.play_date || '')));
   const next = upcoming.find((r) => !r.play_date || r.play_date >= todayIso) || upcoming[0];
-  if (next) return { kind: 'start', round: next, label: next.play_date === todayIso ? `${next.name} is today — start it on the first tee` : `All set. Next up: ${next.name}` };
-  return { kind: 'done', label: 'All set.' };
+  if (!next) return { kind: 'done', label: 'All set.' };
+  if (!hasPlayers(next)) return { kind: 'players', round: next, label: `${next.name}: pick who’s playing` };
+  if (next.play_date === todayIso) return { kind: 'start', round: next, label: `${next.name} is today — start it on the first tee` };
+  return { kind: 'ready', round: next, label: `All set. Next up: ${next.name}${next.play_date ? ` on ${dayLabel(next.play_date)}` : ''} — start it on the day.` };
 }

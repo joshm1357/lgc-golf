@@ -10,7 +10,7 @@ import { Header, Loading } from '../components/ui.jsx';
 import { FindCourse } from '../components/CourseLibrary.jsx';
 import { InviteCard } from './Group.jsx';
 import { OwnCompsAdmin, RoundOwnComps } from './OwnComps.jsx';
-import { guideTrip, tripDays, dayLabel, roundName, setupSteps, nextAction } from '../lib/setupguide.js';
+import { upcomingTrips, tripDays, dayLabel, roundName, setupSteps, nextAction } from '../lib/setupguide.js';
 import { parseHoles } from '../lib/sidecomps.js';
 
 const FORMATS = [
@@ -29,7 +29,10 @@ export default function SetupGuide() {
   const { status } = useSession();
   const cupOn = useFeature('cup');
   const sideCompsOn = useFeature('side_comps');
-  const steps = data.ready ? setupSteps(data, { cup: cupOn, side_comps: sideCompsOn }) : [];
+  const [tripId, setTripId] = useState(null); // the trip being set up (default: the nearest one that isn't over)
+  const candidates = data.ready ? upcomingTrips(data.trips, todayIso()) : [];
+  const trip = (tripId && tripId !== 'new' && data.trips?.find((t) => t.id === tripId)) || (tripId === 'new' ? null : candidates[0] || null);
+  const steps = data.ready ? setupSteps(data, { cup: cupOn, side_comps: sideCompsOn }, trip) : [];
   const firstTodo = steps.find((s) => !s.done && !s.optional)?.key;
   const [open, setOpen] = useState(null);
   useEffect(() => { if (open == null && data.ready) setOpen(firstTodo || 'none'); }, [data.ready]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -38,14 +41,14 @@ export default function SetupGuide() {
   if (!status?.is_admin) {
     return <div className="page"><Header back title="Set up your trip" /><div className="empty">Only the organiser sets the trip up.</div></div>;
   }
-  const trip = guideTrip(data.trips);
   const rounds = trip ? data.rounds.filter((r) => r.trip_id === trip.id) : [];
-  const next = nextAction(steps, rounds, todayIso());
+  const hasPlayers = (r) => ((r.format === 'ambrose' || r.format === 'fourball') ? (data.teamsByRound[r.id] || []).length : (data.roundPlayers[r.id] || []).length) > 0;
+  const next = nextAction(steps, rounds, todayIso(), hasPlayers);
   const doneCount = steps.filter((s) => s.done && !s.optional).length;
   const needed = steps.filter((s) => !s.optional).length;
 
   const body = {
-    trip: <TripStep trip={trip} onDone={() => setOpen('courses')} />,
+    trip: <TripStep key={trip?.id || 'new'} trip={trip} onNew={() => setTripId('new')} onDone={(id) => { setTripId(id); setOpen('courses'); }} />,
     courses: <CoursesStep onDone={() => setOpen('rounds')} />,
     rounds: <RoundsStep trip={trip} onDone={() => setOpen('players')} />,
     players: <PlayersStep cupOn={cupOn} />,
@@ -59,6 +62,12 @@ export default function SetupGuide() {
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${needed}, 1fr)`, gap: 4 }} aria-hidden="true">
           {steps.filter((s) => !s.optional).map((s) => <span key={s.key} style={{ height: 6, borderRadius: 3, background: s.done ? 'var(--gold)' : 'var(--line-soft, #E3E7EC)' }} />)}
         </div>
+        {(candidates.length > 1 || (tripId === 'new' && candidates.length > 0)) && (
+          <div className="chips" role="group" aria-label="Which trip">
+            {candidates.map((t) => <button key={t.id} type="button" className="chip" aria-pressed={trip?.id === t.id} onClick={() => setTripId(t.id)}>{t.name}</button>)}
+            <button type="button" className="chip" aria-pressed={tripId === 'new'} onClick={() => { setTripId('new'); setOpen('trip'); }}>+ New trip</button>
+          </div>
+        )}
         <NextUp next={next} onStep={setOpen} />
         {steps.map((s, i) => (
           <div key={s.key} className="card" style={{ overflow: 'hidden', borderColor: open === s.key ? 'var(--navy)' : undefined }}>
@@ -88,15 +97,23 @@ function NextUp({ next, onStep }) {
   if (next.kind === 'step') return null;
   return (
     <div className="card pad stack" style={{ gap: 8, background: 'var(--gold-soft)', borderColor: 'var(--gold)' }}>
-      <strong>✅ {next.label}</strong>
+      <strong>{next.kind === 'players' ? '👥' : '✅'} {next.label}</strong>
+      {next.kind === 'players' && (
+        <>
+          <span className="small">{next.round.format === 'ambrose' ? 'Make the teams' : next.round.format === 'fourball' ? 'Make the pairs' : 'Add who’s playing'} in Admin → Rounds &amp; teams.</span>
+          <Link to="/admin" className="btn gold sm" style={{ alignSelf: 'flex-start' }}>Go to Admin</Link>
+        </>
+      )}
       {next.kind === 'start' && (
         <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-          <button type="button" className="btn gold sm" disabled={busy} onClick={() => run(async () => {
+          <button type="button" className="btn gold sm" disabled={busy} onClick={() => {
             if (!window.confirm(`Start ${next.round.name} now? Scores can be entered once it’s live.`)) return;
-            await must(supabase.from('rounds').update({ status: 'live' }).eq('id', next.round.id));
-            await data.reload();
-            nav('/');
-          }, 'Round started')}>Start {next.round.name}</button>
+            run(async () => {
+              await must(supabase.from('rounds').update({ status: 'live' }).eq('id', next.round.id));
+              await data.reload();
+              nav('/');
+            }, 'Round started');
+          }}>Start {next.round.name}</button>
           <button type="button" className="btn ghost sm" onClick={() => onStep('extras')}>Add side comps first</button>
         </div>
       )}
@@ -105,7 +122,7 @@ function NextUp({ next, onStep }) {
   );
 }
 
-function TripStep({ trip, onDone }) {
+function TripStep({ trip, onDone, onNew }) {
   const data = useData();
   const [busy, run] = useRun();
   const [name, setName] = useState(trip?.name || '');
@@ -114,10 +131,11 @@ function TripStep({ trip, onDone }) {
   const ok = name.trim().length >= 2 && start && (!end || end >= start);
   const save = () => run(async () => {
     const row = { name: name.trim(), start_date: start, end_date: end || start };
+    let id = trip?.id;
     if (trip) await must(supabase.from('trips').update(row).eq('id', trip.id));
-    else await must(supabase.from('trips').insert(row));
+    else id = (await must(supabase.from('trips').insert(row).select('id').single())).id;
     await data.reload();
-    onDone();
+    onDone(id);
   }, trip ? 'Trip saved' : 'Trip made');
   return (
     <>
@@ -127,7 +145,8 @@ function TripStep({ trip, onDone }) {
         <label className="field grow"><span>Last day</span><input className="input" type="date" value={end} min={start || undefined} onChange={(e) => setEnd(e.target.value)} /></label>
       </div>
       {end && start && end < start && <span className="small err">The last day is before the first.</span>}
-      <button type="button" className="btn gold" disabled={busy || !ok} onClick={save}>{trip ? 'Save' : 'Make the trip'}</button>
+      <button type="button" className="btn gold" disabled={busy || !ok} onClick={save}>{trip ? 'Save changes to this trip' : 'Make the trip'}</button>
+      {trip && <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={onNew}>This is a different trip — start a new one</button>}
     </>
   );
 }
@@ -152,10 +171,12 @@ function CoursesStep({ onDone }) {
 function RoundsStep({ trip, onDone }) {
   const data = useData();
   if (!trip) return <div className="small muted">Make the trip first (step 1).</div>;
+  if (!trip.start_date) return <div className="small muted">Add the trip’s dates first (step 1) — each round goes on a day.</div>;
   if (!data.courses.length) return <div className="small muted">Add a course first (step 2).</div>;
   const days = tripDays(trip);
   const rounds = data.rounds.filter((r) => r.trip_id === trip.id);
-  const list = days.length ? days : [null];
+  const list = days;
+  const others = rounds.filter((r) => !days.includes(r.play_date));
   return (
     <>
       {list.map((day) => {
@@ -170,6 +191,9 @@ function RoundsStep({ trip, onDone }) {
           </div>
         );
       })}
+      {others.length > 0 && (
+        <div className="small muted">Also on this trip: {others.map((r) => `${r.name}${r.play_date ? ` (${dayLabel(r.play_date)})` : ' (no date)'}`).join(', ')} — change dates in Admin.</div>
+      )}
       {rounds.length > 0 && <button type="button" className="btn sm" onClick={onDone}>Next: players →</button>}
       <p className="note" style={{ margin: 0 }}>Ambrose teams, 4BBB pairs, and who’s playing a Stableford or stroke round, are set in Admin → Rounds &amp; teams (or with The Draw).</p>
     </>
@@ -267,7 +291,7 @@ function RoundExtras({ round }) {
   const [ld, setLd] = useState((round.ld_holes || []).join(' '));
   const course = data.coursesById[round.course_id];
   const par3s = (course?.holes || []).filter((h) => h.par === 3).map((h) => h.n);
-  const changed = ctp !== (round.ctp_holes || []).join(' ') || ld !== (round.ld_holes || []).join(' ');
+  const changed = parseHoles(ctp).join(' ') !== (round.ctp_holes || []).join(' ') || parseHoles(ld).join(' ') !== (round.ld_holes || []).join(' ');
   return (
     <div className="card pad stack" style={{ gap: 8, background: 'var(--ground)' }}>
       <strong>{round.name}</strong>

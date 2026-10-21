@@ -57,13 +57,25 @@ export function roundSubjects(round, teamsByRound = {}, roundPlayers = {}) {
 
 const hasScore = (scoresIdx, roundId, subjectId, hole) => !!scoresIdx?.[roundId]?.[subjectId]?.[hole];
 
-/** A side comp hole is decided once everyone has played it (or the round is locked). */
-export function holeDecided({ round, hole, teamsByRound, roundPlayers, scoresIdx }) {
+/** Has this team/player moved on from the hole? Another hole scored after it (by save time, so shotgun starts work;
+ *  without save times, the next hole in order), or a full card. The last group often saves its score before it measures
+ *  the closest-to-pin, so "they've scored the hole" alone is too early. */
+function movedOn(card, hole, nHoles = 18) {
+  const here = card?.[hole];
+  if (!here) return false;
+  const others = Object.entries(card).filter(([n, x]) => Number(n) !== Number(hole) && x && (x.strokes != null || x.picked_up));
+  if (others.length >= nHoles - 1) return true; // a full card
+  return others.some(([n, x]) => (x.updated_at && here.updated_at ? x.updated_at > here.updated_at : Number(n) === (Number(hole) % nHoles) + 1));
+}
+
+/** A side comp hole is decided once everyone has played it and moved on to another hole (or the round is locked). */
+export function holeDecided({ round, hole, teamsByRound, roundPlayers, scoresIdx, course }) {
   if (!round) return false;
   if (round.status === 'locked') return true;
   if (round.status !== 'live') return false;
   const subjects = roundSubjects(round, teamsByRound, roundPlayers);
-  return subjects.length > 0 && subjects.every((id) => hasScore(scoresIdx, round.id, id, hole));
+  const nHoles = courseHoles(course).length || 18;
+  return subjects.length > 0 && subjects.every((id) => movedOn(scoresIdx?.[round.id]?.[id], hole, nHoles));
 }
 
 /** A round is decided once everyone has a score (or pick-up) on every hole, or it's locked. A Stableford player
@@ -148,7 +160,7 @@ export function compMoments(ctx, round) {
   const out = [];
   for (const kind of ['ctp', 'ld']) {
     for (const hole of (kind === 'ctp' ? round.ctp_holes : round.ld_holes) || []) {
-      if (!holeDecided({ round, hole, teamsByRound: ctx.teamsByRound, roundPlayers: ctx.roundPlayers, scoresIdx: ctx.scoresIdx })) continue;
+      if (!holeDecided({ round, hole, teamsByRound: ctx.teamsByRound, roundPlayers: ctx.roundPlayers, scoresIdx: ctx.scoresIdx, course: ctx.coursesById?.[round.course_id] })) continue;
       const here = (ctx.sideEntries || []).filter((e) => e.round_id === round.id && e.kind === kind && e.hole === hole);
       const best = bestEntry(kind, here);
       if (!best) continue;

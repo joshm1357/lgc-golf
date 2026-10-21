@@ -129,19 +129,28 @@ describe('round winner', () => {
 describe('closest to the pin and longest drive', () => {
   it('decided once everyone has played the hole; the confirmed entry wins, else the best distance', () => {
     const c = stableford();
-    c.scoresIdx.r1.kurt = card([5, 3]); // round not finished, but hole 2 is
+    c.scoresIdx.r1.kurt = card([5, 3]); // Kurt has scored 2 but not moved on: not decided yet (still measuring)
+    expect(compMoments({ ...c, sideEntries: [{ round_id: 'r1', kind: 'ctp', hole: 2, player_id: 'al', distance_m: 4.2 }] }, c.round)).toEqual([]);
+    c.scoresIdx.r1.kurt = card([5, 3, 6]); // round not finished, but everyone has moved on from hole 2
     c.sideEntries = [
       { round_id: 'r1', kind: 'ctp', hole: 2, player_id: 'al', distance_m: 4.2 },
       { round_id: 'r1', kind: 'ctp', hole: 2, player_id: 'kurt', distance_m: 1.8 },
       { round_id: 'r1', kind: 'ld', hole: 3, player_id: 'mike', distance_m: 260 },
     ];
-    const ms = compMoments(c, c.round);
+    const ms = compMoments(c, c.round).filter((m) => m.kind === 'ctp');
     expect(ms).toHaveLength(1);
     expect(ms[0]).toMatchObject({ key: 'ctp:r1:2', kind: 'ctp', title: '🎯 Kurt wins closest to the pin on 2 — 1.8 m', winner_player_ids: ['kurt'] });
     c.sideEntries[0].confirmed = true;
-    expect(compMoments(c, c.round)[0].title).toBe('🎯 Al wins closest to the pin on 2 — 4.2 m');
-    c.scoresIdx.r1.kurt = card([5, 3, 6]);
+    expect(compMoments(c, c.round).find((m) => m.kind === 'ctp').title).toBe('🎯 Al wins closest to the pin on 2 — 4.2 m');
+    c.scoresIdx.r1.kurt = card([5, 3, 6, 4]);
     expect(compMoments(c, c.round).map((m) => m.title)).toContain('💣 Mike wins longest drive on 3 — 260 m');
+    // Shotgun start on an 18-hole course: by save time, not hole order.
+    c.coursesById = { c1: { id: 'c1', holes: Array.from({ length: 18 }, (_, i) => ({ n: i + 1, par: 4, si: i + 1 })) } };
+    const t = (n, at) => ({ strokes: 4, updated_at: `2026-10-23T0${at}:00:00Z` });
+    c.scoresIdx.r1.kurt = { 16: t(16, 1), 17: t(17, 2), 2: t(2, 3) };
+    expect(compMoments(c, c.round).some((m) => m.key === 'ctp:r1:2')).toBe(false);
+    c.scoresIdx.r1.kurt = { 16: t(16, 1), 2: t(2, 2), 3: t(3, 3) };
+    expect(compMoments(c, c.round).some((m) => m.key === 'ctp:r1:2')).toBe(true);
   });
   it('no entries: no moment; locked: decided', () => {
     const c = stableford({ status: 'locked' });

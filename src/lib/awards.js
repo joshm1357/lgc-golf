@@ -65,7 +65,9 @@ function movedOn(card, hole, nHoles = 18) {
   if (!here) return false;
   const others = Object.entries(card).filter(([n, x]) => Number(n) !== Number(hole) && x && (x.strokes != null || x.picked_up));
   if (others.length >= nHoles - 1) return true; // a full card
-  return others.some(([n, x]) => (x.updated_at && here.updated_at ? x.updated_at > here.updated_at : Number(n) === (Number(hole) % nHoles) + 1));
+  // Scored after this hole; if the times can't tell (missing or the same, e.g. typed in together), the next hole.
+  return others.some(([n, x]) => (x.updated_at && here.updated_at && x.updated_at !== here.updated_at
+    ? x.updated_at > here.updated_at : Number(n) === (Number(hole) % nHoles) + 1));
 }
 
 /** A side comp hole is decided once everyone has played it and moved on to another hole (or the round is locked). */

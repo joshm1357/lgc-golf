@@ -328,3 +328,23 @@ describe('playGame and the money tally', () => {
     expect(g.money).toEqual({ p1: -2000, p2: 2000 });
   });
 });
+
+describe('paper-card players (review fix)', () => {
+  it('count in the Stableford pot with their card points, and are left out of hole-by-hole games', async () => {
+    const { playGame } = await import('./games.js');
+    const holes = [1, 2, 3].map((n) => ({ n, par: 4, si: n }));
+    const round = { id: 'r', format: 'stableford', status: 'locked' };
+    const ctx = {
+      round, course: { holes }, teams: [],
+      roundPlayers: [{ player_id: 'a', playing_handicap: 0 }, { player_id: 'q', playing_handicap: 0 }],
+      playersById: { a: { id: 'a', name: 'Al' }, q: { id: 'q', name: 'Quinn' } },
+      scoresIdx: { r: { a: { 1: { strokes: 4 }, 2: { strokes: 4 }, 3: { strokes: 4 } } } },
+      quickResults: [{ round_id: 'r', player_id: 'q', points: 9 }],
+    };
+    const pot = playGame({ kind: 'stableford_pot', stake: 10, options: {} }, ctx);
+    expect(pot.result.leaders).toEqual(['q']);
+    const sk = playGame({ kind: 'skins', stake: 5, options: {} }, ctx);
+    expect(sk.subjects.map((x) => x.id)).toEqual(['a']);
+    expect(sk.note).toContain('Quinn');
+  });
+});

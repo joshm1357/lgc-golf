@@ -13,7 +13,7 @@ export default function More() {
   const data = useData();
   const me = data.playersById[status.player_id];
   const pending = status.is_admin ? data.players.filter((p) => p.approved === false).length : 0;
-  const on = { location: useFeature('location'), rule_voting: useFeature('rule_voting'), trophies: useFeature('trophies'), tribunal: useFeature('tribunal'), notifications: useFeature('notifications'), games: useFeature('games'), ai_helper: useFeature('ai_helper') };
+  const on = { location: useFeature('location'), rule_voting: useFeature('rule_voting'), trophies: useFeature('trophies'), tribunal: useFeature('tribunal'), notifications: useFeature('notifications'), games: useFeature('games'), ai_helper: useFeature('ai_helper'), in_jokes: useFeature('in_jokes') };
   const manyGroups = (status.groups?.length || 0) > 1;
   const platformAdmin = usePlatformAdmin();
   const items = [
@@ -25,7 +25,8 @@ export default function More() {
     on.trophies && { to: '/trophies', icon: Icon.trophy, label: 'The Trophy Room', sub: status.legacy ? 'BD, Putt Buddies, Noodle Cup and the honour boards' : 'Trophies and the honour boards' },
     on.games && { to: '/games', icon: Icon.flag, label: 'Games & side bets', sub: 'Skins, Nassau, pots — and who pays who' },
     on.tribunal && { to: '/tribunal', icon: Icon.gavel, label: 'Handicap Tribunal', sub: 'Lodge a case, vote, see verdicts' },
-    useFeature('in_jokes') && { to: '/in-jokes', icon: Icon.hot, label: 'In-jokes', sub: 'Nicknames and running jokes — roast the golf, keep it friendly' },
+    // Running jokes are for the replay and awards' commentary, not a public list: organisers only (Josh, 21 Oct).
+    on.in_jokes && status.is_admin && { to: '/in-jokes', icon: Icon.hot, label: 'Running jokes (organisers)', sub: 'Private — used in the replay and award commentary' },
     on.ai_helper && { to: '/ask', icon: Icon.feed, label: 'Ask about our history', sub: 'Who’s won the most, best rounds, handicaps — in plain words' },
     useFeature('stats') && { to: '/stats', icon: Icon.board, label: 'Stats & season ladder', sub: 'Order of merit, records and head-to-heads' },
     { to: '/courses', icon: Icon.map, label: 'Courses', sub: 'Every course and its history' },

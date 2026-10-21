@@ -301,9 +301,14 @@ export function nassau({ holes, subjects, scores, options, stakeCents = 0, locke
 // ------------------------------------------------------------------ Stableford pot
 
 /** Most Stableford points for the round takes the pot (stake from each player); ties split. */
-export function stablefordPot({ holes, subjects, scores, stakeCents = 0, locked = false }) {
+export function stablefordPot({ holes, subjects, scores, stakeCents = 0, locked = false, quick = {} }) {
   const hs = sortHoles(holes);
   const rows = subjects.map((s) => {
+    // Typed in from a paper card (points only, no hole scores): their card's points count as a full round.
+    if (quick[s.id] != null && !Object.keys(scores?.[s.id] || {}).length) {
+      const pts = Number(quick[s.id]);
+      return { id: s.id, points: pts, thru: hs.length, vsExpected: pts - 2 * hs.length, quick: true };
+    }
     let points = 0;
     let thru = 0;
     for (const h of hs) {
@@ -421,13 +426,20 @@ export function playGame(game, ctx) {
     const subjects = result.rows.map((r) => ({ id: r.id, name: r.name, members: [r.id] }));
     return { game, kind: game.kind, subjects, result, money: result.money, final: result.final, rounds: tripRounds.length };
   }
-  const subjects = gameSubjects(ctx);
-  const args = { holes: ctx.course?.holes || [], subjects, scores: ctx.scoresIdx?.[round.id] || {}, options: game.options, stakeCents, locked };
+  const all = gameSubjects(ctx);
+  const sc = ctx.scoresIdx?.[round.id] || {};
+  // Paper-card players (points only, no hole scores) count in the Stableford pot; hole-by-hole games leave them out.
+  const quick = Object.fromEntries((ctx.quickResults || []).filter((q) => q.round_id === round.id).map((q) => [q.player_id, q.points]));
+  const isQuick = (s) => quick[s.id] != null && !Object.keys(sc[s.id] || {}).length;
+  const subjects = game.kind === 'stableford_pot' ? all : all.filter((s) => !isQuick(s));
+  const leftOut = all.filter(isQuick).map((s) => s.name);
+  const args = { holes: ctx.course?.holes || [], subjects, scores: sc, options: game.options, stakeCents, locked, quick };
   const result = game.kind === 'skins' ? skins(args)
     : game.kind === 'nassau' ? nassau(args)
       : game.kind === 'stableford_pot' ? stablefordPot(args)
         : birdiePool(args);
-  return { game, kind: game.kind, subjects, result, money: toPlayers(result.money, subjects), final: result.final };
+  return { game, kind: game.kind, subjects, result, money: toPlayers(result.money, subjects), final: result.final,
+    ...(game.kind !== 'stableford_pot' && leftOut.length ? { note: `Left out (paper card, no hole scores): ${leftOut.join(', ')}` } : {}) };
 }
 
 /**

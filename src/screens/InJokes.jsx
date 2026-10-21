@@ -1,6 +1,7 @@
 // In-jokes (migration 058, feature 'in_jokes'): the group's running jokes and nicknames. Anyone adds one; whoever
 // added it (or an organiser) edits or retires it. Award moments and round replays pick from these with
 // pickJoke / fillJoke in lib/injokes.js — use useInJokes() below to get the live list.
+import { currentGroup } from '../lib/group.js';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase, friendlyError } from '../lib/supabase.js';
@@ -26,11 +27,13 @@ export function useInJokes() {
 
 /** A row for Group & invites (shows only while the feature is on). */
 export function InJokesLink() {
-  if (!useFeature('in_jokes')) return null;
+  const on = useFeature('in_jokes');
+  const { status } = useSession() || {};
+  if (!on || !status?.is_admin) return null; // organisers only — not a public list (Josh, 21 Oct)
   return (
     <Link to="/in-jokes" className="card pad row" style={{ gap: 10, textDecoration: 'none', color: 'inherit' }}>
       <span style={{ fontSize: 22 }} aria-hidden>😂</span>
-      <span className="grow"><strong>In-jokes</strong><div className="small muted">Your group’s nicknames and running jokes</div></span>
+      <span className="grow"><strong>Running jokes</strong><div className="small muted">Private — the replay and award commentary use them</div></span>
       <span className="muted">{Icon.next()}</span>
     </Link>
   );
@@ -54,6 +57,7 @@ export default function InJokes() {
     await reload();
   }, active ? 'Joke’s back' : 'Joke retired');
 
+  if (!status?.is_admin) return <div className="page"><Header back title="Running jokes" /><div className="empty">Only organisers see the running jokes — they turn up in the replay and award commentary.</div></div>;
   return (
     <div className="page">
       <Header back title="In-jokes" sub="Roast the golf and the mates, keep it friendly" />
@@ -145,7 +149,7 @@ function AddJoke({ onSaved }) {
   const add = async () => {
     setBusy(true);
     try {
-      const res = await sendOrQueue('in_jokes', { text: text.trim(), player_id: playerId || null, moment, created_by: status.player_id });
+      const res = await sendOrQueue('in_jokes', { group_id: currentGroup(), text: text.trim(), player_id: playerId || null, moment, created_by: status.player_id });
       toast(res.sent ? 'Joke added' : 'No signal — saved on your phone, it’ll send when signal’s back');
       setText('');
       setPlayerId('');

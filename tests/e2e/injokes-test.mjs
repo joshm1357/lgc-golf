@@ -86,11 +86,11 @@ page.on('dialog', (d) => d.accept());
 
 // 1. More → In-jokes, and the link in Group & invites.
 await page.goto(`${BASE}#/more`);
-await page.getByRole('link', { name: /In-jokes/ }).waitFor({ timeout: 15000 });
-check(true, 'More lists In-jokes');
+await page.getByRole('link', { name: /Running jokes/ }).waitFor({ timeout: 15000 });
+check(true, 'More lists Running jokes (organisers)');
 await page.goto(`${BASE}#/group`);
-await page.getByRole('link', { name: /In-jokes/ }).waitFor({ timeout: 15000 });
-await page.getByRole('link', { name: /In-jokes/ }).click();
+await page.getByRole('link', { name: /Running jokes/ }).waitFor({ timeout: 15000 });
+await page.getByRole('link', { name: /Running jokes/ }).click();
 await page.getByText('Roast the golf and the mates, keep it friendly').waitFor({ timeout: 10000 });
 check(true, 'Group & invites links to In-jokes; the screen says keep it friendly');
 check(await page.getByText('Lunch is on someone').waitFor({ timeout: 5000 }).then(() => true, () => false), 'an existing joke about anyone lists ({name} → someone)');
@@ -129,25 +129,15 @@ await page.reload();
 await page.getByText('Bluey’s birdie: even a blind squirrel finds a nut').waitFor({ timeout: 10000 });
 check(true, 'edited joke lists');
 
-// 5. A player can't edit someone else's joke; can edit their own.
+// 5. Players don't see the list at all (not a public list).
 organiser = false;
 await page.reload();
-await page.getByText('Lunch is on someone').waitFor({ timeout: 10000 });
-const lunchRow = page.locator('.row', { hasText: 'Lunch is on someone' });
-check(!(await lunchRow.getByRole('button', { name: 'Retire' }).isVisible().catch(() => false)), 'a player can’t retire someone else’s joke');
-check(await page.getByTestId('joke-group').filter({ hasText: 'About Bluey' }).getByRole('button', { name: 'Retire' }).isVisible(), 'but can retire their own');
-
-// 6. Retire it.
-await page.getByTestId('joke-group').filter({ hasText: 'About Bluey' }).getByRole('button', { name: 'Retire' }).click();
-await page.waitForTimeout(800);
-check(added.active === false, 'retired (active = false, not deleted)');
-check(db.in_jokes.length === 2, 'nothing deleted');
-await page.reload();
-await page.getByText('Lunch is on someone').waitFor({ timeout: 10000 });
-check(!(await page.getByText('About Bluey').isVisible().catch(() => false)), 'retired joke no longer lists');
-await page.getByRole('button', { name: 'Show retired (1)' }).click();
-check(await page.getByRole('button', { name: 'Bring back' }).isVisible(), 'retired jokes can be brought back');
-await page.screenshot({ path: `${SHOTS}/3-retired.png`, fullPage: true });
+await page.getByText('Only organisers see the running jokes').waitFor({ timeout: 10000 });
+check(true, 'a player sees no list');
+await page.goto(`${BASE}#/more`);
+await page.waitForTimeout(1000);
+check(!(await page.getByRole('link', { name: /Running jokes/ }).isVisible().catch(() => false)), 'a player has no link in More');
+await page.goto(`${BASE}#/in-jokes`);
 
 // 7. Organiser can retire anyone's.
 organiser = true;
@@ -163,11 +153,11 @@ await page.goto(`${BASE}#/more`);
 await page.getByRole('link', { name: /Group & invites/ }).waitFor({ timeout: 15000 });
 await page.reload();
 await page.getByRole('link', { name: /Group & invites/ }).waitFor({ timeout: 15000 });
-check(!(await page.getByRole('link', { name: /In-jokes/ }).isVisible().catch(() => false)), 'switched off: not in More');
+check(!(await page.getByRole('link', { name: /Running jokes/ }).isVisible().catch(() => false)), 'switched off: not in More');
 await page.goto(`${BASE}#/group`);
 await page.getByText('Group & invites').first().waitFor({ timeout: 10000 });
 await page.waitForTimeout(500);
-check(!(await page.getByRole('link', { name: /In-jokes/ }).isVisible().catch(() => false)), 'switched off: no link in Group & invites');
+check(!(await page.getByRole('link', { name: /Running jokes/ }).isVisible().catch(() => false)), 'switched off: no link in Group & invites');
 await page.goto(`${BASE}#/in-jokes`);
 await page.getByText('In-jokes is switched off for this group.').waitFor({ timeout: 10000 });
 check(true, 'switched off: the screen says so');

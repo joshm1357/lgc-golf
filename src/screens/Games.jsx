@@ -19,7 +19,7 @@ function gameCtx(data, round, scoresIdx) {
   const tripRounds = data.rounds.filter((r) => (round.trip_id ? r.trip_id === round.trip_id : r.id === round.id));
   return {
     round, course: data.coursesById[round.course_id], teams: data.teamsByRound[round.id] || [],
-    roundPlayers: data.roundPlayers[round.id] || [], playersById: data.playersById, scoresIdx,
+    roundPlayers: data.roundPlayers[round.id] || [], playersById: data.playersById, scoresIdx, quickResults: data.quick_results || [],
     tripRounds, teamsByRound: data.teamsByRound, roundPlayersByRound: data.roundPlayers, coursesById: data.coursesById,
   };
 }
@@ -138,6 +138,7 @@ function GameCard({ played, round }) {
         <span className="small" style={{ fontWeight: 700, color: skipped ? 'var(--muted)' : final ? 'var(--up)' : 'var(--gold)' }}>{skipped ? 'Not on' : final ? 'Final ✓' : round.status === 'live' ? 'Live' : 'Not started'}</span>
       </div>
       <div className="small muted">{info.blurb} {stakeWords(game)}</div>
+      {played.note && <div className="small muted">{played.note}</div>}
       {skipped ? <div className="small muted">{skipped}.</div>
         : kind === 'skins' ? <SkinsView result={result} subjects={subjects} />
           : kind === 'nassau' ? <NassauView result={result} subjects={subjects} />

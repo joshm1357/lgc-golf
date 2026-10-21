@@ -175,8 +175,7 @@ await page.waitForTimeout(800);
 const big2 = card().locator('.card', { hasText: 'Kurt wins Saturday' });
 check(!(await big2.getByRole('button', { name: /Swap photo|Retake photo/ }).isVisible().catch(() => false)) && !(await big2.getByText('Take the winner’s photo').isVisible().catch(() => false)), 'player: no photo buttons on someone else’s photo');
 const ctpCard = card().locator('.card', { hasText: 'closest to the pin' });
-await ctpCard.getByRole('button', { name: '📸 Add the winner’s photo' }).click();
-check(await ctpCard.getByText('Take the winner’s photo').isVisible(), 'player: can add the first photo to the closest-to-the-pin card');
+check(await ctpCard.isVisible() && !(await ctpCard.getByRole('button', { name: /photo/i }).isVisible().catch(() => false)), 'older award is a one-line row (keeps the leaderboard in view)');
 organiser = true;
 
 // 5. Hide a card on this phone.

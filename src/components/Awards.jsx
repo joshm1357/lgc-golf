@@ -141,7 +141,7 @@ function Cards() {
   };
   if (!list.length) return null;
   return (
-    <div className="section stack" style={{ gap: 10 }} aria-label="Just decided">
+    <div className="section stack" style={{ gap: 6 }} aria-label="Just decided">
       {list.map((m, i) => <AwardCard key={m.id} moment={m} big={i === 0} onHide={() => hide(m.id)} />)}
     </div>
   );
@@ -177,6 +177,16 @@ function AwardCard({ moment: m, big, onHide }) {
   };
 
   const navy = big;
+  // Only the newest award gets the big card; the rest are one line each, so the leaderboard stays in view (review).
+  if (!big) {
+    return (
+      <div className="card row" style={{ gap: 10, padding: '8px 12px', background: 'var(--gold-soft)', borderColor: 'var(--gold)' }}>
+        {winners[0] && <Avatar player={winners[0]} size={28} />}
+        <span className="grow ellipsis small" style={{ fontWeight: 700 }}>{m.title}</span>
+        <button type="button" className="btn ghost sm" onClick={onHide} aria-label="Hide this card" style={{ flex: 'none', minWidth: 36 }}>✕</button>
+      </div>
+    );
+  }
   return (
     <div className="card" style={{ overflow: 'hidden', position: 'relative', background: navy ? 'var(--navy)' : 'var(--gold-soft)', borderColor: navy ? 'var(--navy)' : 'var(--gold)', color: navy ? '#fff' : 'inherit' }}>
       {shown && big && <img src={shown} alt={`Winner’s photo: ${m.title.replace(/^\S+\s/, '')}`} style={{ width: '100%', maxHeight: 260, objectFit: 'cover', display: 'block', background: '#E6EAEF' }} />}
@@ -200,7 +210,7 @@ function AwardCard({ moment: m, big, onHide }) {
           {busy ? <div className="small" role="status">Uploading the photo…</div>
             : (!shown && big) || picking ? (
               <div style={navy ? { background: '#fff', borderRadius: 12, padding: 6 } : undefined}>
-                <PhotoButtons onPick={save} cameraLabel="Take the winner’s photo" libraryLabel="Choose one" />
+                <PhotoButtons onPick={save} cameraLabel="📸 Take photo" libraryLabel="Choose one" />
               </div>
             ) : (
               <button type="button" className="btn ghost sm" style={navy ? onNavy : undefined} onClick={() => setPicking(true)}>

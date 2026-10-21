@@ -213,7 +213,7 @@ export function userPrompt(kind: string, words: Record<string, unknown>, jokes: 
   ].filter(Boolean).join('\n');
 }
 
-const BANNED = /\b(fat|fatty|obese|weight|ugly|bald|wrinkl\w*|old man|grandpa|cancer|stroke victim|disab\w*|retard\w*|spastic|gay|poof\w*|fag\w*|tranny|f+u+c+k\w*|c+u+n+t\w*|shit\w*|bitch\w*|wank\w*|dick|cock|pussy|slut|whore|nigg\w*|kill yourself|kys)\b/i;
+export const BANNED = /\b(fat|fatty|obese|weight|ugly|bald|wrinkl\w*|old man|grandpa|cancer|stroke victim|disab\w*|retard\w*|spastic|gay|poof\w*|fag\w*|tranny|f+u+c+k\w*|c+u+n+t\w*|shit\w*|bitch\w*|wank\w*|dick|cock|pussy|slut|whore|nigg\w*|kill yourself|kys)\b/i;
 
 /** The model's reply made safe: one line (or a short paragraph for the report), no quotes/labels/tags, within the
  *  limit. Null if it's empty, rude, about off-limits things, has links or tags — then the template is used. */

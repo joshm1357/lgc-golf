@@ -15,7 +15,7 @@ import { GroupCrest } from '../components/Logo.jsx';
 import { useRun, must } from '../lib/run.js';
 import { personalLink, personalMessage, signInLine } from '../lib/personal.js';
 import { NEW_GROUPS } from '../lib/beta.js';
-import { InJokesLink } from './InJokes.jsx';
+import ForgetJokes from '../components/ForgetJokes.jsx';
 import { GovernanceLink } from './Cases.jsx';
 
 export default function Group() {
@@ -33,7 +33,7 @@ export default function Group() {
         {status.is_admin && <LookCard />}
         {status.is_admin && <FeaturesCard />}
         {status.is_admin && status.legacy && <AdminPinCard />}
-        <InJokesLink />
+        {status.is_admin && <ForgetJokes />}
         <GovernanceLink />
         <JoinAnother />
         <YourData />

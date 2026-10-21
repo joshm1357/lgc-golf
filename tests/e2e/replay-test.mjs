@@ -62,6 +62,7 @@ function filterRows(rows, params) {
     return true;
   });
 }
+const jokeCalls = { rpc: 0, table: 0 };
 async function fake(route) {
   const req = route.request();
   const url = new URL(req.url());
@@ -70,6 +71,9 @@ async function fake(route) {
   if (method === 'OPTIONS') return json({});
   const p = url.pathname;
   if (p.startsWith('/rest/v1/rpc/my_status')) return json({ is_member: true, is_admin: false, player_id: A, group_name: 'Hunter Weekend', group_id: GROUP, role: 'player', legacy: false, groups: [{ id: GROUP, name: 'Hunter Weekend', slug: 'hunter', role: 'player' }] });
+  // 072: the list can't be read any more; the replay asks for a few lines instead.
+  if (p.startsWith('/rest/v1/rpc/in_joke_lines')) { jokeCalls.rpc++; return json(db.in_jokes.map((j) => j.text)); }
+  if (p.startsWith('/rest/v1/in_jokes')) { jokeCalls.table++; return json({ code: '42501', message: 'permission denied for table in_jokes' }, 403); }
   if (p.startsWith('/rest/v1/rpc/')) return json(null);
   if (p.startsWith('/rest/v1/')) {
     const table = p.split('/')[3];
@@ -202,9 +206,16 @@ check(saved === 'larrikins', `Larrikins saved for this group (${saved})`);
 await page.goto(`${BASE}#/replay/${R1}`);
 await page.locator('.rp[data-scene="welcome"]').waitFor({ timeout: 15000 });
 await page.getByRole('button', { name: 'Pause' }).click();
-for (let i = 0; i < 40 && (await scene()) !== 'winner'; i++) await page.mouse.click(box.x + box.width * 0.8, box.y + box.height / 2);
+// 072: the jokes come as a few lines (any moment, nobody in particular), so the joke can land on any caption up to the win.
+const caps = [];
+for (let i = 0; i < 40 && (await scene()) !== 'winner'; i++) {
+  caps.push(await page.locator('.rp-caption').innerText().catch(() => ''));
+  await page.mouse.click(box.x + box.width * 0.8, box.y + box.height / 2);
+}
 const cap = await page.locator('.rp-caption').innerText();
-check(/cab/.test(cap), `winner line includes the group's in-joke (${cap})`);
+caps.push(cap);
+check(caps.some((c) => /cab/.test(c)), `a caption includes the group's running joke (${caps.find((c) => /cab/.test(c)) || cap})`);
+check(jokeCalls.rpc > 0 && jokeCalls.table === 0, `jokes come from in_joke_lines, never the table (rpc ${jokeCalls.rpc}, table ${jokeCalls.table})`);
 check(await page.getByRole('button', { name: /Larrikins/ }).first().isVisible(), 'top bar shows the Larrikins style');
 
 // 7. A team round (Ambrose): teams race, the winning team is named.

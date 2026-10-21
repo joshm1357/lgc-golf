@@ -105,6 +105,11 @@ export function Privacy() {
           counts only — which group, which part of the app, how many words (tokens) it used, whether it worked and any
           👍 / 👎 — never the question or the answer. Photos and text you give it to bring in your group’s history are sent to the
           AI company to read them, and aren’t kept by the app or logged.</>,
+        <><strong>Running jokes</strong> — if your group has them switched on (with the AI helper), once a day the AI reads the
+          last two weeks of your group’s feed and trip chat (just the words and first names) to spot running jokes. Only
+          short jokes are kept — never the chat — and they’re used in commentary, the replay and dinner awards. They’re
+          never shown as a list, to anyone. Organisers can switch them off or tap “Forget the running jokes” (Group &amp;
+          invites).</>,
       ]} />
       <P>No advertising networks, no analytics or tracking tools, and nothing is sold.</P>
 

@@ -23,7 +23,7 @@
 // live.ts and providers.ts, tested by logic.test.ts and providers.test.ts.
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.45.4';
 import {
-  helperRequest, isUuid, zonedStart, zonedToday, planIds, shapeLibrary, shapeOwnCourses, clean, TZ, tripPlanIds,
+  helperRequest, isUuid, zonedStart, zonedToday, planIds, shapeLibrary, shapeOwnCourses, clean, TZ, tripPlanIds, errorKind,
   type Deps, type PlanContext, type History,
 } from './logic.ts';
 import { aiConfig } from './providers.ts';
@@ -87,7 +87,7 @@ function makeDeps(db: SupabaseClient, g: string, uid: string, status: Any): Deps
   return {
     status: {
       is_member: !!status?.is_member, is_admin: !!status?.is_admin, group_id: status?.group_id || null, group_name: status?.group_name || null,
-      player_name: status?.player_name || null,
+      player_name: status?.player_name || null, role: status?.role || null,
     },
     ai: AI.ok ? AI.cfg : null,
     fetchFn: fetch,
@@ -106,7 +106,7 @@ function makeDeps(db: SupabaseClient, g: string, uid: string, status: Any): Deps
     // The row goes in before the model is called, so two questions at once both count. Never any text.
     logStart: async (row) => {
       const { data } = await admin.from('helper_log').insert({
-        group_id: g, user_id: uid, mode: row.mode, area: row.area, capped: !!row.capped, ok: false,
+        group_id: g, user_id: uid, mode: row.mode, area: row.area, capped: false, ok: false,
         provider: row.provider ? clean(row.provider, 20) : null, model: row.model ? clean(row.model, 80) : null,
       }).select('id').single();
       return data?.id ?? null;
@@ -245,7 +245,7 @@ Deno.serve(async (req) => {
   try {
     return json(await helperRequest(body, makeDeps(db, status.group_id, who.user.id, status)));
   } catch (e) {
-    console.error('ai-helper failed:', (e as Error)?.message); // never the request text, never the key
+    console.error('ai-helper failed:', errorKind(e)); // only the kind of error: never values, text or keys
     return json({ error: 'The AI helper hit a snag — try again in a minute.' });
   }
 });

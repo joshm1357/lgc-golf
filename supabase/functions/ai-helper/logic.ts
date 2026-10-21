@@ -629,9 +629,16 @@ export async function runLoop(o: {
 
 // ------------------------------------------------------------------ One request, start to finish
 
-export type Status = { is_member: boolean; is_admin: boolean; group_id: string | null; group_name?: string | null; player_name?: string | null };
-export type LogStart = { mode: string; area: string; capped?: boolean; provider?: string | null; model?: string | null };
-export type LogEnd = { ok: boolean; input_tokens: number; output_tokens: number; ms: number; error?: string | null };
+export type Status = { is_member: boolean; is_admin: boolean; group_id: string | null; group_name?: string | null; player_name?: string | null; role?: string | null };
+export type LogStart = { mode: string; area: string; provider?: string | null; model?: string | null };
+export type LogEnd = { ok: boolean; input_tokens: number; output_tokens: number; ms: number; error?: string | null; capped?: boolean };
+
+/** A short, safe name for an error, for the function's log: its class (e.g. "TypeError"), never its message
+ *  (which can hold database values or text people typed). */
+export function errorKind(e: unknown): string {
+  const n = String((e as Error)?.name || (typeof e === 'object' && e && 'code' in e ? (e as { code: unknown }).code : '') || 'Error');
+  return /^[A-Za-z0-9_]{1,40}$/.test(n) ? n : 'Error';
+}
 export type Deps = {
   status: Status;
   ai: AiConfig | null; // null: no provider set up yet
@@ -660,6 +667,8 @@ export async function helperRequest(body: Any, d: Deps): Promise<Record<string, 
   const m = Object.prototype.hasOwnProperty.call(MODES, mode) ? MODES[mode] : null;
   if (!m) return { error: 'Unknown request.' };
   if (!d.status?.is_member || !d.status.group_id) return { error: 'You’re not in this group.' };
+  // Guests (quick-round and personal links) don't get the helper: it would spend the group's questions.
+  if (d.status.role === 'guest') return { error: 'The AI helper is for the group’s players — ask your organiser to add you.' };
   if (m.organiser && !d.status.is_admin) return { error: m.planner ? 'Only an organiser can plan a trip with the helper.' : 'Only an organiser can set up a trip with the helper.' };
   if (!(await d.featureOn('ai_helper'))) return { error: 'The AI helper is switched off for this group. An organiser can switch it on in More → Group & invites → Features.', off: true };
   if (m.planner && !(await d.featureOn('planner'))) return { error: 'The Trips planner is switched off for this group.', off: true };
@@ -678,19 +687,29 @@ export async function helperRequest(body: Any, d: Deps): Promise<Record<string, 
   const text = String(body?.text ?? '').replace(/[<>]/g, ' ').trim().slice(0, 600);
   if (text.length < 3) return { error: mode === 'setup' ? 'Say a bit about the trip first.' : mode === 'plan' ? 'Say a bit about the trip you want first.' : 'Ask a question first.' };
 
+  // The cap, safe against many questions at once: this question's row goes in FIRST, then the count (which
+  // includes it and any others in flight). Over the limit → the row is marked as a cap hit (which never counts)
+  // and the question is refused. No row (the log is down) → refused, so nothing goes uncounted.
   const now = d.now();
-  const cap = capCheck(await d.usage(), now, d.ai.caps);
+  const started = Date.now();
+  const logId = await d.logStart({ mode: m.logMode, area: m.area, provider: d.ai.provider, model: d.ai.model });
+  if (logId == null) return { error: 'The AI helper couldn’t start just now — try again in a minute.' };
+  let used: Used;
+  try {
+    used = await d.usage();
+  } catch {
+    await d.logEnd(logId, { ok: false, input_tokens: 0, output_tokens: 0, ms: 0, error: 'cap_check', capped: true });
+    return { error: 'The AI helper couldn’t start just now — try again in a minute.' };
+  }
+  const cap = capCheck({ month: Math.max(0, used.month - 1), today: Math.max(0, used.today - 1) }, now, d.ai.caps);
   if (!cap.ok) {
-    // Counted for Josh's usage screen (a cap hit), never against the cap itself. No text.
-    const id = await d.logStart({ mode: m.logMode, area: m.area, capped: true });
-    await d.logEnd(id, { ok: false, input_tokens: 0, output_tokens: 0, ms: 0, error: 'capped' });
+    // Kept for Josh's usage screen (a cap hit), never counted against the cap itself. No text.
+    await d.logEnd(logId, { ok: false, input_tokens: 0, output_tokens: 0, ms: 0, error: 'capped', capped: true });
     return { error: cap.message, capped: true, remaining: cap.remaining };
   }
 
   const today = zonedToday(now);
   const group = d.status.group_name || 'your group';
-  const started = Date.now();
-  const logId = await d.logStart({ mode: m.logMode, area: m.area, provider: d.ai.provider, model: d.ai.model });
   let result: LoopResult = { kind: 'error', code: 'crash', message: 'Something went wrong.', usage: { input_tokens: 0, output_tokens: 0 } };
   try {
     const common = { ai: d.ai, fetchFn: d.fetchFn, deadline: started + LIMITS.totalMs };
@@ -729,8 +748,8 @@ export async function helperRequest(body: Any, d: Deps): Promise<Record<string, 
       });
     }
   } catch (e) {
-    console.error('ai-helper loop failed:', clean((e as Error)?.message, 120)); // never the request text, never the key
-    result = { kind: 'error', code: 'crash', message: 'The AI helper hit a snag — try again in a minute.', usage: result.usage };
+    console.error('ai-helper loop failed:', errorKind(e)); // only the kind of error: never values, text or keys
+    result ={ kind: 'error', code: 'crash', message: 'The AI helper hit a snag — try again in a minute.', usage: result.usage };
   } finally {
     await d.logEnd(logId, {
       ok: result.kind !== 'error', input_tokens: result.usage.input_tokens, output_tokens: result.usage.output_tokens, ms: Date.now() - started,

@@ -1,9 +1,25 @@
-// The AI helper (21 Oct 2026): the small, pure bits the screens use (screens/AiHelper.jsx). The helper itself runs
-// in the ai-helper edge function (supabase/functions/ai-helper), which does all the checking and the cap.
+// The AI helper (21 Oct 2026; v2 the same night): the small, pure bits the screens use (screens/AiHelper.jsx,
+// screens/AiPlanner.jsx, components/AskChip.jsx). The helper itself runs in the ai-helper edge function
+// (supabase/functions/ai-helper), which does all the checking and the cap.
 
 export const SETUP_EXAMPLE = 'Hunter Valley, Thu 22 to Sat 24 Oct. Kurri Thursday, Cypress Lakes Friday, The Vintage Saturday. Stableford all three, closest to pin on the par 3s.';
+export const PLAN_EXAMPLE = 'Weekend away in March, 12 of us, somewhere within 3 hours of Sydney, about $500 each.';
 export const ASK_EXAMPLES = ['Who’s won the most trips?', 'Best Stableford round ever?', 'Who won our last trip?', 'How has my handicap changed?'];
 export const MAX_TEXT = 600;
+
+/** Example questions for the Ask screen, by where it was opened from (?about=round | trips | anything else). */
+export function askExamples(about) {
+  if (about === 'round') return ['Who’s leading?', 'What do I need on the last 3 holes?', 'Who’s got the best chance to win?', 'How’s everyone going today?'];
+  if (about === 'trips') return ['What’s on this trip?', 'Who won our last trip?', 'Who’s won the most trips?', 'Where have we been?'];
+  return ['What’s on today?', ...ASK_EXAMPLES];
+}
+
+/** The Ask screen's heading, by where it was opened from. */
+export function askTitle(about) {
+  if (about === 'round') return { title: 'Ask about this round', sub: 'Who’s leading, what anyone needs to win' };
+  if (about === 'trips') return { title: 'Ask about our trips', sub: 'What’s on, who won, where you’ve been' };
+  return { title: 'Ask', sub: 'What’s on, trips, winners, records and handicaps' };
+}
 
 /** Is there enough to send (and not too much)? */
 export function canSend(text) {
@@ -18,13 +34,20 @@ export function remainingLabel(r) {
   return typeof r.today === 'number' ? `${month} · ${r.today} for you today` : month;
 }
 
+/** 👍 / 👎: tapping the one already chosen clears it (0); otherwise it's the new rating. */
+export function nextRating(current, tapped) {
+  return current === tapped ? 0 : tapped;
+}
+
 /**
  * What the function said, as one thing for the screen to show:
- *   plan    — a setup plan to confirm ({ plan, summary, warnings, notes })
- *   message — the helper needs to ask something back
- *   answer  — a history answer
- *   done    — "Do it" worked ({ tripId, made })
- *   error   — friendly words (off: the feature is switched off; capped: the limit's reached)
+ *   plan     — a setup plan to confirm ({ plan, summary, warnings, notes })
+ *   tripplan — a trip plan (Plan it with AI) to confirm ({ plan, summary, warnings, notes })
+ *   message  — the helper needs to ask something back
+ *   answer   — an answer to a question
+ *   done     — "Do it" / "Create it" worked ({ tripId | planId, made })
+ *   error    — friendly words (off: the feature is switched off; capped: the limit's reached)
+ * `logId` (when the function sends one) is what 👍 / 👎 rates.
  * `error` is the error from supabase.functions.invoke (no signal, sign-in problem…).
  */
 export function readReply(data, error) {
@@ -37,12 +60,20 @@ export function readReply(data, error) {
   }
   const d = data && typeof data === 'object' ? data : {};
   const remaining = d.remaining || null;
-  if (d.error) return { kind: 'error', text: String(d.error), off: !!d.off, capped: !!d.capped, remaining };
-  if (d.done) return { kind: 'done', tripId: d.trip_id || null, made: Array.isArray(d.made) ? d.made : [], remaining };
-  if (d.plan && Array.isArray(d.summary)) {
-    return { kind: 'plan', plan: d.plan, summary: d.summary, warnings: d.plan.warnings || [], notes: d.plan.notes || '', remaining };
+  const log = d.log_id != null ? { logId: d.log_id } : {};
+  if (d.error) return { kind: 'error', text: String(d.error), off: !!d.off, capped: !!d.capped, remaining, ...log };
+  if (d.done) {
+    return d.plan_id
+      ? { kind: 'done', planId: d.plan_id, made: Array.isArray(d.made) ? d.made : [], remaining }
+      : { kind: 'done', tripId: d.trip_id || null, made: Array.isArray(d.made) ? d.made : [], remaining };
   }
-  if (typeof d.message === 'string' && d.message) return { kind: 'message', text: d.message, remaining };
-  if (typeof d.answer === 'string' && d.answer) return { kind: 'answer', text: d.answer, remaining };
+  if (d.plan && Array.isArray(d.summary)) {
+    return { kind: 'plan', plan: d.plan, summary: d.summary, warnings: d.plan.warnings || [], notes: d.plan.notes || '', remaining, ...log };
+  }
+  if (d.trip_plan && Array.isArray(d.summary)) {
+    return { kind: 'tripplan', plan: d.trip_plan, summary: d.summary, warnings: d.trip_plan.warnings || [], notes: d.trip_plan.notes || '', remaining, ...log };
+  }
+  if (typeof d.message === 'string' && d.message) return { kind: 'message', text: d.message, remaining, ...log };
+  if (typeof d.answer === 'string' && d.answer) return { kind: 'answer', text: d.answer, remaining, ...log };
   return { kind: 'error', text: 'The helper didn’t have an answer — try asking another way.', remaining };
 }

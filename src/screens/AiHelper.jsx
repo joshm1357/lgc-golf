@@ -1,23 +1,54 @@
-// The AI helper (21 Oct 2026), two ways in:
+// The AI helper (21 Oct 2026; v2 the same night). Ways in:
 //   * SetupHelperBox — "✨ Set it up for me" at the top of Set up your trip (organisers). Type the trip in plain
 //     words → a confirm card listing exactly what will be made → [Do it] [Change something]. Nothing is saved until
 //     Do it.
-//   * Ask (default export, /ask) — anyone in the group asks about the group's history.
-// Both call the ai-helper edge function, which checks who you are, the feature switch and the monthly limit, and
-// only ever reads or writes as you. Hidden when the 'ai_helper' feature is off.
+//   * Ask (default export, /ask) — anyone in the group asks about what's on (the trip, the live round: who's
+//     leading, what someone needs) and the group's history. /ask?about=round (from the leaderboard's "✨ Ask" chip)
+//     or ?about=trips (the Trips tab) picks the example questions.
+//   * "✨ Plan it with AI" on the Trips tab (screens/AiPlanner.jsx).
+// Each answer has 👍 / 👎 (Rate) so Josh can see whether people want it. All of them call the ai-helper edge
+// function, which checks who you are, the feature switch and the limits, and only ever reads or writes as you.
+// Hidden when the 'ai_helper' feature is off.
 import React, { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
 import { currentGroup } from '../lib/group.js';
 import { useData, useFeature } from '../lib/store.jsx';
 import { Header, toast } from '../components/ui.jsx';
-import { SETUP_EXAMPLE, ASK_EXAMPLES, MAX_TEXT, canSend, remainingLabel, readReply } from '../lib/aihelper.js';
+import { SETUP_EXAMPLE, MAX_TEXT, canSend, remainingLabel, readReply, nextRating, askExamples, askTitle } from '../lib/aihelper.js';
 
-async function askHelper(body) {
+export async function askHelper(body) {
   const { data, error } = await supabase.functions.invoke('ai-helper', { body: { ...body, group_id: currentGroup() || undefined } });
   return readReply(data, error);
 }
 
-const Remaining = ({ r }) => (r ? <span className="small muted">{remainingLabel(r)}</span> : null);
+export const Remaining = ({ r }) => (r ? <span className="small muted">{remainingLabel(r)}</span> : null);
+
+/** 👍 / 👎 on one answer (only your own; nothing you typed is stored). Tap again to clear. */
+export function Rate({ logId }) {
+  const [rating, setRating] = useState(0);
+  const [busy, setBusy] = useState(false);
+  if (logId == null) return null;
+  const tap = async (v) => {
+    const next = nextRating(rating, v);
+    setBusy(true);
+    const { error } = await supabase.rpc('rate_helper', { p_log: logId, p_rating: next });
+    setBusy(false);
+    if (error) toast('Couldn’t save that — try again');
+    else setRating(next);
+  };
+  const btn = (v, icon, label) => (
+    <button type="button" className="btn ghost sm" aria-label={label} aria-pressed={rating === v} disabled={busy} onClick={() => tap(v)}
+      style={{ minWidth: 48, minHeight: 40, ...(rating === v ? { background: 'var(--gold-soft)', borderColor: 'var(--gold)' } : {}) }}>{icon}</button>
+  );
+  return (
+    <div className="row" style={{ gap: 6, alignItems: 'center' }} role="group" aria-label="Was this helpful?">
+      <span className="small muted">{rating ? 'Thanks!' : 'Helpful?'}</span>
+      {btn(1, '👍', 'Helpful')}
+      {btn(-1, '👎', 'Not helpful')}
+    </div>
+  );
+}
 
 /** "✨ Set it up for me" — goes at the top of Set up your trip. onApplied(tripId) after Do it. */
 export function SetupHelperBox({ onApplied }) {
@@ -79,13 +110,17 @@ export function SetupHelperBox({ onApplied }) {
           <span className="small muted">Players join with the link as usual (step 4). Everything can be changed afterwards.</span>
         </div>
       )}
+      {(reply?.kind === 'plan' || reply?.kind === 'message') && <Rate key={reply.logId} logId={reply.logId} />}
       <Remaining r={remaining} />
     </div>
   );
 }
 
-/** /ask — questions about the group's own history. */
+/** /ask — questions about what's on and the group's own history. */
 export default function Ask() {
+  const [params] = useSearchParams();
+  const about = params.get('about');
+  const head = askTitle(about);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [thread, setThread] = useState([]); // [{ q, reply }], newest first
@@ -95,6 +130,7 @@ export default function Ask() {
     const question = String(q || '').trim();
     if (!canSend(question) || busy) return;
     setBusy(true);
+    // 'history' (not 'ask') so it also works with the first version of the function, if that's what's deployed.
     const reply = await askHelper({ mode: 'history', text: question });
     if (reply.remaining) setRemaining(reply.remaining);
     setThread((t) => [{ q: question, reply }, ...t].slice(0, 10));
@@ -104,10 +140,10 @@ export default function Ask() {
 
   return (
     <div className="page">
-      <Header back title="Ask about our history" sub="Trips, winners, records and handicaps" />
+      <Header back title={head.title} sub={head.sub} />
       <div className="section stack" style={{ gap: 10 }}>
         <div className="chips" role="group" aria-label="Try asking">
-          {ASK_EXAMPLES.map((q) => <button key={q} type="button" className="chip" disabled={busy} onClick={() => ask(q)}>{q}</button>)}
+          {askExamples(about).map((q) => <button key={q} type="button" className="chip" disabled={busy} onClick={() => ask(q)}>{q}</button>)}
         </div>
         <form className="stack" style={{ gap: 8 }} onSubmit={(e) => { e.preventDefault(); ask(text); }}>
           <textarea className="textarea" rows={2} style={{ padding: 12 }} value={text} maxLength={MAX_TEXT} aria-label="Your question"
@@ -121,9 +157,10 @@ export default function Ask() {
             {reply.kind === 'error'
               ? <span className="small err" style={{ margin: 0 }} role="alert">{reply.text}</span>
               : <span style={{ lineHeight: 1.45 }}>{reply.text}</span>}
+            {reply.kind !== 'error' && <Rate logId={reply.logId} />}
           </div>
         ))}
-        {!thread.length && <p className="note" style={{ margin: 4 }}>The helper only reads your group’s own trips, rounds, honour boards and handicaps. It can make mistakes — the honour boards are the official record.</p>}
+        {!thread.length && <p className="note" style={{ margin: 4 }}>The helper only reads your group’s own trips, rounds, scores, honour boards and handicaps. It can make mistakes — the leaderboard and honour boards are the official record.</p>}
       </div>
     </div>
   );

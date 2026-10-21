@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canSend, remainingLabel, readReply, MAX_TEXT, SETUP_EXAMPLE } from './aihelper.js';
+import { canSend, remainingLabel, readReply, nextRating, askExamples, askTitle, MAX_TEXT, SETUP_EXAMPLE, PLAN_EXAMPLE } from './aihelper.js';
 
 describe('canSend', () => {
   it('needs a few characters and not too many', () => {
@@ -38,5 +38,28 @@ describe('readReply', () => {
     expect(readReply(null, { name: 'FunctionsFetchError', message: 'Failed to send a request' }).text).toMatch(/No signal/);
     expect(readReply(null, { name: 'FunctionsHttpError', message: 'Edge Function returned a non-2xx status code' }).text).toMatch(/Couldn’t reach the helper/);
     expect(readReply({}).kind).toBe('error');
+  });
+});
+
+describe('v2: plans, ratings, where Ask was opened from', () => {
+  it('a trip plan to confirm, and the log id for 👍 / 👎', () => {
+    const trip_plan = { name: 'March Away', warnings: ['Only one place option'], notes: 'Two hours away.' };
+    const r = readReply({ trip_plan, summary: ['Start the trip “March Away”'], remaining: { month: 9, today: 4 }, log_id: 42 });
+    expect(r).toEqual({ kind: 'tripplan', plan: trip_plan, summary: ['Start the trip “March Away”'], warnings: ['Only one place option'], notes: 'Two hours away.', remaining: { month: 9, today: 4 }, logId: 42 });
+    expect(readReply({ answer: 'Bluey leads.', log_id: 7 }).logId).toBe(7);
+    expect(readReply({ done: true, plan_id: 'p1', made: ['the votes'] })).toEqual({ kind: 'done', planId: 'p1', made: ['the votes'], remaining: null });
+  });
+  it('tapping the same thumb clears it', () => {
+    expect(nextRating(0, 1)).toBe(1);
+    expect(nextRating(1, 1)).toBe(0);
+    expect(nextRating(1, -1)).toBe(-1);
+  });
+  it('examples and headings depend on where Ask was opened', () => {
+    expect(askExamples('round')[0]).toBe('Who’s leading?');
+    expect(askExamples('trips')).toContain('Who won our last trip?');
+    expect(askExamples()).toContain('What’s on today?');
+    expect(askTitle('round').title).toBe('Ask about this round');
+    expect(askTitle(null).title).toBe('Ask');
+    expect(canSend(PLAN_EXAMPLE)).toBe(true);
   });
 });

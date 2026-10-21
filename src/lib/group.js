@@ -32,6 +32,9 @@ export const GROUP_TABLES = new Set([
   'round_games',
   // The AI helper's usage log (migration 059; only the edge function reads it)
   'helper_log',
+  // Governance and the Tribunal (migration 061)
+  'governance_group', 'governance_settings', 'committees', 'committee_seats', 'cases', 'case_votes', 'case_posts',
+  'rule_versions', 'round_rule_versions',
 ]);
 
 let current = (() => {

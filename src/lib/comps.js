@@ -34,7 +34,7 @@ export const COMP_TYPES = [
   { kind: 'fourball_pairs', family: 'Teams and pairs', emoji: '👯', who: 'pairs', formats: ['fourball'],
     name: '4BBB pairs', description: 'Pairs play better-ball Stableford. Most points wins.',
     example: 'e.g. the Pairs Plate on Saturday' },
-  { kind: 'cup', family: 'Cup', emoji: '🇪🇺', who: 'sides', formats: null,
+  { kind: 'cup', family: 'Cup', emoji: '⚔️', who: 'sides', formats: null,
     name: 'Team match play', description: 'Two sides for the trip. Match play matches each day, points for each win. More than half the points wins the Cup.',
     example: 'e.g. the 6th Ryder Cup — Blue v Red' },
   { kind: 'side_comps', family: 'On the side', emoji: '🎯', who: 'each', formats: null,

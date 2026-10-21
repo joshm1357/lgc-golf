@@ -148,7 +148,7 @@ export function CompTodo({ items, onAction, hideDone = false }) {
 
 function roundDays(comp, rounds) {
   const t = COMP_TYPE[comp.kind];
-  if (t?.noRounds) return 'Awarded by the group';
+  if (t?.noRounds) return 'no rounds — you pick the winner';
   const rs = compRounds(comp, rounds);
   if (!rs.length) return 'No rounds yet';
   const days = rs.map(dayOf).join(', ');

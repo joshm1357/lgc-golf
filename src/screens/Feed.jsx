@@ -5,6 +5,7 @@ import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useRealtime, useSession, playerName } from '../lib/store.jsx';
 import { Header, Avatar, Icon, Sheet, timeAgo, toast, PhotoButtons } from '../components/ui.jsx';
 import { DinnerAwardsLink } from '../components/DinnerAwardsLink.jsx';
+import { isCommentaryPost } from '../lib/commentary.js';
 
 const REACTIONS = ['🔥', '😂', '👏', '🤦', '🍺'];
 
@@ -97,7 +98,7 @@ function Post({ post, me, comments, reactions, onReact, onChanged, isAdmin }) {
           {!auto && <div style={{ fontWeight: 700 }}>{playerName(author)}</div>}
           {auto && post.body && <div style={{ fontWeight: 600, fontSize: 16, lineHeight: 1.3 }}>{post.body}</div>}
           <div className="small muted">
-            {post.kind === 'auto' ? 'Scoreboard · ' : post.kind === 'tribunal' ? 'Tribunal · ' : ''}
+            {isCommentaryPost(post) ? 'Commentary · ' : post.kind === 'auto' ? 'Scoreboard · ' : post.kind === 'tribunal' ? 'Tribunal · ' : ''}
             {post.hole ? `Hole ${post.hole} · ` : ''}{timeAgo(post.created_at)}
           </div>
         </div>

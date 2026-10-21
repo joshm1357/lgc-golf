@@ -95,9 +95,10 @@ export function Seg({ options, value, onChange, light }) {
 }
 
 export function TabBar() {
-  const on = { feed: useFeature('feed'), side_comps: useFeature('side_comps'), planner: useFeature('planner') };
+  const on = { feed: useFeature('feed'), side_comps: useFeature('side_comps'), planner: useFeature('planner'), cup: useFeature('cup') };
   const tabs = [
     { to: '/', label: 'Leaderboard', icon: Icon.board, end: true },
+    { to: '/cup', label: 'Cup', icon: Icon.trophy, feature: 'cup' },
     { to: '/feed', label: 'Feed', icon: Icon.feed, feature: 'feed' },
     { to: '/comps', label: 'Comps', icon: Icon.flag, feature: 'side_comps' },
     { to: '/plan', label: 'Trips', icon: Icon.calendar, feature: 'planner' },

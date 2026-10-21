@@ -22,6 +22,8 @@ export const GROUP_TABLES = new Set([
   'plan_comments', 'notify_prefs',
   // Stage 3 (migration 029)
   'group_features',
+  // Team match play (migration 050)
+  'cup_sides', 'cup_matches',
 ]);
 
 let current = (() => {

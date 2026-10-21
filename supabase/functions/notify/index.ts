@@ -57,7 +57,7 @@ const KIND_FEATURE: Record<string, string> = {
   plan_new: 'planner', plan_proposed: 'planner', trip_locked: 'planner', rsvp_locked: 'planner', rsvp_deadline: 'planner',
   nudge_rsvp: 'planner', trip_week: 'planner', trip_tomorrow: 'planner', comment: 'planner',
   nudge_kitty: 'planner_costs', payment_recorded: 'planner_costs', groups_set: 'planner_rooms',
-  rule_proposed: 'rule_voting', draw_open: 'draw', award: 'awards', award_minor: 'awards',
+  rule_proposed: 'rule_voting', draw_open: 'draw', award: 'awards', award_minor: 'awards', commentary: 'commentary',
   case_new: 'tribunal', case_about_you: 'tribunal', case_committee: 'tribunal', case_fallback: 'tribunal', case_casting: 'tribunal',
   case_report: 'tribunal', case_closing: 'tribunal', case_verdict: 'tribunal', term_ending: 'committees',
   // rule_decided: not tied to voting — organisers deciding rules is part of the Rulebook itself.
@@ -151,6 +151,8 @@ async function digest() {
     const notifOn = await featureOn(g, 'notifications');
     const kept = [];
     for (const i of all) if (notifOn && (!KIND_FEATURE[i.kind] || await featureOn(g, KIND_FEATURE[i.kind]))) kept.push(i);
+    // 071: a live commentary line is stale after 30 minutes — it's in the Feed; don't put it in an update.
+    for (let k = kept.length - 1; k >= 0; k--) if (kept[k].kind === 'commentary' && Date.now() - new Date(kept[k].created_at).getTime() > 30 * 60000) kept.splice(k, 1);
     const items = p?.mode === 'important' ? kept.filter((i) => IMPORTANT.has(i.kind)) : kept;
     if (p?.mode === 'digest' && local.hour !== p.digest_hour) continue;
     if (p?.mode === 'digest' && !(await once(`digest:${g}:${user}:${local.date}:${local.hour}`))) continue;
@@ -160,12 +162,30 @@ async function digest() {
     const msg = items.length === 1
       ? { title: items[0].title, body: gname, url: items[0].url || APP }
       // Only winners in it (054 awards): open the leaderboard, not the planner.
-      : { title: `📬 ${gname}: ${items.length} things since your last update`, body: shown + more, url: items.every((i) => i.kind === 'award' || i.kind === 'award_minor') ? `${APP}#/` : `${APP}#/plan`, tag: `digest-${g}` };
+      : { title: `📬 ${gname}: ${items.length} things since your last update`, body: shown + more, url: items.every((i) => i.kind === 'award' || i.kind === 'award_minor' || i.kind === 'commentary') ? `${APP}#/` : `${APP}#/plan`, tag: `digest-${g}` };
     if (items.length) sent += await pushTo([user], msg);
     await db.from('notify_queue').update({ sent_at: new Date().toISOString() }).in('id', all.map((i) => i.id));
   }
   // Keep the queue small: forget what went out more than a month ago.
   await db.from('notify_queue').delete().lt('sent_at', new Date(Date.now() - 30 * 86400000).toISOString());
+  return sent;
+}
+
+/** 071: live commentary buzzes, sent as soon as the line is written (the ai-helper and the every-minute job call
+ *  this with the cron secret). The database only queued them for people on "straight away", already rate-limited.
+ *  Older than 30 minutes: dropped (the line is in the Feed). Each person gets their newest line for each group. */
+async function commentaryNow() {
+  const { data: waiting } = await db.from('notify_queue').select('id,group_id,user_id,title,body,created_at')
+    .eq('kind', 'commentary').is('sent_at', null).order('created_at').limit(2000);
+  if (!waiting?.length) return 0;
+  let sent = 0;
+  const fresh = waiting.filter((w) => Date.now() - new Date(w.created_at).getTime() <= 30 * 60000);
+  const on = new Map<string, boolean>();
+  for (const g of new Set(fresh.map((w) => w.group_id))) on.set(g, (await featureOn(g, 'notifications')) && (await featureOn(g, 'commentary')));
+  const newest = new Map<string, (typeof waiting)[number]>();
+  for (const w of fresh) if (on.get(w.group_id)) newest.set(`${w.group_id}|${w.user_id}`, w);
+  for (const w of newest.values()) sent += await pushTo([w.user_id], { title: w.title, body: w.body || '', url: `${APP}#/feed`, tag: `commentary-${w.group_id}` });
+  await db.from('notify_queue').update({ sent_at: new Date().toISOString() }).in('id', waiting.map((w) => w.id));
   return sent;
 }
 
@@ -302,9 +322,9 @@ Deno.serve(async (req) => {
     await loadKeys();
     const body = await req.json().catch(() => ({}));
 
-    if (body.type === 'daily' || body.type === 'digest') {
+    if (body.type === 'daily' || body.type === 'digest' || body.type === 'commentary') {
       if (!cronSecret || req.headers.get('x-cron-secret') !== cronSecret) return json({ error: 'Not allowed' }, 401);
-      return json({ sent: body.type === 'daily' ? await daily() : await digest() });
+      return json({ sent: body.type === 'daily' ? await daily() : body.type === 'commentary' ? await commentaryNow() : await digest() });
     }
 
     // Everyone else must be a signed-in member of the group.

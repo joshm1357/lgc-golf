@@ -43,6 +43,8 @@ export const GROUP_TABLES = new Set([
   // Governance and the Tribunal (migration 061)
   'governance_group', 'governance_settings', 'committees', 'committee_seats', 'cases', 'case_votes', 'case_posts',
   'rule_versions', 'round_rule_versions',
+  // Live commentary (migration 071)
+  'commentary', 'commentary_settings',
 ]);
 
 let current = (() => {

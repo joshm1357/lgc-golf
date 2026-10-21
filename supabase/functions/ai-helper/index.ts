@@ -28,6 +28,7 @@ import {
 } from './logic.ts';
 import { aiConfig } from './providers.ts';
 import { shapePastTrips, shapeNear } from './plan.ts';
+import { commentaryRequest, commentaryCap } from './commentary.ts';
 
 const AI = aiConfig((k) => Deno.env.get(k));
 if (!AI.ok) console.warn('ai-helper: AI provider not set up:', AI.reason); // the reason never includes a key
@@ -219,6 +220,8 @@ function makeDeps(db: SupabaseClient, g: string, uid: string, status: Any): Deps
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return json({ error: 'Use POST.' }, 405);
+  // Live commentary (071): the database's every-minute job, with the server's cron secret — not a person. See commentary.ts.
+  if (req.headers.get('x-cron-secret')) { const r = await commentaryRequest(req, admin, SUPABASE_URL, AI.ok ? AI.cfg : null, commentaryCap((k) => Deno.env.get(k))); return json(r.body, r.status); }
   const auth = req.headers.get('Authorization') || '';
   const token = auth.replace(/^Bearer\s+/i, '');
   if (!token) return json({ error: 'Sign in first.' }, 401);

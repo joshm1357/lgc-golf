@@ -46,6 +46,7 @@ export const FEATURES = [
   { key: 'trip_finder', name: 'Trip finder', description: 'Which courses suit the group: tee-time windows, drive times and course facts, ranked on a map.', parent: 'planner', newGroup: false },
   { key: 'weather', name: 'Weather on the trip', description: 'The forecast for the trip’s place in the week before.', parent: 'planner', newGroup: true },
   { key: 'dinner_awards', name: 'Fines and dinner awards', description: 'Nominate and vote for the trip’s awards and fines at dinner.', newGroup: false },
+  { key: 'commentary', name: 'Live commentary', description: 'A short line in the Feed (and the odd buzz) as the round goes on: lead changes, birdie runs, aces, the Cup — plus a round report.', parent: 'awards', newGroup: true },
 ].map((f) => ({ parent: null, tier: 'free', ...f }));
 
 export const FEATURE_BY_KEY = Object.fromEntries(FEATURES.map((f) => [f.key, f]));
@@ -82,7 +83,7 @@ export const PRESETS = [
     key: 'full_trip',
     name: 'Full trip',
     blurb: 'Plus the feed, side comps, trophies, the Tribunal, the draw, the Trips planner and rule votes.',
-    switches: { ...ALL_OFF, ...Object.fromEntries(FEATURES.filter((f) => f.newGroup).map((f) => [f.key, true])), planner_rooms: true },
+    switches: { ...ALL_OFF, ...Object.fromEntries(FEATURES.filter((f) => f.newGroup && (!f.parent || FEATURE_BY_KEY[f.parent].newGroup)).map((f) => [f.key, true])), planner_rooms: true },
   },
   {
     key: 'everything',

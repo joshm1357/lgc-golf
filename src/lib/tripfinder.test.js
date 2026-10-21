@@ -2,7 +2,32 @@ import { describe, it, expect } from 'vitest';
 import {
   km, driveMinutes, fmtDrive, drivesFor, searchBox, startsFromHomes, startsText, pickFacts, parseTimes, parseClock, weekday,
   defaultDay, assessCourse, rankCourses, findCourses, optionNotes, voteOptions, decidedCourse, cleanStart, num, yesNo,
+  nominatimUrl, placeFromNominatim, factLine,
 } from './tripfinder.js';
+
+describe('places and fact lines', () => {
+  it('asks OpenStreetMap for towns and suburbs only', () => {
+    const u = new URL(nominatimUrl('  Leichhardt '));
+    expect(u.hostname).toBe('nominatim.openstreetmap.org');
+    expect(u.searchParams.get('q')).toBe('Leichhardt');
+    expect(u.searchParams.get('featureType')).toBe('settlement');
+    expect(u.searchParams.get('countrycodes')).toBe('au');
+  });
+  it('keeps a suburb and a rounded place — no street, no house number', () => {
+    const p = placeFromNominatim({ lat: '-33.8836', lon: '151.1569', name: 'Leichhardt', address: { suburb: 'Leichhardt', postcode: '2040', 'ISO3166-2-lvl4': 'AU-NSW' } });
+    expect(p).toEqual({ label: 'Leichhardt', where: 'Leichhardt NSW', postcode: '2040', lat: -33.88, lng: 151.16 });
+    expect(placeFromNominatim({ lat: '1', lon: '2', display_name: '12, X' })).toBe(null);
+    expect(placeFromNominatim(null)).toBe(null);
+  });
+  it('fact lines say where it came from and when — never who', () => {
+    const now = new Date('2026-10-21T10:00:00');
+    const sep = new Date('2026-09-01T00:00:00').toLocaleDateString('en-AU', { month: 'short', year: 'numeric' });
+    expect(factLine({ fact: 'price_18', value: '95', source: 'organiser', status: 'pending', checked_at: '2026-09-01' }, now))
+      .toBe(`$95 · from an organiser · checked ${sep} · not confirmed yet`);
+    expect(factLine({ fact: 'max_group', value: '16', source: 'research', status: 'confirmed', club: true, checked_at: '2025-01-01' }, now))
+      .toMatch(/^16 players · from the club · checked .+2025 · check again$/);
+  });
+});
 
 const INNER_WEST = { label: 'Inner West', lat: -33.88, lng: 151.16, count: 8, leave: '06:00', finish: '17:00' };
 const NEWCASTLE = { label: 'Newcastle', lat: -32.93, lng: 151.78, count: 4, leave: '06:00', finish: '17:00' };

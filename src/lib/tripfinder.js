@@ -438,3 +438,40 @@ export function cleanStart(s) {
     leave, finish,
   };
 }
+
+// ------------------------------------------------------------------ finding a place by name (OpenStreetMap search)
+
+/** The free OpenStreetMap search, for towns and suburbs only (never streets or houses). One request per search. */
+export function nominatimUrl(q, country = 'au') {
+  const p = new URLSearchParams({ q: String(q || '').trim().slice(0, 80), format: 'jsonv2', limit: '6', addressdetails: '1', featureType: 'settlement' });
+  if (country) p.set('countrycodes', country);
+  return `https://nominatim.openstreetmap.org/search?${p}`;
+}
+
+/** One OpenStreetMap result → { label, where, postcode, lat, lng } kept to about 1 km; null if it isn't a usable place. */
+export function placeFromNominatim(r) {
+  if (!r || r.lat == null || r.lon == null) return null;
+  const a = r.address || {};
+  const name = a.suburb || a.town || a.city || a.village || a.hamlet || a.municipality || a.city_district || r.name
+    || String(r.display_name || '').split(',')[0];
+  const label = String(name || '').replace(/[0-9]/g, '').replace(/\s+/g, ' ').trim().slice(0, 60);
+  if (label.length < 2) return null;
+  const state = a.state_code || String(a['ISO3166-2-lvl4'] || '').split('-')[1] || '';
+  return {
+    label, where: [label, state].filter(Boolean).join(' '),
+    postcode: /^[0-9]{4}$/.test(a.postcode || '') ? a.postcode : null,
+    lat: round2(Number(r.lat)), lng: round2(Number(r.lon)),
+  };
+}
+
+/** How a fact reads on a course: "$95 · from the club · checked Oct 2026", plus "not confirmed yet" / "check again". */
+export function factLine(f, now = new Date()) {
+  if (!f) return '';
+  const d = f.checked_at ? new Date(`${String(f.checked_at).slice(0, 10)}T00:00:00`) : null;
+  const when = d ? d.toLocaleDateString('en-AU', { month: 'short', year: 'numeric' }) : null;
+  const def = FACT[f.fact];
+  const shown = def?.kind === 'money' ? `$${num(f.value)}` : def?.kind === 'number' && def.unit ? `${f.value} ${def.unit}` : f.value;
+  const stale = f.stale ?? (d ? (now - d) / 86400000 > STALE_DAYS : false);
+  return [shown, f.club ? 'from the club' : `from ${SOURCES[f.source] || 'an organiser'}`, when && `checked ${when}`,
+    f.status !== 'confirmed' ? 'not confirmed yet' : null, stale ? 'check again' : null].filter(Boolean).join(' · ');
+}

@@ -119,6 +119,7 @@ await page.getByRole('button', { name: /Set up the cup/ }).click();
 await page.getByRole('button', { name: 'Make Team Blue and Team Red' }).click();
 await page.getByText('Team Blue link').waitFor({ timeout: 10000 });
 check(db.cup_sides.length === 2, 'two teams made');
+await page.getByText('#/join/REDTEAM23456').waitFor({ timeout: 10000 }).catch(() => {});
 const setupText = await page.locator('.page').innerText();
 check(setupText.includes('#/join/BLUETEAM2345'), 'Team Blue has its own link');
 check(setupText.includes('#/join/REDTEAM23456'), 'Team Red has its own link');

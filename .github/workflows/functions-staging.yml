@@ -1,0 +1,54 @@
+name: Deploy functions to staging
+
+# Deploys the Supabase edge functions (supabase/functions/*) to the STAGING project only, so a preview branch's
+# server code matches its app. Live is never touched here: live deploys stay manual, with Josh's OK.
+# Needs one repo secret: SUPABASE_ACCESS_TOKEN (Supabase → Account → Access tokens). Without it, it skips.
+on:
+  push:
+    branches: [wave2-all, product]
+    paths: ['supabase/functions/**', 'src/lib/**', 'supabase/config.toml', '.github/workflows/functions-staging.yml']
+  workflow_dispatch:
+    inputs:
+      functions:
+        description: 'Which functions (space-separated), or "all"'
+        default: 'all'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: functions-staging
+  cancel-in-progress: false
+
+env:
+  STAGING_REF: ttkaojaqhckiwpgrpxkh
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Deploy
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          WANT: ${{ github.event.inputs.functions || 'all' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_ACCESS_TOKEN:-}" ]; then echo "::notice title=Supabase not connected yet::Add the SUPABASE_ACCESS_TOKEN repo secret to deploy functions to staging. Skipping."; exit 0; fi
+          if [ "$WANT" = "all" ]; then
+            LIST=$(for d in supabase/functions/*/; do n=$(basename "$d"); [ -f "$d/index.ts" ] && [ "${n#_}" = "$n" ] && echo "$n"; done)
+          else
+            LIST="$WANT"
+          fi
+          for fn in $LIST; do
+            case "$fn" in *[!a-z0-9-]*|'') echo "::error::Bad function name: $fn"; exit 1;; esac
+            echo "::group::$fn"
+            # verify_jwt comes from supabase/config.toml ([functions.<name>] verify_jwt = …).
+            supabase functions deploy "$fn" --project-ref "$STAGING_REF" --use-api
+            echo "::endgroup::"
+          done
+          echo "Deployed to staging: $(echo $LIST | tr '\n' ' ')"

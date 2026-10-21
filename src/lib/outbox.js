@@ -32,6 +32,8 @@ function write(q) {
 const update = (id, patch) => write(read().map((x) => (x.id === id ? { ...x, ...patch } : x)));
 const remove = (id) => write(read().filter((x) => x.id !== id));
 export const outboxCount = () => read().length;
+/** Rows still waiting on this phone for one table (e.g. side comp dots logged with no signal), marked pending. */
+export const outboxPending = (table) => read().filter((x) => x.table === table).map((x) => ({ created_at: x.queued_at, ...x.row, pending: true }));
 export function onOutboxChange(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 /** Called with a plain message when an item had to be dropped. */
 export function onOutboxDrop(fn) { dropListeners.add(fn); return () => dropListeners.delete(fn); }

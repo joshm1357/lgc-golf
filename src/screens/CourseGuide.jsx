@@ -92,8 +92,7 @@ export default function CourseGuide() {
   const legInto = (i) => plan.legs[(start ? 0 : -1) + i];
   const markers = [
     ...(hole.tee ? [{ id: 'tee', ...hole.tee, icon: teeIcon }] : []),
-    ...(hole.front ? [{ id: 'f', ...hole.front, icon: labelIcon('F') }] : []),
-    ...(hole.back ? [{ id: 'b', ...hole.back, icon: labelIcon('B', '#15202E', '#fff') }] : []),
+    // Front and back aren't drawn: at the size of a whole hole they'd sit on top of the middle (their distances are below).
     ...(hole.green ? [{ id: 'm', ...hole.green, icon: labelIcon('M', '#2E7D32', '#fff') }] : []),
     ...(pin ? [{ id: 'pin', lat: pin.lat, lng: pin.lng, icon: flagIcon }] : []),
     ...(pos ? [{ id: 'me', lat: pos.lat, lng: pos.lng, icon: meIcon }] : []),
@@ -143,7 +142,7 @@ export default function CourseGuide() {
       </div>
 
       {showMap ? (
-        <CourseMap className="map tall" markers={markers} fit={fit} zoom={frame.length ? undefined : 15} lines={lines} osm={anyOsm}
+        <CourseMap className="map tall" markers={markers} fit={fit} zoom={frame.length ? undefined : 15} lines={lines} osm={anyOsm} animate={false}
           onTap={hole.green || hole.tee ? (p) => setTargets((t) => (t.length >= MAX_TARGETS ? [...t.slice(0, -1), p] : [...t, p])) : undefined} />
       ) : null}
 

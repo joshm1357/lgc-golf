@@ -147,7 +147,7 @@ export default function GreenMapper() {
         <div className="stack" style={{ gap: 6 }} data-testid="map-progress">
           <div className="row between">
             <strong>{progress.mapped} of {progress.total} greens mapped{progress.done ? ' ✓' : ''}</strong>
-            {nextGap != null && nextGap !== h.n && <button type="button" className="btn ghost sm" onClick={() => goTo(holes.find((x) => x.n === nextGap))}>Next to map: hole {nextGap} →</button>}
+            {nextGap != null && nextGap !== h.n && <button type="button" className="btn ghost sm" onClick={() => goTo(holes.find((x) => x.n === nextGap))}>Next: hole {nextGap} →</button>}
           </div>
           <div style={{ height: 8, borderRadius: 999, background: 'var(--line)', overflow: 'hidden' }} aria-hidden="true">
             <div style={{ height: '100%', width: `${progress.total ? (100 * progress.mapped) / progress.total : 0}%`, background: 'var(--gold)' }} />

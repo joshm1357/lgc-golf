@@ -90,8 +90,14 @@ async function fake(route) {
     if (method === 'GET') return json(filterRows(rows, url.searchParams));
     if (method === 'POST') {
       const body = JSON.parse(req.postData() || '{}');
-      for (const b of Array.isArray(body) ? body : [body]) rows.push({ id: crypto.randomUUID(), group_id: GROUP, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), holes: {}, ...b });
-      return json([], 201);
+      const made = [];
+      for (const b of Array.isArray(body) ? body : [body]) {
+        const row = { id: crypto.randomUUID(), group_id: GROUP, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), holes: {}, ...b };
+        rows.push(row);
+        made.push(row);
+      }
+      if (/vnd\.pgrst\.object/.test(req.headers().accept || '')) return json(made[0], 201);
+      return json(url.searchParams.has('select') ? made : [], 201);
     }
     if (method === 'PATCH') {
       const id = eqOf(url.searchParams, 'id');
@@ -155,6 +161,19 @@ await page.goto(`${BASE}#/admin`);
 await page.getByText('Pairs (4BBB)').first().waitFor({ timeout: 15000 });
 check(await page.getByText('Add a pair').first().isVisible(), 'Admin offers "Add a pair"');
 check(!(await page.getByLabel('Team handicap').first().isVisible().catch(() => false)), 'no team handicap box for pairs');
+// A new pair: both players' handicaps are fixed for the round (round_players).
+db.players.push({ id: 'p5', name: 'Di Five', handicap: 14.4, approved: true, created_at: now }, { id: 'p6', name: 'Ed Six', handicap: 9.6, approved: true, created_at: now });
+await page.reload();
+await page.getByText('Pairs (4BBB)').first().waitFor({ timeout: 15000 });
+const addPair = page.locator('.card', { hasText: 'Add a pair' }).last();
+await addPair.getByPlaceholder('Pair name (e.g. Kurt & Al)').fill('Di & Ed');
+await addPair.getByRole('button', { name: 'Di Five' }).click();
+await addPair.getByRole('button', { name: 'Ed Six' }).click();
+await addPair.getByRole('button', { name: 'Add pair' }).click();
+await page.waitForTimeout(1000);
+const rp = db.round_players.filter((x) => x.round_id === R1).map((x) => [x.player_id, x.playing_handicap]).sort();
+check(JSON.stringify(rp) === JSON.stringify([['p5', 14], ['p6', 10]]), `new pair: round handicaps fixed at 14 and 10 (${JSON.stringify(rp)})`);
+check(db.teams.some((t) => t.name === 'Di & Ed' && t.handicap === 0), 'pair saved with no team handicap');
 
 await browser.close();
 console.log(fails.length ? `\n${fails.length} FAILED:\n- ${fails.join('\n- ')}` : '\nAll checks passed.');

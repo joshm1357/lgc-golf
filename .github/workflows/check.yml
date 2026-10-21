@@ -1,0 +1,35 @@
+name: Check
+
+# Runs on every pull request and every push to product: the tests, plus both builds
+# (GitHub Pages and Cloudflare). A red cross here means "don't merge yet".
+# Branch protection on product and main requires this check to pass (docs/RELEASE-FLOW.md).
+on:
+  pull_request:
+    branches: [product, main]
+  push:
+    branches: [product]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - name: Tests
+        run: npm test
+      - name: Build for GitHub Pages (as L.G.C runs today)
+        run: npm run build
+      - name: Build for Cloudflare, dev/staging (staging database)
+        run: npm run build
+        env:
+          VITE_BASE: /
+          VITE_SUPABASE_URL: https://ttkaojaqhckiwpgrpxkh.supabase.co
+          VITE_SUPABASE_KEY: sb_publishable_5L3LKASJSYGFXt12_QMZfA_LFThnZIi
+          CF_PAGES_BRANCH: ${{ github.head_ref || github.ref_name }}

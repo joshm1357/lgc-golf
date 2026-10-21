@@ -1,0 +1,129 @@
+name: Cloudflare (dev links, staging, production)
+
+# Builds and puts every branch on Cloudflare Pages, project "thegolftrip-app". See docs/RELEASE-FLOW.md.
+#   any branch  → https://<branch>.thegolftrip-app.pages.dev        (staging database, red TEST tag)
+#   product     → also https://staging.thegolftrip.club             (set up by infra.yml)
+#   main        → production (live database). Only once infra/cloudflare.json has "production_deploy": true (release B).
+# Needs one repo secret, CLOUDFLARE_API_TOKEN. Until it exists, it says so and stops without failing.
+# Settings live in infra/cloudflare.json, not in GitHub's or Cloudflare's screens. Dependabot's branches are skipped.
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: cloudflare-${{ github.ref_name }}
+  cancel-in-progress: true
+
+env:
+  PROJECT: thegolftrip-app
+  STAGING_DB: https://ttkaojaqhckiwpgrpxkh.supabase.co
+  STAGING_KEY: sb_publishable_5L3LKASJSYGFXt12_QMZfA_LFThnZIi
+  LIVE_DB: https://luogyzvrbedmicjejilr.supabase.co
+  LIVE_KEY: sb_publishable_uNBEcPawkDZHYGeubyYyag_MwhYkhR7
+
+jobs:
+  deploy:
+    if: ${{ github.actor != 'dependabot[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Ready?
+        id: ready
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          go=true
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::notice title=Cloudflare not connected yet::Add the repo secret CLOUDFLARE_API_TOKEN (docs/RELEASE-FLOW.md). Skipping."; go=false
+          elif [ "$BRANCH" = "main" ] && [ "$(jq -r '.production_deploy' infra/cloudflare.json)" != "true" ]; then
+            echo "::notice title=Production is off::main isn't deployed to Cloudflare until release B (infra/cloudflare.json)."; go=false
+          else
+            # The account ID isn't secret; the token can see exactly one account, so ask Cloudflare for it.
+            ACC=$(curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" https://api.cloudflare.com/client/v4/accounts | jq -r '.result[0].id // empty')
+            [ -n "$ACC" ] || { echo "::error::The Cloudflare token can't see an account. Check its permissions."; exit 1; }
+            echo "account=$ACC" >> "$GITHUB_OUTPUT"
+            [ "$BRANCH" = "main" ] && W=live || W=staging
+            echo "sign_in=$(jq -r ".sign_in.$W // \"\"" infra/cloudflare.json)" >> "$GITHUB_OUTPUT"
+            echo "google_id=$(jq -r ".google.client_id.$W // \"\"" infra/cloudflare.json)" >> "$GITHUB_OUTPUT"
+            echo "google_hosts=$(jq -r '(.google.button_hosts // []) | join(",")' infra/cloudflare.json)" >> "$GITHUB_OUTPUT"
+            echo "new_groups=$(jq -r ".new_groups.$W // \"\"" infra/cloudflare.json)" >> "$GITHUB_OUTPUT"
+          fi
+          echo "go=$go" >> "$GITHUB_OUTPUT"
+
+      - if: steps.ready.outputs.go == 'true'
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - if: steps.ready.outputs.go == 'true'
+        run: npm ci
+      - if: steps.ready.outputs.go == 'true'
+        name: Tests
+        run: npm test
+
+      - if: steps.ready.outputs.go == 'true'
+        name: Build (main = live database; every other branch = staging)
+        env:
+          IS_MAIN: ${{ github.ref_name == 'main' }}
+          CF_PAGES_BRANCH: ${{ github.ref_name }}
+          CF_PAGES_COMMIT_SHA: ${{ github.sha }}
+          VITE_BASE: /
+          VITE_SIGN_IN: ${{ steps.ready.outputs.sign_in }}
+          VITE_GOOGLE_CLIENT_ID: ${{ steps.ready.outputs.google_id }}
+          VITE_GOOGLE_HOSTS: ${{ steps.ready.outputs.google_hosts }}
+          VITE_NEW_GROUPS: ${{ steps.ready.outputs.new_groups }}
+        run: |
+          if [ "$IS_MAIN" = "true" ]; then export VITE_SUPABASE_URL="$LIVE_DB" VITE_SUPABASE_KEY="$LIVE_KEY";
+          else export VITE_SUPABASE_URL="$STAGING_DB" VITE_SUPABASE_KEY="$STAGING_KEY"; fi
+          npm run build   # vite.config.js refuses a non-main branch on live, and main on staging
+
+      - if: steps.ready.outputs.go == 'true'
+        name: Make sure the Cloudflare project exists
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.ready.outputs.account }}
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PROJECT")
+          if [ "$code" = "404" ]; then
+            npx --yes wrangler@3 pages project create "$PROJECT" --production-branch=main
+            echo "::notice title=Cloudflare::Created the Pages project $PROJECT"
+          elif [ "$code" != "200" ]; then
+            echo "::error title=Cloudflare::Couldn't read the project (HTTP $code). Check the API token's permissions."; exit 1
+          fi
+
+      - if: steps.ready.outputs.go == 'true'
+        name: Deploy
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ steps.ready.outputs.account }}
+          command: pages deploy dist --project-name=${{ env.PROJECT }} --branch=${{ github.ref_name }} --commit-hash=${{ github.sha }} --commit-dirty=true
+
+      - if: steps.ready.outputs.go == 'true'
+        name: Share the link
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ALIAS: ${{ steps.deploy.outputs.pages-deployment-alias-url }}
+          URL: ${{ steps.deploy.outputs.deployment-url }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          LINK="${ALIAS:-$URL}"
+          [ "$BRANCH" = "main" ] && WHAT="Production - live data" || WHAT="Test link - staging data with red TEST tag"
+          echo "::notice title=$WHAT::$LINK"
+          printf '### %s\n%s\n\nThis exact version: %s\n' "$WHAT" "$LINK" "$URL" >> "$GITHUB_STEP_SUMMARY"
+          # Put (or refresh) the link on this branch's open pull request.
+          PR=$(gh api "repos/$GITHUB_REPOSITORY/pulls?head=${GITHUB_REPOSITORY_OWNER}:${BRANCH}&state=open" --jq '.[0].number // empty')
+          if [ -n "$PR" ]; then
+            BODY=$(printf '<!-- cloudflare-link -->\n📱 **Test this on your phone:** %s\n\nStaging data, red TEST tag. Updated for `%s` (%s).' "$LINK" "${GITHUB_SHA:0:7}" "$(TZ=Australia/Sydney date '+%a %-d %b %-I:%M %p')")
+            ID=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --jq '[.[] | select(.body | startswith("<!-- cloudflare-link -->"))][0].id // empty')
+            if [ -n "$ID" ]; then gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$ID" -f body="$BODY" >/dev/null;
+            else gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -f body="$BODY" >/dev/null; fi
+          fi

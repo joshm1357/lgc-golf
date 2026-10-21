@@ -1,0 +1,20 @@
+# Keeps libraries up to date. Each update arrives as a pull request with its own test link and Check,
+# and is merged the same way as any other change (docs/RELEASE-FLOW.md). Small updates come grouped in one
+# pull request a week. Big (major) version jumps come separately, because they can change how things work.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    target-branch: product
+    schedule: { interval: weekly, day: monday, time: "07:00", timezone: Australia/Sydney }
+    open-pull-requests-limit: 3
+    groups:
+      small-updates:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: product
+    schedule: { interval: monthly }
+    groups:
+      actions:
+        patterns: ["*"]

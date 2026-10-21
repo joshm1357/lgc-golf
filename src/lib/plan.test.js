@@ -157,3 +157,18 @@ describe('rules into round settings', () => {
     expect(s.applies).toHaveLength(2);
   });
 });
+
+describe('starter rulebook drives round set-up (Stage 5)', () => {
+  it('Ambrose and Stableford: 2 strokes for a side comp, 6 drives each', async () => {
+    const { roundSettingsFromRules } = await import('./plan.js');
+    const rules = [
+      { title: 'Minimum drives', category: 'format', applies_to: ['ambrose'], value: '6 drives each', status: 'active' },
+      { title: 'Closest to pin', category: 'side_comp', applies_to: ['ambrose'], value: '−2 strokes', status: 'active' },
+      { title: 'Stableford counts for the trip trophy', category: 'format', applies_to: ['stableford'], value: null, status: 'active' },
+    ];
+    const s = roundSettingsFromRules(rules, 'ambrose');
+    expect(s.comp_bonus).toBe(2);
+    expect(s.min_drives).toBe(6);
+    expect(roundSettingsFromRules(rules, 'stableford').comp_bonus).toBeNull();
+  });
+});

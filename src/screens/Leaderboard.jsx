@@ -1,11 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { useData, useScores, useSession, useSideEntries } from '../lib/store.jsx';
+import { useData, useScores, useSession, useSideEntries, useFeature } from '../lib/store.jsx';
 import { roundBoard, headlines, compBonuses } from '../lib/board.js';
 import { formatToPar, strokesReceived, stablefordPoints } from '../lib/scoring.js';
-import { Header, Seg, AvatarStack, Icon, Sheet, Loading } from '../components/ui.jsx';
+import { Header, Seg, AvatarStack, Icon, Sheet, Loading, toast } from '../components/ui.jsx';
+import { supabase, friendlyError } from '../lib/supabase.js';
 import { TrophyArt } from '../components/TrophyArt.jsx';
-import DrawSetup from '../components/DrawSetup.jsx';
+import { QuickRoundDone } from './QuickRound.jsx';
+import SharePicture from '../components/SharePicture.jsx';
+import { boardCard } from '../lib/shareCard.js';
+import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
+
+const DrawSetup = lazyScreen(() => import('../components/DrawSetup.jsx'), 'default', { inline: true });
 
 export function useRoundChoice() {
   const data = useData();
@@ -38,6 +44,9 @@ export default function Leaderboard() {
   const [mode, setMode] = useState('live');
   const [open, setOpen] = useState(null);
   const [drawing, setDrawing] = useState(false);
+  const drawOn = useFeature('draw');
+  const sideCompsOn = useFeature('side_comps');
+  const tvOn = useFeature('clubhouse_tv');
   const scores = useScores(round?.id);
   const sideEntries = useSideEntries(round?.id);
 
@@ -79,7 +88,7 @@ export default function Leaderboard() {
   if (!round) {
     return (
       <div className="page">
-        <Header logo title={trip?.name || 'L.G.C Golf'} sub="No rounds set up yet" />
+        <Header logo title={trip?.name || (status?.legacy ? 'L.G.C Golf' : status?.group_name) || 'The Golf Trip'} sub="No rounds set up yet" />
         <div className="empty">
           Nothing to show yet.{status?.is_admin ? <> Set up the course, teams and round in <Link to="/admin">Admin</Link>.</> : ' The admin is setting things up.'}
         </div>
@@ -124,7 +133,22 @@ export default function Leaderboard() {
         </div>
       )}
 
-      {round.status === 'live' && ((round.ctp_holes || []).length > 0 || (round.ld_holes || []).length > 0) && (
+      {winner && !status?.quick && (
+        <div className="section row" style={{ gap: 8 }}>
+          <SharePicture className="btn ghost sm grow" label="🖼️ Winner picture" kind="winner"
+            data={{ name: winner.name, score: isA ? `${formatToPar(winner.netToPar, 1)} net` : `${winner.points} points`, roundName: trophy?.name || round.name, courseName: course?.name,
+              date: round.play_date ? new Date(`${round.play_date}T00:00:00`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '' }}
+            text={`🏆 ${winner.name} wins ${trophy?.name || round.name}!`} />
+          <SharePicture className="btn ghost sm grow" label="🖼️ Leaderboard picture" kind="leaderboard"
+            data={boardCard(board, { roundName: round.name, courseName: course?.name, playDate: round.play_date, final: round.status === 'locked' })}
+            text={`⛳ ${round.name}${course?.name ? ` at ${course.name}` : ''} — the leaderboard`} />
+        </div>
+      )}
+
+      {status?.quick && <QuickRoundDone round={round} board={board} course={course} />}
+      {status?.is_admin && ((tvOn && round.status !== 'locked') || round.tv) && <TvToggle round={round} />}
+
+      {sideCompsOn && round.status === 'live' && ((round.ctp_holes || []).length > 0 || (round.ld_holes || []).length > 0) && (
         <div className="section">
           <Link to={`/comps?r=${round.id}`} className="card pad row" style={{ background: 'var(--gold-soft)', borderColor: 'var(--gold)', textDecoration: 'none', color: 'inherit' }}>
             <span className="grow small" style={{ lineHeight: 1.4 }}>
@@ -137,7 +161,7 @@ export default function Leaderboard() {
         </div>
       )}
       {round.rules && round.status !== 'locked' && (
-        <div className="section"><div className="card pad small" style={{ lineHeight: 1.45 }}><strong>Today's rules:</strong> {round.rules} <a href="?guide" style={{ fontWeight: 700 }}>How it works</a></div></div>
+        <div className="section"><div className="card pad small" style={{ lineHeight: 1.45 }}><strong>Today's rules:</strong> {round.rules}{status?.legacy && <> <a href="?guide" style={{ fontWeight: 700 }}>How it works</a></>}</div></div>
       )}
 
       {heads.length > 0 && round.status !== 'locked' && (
@@ -164,10 +188,10 @@ export default function Leaderboard() {
             {isA ? (status?.is_admin ? (
               <div className="stack" style={{ alignItems: 'stretch' }}>
                 <strong style={{ color: 'var(--text)' }}>How are teams decided?</strong>
-                <button type="button" className="btn gold" onClick={() => setDrawing(true)}>🎲 Random draw — live for everyone</button>
+                {drawOn && <button type="button" className="btn gold" onClick={() => setDrawing(true)}>🎲 Random draw — live for everyone</button>}
                 <Link to="/admin" className="btn ghost">Pick the teams myself</Link>
               </div>
-            ) : 'Teams come out of the draw — keep the app open and it will pop up.') : 'No players in this round yet.'}
+            ) : (drawOn ? 'Teams come out of the draw — keep the app open and it will pop up.' : 'Teams aren’t set yet.')) : 'No players in this round yet.'}
           </div>
         )}
         {rows.map((r, i) => {
@@ -223,7 +247,7 @@ export default function Leaderboard() {
         <Link to={`/score/${round.id}`} className="btn gold fab">Enter score{myTeam ? ` — ${myTeam.name}` : ''}</Link>
       )}
 
-      {drawing && <DrawSetup round={round} onClose={() => setDrawing(false)} />}
+      {drawing && <LazyArea onClose={() => setDrawing(false)}><DrawSetup round={round} onClose={() => setDrawing(false)} /></LazyArea>}
       {open && (
         <Sheet title={open.name} onClose={() => setOpen(null)}>
           <Scorecard row={open} board={board} />
@@ -280,6 +304,26 @@ export function Scorecard({ row, board }) {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Organiser: show this round on the clubhouse TV (the group's switch must be on too). First names only. */
+function TvToggle({ round }) {
+  const data = useData();
+  const [busy, setBusy] = useState(false);
+  const flip = async (on) => {
+    setBusy(true);
+    const { error } = await supabase.rpc('set_round_tv', { p_round: round.id, p_on: on });
+    if (error) toast(friendlyError(error)); else { toast(on ? 'On the clubhouse TV (first names only)' : 'Off the clubhouse TV'); data.reload(); }
+    setBusy(false);
+  };
+  return (
+    <div className="section">
+      <label className="card pad row between" style={{ gap: 10 }}>
+        <span className="small"><strong>📺 Show on the clubhouse TV</strong><div className="muted">On the club’s TV screen today — first names only, no photos. Anyone with the club’s TV link can see it.</div></span>
+        <input type="checkbox" checked={!!round.tv} disabled={busy} onChange={(e) => flip(e.target.checked)} style={{ width: 24, height: 24, flex: 'none' }} aria-label="Show on the clubhouse TV" />
+      </label>
     </div>
   );
 }

@@ -13,13 +13,124 @@ Kept up to date at the end of every build. The shared copy for comments is a Cla
 | 1.3 | Sun 18 Oct (evening) | **Coming up** (any number of future trips and rounds): votes on dates/location/anything, Who's in + lock-in, details, day-by-day plan, bring list, jobs, shared costs with custom splits + who-pays-who + payment details, rooms & cars (live draw), organiser's checklist (suggestions only), anyone can suggest a trip or round. **The Rulebook** (rules, what they apply to, propose → vote → admin decides). **Phone notifications** + daily 9am reminders, Share-to-Messenger nudges, add-to-calendar. **Offline**: the app opens and scoring works with no signal. Bottom bar: Map moved into More; Coming up added. |
 | 1.4 | Sun 18 Oct (night) | **GPS distances** to the front/middle/back and today's pin (anyone can drop the pin while the round is live), **shot planner** (tap up to 3 targets — distance from you or the tee to each, then on to the pin), greens filled from OpenStreetMap or tapped in by the admin, course map saved for offline. **Rules drive round set-up** (CTP/LD value and minimum drives come from the Rulebook). **Plan → trip** (admin button). **More offline**: feed posts and comp entries (with photos) queue and send later. **L.G.C connector** for Claude (safe actions: leaderboard, enter scores, confirm comps, post, organise). |
 
-## Next — v1.5 (before the next trip)
+## The road to beta (agreed with Josh, 20 Oct 2026)
+Living plan: the Claude Doc "The Golf Trip — Road to beta". One installable web app for phone and laptop (no app stores).
+Each stage opens only when the one before meets its gate.
 
-1. **Scorecard photo → scores.** Snap a paper card (or a screenshot from 18Birdies etc.), the app reads it, you check and save. Needs a decision: an Anthropic API key for the app (small pay-per-use cost) — or keep doing it through the L.G.C connector in a Claude chat (free, works now).
-2. **Pins: clear today's pin.** Admin can remove a wrongly dropped pin (today you can only move it).
-3. **Tidy-ups.** One-step save for rooms; move the `pg_net` database add-on; Josh's stray Tribunal vote (change it in the app).
+| Stage | Who | What | Gate |
+|---|---|---|---|
+| 0. Pull it together | No one new | #1 launch-hosting and #2 sign-in-home merged (done 20 Oct); email codes on staging | Josh signed in as himself on staging, phone and laptop |
+| 1. The L.G.C beta | L.G.C | v1.5 → v2.2 on live (now including 045–047 and `beta-1`), app.thegolftrip.club, sign-in, personal links, light desktop, Tell Josh | Players signed in on their own links; next trip in Trips; feedback sorted |
+| 2. Friends' beta | 2–5 groups Josh knows | Fixes from feedback, new groups switched on, Turnstile, Supabase Pro, privacy and terms with the ABN, Caddie live | 3 groups run a round with no help |
+| 3. Signature features (v2.3) | Same groups | 11b governance, 12 Replay, 14 plate pilot, 13 connect your assistant, 11c full desktop; 15 later | Groups come back for a second trip |
+| 4. Public launch | Anyone | Start your group on the website, pilot club, Future Golf | 5–10 active groups outside L.G.C |
+| 5. Earn (v3) | Paying groups | 16 trip finder, 17 premium and payments, paid reel | First trip paid through the app |
 
-## Later — v2
+**Stage 1 build (`beta-1`, 20 Oct):** light desktop (sidebar at 1024 px and up, wider column at 768 px, phones unchanged),
+"Tell Josh" feedback (047, Josh's screen → Feedback), What's new (once per phone, sign-in builds only), Install on this
+computer, and new groups off on live (`infra/cloudflare.json` → `new_groups`; the database refuses too until the
+`new_groups_open` flag is on).
+
+## Next — v1.5: finish and fix up (built 18 Oct, waiting for Josh's OK to go live)
+
+Nothing here changes how L.G.C plays. Branch `v1.5`; tested on the staging database `lgc-golf-staging`.
+
+| Item | Status |
+|---|---|
+| **Clear today's pin** — admin can remove a wrongly dropped pin | Built + tested |
+| **Rooms & cars: one-step save** — name, size, note and who's in it, one Save | Built + tested |
+| **Scorecard photo** — keep using the L.G.C connector in a Claude chat (free). In-app reading becomes an optional feature in v2 (switched off by default, needs an Anthropic API key). | No code |
+| Josh's stray Tribunal vote — Josh changes it in the app | No code |
+| **Faster first load** — leaderboard starts with 492 kB instead of 856 kB (145 kB vs 249 kB over the wire); map, planner, admin, draw, Tribunal and other screens load when opened; the phone still saves every part for offline | Built + tested |
+| **Database tidy-up** (019) — 42 indexes, faster access rules, function permissions | On staging |
+| **Merge overlapping access rules** (020) | Written; needs Josh to approve the DROP in the chat |
+| **Move pg_net** (021) and re-save the 9am reminder job | Written; needs Josh to approve the DROP in the chat |
+
+## v2.0 onwards — The Golf Trip (the product build)
+
+The L.G.C app becomes **The Golf Trip**: one app and one database for many golf groups. Each group sees only its own
+data, name, crest, rulebook, history and features. L.G.C is group number one and keeps everything it has.
+Full brief: `the-golf-trip-full-build-prompt.md` (in the Claude project). Every stage is built and tested on staging first.
+
+**Phase 1 — Foundations (release v2.0)**
+1. **Groups** — `groups` and `group_members` tables, `group_id` on every table (filled in automatically so old phones
+   keep working), access rules per group, notifications/reminders/connector/photos/phone storage per group,
+   isolation tests (no group can see or change another's data), old-version test.
+1b. ✅ on staging — **Trips** (decided 18 Oct — spec in `docs/TRIPS-SPEC.md`) — one Trip from idea → votes on dates and place with
+   discussion → locked in → on the trip → done (the record). The Trips tab replaces Coming up: now/next, ideas and
+   voting, past trips. Admin picks vote winners (group setting can let the trip's organiser too). Rules, players,
+   handicaps, Tribunal, courses and trophies stay group-wide. Plus **notification choices** per person: straight away,
+   daily digest at a chosen time, or only important; iPhone Home Screen guide.
+2. ✅ on staging, sign-in providers not yet on (STOP) — **Proper login, roles and invites** — Apple, Google and emailed link; guests stay anonymous and can upgrade
+   without losing scores; organiser / player / guest; invite link + QR code; group switcher. STOP before switching
+   any sign-in provider on.
+3. ✅ on staging — **Feature switches** — `src/lib/features.js`, `group_features` table, `feature_on()` checked by the database
+   (not just hidden), Group settings → Features screen, L.G.C has everything on except scorecard photo and booking links.
+
+**Phase 2 — Make it theirs (release v2.1 with Phase 3)**
+4. ✅ on staging, reviewed, in `product` — Branding from the database (name, crest, colours, font; trophy names were
+already per group). 5. ✅ on staging, reviewed, in `product` — Rulebook per group with starter rulebooks.
+6. ✅ on staging, reviewed, in `product` — History import: past winners and handicaps, by hand or pasted from a list; honour board
+and Trophy Room mix history and app-made winners by year; past trips show their winners.
+
+**Phase 3 — Open the doors**
+7. ✅ on staging, reviewed, in `product` — Start-a-group wizard (under 10 minutes). 8. ✅ on staging, reviewed, in `product` — Shared course library (OpenStreetMap credit). 9. Launch basics:
+move to Vercel with `<slug>.thegolftrip.club` (STOP — Josh buys the domain), Supabase Pro (STOP — Josh switches it on),
+DRAFT privacy policy and terms, delete-my-data, error alerts (ask first), share cards, basic usage numbers.
+  (✅ on staging: privacy/terms drafts, your data (download; leave/delete waiting on Josh's 041b), app problem reports
+  (no new dependency), share pictures, Josh's numbers with scan funnel, stay cards. Hosting, domain, Pro: STOPs.)
+
+**Target user** (club-partners addendum, 18 Oct)
+- **The organiser:** the bloke in a group of 6–16 mates who books the trip, runs the group chat and chases the money.
+  Roughly 25–50, social golfer, often not a club member, phone-first, Messenger or WhatsApp.
+- **Design rules:** no app store and no sign-up before the first tee. One-handed on a cart in sunlight. Sharing to the
+  group chat comes first. Every screen a first-time guest sees makes sense with no explanation.
+
+**Added by the club-partners addendum** (order agreed: Stage 8 shared courses → 7b → 8b, because the quick round needs
+the public course page and shared courses)
+- **Stage 3 addition:** feature switch "Clubhouse TV leaderboard" (new group default off; the group also opts in per round).
+- **7b. Quick round** (✅ on staging, reviewed and merged — stroke play waits for its STOP): public course page `/c/<course>` (no sign-in) with "Start a round with your mates"; a quick
+  group ("Josh's round at <course>") with a one-day trip and one round, guest sign-in only — under 2 minutes from scan
+  to first score; invite via the phone's share sheet, mates join with just a name as guests; format picker
+  (Stableford, Ambrose, **stroke play** — new format: STOP for the check-constraint change), closest-to-pin pre-filled
+  from par 3s, longest drive from a par 5; after the last hole: results card (share sheet), winner on the honour board,
+  "Same time next year?" (a Trips idea with a dates vote), "Make it official" (the Stage 7 wizard, pre-filled); guests
+  keep history by signing in later; every card and invite carries "Start your own group" with its source tracked.
+  Quick groups get their own new-group limit.
+- **8b. Club partners** (✅ claims, club screen, QR kit draft, counts, Clubhouse TV — reviewed and merged; ✅ course
+  list seeded from OpenStreetMap on staging — STOP before live, licence question for Josh; club photos later): every Australian course listed (seeded from OpenStreetMap with credit — STOP before seeding
+  live); "Claim your course" (Josh approves each claim by hand — STOP before the first real one; club accounts need
+  real sign-in, so the Stage 2 STOP comes first); club role edits verified hole data, logo, booking contact, offers,
+  photos; QR kit PDF (cart, par 3 signs, counter, TV; each code carries club ref and placement — STOP before any kit is
+  printed or sent, and codes only ever carry the final thegolftrip.club address); attribution (first scan's club and
+  placement; per club: scans, rounds, groups, returns, trips — counts only, never names); Clubhouse TV mode (opted-in
+  groups, first names only, no photos); "Partner course" label that never hides unclaimed courses; privacy: clubs see
+  nothing about players unless a group opts in to TV (goes in the Stage 9 privacy draft).
+- **Stage 9 additions:** scan funnel in the usage numbers (by club and placement); stay cards (placement `stay`) issued
+  by Josh from the admin screen. Share cards are built once in 7b and reused.
+- **Stage 10 addition:** "Ask about a group booking" on claimed course pages and in trip place votes (form → email to
+  the club, logged against its code). No money changes hands yet; any future payment goes to the club itself, never to
+  staff, and is disclosed. (✅ on staging: the email goes from the person's own mail app — no email service.)
+
+**Phase 4 — Earn later (release v2.2)**
+10. Planner per group + booking links (switched off, one redirect so referral codes can be added later).
+    ✅ on staging (planner was already per group from Stage 1).
+11. `group_plan` field (`free` for everyone) and the tier check in `feature_on`; list of possible premium features. No payments.
+    ✅ on staging: only Josh can change a group's plan; a feature marked premium is off for free groups.
+
+### Ideas that could be premium later (no payments built; nothing marked premium yet)
+Rule of thumb: everything a group needs to run a trip stays free. Premium is extras for keen organisers.
+- Multi-trip seasons and season-long ladders (order of merit across trips).
+- In-app scorecard photo reading (needs an Anthropic API key — a pay-per-use cost).
+- Extra crest/branding options (custom fonts, own colours beyond the presets, a printed honour board poster).
+- Player stats: scoring vs handicap, best and worst holes, head-to-heads.
+- History import beyond a few years / bulk import from spreadsheets.
+- More than one Clubhouse TV board at once, or a branded TV page for a club (club-side, not player-side).
+- Trip extras: weather on the plan, automatic reminders by text message (would cost per message).
+- Not premium (stays free): scoring, leaderboard, side comps, trophies, Rulebook, Tribunal, Trips planner, invites,
+  share pictures, privacy and delete-my-data.
+
+## Later — ideas not yet in a stage
 
 - AI help for the admin (see options below).
 - Weather for the plan's location in the week before.
@@ -55,8 +166,13 @@ Options: **A. Keep our own scoring** (recommended — already does Ambrose/Stabl
 
 - iPhone notifications need the app added to the Home Screen and opened from there (iOS 16.4+).
 - Supabase free plan pauses after 7 days without use — restore it before a trip.
-- Approval prompts for deleting data from this chat time out as "cancelled".
+- Approval prompts for deleting data from this chat time out as "cancelled". Database changes that DROP something
+  (e.g. 020, 021) need Josh in the chat to approve them, on staging as well as live.
+- The build session's computer can't reach Supabase directly, so the in-browser phone checks run against a
+  stand-in database; the database rules themselves are checked with SQL tests on staging.
 
 ## How each release is built
 
-Start from ARCHITECTURE-RULES.md and an audit → build on a branch → unit tests → phone-size check in a browser → independent review → fix → merge → live → update this plan and BUILD-STATUS.md.
+Start from ARCHITECTURE-RULES.md and an audit → build on a branch → apply database changes to **staging**
+(`lgc-golf-staging`) → unit tests + SQL access checks (`supabase/tests/`) → phone-size check in a browser →
+independent review → fix → STOP for Josh's OK → database changes on live → merge → live → update this plan and BUILD-STATUS.md.

@@ -6,6 +6,8 @@
 //     and opened from there, on iOS 16.4 or newer. Apple's rule, not ours.
 //   - The app tells the 'notify' server function what happened; the server writes
 //     the message and sends it, so nobody can send made-up notifications.
+import { currentGroup } from './group.js';
+import { previewOf, READ_ONLY_MESSAGE } from './preview.js';
 import { supabase } from './supabase.js';
 
 export const VAPID_PUBLIC = 'BCfEi9CqrSZi7EMNXBjBvwjPYsy-EPe4uM9BCqx7showM-O8MUOQBPQeCtnBDZDwKWDlUQpU-JVR2aqR6tz-H9I';
@@ -37,6 +39,7 @@ function keyBytes(b64) {
 
 /** Must be called from a tap (browsers only ask permission in response to a tap). */
 export async function enablePush() {
+  if (previewOf()) throw new Error(READ_ONLY_MESSAGE(previewOf().name));
   const perm = await Notification.requestPermission();
   if (perm !== 'granted') throw new Error(perm === 'denied' ? 'Notifications are blocked — allow them for this app in your phone settings.' : 'Notifications weren’t allowed.');
   const reg = await navigator.serviceWorker.register(SW_URL);
@@ -51,6 +54,7 @@ export async function enablePush() {
 }
 
 export async function disablePush() {
+  if (previewOf()) throw new Error(READ_ONLY_MESSAGE(previewOf().name));
   const reg = await navigator.serviceWorker.getRegistration(SW_URL);
   const sub = await reg?.pushManager.getSubscription();
   if (sub) {
@@ -62,7 +66,7 @@ export async function disablePush() {
 /** Tell the server something happened. Never throws — a failed notification shouldn't block the action. */
 export async function notify(type, payload = {}) {
   try {
-    const { data, error } = await supabase.functions.invoke('notify', { body: { type, ...payload } });
+    const { data, error } = await supabase.functions.invoke('notify', { body: { type, group_id: currentGroup() || undefined, ...payload } });
     if (error) return { sent: 0, error };
     return data || { sent: 0 };
   } catch (error) {
@@ -71,7 +75,7 @@ export async function notify(type, payload = {}) {
 }
 
 /** Share sheet (pick Messenger) where available; otherwise copy to the clipboard. Returns 'shared' | 'copied' | 'failed'. */
-export async function shareText(text, title = 'L.G.C') {
+export async function shareText(text, title = (typeof document !== 'undefined' && document.title) || 'The Golf Trip') {
   try {
     if (navigator.share) {
       await navigator.share({ title, text });

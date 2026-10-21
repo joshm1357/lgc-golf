@@ -1,12 +1,38 @@
 import { createClient } from '@supabase/supabase-js';
+import { currentGroup, scopeRequest } from './group.js';
+import { previewOf, blockedWhileViewing, READ_ONLY_MESSAGE } from './preview.js';
 
 // These two values are public by design (they ship in every browser).
 // The data is protected by the group PIN and Row Level Security in the database.
-export const SUPABASE_URL = 'https://luogyzvrbedmicjejilr.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_uNBEcPawkDZHYGeubyYyag_MwhYkhR7';
+// A test build can point at the staging database instead (VITE_SUPABASE_URL / VITE_SUPABASE_KEY);
+// the live app uses the L.G.C database below.
+export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://luogyzvrbedmicjejilr.supabase.co';
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY || 'sb_publishable_uNBEcPawkDZHYGeubyYyag_MwhYkhR7';
+
+/** Every database request says which group it's for (see group.js). Photos and functions are left alone. */
+function groupFetch(input, init = {}) {
+  const g = currentGroup();
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input?.url;
+  // Viewing as a player (preview.js): read only. Any change is refused here, before it leaves the phone.
+  const viewing = previewOf();
+  if (viewing) {
+    const m = (init.method || (typeof input === 'object' && !(input instanceof URL) && input.method) || 'GET').toUpperCase();
+    if (blockedWhileViewing(url, m, viewing)) {
+      return Promise.resolve(new Response(JSON.stringify({ message: READ_ONLY_MESSAGE(viewing.name), code: 'VIEWING' }),
+        { status: 403, headers: { 'content-type': 'application/json' } }));
+    }
+  }
+  if (!g || !url || !url.includes('/rest/v1/')) return fetch(input, init);
+  const method = (init.method || (typeof input === 'object' && input.method) || 'GET').toUpperCase();
+  const scoped = scopeRequest(url, method, g);
+  const headers = new Headers(init.headers || (typeof input === 'object' && !(input instanceof URL) ? input.headers : undefined));
+  headers.set('x-group-id', scoped.header);
+  return fetch(scoped.url, { ...init, method, headers });
+}
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, storageKey: 'lgc-auth' },
+  global: { fetch: groupFetch },
   // No built-in retries: on a golf course they turn a lost signal into a 7-second freeze. The app
   // re-loads by itself when signal returns, and score saves have their own queue (offline.js).
   db: { retry: false },

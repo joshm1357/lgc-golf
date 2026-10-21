@@ -1,0 +1,41 @@
+{
+  "_about": "Web addresses for the app on Cloudflare. Changing this file on product makes .github/workflows/infra.yml apply it. It only ever adds or points CNAME records for the names listed here; it never deletes anything and never touches mail (MX/TXT) records.",
+  "project": "thegolftrip-app",
+  "zone": "thegolftrip.club",
+  "production_deploy": false,
+  "_production_deploy": "true only at release B: then main deploys to production on the live database",
+  "github_pages_retired": false,
+  "_github_pages_retired": "true only at release B, step 5: stops deploy.yml so a push can't put the old app back over the hand-over page",
+  "sign_in": {
+    "staging": "google,email",
+    "live": ""
+  },
+  "_sign_in": "e.g. \"google\" or \"google,email\" once that provider is set up for that database",
+  "new_groups": {
+    "staging": "on",
+    "live": ""
+  },
+  "_new_groups": "\"on\" lets anyone start a group (or a quick round) on that database's app. Live stays \"\" until Stage 2 (friends' beta, decided 20 Oct). The database also refuses new groups until its new_groups_open flag is on (migration 047).",
+  "google": {
+    "client_id": {
+      "staging": "716054617925-qp2bvst6o36st4ijc47tkvo21eug3me7.apps.googleusercontent.com",
+      "live": ""
+    },
+    "button_hosts": [
+      "staging.thegolftrip.club",
+      "app.thegolftrip.club",
+      "sign-in-home.thegolftrip-app.pages.dev"
+    ]
+  },
+  "_google": "client_id is public (it's in every sign-in). Google's own button shows only on button_hosts, which must match the client's Authorised JavaScript origins in Google Cloud; everywhere else uses the redirect.",
+  "domains": [
+    {
+      "name": "staging.thegolftrip.club",
+      "branch": "product"
+    }
+  ],
+  "_at_release_B_add": {
+    "name": "app.thegolftrip.club",
+    "branch": "main"
+  }
+}

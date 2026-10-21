@@ -6,6 +6,7 @@
 //   done     → all picks revealed; admin locks in or scraps
 //   locked   → teams written to the round
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { previewOf } from '../lib/preview.js';
 import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useRealtime, useSession, playerName } from '../lib/store.jsx';
 import { REVEAL_MS, SPIN_MS, makeDraw, makeGroupDraw } from '../lib/draw.js';
@@ -14,34 +15,10 @@ import { Avatar, toast } from './ui.jsx';
 
 export const TEAM_COLOURS = ['#D9A521', '#5FB3E0', '#E0705F', '#7FD1AE', '#C79BE6', '#F2F4F6'];
 const COUNTDOWN_MS = 5000;
-const DISMISS_KEY = 'lgc-draw-dismissed';
 
-/** Watches for an open draw room or a live draw and takes over the screen. */
-export function DrawOverlay() {
-  const [draw, setDraw] = useState(null);
-  const [dismissed, setDismissed] = useState(() => {
-    try { return localStorage.getItem(DISMISS_KEY); } catch { return null; }
-  });
-  const load = useCallback(async () => {
-    const since = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
-    const { data } = await supabase.from('draws').select('*').gte('created_at', since).neq('status', 'cancelled').order('created_at', { ascending: false }).limit(10);
-    // A draw that's open or running always wins over one that's finished (e.g. cars drawn after the teams room opened).
-    const d = (data || []).find((x) => x.status === 'lobby' || x.status === 'running' || x.status === 'done') || data?.[0] || null;
-    // A locked draw only reappears for 30 minutes.
-    if (d && d.status === 'locked' && Date.now() - new Date(d.started_at).getTime() > 30 * 60 * 1000) setDraw(null);
-    else setDraw(d);
-  }, []);
-  useEffect(() => { load(); }, [load]);
-  useRealtime(['draws'], load);
-
-  if (!draw || dismissed === draw.id + ':' + draw.status) return null;
-  return (
-    <DrawCeremony draw={draw} actions={liveActions} onClose={() => {
-      const v = draw.id + ':' + draw.status;
-      try { localStorage.setItem(DISMISS_KEY, v); } catch { /* ignore */ }
-      setDismissed(v);
-    }} />
-  );
+/** The live ceremony, writing to the database so every phone follows along (opened by DrawOverlay). */
+export function LiveDrawCeremony({ draw, onClose }) {
+  return <DrawCeremony draw={draw} actions={liveActions} onClose={onClose} />;
 }
 
 /** Real actions: write to the database so every phone follows along. */
@@ -136,7 +113,7 @@ function useWatchers(drawId, me, enabled) {
     if (!enabled || !me) return undefined;
     const ch = supabase.channel(`draw-room-${drawId}`, { config: { presence: { key: me } } });
     ch.on('presence', { event: 'sync' }, () => setIds(Object.keys(ch.presenceState())));
-    ch.subscribe((s) => { if (s === 'SUBSCRIBED') ch.track({ at: Date.now() }); });
+    ch.subscribe((s) => { if (s === 'SUBSCRIBED' && !previewOf()) ch.track({ at: Date.now() }); }); // viewing as someone: watch, don't appear as them
     return () => { supabase.removeChannel(ch); };
   }, [drawId, me, enabled]);
   return ids;
@@ -307,7 +284,7 @@ function Ceremony({ draw, onClose, actions, header, busy, run, isAdmin, me, grou
               {/* the lotto ball */}
               <div style={{ width: 176, height: 176, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'radial-gradient(circle at 35% 30%, #FFFFFF 0%, #E9EDF2 45%, #B9C2CC 100%)', boxShadow: spinning ? `0 0 0 6px rgba(255,255,255,.08), 0 0 40px rgba(235,212,150,.35)` : `0 0 0 6px ${colour}, 0 0 48px ${colour}`, transform: spinning ? `rotate(${(within / 6) % 360}deg)` : 'scale(1.04)', transition: spinning ? 'none' : 'transform .25s, box-shadow .25s' }}>
                 {waitingForClick && !current ? (
-                  <span style={{ fontFamily: "'Pirata One', serif", fontSize: 64, color: '#1C2B3F' }}>?</span>
+                  <span style={{ fontFamily: "'Pirata One', serif", fontSize: 64, color: 'var(--navy)' }}>?</span>
                 ) : (
                   <div style={{ transform: spinning ? `rotate(${-(within / 6) % 360}deg)` : 'none' }}><Avatar player={face} size={140} /></div>
                 )}

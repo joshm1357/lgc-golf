@@ -1,10 +1,11 @@
-// lgc-mcp — the L.G.C connector: lets a Claude chat run the app through a short list of safe
-// actions (read the leaderboard, enter a card, confirm a comp winner, post to the feed, organise
-// a trip) instead of having full database access.
+// lgc-mcp — the Claude connector: lets a Claude chat run ONE group's app through a short list of
+// safe actions (read the leaderboard, enter a card, confirm a comp winner, post to the feed,
+// organise a trip) instead of having full database access.
 //
 // Connect it in Claude: Settings → Connectors → Add custom connector → paste the secret link
-// https://<project>.supabase.co/functions/v1/lgc-mcp/<key>. Anyone with the link acts as the
-// admin, so keep it private; change the key in server_secrets ('mcp_key') to cut it off.
+// https://<project>.supabase.co/functions/v1/lgc-mcp/<key>. Each key belongs to one group
+// (connector_keys, stored as a SHA-256 hash) and can only see and change that group. Anyone with
+// the link acts as that group's organiser, so keep it private; delete its row to cut it off.
 //
 // Protocol: MCP over plain HTTP (JSON-RPC 2.0, JSON responses — no streaming needed).
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
@@ -15,15 +16,30 @@ const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SE
 const VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*' };
 
-let secrets: Record<string, string> | null = null;
-let loadedAt = 0;
-async function getSecrets() {
-  // Re-read every minute, so changing the key cuts off the old link within a minute.
-  if (secrets && Date.now() - loadedAt < 60000) return secrets;
-  const { data } = await db.from('server_secrets').select('name,value').in('name', ['mcp_key', 'mcp_player_id']);
-  secrets = Object.fromEntries((data || []).map((r) => [r.name, r.value]));
-  loadedAt = Date.now();
-  return secrets;
+// Which group a key belongs to. Looked up again after a minute, so removing a key cuts it off fast.
+type Ctx = { g: string; author: string | null; groupName: string };
+const keyCache = new Map<string, { ctx: Ctx | null; at: number }>();
+async function sha256(text: string) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+async function ctxForKey(key: string | undefined): Promise<Ctx | null> {
+  if (!key || key.length < 16) return null;
+  const hit = keyCache.get(key);
+  if (hit && Date.now() - hit.at < 60000) return hit.ctx;
+  const { data } = await db.from('connector_keys').select('group_id, player_id, groups(name)').eq('key_hash', await sha256(key)).maybeSingle();
+  let ctx = data ? { g: data.group_id as string, author: (data.player_id as string) || null, groupName: (data as any).groups?.name || 'the group' } : null;
+  // The group can switch the connector off (Stage 3). An older database without switches: on.
+  if (ctx) {
+    const { data: on, error } = await db.rpc('feature_on', { p_group: ctx.g, p_key: 'connector' });
+    if (!error && on === false) ctx = null;
+  }
+  // Only remember keys that work (and not too many), so random wrong keys can't fill the memory.
+  if (ctx) {
+    if (keyCache.size > 200) keyCache.clear();
+    keyCache.set(key, { ctx, at: Date.now() });
+  }
+  return ctx;
 }
 
 // ---------- helpers ----------
@@ -34,8 +50,13 @@ const must = async <T>(q: PromiseLike<{ data: T; error: unknown }>) => {
   if (error) fail((error as { message?: string }).message || 'Database error');
   return data;
 };
-async function players(): Promise<P[]> {
-  return ((await must(db.from('players').select('id,name,nickname,handicap,approved'))) as P[]).filter((p) => p.approved !== false);
+async function players(c: Ctx): Promise<P[]> {
+  return ((await must(db.from('players').select('id,name,nickname,handicap,approved').eq('group_id', c.g))) as P[]).filter((p) => p.approved !== false);
+}
+/** A plan of THIS group, or a clear error. */
+async function planOf(c: Ctx, id: string) {
+  const { data } = await db.from('plans').select('*').eq('id', id).eq('group_id', c.g).maybeSingle();
+  return (data as Record<string, any>) || fail('No such plan in this group — check the id with lgc_overview.');
 }
 const pname = (p?: P) => (p ? p.nickname || p.name : 'Unknown');
 function findPlayer(all: P[], who: string) {
@@ -53,11 +74,14 @@ function strokesReceived(hcp: number, si: number) {
   if (h >= 0) return Math.floor(h / 18) + (si <= h % 18 ? 1 : 0);
   return -(19 - si <= -h ? 1 : 0);
 }
-async function currentRound(roundId?: string) {
-  if (roundId) return must(db.from('rounds').select('*').eq('id', roundId).single());
-  const { data: live } = await db.from('rounds').select('*').eq('status', 'live').order('play_date', { ascending: false }).limit(1);
+async function currentRound(c: Ctx, roundId?: string) {
+  if (roundId) {
+    const { data } = await db.from('rounds').select('*').eq('id', roundId).eq('group_id', c.g).maybeSingle();
+    return (data as Record<string, any>) || fail('No such round in this group — check the id with lgc_overview.');
+  }
+  const { data: live } = await db.from('rounds').select('*').eq('group_id', c.g).eq('status', 'live').order('play_date', { ascending: false }).limit(1);
   if (live?.length) return live[0];
-  const { data: last } = await db.from('rounds').select('*').order('play_date', { ascending: false, nullsFirst: false }).limit(1);
+  const { data: last } = await db.from('rounds').select('*').eq('group_id', c.g).order('play_date', { ascending: false, nullsFirst: false }).limit(1);
   return last?.[0] || fail('No rounds yet.');
 }
 async function subjectsOf(round: Record<string, unknown>, all: P[]) {
@@ -76,13 +100,23 @@ function findSubject(subs: Awaited<ReturnType<typeof subjectsOf>>, who: string) 
   if (part.length === 1) return part[0];
   return fail(part.length ? `"${who}" matches ${part.map((s) => s.name).join(' and ')}.` : `No team or player "${who}" in this round. In it: ${subs.map((s) => s.name).join(', ')}.`);
 }
-async function post(text: string) {
-  const s = await getSecrets();
-  await must(db.from('posts').insert({ kind: 'user', player_id: s.mcp_player_id || null, body: text }));
+/** Feature switches (Stage 3). The connector uses the server key, which skips the database's rules, so it checks
+ *  here: a tool for a switched-off feature isn't offered and refuses to run. (An older database: everything on.) */
+async function featureOn(c: Ctx, key: string) {
+  const { data, error } = await db.rpc('feature_on', { p_group: c.g, p_key: key });
+  return error ? true : data !== false;
+}
+const TOOL_FEATURE: Record<string, string> = {
+  confirm_side_comp: 'side_comps', post_to_feed: 'feed', plan_details: 'planner', set_rsvp: 'planner',
+  add_job: 'planner_tasks', create_poll: 'planner_tasks', add_cost: 'planner_costs',
+};
+async function post(c: Ctx, text: string) {
+  if (!(await featureOn(c, 'feed'))) return; // no feed: nothing to post to
+  await must(db.from('posts').insert({ group_id: c.g, kind: 'user', player_id: c.author, body: text }));
 }
 
 // ---------- the tools ----------
-type Tool = { name: string; description: string; inputSchema: Record<string, unknown>; run: (a: Record<string, any>) => Promise<string> };
+type Tool = { name: string; description: string; inputSchema: Record<string, unknown>; run: (a: Record<string, any>, c: Ctx) => Promise<string> };
 const str = (description: string) => ({ type: 'string', description });
 const num = (description: string) => ({ type: 'number', description });
 
@@ -91,19 +125,19 @@ const TOOLS: Tool[] = [
     name: 'lgc_overview',
     description: 'Start here. The current trip, its rounds (ids, course, format, status, teams/players with handicaps) and the trips and rounds being planned.',
     inputSchema: { type: 'object', properties: {} },
-    async run() {
-      const all = await players();
-      const trips = await must(db.from('trips').select('*').order('start_date', { ascending: false })) as Record<string, any>[];
+    async run(_a, c) {
+      const all = await players(c);
+      const trips = await must(db.from('trips').select('*').eq('group_id', c.g).order('start_date', { ascending: false })) as Record<string, any>[];
       const trip = trips.find((t) => t.status === 'active') || trips[0];
-      const rounds = trip ? await must(db.from('rounds').select('*, courses(name)').eq('trip_id', trip.id).order('play_date')) as Record<string, any>[] : [];
-      const lines = [`Current trip: ${trip ? `${trip.name} (${trip.start_date || '?'} to ${trip.end_date || '?'})` : 'none'}`];
+      const rounds = trip ? await must(db.from('rounds').select('*, courses(name)').eq('trip_id', trip.id).eq('group_id', c.g).order('play_date')) as Record<string, any>[] : [];
+      const lines = [`Group: ${c.groupName}`, `Current trip: ${trip ? `${trip.name} (${trip.start_date || '?'} to ${trip.end_date || '?'})` : 'none'}`];
       for (const r of rounds) {
         const subs = await subjectsOf(r, all);
         lines.push(`- Round "${r.name}" id=${r.id} · ${r.courses?.name} · ${r.format} · ${r.status} · ${r.play_date || ''}${r.comp_bonus ? ` · side comps −${r.comp_bonus}` : ''}${r.ctp_holes?.length ? ` · CTP ${r.ctp_holes.join(',')}` : ''}${r.ld_holes?.length ? ` · LD ${r.ld_holes.join(',')}` : ''}`);
         for (const s of subs) lines.push(`    ${s.name} (hcp ${s.handicap})${s.type === 'team' ? `: ${s.members.map(pname).join(', ')}` : ''}`);
       }
-      const plans = await must(db.from('plans').select('id,name,kind,status,start_date,end_date,location_name,proposed').neq('status', 'cancelled').order('start_date', { nullsFirst: false })) as Record<string, any>[];
-      lines.push('Coming up:');
+      const plans = await must(db.from('plans').select('id,name,kind,status,start_date,end_date,location_name,proposed').eq('group_id', c.g).neq('status', 'cancelled').order('start_date', { nullsFirst: false })) as Record<string, any>[];
+      lines.push('Trips (ideas, being decided, locked in, past):');
       for (const p of plans) lines.push(`- ${p.proposed ? '[suggested] ' : ''}${p.name} id=${p.id} · ${p.kind} · ${p.status} · ${p.start_date || 'dates TBC'} · ${p.location_name || 'location TBC'}`);
       lines.push(`Players: ${all.map((p) => `${pname(p)} (${p.handicap})`).join(', ')}`);
       return lines.join('\n');
@@ -113,10 +147,10 @@ const TOOLS: Tool[] = [
     name: 'get_leaderboard',
     description: 'The scores for a round (default: the live round, else the latest). Gross, holes played, handicap and net (Ambrose) or Stableford points.',
     inputSchema: { type: 'object', properties: { round_id: str('Round id (optional)') } },
-    async run(a) {
-      const round = await currentRound(a.round_id);
-      const course = await must(db.from('courses').select('*').eq('id', round.course_id).single()) as Record<string, any>;
-      const subs = await subjectsOf(round, await players());
+    async run(a, c) {
+      const round = await currentRound(c, a.round_id);
+      const course = await must(db.from('courses').select('*').eq('id', round.course_id).eq('group_id', c.g).single()) as Record<string, any>;
+      const subs = await subjectsOf(round, await players(c));
       const scores = await must(db.from('scores').select('*').eq('round_id', round.id)) as Record<string, any>[];
       const holes = course.holes as { n: number; par: number; si: number }[];
       // Side comps (Ambrose): the winner's team takes comp_bonus strokes off — confirmed winner first, else best distance.
@@ -165,10 +199,10 @@ const TOOLS: Tool[] = [
         scores: { type: 'array', items: { type: 'object', required: ['hole', 'strokes'], properties: { hole: num('1–18'), strokes: num('Strokes, 1–15; 0 = picked up (Stableford)'), drive_by: str('Ambrose: player whose tee shot was used (optional)') } } },
       },
     },
-    async run(a) {
-      const round = await currentRound(a.round_id);
+    async run(a, c) {
+      const round = await currentRound(c, a.round_id);
       if (round.status === 'locked') fail(`"${round.name}" is locked. Reopen it in Admin first.`);
-      const all = await players();
+      const all = await players(c);
       const subject = findSubject(await subjectsOf(round, all), a.who);
       const rows = (a.scores || []).map((x: Record<string, any>) => {
         const hole = Number(x.hole);
@@ -193,13 +227,13 @@ const TOOLS: Tool[] = [
     name: 'confirm_side_comp',
     description: 'Record and confirm the winner of closest to pin (ctp) or longest drive (ld) on a hole. A confirmed winner beats any measured distance.',
     inputSchema: { type: 'object', required: ['kind', 'hole', 'player'], properties: { round_id: str('Round id (optional)'), kind: { type: 'string', enum: ['ctp', 'ld'] }, hole: num('Hole'), player: str('Winner'), distance_m: num('Distance in metres (optional)') } },
-    async run(a) {
-      const round = await currentRound(a.round_id);
-      const p = findPlayer(await players(), a.player);
+    async run(a, c) {
+      const round = await currentRound(c, a.round_id);
+      const p = findPlayer(await players(c), a.player);
       await must(db.from('side_entries').update({ confirmed: false }).eq('round_id', round.id).eq('kind', a.kind).eq('hole', a.hole));
       await must(db.from('side_entries').insert({ round_id: round.id, kind: a.kind, hole: a.hole, player_id: p.id, distance_m: a.distance_m ?? null, confirmed: true }));
       const what = a.kind === 'ctp' ? 'closest to pin' : 'longest drive';
-      await post(`${a.kind === 'ctp' ? '🎯' : '💣'} ${pname(p)} takes ${what} on ${a.hole}${a.distance_m ? ` (${a.distance_m} m)` : ''}.`);
+      await post(c, `${a.kind === 'ctp' ? '🎯' : '💣'} ${pname(p)} takes ${what} on ${a.hole}${a.distance_m ? ` (${a.distance_m} m)` : ''}.`);
       return `Confirmed ${pname(p)} as ${what} winner on hole ${a.hole} and posted it to the feed.`;
     },
   },
@@ -207,9 +241,9 @@ const TOOLS: Tool[] = [
     name: 'post_to_feed',
     description: 'Post a message to the group feed (as the admin).',
     inputSchema: { type: 'object', required: ['text'], properties: { text: str('The message') } },
-    async run(a) {
+    async run(a, c) {
       if (!String(a.text || '').trim()) fail('Nothing to post.');
-      await post(String(a.text).trim().slice(0, 1000));
+      await post(c, String(a.text).trim().slice(0, 1000));
       return 'Posted to the feed.';
     },
   },
@@ -217,9 +251,9 @@ const TOOLS: Tool[] = [
     name: 'plan_details',
     description: "One planned trip or round: who's in, votes with tallies, jobs, costs and who owes what.",
     inputSchema: { type: 'object', required: ['plan_id'], properties: { plan_id: str('Plan id from lgc_overview') } },
-    async run(a) {
-      const all = await players();
-      const pl = await must(db.from('plans').select('*').eq('id', a.plan_id).single()) as Record<string, any>;
+    async run(a, c) {
+      const all = await players(c);
+      const pl = await planOf(c, a.plan_id);
       const by = (t: string) => db.from(t).select('*').eq('plan_id', pl.id);
       const [rs, polls, items, costs] = await Promise.all([must(by('plan_rsvps')), must(by('plan_polls')), must(by('plan_items')), must(by('plan_costs'))]) as Record<string, any>[][];
       const pollIds = polls.map((p) => p.id);
@@ -247,8 +281,9 @@ const TOOLS: Tool[] = [
     name: 'set_rsvp',
     description: "Set whether someone is in, maybe or out for a planned trip or round (e.g. they told you in the group chat).",
     inputSchema: { type: 'object', required: ['plan_id', 'player', 'status'], properties: { plan_id: str('Plan id'), player: str('Player'), status: { type: 'string', enum: ['in', 'maybe', 'out'] }, note: str('Optional note') } },
-    async run(a) {
-      const p = findPlayer(await players(), a.player);
+    async run(a, c) {
+      await planOf(c, a.plan_id);
+      const p = findPlayer(await players(c), a.player);
       await must(db.from('plan_rsvps').upsert({ plan_id: a.plan_id, player_id: p.id, status: a.status, note: a.note || null, updated_at: new Date().toISOString() }));
       return `${pname(p)} is now "${a.status}".`;
     },
@@ -257,10 +292,10 @@ const TOOLS: Tool[] = [
     name: 'add_job',
     description: 'Add a job to a planned trip or round, optionally with an owner and due date (YYYY-MM-DD).',
     inputSchema: { type: 'object', required: ['plan_id', 'title'], properties: { plan_id: str('Plan id'), title: str('The job'), owner: str('Who does it (optional)'), due: str('Due date YYYY-MM-DD (optional)'), notes: str('Optional') } },
-    async run(a) {
-      const owner = a.owner ? findPlayer(await players(), a.owner) : null;
-      const s = await getSecrets();
-      await must(db.from('plan_items').insert({ plan_id: a.plan_id, kind: 'job', title: a.title, owner_id: owner?.id || null, due: a.due || null, body: a.notes || null, created_by: s.mcp_player_id || null }));
+    async run(a, c) {
+      await planOf(c, a.plan_id);
+      const owner = a.owner ? findPlayer(await players(c), a.owner) : null;
+      await must(db.from('plan_items').insert({ plan_id: a.plan_id, kind: 'job', title: a.title, owner_id: owner?.id || null, due: a.due || null, body: a.notes || null, created_by: c.author }));
       return `Added job "${a.title}"${owner ? ` for ${pname(owner)}` : ''}.`;
     },
   },
@@ -268,13 +303,13 @@ const TOOLS: Tool[] = [
     name: 'add_cost',
     description: 'Log a shared cost on a plan: who paid and who it splits between (default everyone who is in).',
     inputSchema: { type: 'object', required: ['plan_id', 'title', 'amount'], properties: { plan_id: str('Plan id'), title: str('What for'), amount: num('Dollars'), per_head: { type: 'boolean', description: 'true = amount is per person' }, paid_by: str('Who paid (blank = from the kitty)'), split_between: { type: 'array', items: { type: 'string' }, description: 'Names (optional)' } } },
-    async run(a) {
-      const all = await players();
+    async run(a, c) {
+      await planOf(c, a.plan_id);
+      const all = await players(c);
       const payer = a.paid_by ? findPlayer(all, a.paid_by) : null;
       const split = Array.isArray(a.split_between) && a.split_between.length ? [...new Set(a.split_between.map((n: string) => findPlayer(all, n).id))] : null;
-      const s = await getSecrets();
       if (!(Number(a.amount) > 0)) fail('Amount must be more than $0.');
-      await must(db.from('plan_costs').insert({ plan_id: a.plan_id, title: a.title, amount: Number(a.amount), per_head: !!a.per_head, paid_by: payer?.id || null, split_between: split, created_by: s.mcp_player_id || null }));
+      await must(db.from('plan_costs').insert({ plan_id: a.plan_id, title: a.title, amount: Number(a.amount), per_head: !!a.per_head, paid_by: payer?.id || null, split_between: split, created_by: c.author }));
       return `Logged ${a.title} $${a.amount}${a.per_head ? ' each' : ''}${payer ? `, paid by ${pname(payer)}` : ''}${split ? `, split between ${split.length}` : ', split between everyone in'}.`;
     },
   },
@@ -288,12 +323,12 @@ const TOOLS: Tool[] = [
         options: { type: 'array', items: { type: 'object', properties: { label: str('Label (location/other)'), start_date: str('YYYY-MM-DD'), end_date: str('YYYY-MM-DD'), notes: str('Optional'), cost_pp: num('Rough cost per head (optional)') } } },
       },
     },
-    async run(a) {
-      const s = await getSecrets();
-      const poll = await must(db.from('plan_polls').insert({ plan_id: a.plan_id, kind: a.kind, question: a.question, closes_on: a.closes_on || null, created_by: s.mcp_player_id || null }).select().single()) as Record<string, any>;
-      const opts = (a.options || []).map((o: Record<string, any>) => ({ poll_id: poll.id, label: o.label || (o.start_date ? `${o.start_date}${o.end_date && o.end_date !== o.start_date ? ` – ${o.end_date}` : ''}` : 'Option'), start_date: o.start_date || null, end_date: o.end_date || o.start_date || null, notes: o.notes || null, cost_pp: o.cost_pp ?? null, created_by: s.mcp_player_id || null }));
+    async run(a, c) {
+      await planOf(c, a.plan_id);
+      const poll = await must(db.from('plan_polls').insert({ plan_id: a.plan_id, kind: a.kind, question: a.question, closes_on: a.closes_on || null, created_by: c.author }).select().single()) as Record<string, any>;
+      const opts = (a.options || []).map((o: Record<string, any>) => ({ poll_id: poll.id, label: o.label || (o.start_date ? `${o.start_date}${o.end_date && o.end_date !== o.start_date ? ` – ${o.end_date}` : ''}` : 'Option'), start_date: o.start_date || null, end_date: o.end_date || o.start_date || null, notes: o.notes || null, cost_pp: o.cost_pp ?? null, created_by: c.author }));
       if (opts.length) await must(db.from('plan_options').insert(opts));
-      await post(`🗳️ New vote: ${a.question} — have your say in Coming up.`);
+      await post(c, `🗳️ New vote: ${a.question} — have your say in Trips.`);
       return `Vote "${a.question}" is up with ${opts.length} options (id=${poll.id}) and posted to the feed. Push notifications go out when the admin opens votes from the app.`;
     },
   },
@@ -301,15 +336,15 @@ const TOOLS: Tool[] = [
     name: 'list_rules',
     description: 'The Rulebook: rules in force and rules up for a vote.',
     inputSchema: { type: 'object', properties: {} },
-    async run() {
-      const rules = await must(db.from('rules').select('*').in('status', ['active', 'proposed']).order('sort')) as Record<string, any>[];
+    async run(_a, c) {
+      const rules = await must(db.from('rules').select('*').eq('group_id', c.g).in('status', ['active', 'proposed']).order('sort')) as Record<string, any>[];
       return rules.map((r) => `${r.status === 'proposed' ? '[up for a vote] ' : ''}${r.title}${r.value ? ` (${r.value})` : ''} — applies to ${r.applies_to.join(', ')}${r.detail ? `: ${r.detail}` : ''}`).join('\n') || 'No rules yet.';
     },
   },
 ];
 
 // ---------- MCP over HTTP ----------
-async function handle(msg: Record<string, any>) {
+async function handle(msg: Record<string, any>, c: Ctx) {
   const { id, method, params } = msg;
   if (id === undefined) return null; // a notification — nothing to answer
   const ok = (result: unknown) => ({ jsonrpc: '2.0', id, result });
@@ -317,15 +352,22 @@ async function handle(msg: Record<string, any>) {
   switch (method) {
     case 'initialize': {
       const v = VERSIONS.includes(params?.protocolVersion) ? params.protocolVersion : VERSIONS[0];
-      return ok({ protocolVersion: v, capabilities: { tools: {} }, serverInfo: { name: 'lgc-golf', version: '1.0.0' }, instructions: 'L.G.C golf app. Call lgc_overview first to get round, team and plan ids. Scores go in with enter_scores; check names against lgc_overview.' });
+      return ok({ protocolVersion: v, capabilities: { tools: {} }, serverInfo: { name: 'lgc-golf', version: '1.0.0' }, instructions: `${c.groupName} golf app (The Golf Trip). Everything here is this group only. Call lgc_overview first to get round, team and plan ids. Scores go in with enter_scores; check names against lgc_overview.` });
     }
     case 'ping': return ok({});
-    case 'tools/list': return ok({ tools: TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })) });
+    case 'tools/list': {
+      const offered = [];
+      for (const t of TOOLS) if (!TOOL_FEATURE[t.name] || await featureOn(c, TOOL_FEATURE[t.name])) offered.push(t);
+      return ok({ tools: offered.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })) });
+    }
     case 'tools/call': {
       const tool = TOOLS.find((t) => t.name === params?.name);
       if (!tool) return err(-32602, `Unknown tool ${params?.name}`);
+      if (TOOL_FEATURE[tool.name] && !(await featureOn(c, TOOL_FEATURE[tool.name]))) {
+        return ok({ content: [{ type: 'text', text: `That's switched off for ${c.groupName} (Group & invites → Features).` }], isError: true });
+      }
       try {
-        return ok({ content: [{ type: 'text', text: await tool.run(params?.arguments || {}) }] });
+        return ok({ content: [{ type: 'text', text: await tool.run(params?.arguments || {}, c) }] });
       } catch (e) {
         return ok({ content: [{ type: 'text', text: String((e as Error)?.message || e) }], isError: true });
       }
@@ -336,18 +378,18 @@ async function handle(msg: Record<string, any>) {
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers });
-  const s = await getSecrets();
   const key = new URL(req.url).pathname.split('/').filter(Boolean).pop();
-  if (!s.mcp_key || key !== s.mcp_key) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers });
+  const c = await ctxForKey(key);
+  if (!c) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers });
   if (req.method === 'GET') return new Response(null, { status: 405, headers: { ...headers, Allow: 'POST' } });
   if (req.method === 'DELETE') return new Response(null, { status: 200, headers });
   if (req.method !== 'POST') return new Response(null, { status: 405, headers });
   let body: unknown;
   try { body = await req.json(); } catch { return new Response(JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }), { status: 400, headers }); }
   if (Array.isArray(body)) {
-    const out = (await Promise.all(body.map(handle))).filter(Boolean);
+    const out = (await Promise.all(body.map((m) => handle(m, c)))).filter(Boolean);
     return out.length ? new Response(JSON.stringify(out), { headers }) : new Response(null, { status: 202, headers });
   }
-  const res = await handle(body as Record<string, any>);
+  const res = await handle(body as Record<string, any>, c);
   return res ? new Response(JSON.stringify(res), { headers }) : new Response(null, { status: 202, headers });
 });

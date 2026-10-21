@@ -1,0 +1,11 @@
+an organiser issues a stay card = refused
+an organiser asks for Josh's numbers = nothing / errors [] / stays []
+stay card ref = true
+read the problems table = refused
+Josh sees the problem = TypeError: x is undefined / 3 times
+Josh's stays = Zzqx Motel / scans 1
+Josh's numbers = true / funnel has the stay: true
+export = Zzqx Nine / players 2 / members 3 / user ids in it: false / locations in it: false / invites in it: false / rooms in it: true
+phone-only organiser exports = refused
+a player exports = refused
+page addresses kept = /lgc-golf/#/c/bowral , /lgc-golf/ , /lgc-golf/#

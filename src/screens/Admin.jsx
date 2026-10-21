@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { roundSettingsFromRules } from '../lib/plan.js';
+import { honourOrder } from '../lib/history.js';
 import { supabase, friendlyError } from '../lib/supabase.js';
-import { useData, useSession, playerName } from '../lib/store.jsx';
+import { useData, useSession, playerName, useFeature } from '../lib/store.jsx';
 import { Header, Avatar, Loading, toast } from '../components/ui.jsx';
 import DrawSetup from '../components/DrawSetup.jsx';
+import { FindCourse, ShareCourse } from '../components/CourseLibrary.jsx';
 
 async function run(fn, okMsg) {
   try {
@@ -33,6 +35,7 @@ function Section({ title, children, open: startOpen = false }) {
 export default function Admin() {
   const { status, refresh } = useSession();
   const data = useData();
+  const trophiesOn = useFeature('trophies');
   const [pin, setPin] = useState('');
 
   if (!data.ready) return <Loading />;
@@ -64,9 +67,10 @@ export default function Admin() {
         <CoursesAdmin />
         <PlayersAdmin />
         <RoundsAdmin />
-        <TrophiesAdmin />
-        <HonourAdmin />
+        {trophiesOn && <TrophiesAdmin />}
+        {trophiesOn ? <HonourAdmin /> : <Link to="/history" className="btn ghost block">Add past handicaps (from before the app) →</Link>}
         <PinsAdmin />
+        <VotesAdmin />
       </div>
     </div>
   );
@@ -112,15 +116,27 @@ function parseNums(s) {
 function CoursesAdmin() {
   const data = useData();
   const [editing, setEditing] = useState(null);
+  const [finding, setFinding] = useState(!data.courses.length);
   return (
     <Section title={`2. Courses (${data.courses.length})`} open={!data.courses.length}>
       {data.courses.map((c) => (
-        <div key={c.id} className="row between">
-          <span><strong>{c.name}</strong> <span className="muted small">par {c.holes.reduce((s, h) => s + h.par, 0)}</span></span>
-          <button type="button" className="btn ghost sm" onClick={() => setEditing(c)}>Edit</button>
+        <div key={c.id} className="row between" style={{ gap: 6 }}>
+          <span style={{ minWidth: 0 }}><strong>{c.name}</strong> <span className="muted small">par {c.holes.reduce((s, h) => s + h.par, 0)}</span></span>
+          <span className="row" style={{ gap: 6, flex: 'none' }}>
+            <ShareCourse course={c} />
+            <button type="button" className="btn ghost sm" onClick={() => setEditing(c)}>Edit</button>
+          </span>
         </div>
       ))}
-      {editing ? <CourseForm course={editing} onDone={() => setEditing(null)} /> : <button type="button" className="btn" onClick={() => setEditing({})}>Add a course</button>}
+      {finding ? (
+        <div className="card pad stack" style={{ gap: 8 }}>
+          <strong>📚 Find it in the course library</strong>
+          <span className="small muted">Courses other groups have set up — pars, stroke index and often the greens for GPS. You get your own copy.</span>
+          <FindCourse onAdded={() => setFinding(false)} />
+          <button type="button" className="btn ghost sm" onClick={() => setFinding(false)}>Close</button>
+        </div>
+      ) : <button type="button" className="btn ghost" onClick={() => setFinding(true)}>📚 Find a course in the library</button>}
+      {editing ? <CourseForm course={editing} onDone={() => setEditing(null)} /> : <button type="button" className="btn" onClick={() => setEditing({})}>Add a course by hand</button>}
     </Section>
   );
 }
@@ -260,6 +276,7 @@ function RoundsAdmin() {
 /** The Rulebook rules for this round's format, and the numbers scoring uses (side comp strokes, minimum drives). */
 function RoundRules({ round }) {
   const data = useData();
+  const bonusOn = useFeature('comp_bonus');
   const [rules, setRules] = useState(null);
   const [bonus, setBonus] = useState(String(round.comp_bonus ?? 0));
   const [drives, setDrives] = useState(String(round.min_drives ?? ''));
@@ -278,15 +295,15 @@ function RoundRules({ round }) {
         {s.applies.map((r) => <div key={r.id} className="small"><strong>{r.title}</strong>{r.value ? ` · ${r.value}` : ''}</div>)}
         {isA && (
           <div className="row">
-            <label className="field grow"><span>Side comp worth (strokes off)</span><input className="input" inputMode="numeric" value={bonus} onChange={(e) => setBonus(e.target.value.replace(/[^0-9]/g, ''))} /></label>
+            {bonusOn && <label className="field grow"><span>Side comp worth (strokes off)</span><input className="input" inputMode="numeric" value={bonus} onChange={(e) => setBonus(e.target.value.replace(/[^0-9]/g, ''))} /></label>}
             <label className="field grow"><span>Minimum drives each</span><input className="input" inputMode="numeric" value={drives} onChange={(e) => setDrives(e.target.value.replace(/[^0-9]/g, ''))} placeholder="none" /></label>
           </div>
         )}
-        {changed && <button type="button" className="btn sm" onClick={() => save({ comp_bonus: parseInt(bonus, 10) || 0, min_drives: drives ? Number(drives) : null }, 'Round settings saved')}>Save these settings</button>}
+        {changed && <button type="button" className="btn sm" onClick={() => save({ comp_bonus: bonusOn ? parseInt(bonus, 10) || 0 : 0, min_drives: drives ? Number(drives) : null }, 'Round settings saved')}>Save these settings</button>}
         {rules && s.applies.length > 0 && (
           <button type="button" className="btn ghost sm" onClick={() => {
             const patch = { rules: s.text };
-            if (isA && s.comp_bonus != null) patch.comp_bonus = s.comp_bonus;
+            if (isA && s.comp_bonus != null && bonusOn) patch.comp_bonus = s.comp_bonus;
             if (isA && s.min_drives != null) patch.min_drives = s.min_drives;
             if (isA) { setBonus(String(patch.comp_bonus ?? round.comp_bonus ?? 0)); setDrives(String(patch.min_drives ?? round.min_drives ?? '')); }
             save(patch, 'Applied from the Rulebook — shown on the leaderboard');
@@ -300,6 +317,8 @@ function RoundRules({ round }) {
 
 function RoundCard({ round }) {
   const data = useData();
+  const sideCompsOn = useFeature('side_comps');
+  const drawOn = useFeature('draw');
   const [ld, setLd] = useState(round.ld_holes.join(' '));
   const [ctp, setCtp] = useState(round.ctp_holes.join(' '));
   const course = data.coursesById[round.course_id];
@@ -310,15 +329,15 @@ function RoundCard({ round }) {
         <div><strong>{round.name}</strong><div className="small muted">{course?.name} · {round.format} · {round.status}</div></div>
         <button type="button" className={'btn sm' + (round.status === 'setup' ? ' gold' : ' ghost')} onClick={() => run(() => supabase.from('rounds').update({ status: next[0] }).eq('id', round.id), 'Round updated').then(data.reload)}>{next[1]}</button>
       </div>
-      <div className="row">
+      {sideCompsOn && <div className="row">
         <label className="field grow"><span>Longest drive holes</span><input className="input" value={ld} onChange={(e) => setLd(e.target.value)} placeholder="e.g. 5" inputMode="numeric" /></label>
         <label className="field grow"><span>Closest to pin holes</span><input className="input" value={ctp} onChange={(e) => setCtp(e.target.value)} placeholder="e.g. 3 7" inputMode="numeric" /></label>
-      </div>
-      {(ld !== round.ld_holes.join(' ') || ctp !== round.ctp_holes.join(' ')) && (
+      </div>}
+      {sideCompsOn && (ld !== round.ld_holes.join(' ') || ctp !== round.ctp_holes.join(' ')) && (
         <button type="button" className="btn sm" onClick={() => run(() => supabase.from('rounds').update({ ld_holes: parseNums(ld).filter((n) => n >= 1 && n <= 18), ctp_holes: parseNums(ctp).filter((n) => n >= 1 && n <= 18) }).eq('id', round.id), 'Side comps saved').then(data.reload)}>Save side comp holes</button>
       )}
       <RoundRules round={round} />
-      {round.format === 'ambrose' && <DrawButton round={round} />}
+      {round.format === 'ambrose' && drawOn && <DrawButton round={round} />}
       {round.format === 'ambrose' ? <TeamsEditor round={round} /> : <StablefordPlayers round={round} />}
       <details>
         <summary className="small muted">Delete this round</summary>
@@ -471,6 +490,7 @@ function RoundPlayerRow({ round, rp, points }) {
 // ---------- Trophies ----------
 function TrophiesAdmin() {
   const data = useData();
+  const { status } = useSession();
   const trip = data.currentTrip;
   const [name, setName] = useState('');
   const [type, setType] = useState('stableford_total');
@@ -488,11 +508,11 @@ function TrophiesAdmin() {
         e.preventDefault();
         if (await run(() => supabase.from('trophies').insert({ trip_id: trip.id, name, type }), 'Trophy added')) { setName(''); data.reload(); }
       }}>
-        <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Trophy name, e.g. The BD" required />
+        <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={status?.legacy ? 'Trophy name, e.g. The BD' : 'Trophy name, e.g. The Cup'} required />
         <select className="select" value={type} onChange={(e) => setType(e.target.value)}>
           <option value="stableford_total">Stableford — total points across the trip</option>
           <option value="ambrose">Ambrose — winning team</option>
-          <option value="manual">Awarded by the group (e.g. the Noodle Cup)</option>
+          <option value="manual">Awarded by the group{status?.legacy ? ' (e.g. the Noodle Cup)' : ' (e.g. best on-course outfit)'}</option>
         </select>
         <button className="btn">Add trophy</button>
       </form>
@@ -503,10 +523,12 @@ function TrophiesAdmin() {
 // ---------- Honour board ----------
 function HonourAdmin() {
   const data = useData();
-  const [f, setF] = useState({ trophy_name: 'BD', label: '', winner_names: '' });
-  const list = [...data.honour_board].sort((a, b) => b.sort_key - a.sort_key);
+  const { status } = useSession();
+  const [f, setF] = useState({ trophy_name: status?.legacy ? 'BD' : '', label: '', winner_names: '' });
+  const list = honourOrder(data.honour_board);
   return (
     <Section title={`6. Honour board (${list.length})`}>
+      <Link to="/history" className="btn ghost block">Add past winners and handicaps (paste a list) →</Link>
       {list.map((h) => (
         <div key={h.id} className="row between">
           <span><strong>{h.trophy_name}</strong> {h.label} — {h.winner_names}</span>
@@ -543,6 +565,32 @@ function PinsAdmin() {
         <input className="input" value={a} onChange={(e) => setA(e.target.value)} placeholder="New admin PIN" inputMode="numeric" required />
         <button className="btn">Change both PINs</button>
       </form>
+    </Section>
+  );
+}
+
+// ---------- Who picks vote winners (group-wide) ----------
+function VotesAdmin() {
+  const { status } = useSession();
+  const [value, setValue] = useState(null);
+  useEffect(() => {
+    if (!status?.group_id) return;
+    supabase.from('groups').select('vote_decider').eq('id', status.group_id).maybeSingle()
+      .then(({ data, error }) => setValue(error ? 'unavailable' : data?.vote_decider || 'admin'));
+  }, [status?.group_id]);
+  if (value === 'unavailable') return null;
+  const pick = async (v) => {
+    if (await run(() => supabase.rpc('set_vote_decider', { p_group: status.group_id, p_value: v }), 'Saved')) setValue(v);
+  };
+  return (
+    <Section title="8. Trip votes — who picks the winner">
+      <span className="small muted">Everyone votes on when and where. This decides who closes a vote and picks the winner. It applies to every trip in the group.</span>
+      {[['admin', 'The admin', 'Only admins pick winners (as now).'], ['admin_or_organiser', 'The admin or the trip’s organiser', 'Whoever suggested a trip (or who you make its organiser) can pick its winners too.']].map(([v, label, help]) => (
+        <button key={v} type="button" className="chip" aria-pressed={value === v} disabled={value == null}
+          style={{ textAlign: 'left', whiteSpace: 'normal', minHeight: 48, display: 'block' }} onClick={() => pick(v)}>
+          <strong>{value === v ? '● ' : '○ '}{label}</strong><div className="small muted">{help}</div>
+        </button>
+      ))}
     </Section>
   );
 }

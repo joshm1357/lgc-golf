@@ -1,8 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useSession, playerName } from '../lib/store.jsx';
 import { uploadPhoto } from '../lib/images.js';
 import { Avatar, Icon, Loading, PhotoButtons, Sheet, toast } from '../components/ui.jsx';
+import { QuickJoin } from './QuickRound.jsx';
+import { SIGN_IN } from '../lib/auth.js';
+import { personalCode } from '../lib/personal.js';
 
 function PhotoCircle({ preview, player }) {
   return (
@@ -16,9 +19,24 @@ function PhotoCircle({ preview, player }) {
 
 /** First time in: pick your name from the list. Anyone not on it can add themselves — the admin approves them. */
 export default function ProfileSetup() {
-  const { refresh } = useSession();
+  const { status } = useSession();
+  // A quick round: just a name, no list to pick from, no waiting for approval.
+  if (status?.quick) return <QuickJoin />;
+  return <PickOrAdd />;
+}
+
+function PickOrAdd() {
+  const { refresh, status } = useSession();
+  // Names someone else has already picked (only an organiser can free one).
+  const [taken, setTaken] = useState(new Set());
+  useEffect(() => {
+    if (!status?.group_id) return;
+    supabase.from('group_members').select('player_id').eq('group_id', status.group_id).not('player_id', 'is', null)
+      .then(({ data: rows }) => setTaken(new Set((rows || []).map((r) => r.player_id))));
+  }, [status?.group_id]);
   const data = useData();
-  const [mode, setMode] = useState('pick');
+  // Guests add themselves; an organiser can link them to an existing name.
+  const [mode, setMode] = useState(() => (status?.role === 'guest' ? 'new' : 'pick'));
   const [chosen, setChosen] = useState(null);
   const [name, setName] = useState('');
   const [nickname, setNickname] = useState('');
@@ -87,12 +105,13 @@ export default function ProfileSetup() {
       <div className="section stack" style={{ paddingBottom: 24 }}>
         {mode === 'pick' ? (
           <>
+            {SIGN_IN.length > 0 && <PersonalLinkHint />}
             <div className="card">
               {players.map((p) => (
                 <button key={p.id} type="button" className="lb-row" style={{ gridTemplateColumns: '40px 1fr auto' }} onClick={() => { setChosen(p); setFile(null); setErr(''); }}>
                   <Avatar player={p} size={36} />
                   <span className="lb-name">{p.name}{p.nickname ? <span className="muted small"> · {p.nickname}</span> : null}</span>
-                  <span className="muted">{Icon.next()}</span>
+                  {taken.has(p.id) ? <span className="small muted">taken</span> : <span className="muted">{Icon.next()}</span>}
                 </button>
               ))}
               {!players.length && <div className="empty">Nobody on the list yet.</div>}
@@ -112,7 +131,7 @@ export default function ProfileSetup() {
             <div className="sync" style={{ margin: 0 }}>The admin needs to approve new people before you can join in.</div>
             {err && <div className="err">{err}</div>}
             <div className="row">
-              <button type="button" className="btn ghost grow" onClick={() => setMode('pick')}>Back to the list</button>
+              {status?.role !== 'guest' && <button type="button" className="btn ghost grow" onClick={() => setMode('pick')}>Back to the list</button>}
               <button className="btn gold grow" disabled={busy || !name || hcp === '' || Number.isNaN(Number(hcp))}>{busy ? 'Sending…' : 'Ask to join'}</button>
             </div>
           </form>
@@ -151,5 +170,23 @@ export function AwaitingApproval({ player }) {
         <button type="button" className="btn ghost" onClick={() => setPickInstead(true)}>Actually, I'm on the list</button>
       </div>
     </div>
+  );
+}
+
+// Players who already have history should use the personal link their organiser sent: it signs them in properly and
+// connects their scores. Picking a name here only works on this phone.
+function PersonalLinkHint() {
+  const [text, setText] = useState('');
+  const code = personalCode(text);
+  return (
+    <form className="card pad stack" style={{ gap: 8, borderColor: 'var(--gold)', background: 'var(--gold-soft)' }}
+      onSubmit={(e) => { e.preventDefault(); if (code) { window.location.hash = `#/me/${code}`; } }}>
+      <strong>Got a personal link from your organiser?</strong>
+      <span className="small">Open it instead. It signs you in and brings your scores and history to any phone. Tap it in your messages, or paste it here.</span>
+      <div className="row" style={{ gap: 6 }}>
+        <input className="input grow" value={text} onChange={(e) => setText(e.target.value)} placeholder="https://…/#/me/…" autoCapitalize="none" aria-label="Your personal link" />
+        <button className="btn" disabled={!code}>Open</button>
+      </div>
+    </form>
   );
 }

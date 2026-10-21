@@ -1,7 +1,7 @@
 // The Planner's other tabs: Details (where/when, day plan, info, bring list), Jobs, Kitty, Rooms & cars.
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
-import { useData, useSession, playerName } from '../lib/store.jsx';
+import { useData, useSession, playerName, useFeature } from '../lib/store.jsx';
 import { Avatar, Sheet, Icon, toast } from '../components/ui.jsx';
 import { fmtRange, countdown, icsFor, nudgeText, mapsLink, kitty, money, DEFAULT_BRING, todayISO, daysUntil } from '../lib/plan.js';
 import { REVEAL_MS } from '../lib/draw.js';
@@ -12,8 +12,37 @@ const canEdit = (item, me, isAdmin) => isAdmin || item.created_by === me || item
 
 // ---------------------------------------------------------------- Details
 
+/** Stage 10: booking links (switch: Booking links). Each one goes through the database, which builds the address from
+ * the trip's place, dates and how many are in — so a referral code can be added later without an app update. */
+function BookingLinks({ plan }) {
+  const [busy, setBusy] = useState(null);
+  const [note, setNote] = useState('');
+  useEffect(() => { supabase.rpc('booking_disclosure').then(({ data }) => setNote(data || ''), () => {}); }, []);
+  const go = async (kind) => {
+    // Open the new window straight from the tap (so phones don't block it, and the app stays where it is underneath).
+    const win = window.open('', '_blank');
+    setBusy(kind);
+    const { data, error } = await supabase.rpc('booking_link', { p_kind: kind, p_plan: plan.id });
+    setBusy(null);
+    if (error || !data?.url) { win?.close(); toast(error?.message || 'Couldn’t open that link'); return; }
+    if (data.disclosure) setNote(data.disclosure);
+    if (win) { try { win.opener = null; } catch { /* fine */ } win.location.href = data.url; } else window.location.href = data.url;
+  };
+  return (
+    <div className="stack" style={{ gap: 6, borderTop: '1px solid var(--line-soft)', paddingTop: 8 }}>
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+        {[['stay', '🏨 Find accommodation'], ['golf', '⛳ Find a course'], ['transport', '🚗 Getting there']].map(([k, label]) => (
+          <button key={k} type="button" className="btn ghost sm" disabled={!!busy} onClick={() => go(k)}>{busy === k ? 'Opening…' : label}</button>
+        ))}
+      </div>
+      <span className="small muted">Opens the booking site with your place and dates filled in. {note}</span>
+    </div>
+  );
+}
+
 export function DetailsTab({ pd }) {
   const { status } = useSession();
+  const bookingOn = useFeature('booking_links');
   const { plan } = pd;
   const [adding, setAdding] = useState(null); // 'day' | 'info' | 'bring'
   const [editing, setEditing] = useState(null);
@@ -60,6 +89,7 @@ export function DetailsTab({ pd }) {
           {plan.start_date && <button type="button" className="btn ghost sm" onClick={() => downloadFile(`${plan.name.replace(/[^a-z0-9]+/gi, '-')}.ics`, icsFor(plan, appLink(`/plan/${plan.id}`)))}>📅 Add to calendar</button>}
           <button type="button" className="btn ghost sm" onClick={() => shareNudge(nudgeText('details', { plan, url: appLink(`/plan/${plan.id}?tab=details`) }))}>💬 Share</button>
         </div>
+        {bookingOn && plan.location_name && <BookingLinks plan={plan} />}
       </div>
 
       {plan.brief && <div className="card pad" style={{ whiteSpace: 'pre-wrap', fontSize: 15, lineHeight: 1.5 }}><div className="label" style={{ marginBottom: 4 }}>The details</div>{plan.brief}</div>}
@@ -522,10 +552,10 @@ function PaySheet({ pd, person, onClose }) {
 
 export function GroupsTab({ pd }) {
   const data = useData();
+  const drawOn = useFeature('draw');
   const { status } = useSession();
   const [kind, setKind] = useState(pd.plan.kind === 'round' ? 'car' : 'room');
   const [editing, setEditing] = useState(null); // {} new
-  const [assigning, setAssigning] = useState(null);
   const [drawing, setDrawing] = useState(false);
   const groups = pd.groups.filter((g) => g.kind === kind);
   const ids = new Set(groups.map((g) => g.id));
@@ -548,7 +578,7 @@ export function GroupsTab({ pd }) {
       {groups.map((g) => {
         const ms = members.filter((m) => m.group_id === g.id).map((m) => data.playersById[m.player_id]).filter(Boolean);
         return (
-          <button key={g.id} type="button" className="card pad stack" disabled={!status.is_admin} onClick={() => setAssigning(g)} style={{ gap: 6, textAlign: 'left', color: 'inherit', width: '100%' }}>
+          <button key={g.id} type="button" className="card pad stack" disabled={!status.is_admin} onClick={() => setEditing(g)} style={{ gap: 6, textAlign: 'left', color: 'inherit', width: '100%' }}>
             <div className="row between"><strong style={{ fontSize: 17 }}>{g.name}</strong><span className="small muted">{ms.length}/{g.capacity} {word.seat}</span></div>
             {g.note && <div className="small muted">{g.note}</div>}
             <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
@@ -565,73 +595,78 @@ export function GroupsTab({ pd }) {
       {status.is_admin && (
         <div className="stack" style={{ gap: 8 }}>
           <button type="button" className="btn ghost block" onClick={() => setEditing({})}>+ Add a {word.one}</button>
-          {groups.length > 0 && inIds.length > 0 && <button type="button" className="btn gold block" style={{ minHeight: 56 }} onClick={() => setDrawing(true)}>🎲 Draw the {word.many} live</button>}
-          {groups.length > 0 && <span className="small muted">Tap a {word.one} to put people in by hand, rename it or remove it.</span>}
+          {drawOn && groups.length > 0 && inIds.length > 0 && <button type="button" className="btn gold block" style={{ minHeight: 56 }} onClick={() => setDrawing(true)}>🎲 Draw the {word.many} live</button>}
+          {groups.length > 0 && <span className="small muted">Tap a {word.one} to put people in, rename it or remove it — one Save does the lot.</span>}
         </div>
       )}
-      {editing && <GroupSheet pd={pd} kind={kind} group={editing.id ? editing : null} onClose={() => setEditing(null)} />}
-      {assigning && <AssignSheet pd={pd} group={assigning} groups={groups} members={members} inIds={inIds} onEdit={() => { setEditing(assigning); setAssigning(null); }} onClose={() => setAssigning(null)} />}
+      {editing && <GroupSheet key={editing.id || 'new'} pd={pd} kind={kind} group={editing.id ? editing : null} groups={groups} members={members} inIds={inIds} onClose={() => setEditing(null)} />}
       {drawing && <GroupDrawSheet pd={pd} kind={kind} groups={groups} members={members} inIds={inIds} onClose={() => setDrawing(false)} />}
     </>
   );
 }
 
-function GroupSheet({ pd, kind, group, onClose }) {
-  const [v, set] = useState(() => group || { name: `${kind === 'car' ? 'Car' : 'Room'} ${pd.groups.filter((g) => g.kind === kind).length + 1}`, capacity: kind === 'car' ? 4 : 2 });
+/** Add or edit a room/car — name, size, note and who's in it — saved in one step. */
+function GroupSheet({ pd, kind, group, groups, members, inIds, onClose }) {
+  const data = useData();
+  const [v, set] = useState(() => group || { name: `${kind === 'car' ? 'Car' : 'Room'} ${groups.length + 1}`, capacity: kind === 'car' ? 4 : 2 });
+  const before = new Set(group ? members.filter((m) => m.group_id === group.id).map((m) => m.player_id) : []);
+  const [picked, setPicked] = useState(() => new Set(before));
   const [busy, run] = useRun();
+  // A new room/car is created on the first Save; if adding the people then fails, a second Save
+  // updates that room instead of creating another one.
+  const createdId = useRef(null);
+  const cap = Math.max(1, Math.min(12, Number(v.capacity) || 1));
+  const whereIs = (pid) => groups.find((g) => g.id !== group?.id && members.some((m) => m.group_id === g.id && m.player_id === pid));
+  // Everyone who's In, plus anyone already placed here who has since dropped out (so they can be taken out).
+  const people = [...new Set([...inIds, ...before])];
+  const toggle = (pid) => {
+    const n = new Set(picked);
+    if (n.has(pid)) n.delete(pid); else n.add(pid);
+    setPicked(n);
+  };
+  const save = () => run(async () => {
+    if (picked.size > cap) throw new Error(`${picked.size} people but only ${cap} ${kind === 'car' ? 'seats' : 'beds'} — take someone out or make it bigger.`);
+    const row = { plan_id: pd.plan.id, kind, name: v.name.trim(), capacity: cap, note: v.note?.trim() || null };
+    let id = group?.id || createdId.current;
+    if (id) await must(supabase.from('plan_groups').update(row).eq('id', id));
+    else id = createdId.current = (await must(supabase.from('plan_groups').insert(row).select('id').single())).id;
+    const out = [...before].filter((pid) => !picked.has(pid));
+    const add = [...picked].filter((pid) => !before.has(pid));
+    if (out.length) await must(supabase.from('plan_group_members').delete().eq('group_id', id).in('player_id', out));
+    if (add.length) {
+      // Someone moved here from another room/car comes out of that one first.
+      const elsewhere = groups.filter((g) => g.id !== id).map((g) => g.id);
+      if (elsewhere.length) await must(supabase.from('plan_group_members').delete().in('group_id', elsewhere).in('player_id', add));
+      // Ignore anyone another phone has just put here too, rather than failing half-way.
+      await must(supabase.from('plan_group_members').upsert(add.map((pid) => ({ group_id: id, player_id: pid })), { onConflict: 'group_id,player_id', ignoreDuplicates: true }));
+    }
+    pd.reload(); onClose();
+  }, 'Saved');
   return (
     <Sheet title={group ? `Edit ${group.name}` : `Add a ${kind === 'car' ? 'car' : 'room'}`} onClose={onClose}>
       <div className="stack">
         <label className="field"><span>Name</span><input className="input" value={v.name || ''} onChange={(e) => set({ ...v, name: e.target.value })} placeholder={kind === 'car' ? 'e.g. Josh’s Outback' : 'e.g. Bunk room'} /></label>
         <label className="field"><span>{kind === 'car' ? 'Seats (passengers incl. driver)' : 'Beds'}</span><input className="input" type="number" min={1} max={12} value={v.capacity} onChange={(e) => set({ ...v, capacity: e.target.value })} /></label>
         <label className="field"><span>Note (optional)</span><input className="input" value={v.note || ''} onChange={(e) => set({ ...v, note: e.target.value })} placeholder={kind === 'car' ? 'e.g. leaves Leichhardt 6am' : 'e.g. queen + single'} /></label>
-        <button type="button" className="btn gold block" disabled={busy || !v.name?.trim()} onClick={() => run(async () => {
-          const row = { plan_id: pd.plan.id, kind, name: v.name.trim(), capacity: Math.max(1, Math.min(12, Number(v.capacity) || 1)), note: v.note?.trim() || null };
-          if (group) await must(supabase.from('plan_groups').update(row).eq('id', group.id));
-          else await must(supabase.from('plan_groups').insert(row));
-          pd.reload(); onClose();
-        }, 'Saved')}>Save</button>
-        {group && <button type="button" className="btn ghost block" onClick={() => { if (window.confirm(`Remove ${group.name}?`)) run(async () => { await must(supabase.from('plan_groups').delete().eq('id', group.id)); pd.reload(); onClose(); }, 'Removed'); }}>Remove</button>}
-      </div>
-    </Sheet>
-  );
-}
-
-function AssignSheet({ pd, group, groups, members, inIds, onEdit, onClose }) {
-  const data = useData();
-  const [busy, run] = useRun();
-  const here = new Set(members.filter((m) => m.group_id === group.id).map((m) => m.player_id));
-  const whereIs = (pid) => groups.find((g) => members.some((m) => m.group_id === g.id && m.player_id === pid));
-  const toggle = (pid) => run(async () => {
-    if (here.has(pid)) {
-      await must(supabase.from('plan_group_members').delete().eq('group_id', group.id).eq('player_id', pid));
-    } else {
-      if (here.size >= group.capacity) throw new Error(`${group.name} is full (${group.capacity}).`);
-      const other = whereIs(pid);
-      if (other) await must(supabase.from('plan_group_members').delete().eq('group_id', other.id).eq('player_id', pid));
-      await must(supabase.from('plan_group_members').insert({ group_id: group.id, player_id: pid }));
-    }
-    pd.reload();
-  });
-  return (
-    <Sheet title={`${group.name} · ${here.size}/${group.capacity}`} onClose={onClose}>
-      <div className="stack">
-        <div className="card">
-          {inIds.map((pid) => {
-            const p = data.playersById[pid];
-            const other = !here.has(pid) && whereIs(pid);
-            return (
-              <button key={pid} type="button" className="row" disabled={busy} onClick={() => toggle(pid)} aria-pressed={here.has(pid)}
-                style={{ width: '100%', padding: '8px 12px', border: 0, borderBottom: '1px solid var(--line-soft)', background: here.has(pid) ? 'var(--gold-soft)' : '#fff', textAlign: 'left', color: 'inherit' }}>
-                <Avatar player={p} size={30} />
-                <span className="grow" style={{ fontWeight: 600 }}>{playerName(p)}{other && <span className="small muted"> · in {other.name}</span>}</span>
-                <span style={{ fontWeight: 800 }}>{here.has(pid) ? '✓' : ''}</span>
-              </button>
-            );
-          })}
-        </div>
-        {inIds.length === 0 && <div className="small muted">Only people who are In can be placed.</div>}
-        <button type="button" className="btn ghost block" onClick={onEdit}>Rename / change size / remove</button>
+        <div className="row between"><span className="label">Who’s in it</span><span className="small muted" style={{ fontWeight: 700, color: picked.size > cap ? 'var(--down)' : undefined }}>{picked.size}/{cap}</span></div>
+        {people.length === 0 ? <div className="small muted">Only people who are In can be placed.</div> : (
+          <div className="card">
+            {people.map((pid) => {
+              const p = data.playersById[pid];
+              const other = !picked.has(pid) && whereIs(pid);
+              return (
+                <button key={pid} type="button" className="row" onClick={() => toggle(pid)} aria-pressed={picked.has(pid)}
+                  style={{ width: '100%', minHeight: 48, padding: '8px 12px', border: 0, borderBottom: '1px solid var(--line-soft)', background: picked.has(pid) ? 'var(--gold-soft)' : '#fff', textAlign: 'left', color: 'inherit' }}>
+                  <Avatar player={p} size={30} />
+                  <span className="grow" style={{ fontWeight: 600 }}>{playerName(p)}{!inIds.includes(pid) && <span className="small muted"> · not coming any more</span>}{other && <span className="small muted"> · in {other.name}</span>}</span>
+                  <span style={{ fontWeight: 800 }}>{picked.has(pid) ? '✓' : ''}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <button type="button" className="btn gold block" disabled={busy || !v.name?.trim()} onClick={save}>Save</button>
+        {group && <button type="button" className="btn ghost block" disabled={busy} onClick={() => { if (window.confirm(`Remove ${group.name}?`)) run(async () => { await must(supabase.from('plan_groups').delete().eq('id', group.id)); pd.reload(); onClose(); }, 'Removed'); }}>Remove</button>}
       </div>
     </Sheet>
   );

@@ -6,7 +6,10 @@ import { useRealtime, useSession } from '../lib/store.jsx';
 import { getFix, useWatchPosition } from '../lib/geo.js';
 import { greenDistances } from '../lib/greens.js';
 import { toast } from './ui.jsx';
-import ShotPlanner from './ShotPlanner.jsx';
+import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
+
+// The shot planner brings the map library with it, so it only loads when opened.
+const ShotPlanner = lazyScreen(() => import('./ShotPlanner.jsx'), 'default', { inline: true });
 
 const KEY = 'lgc-distances-on';
 
@@ -39,7 +42,7 @@ export default function Distances({ round, course, hole }) {
   const [busy, setBusy] = useState(false);
   const [planning, setPlanning] = useState(false);
   const pin = pins[hole.n];
-  const planner = planning && <ShotPlanner hole={hole} pin={pin} onClose={() => setPlanning(false)} />;
+  const planner = planning && <LazyArea onClose={() => setPlanning(false)}><ShotPlanner hole={hole} pin={pin} onClose={() => setPlanning(false)} /></LazyArea>;
   const d = pos ? greenDistances(hole, pos, pin) : null;
   const mapped = !!(hole.green || pin);
   const toggle = () => {
@@ -55,6 +58,18 @@ export default function Distances({ round, course, hole }) {
       const { error: e } = await supabase.from('round_pins').upsert({ round_id: round.id, hole: hole.n, lat: f.lat, lng: f.lng, set_by: status.player_id, set_at: new Date().toISOString() });
       if (e) throw e;
       toast(`Today's pin on ${hole.n} set (±${Math.round(f.accuracy)} m) — everyone gets the distance`);
+      reloadPins();
+    } catch (e) { toast(friendlyError(e)); } finally { setBusy(false); }
+  }
+  // Admin only: take away a pin dropped in the wrong place (distances go back to front/middle/back).
+  async function clearPin() {
+    if (!window.confirm(`Clear today's pin on ${hole.n}?`)) return;
+    setBusy(true);
+    try {
+      const { data: gone, error: e } = await supabase.from('round_pins').delete().eq('round_id', round.id).eq('hole', hole.n).select('hole');
+      if (e) throw e;
+      if (!gone?.length) throw new Error('The pin wasn’t cleared — only the admin can clear a pin.');
+      toast(`Today's pin on ${hole.n} cleared`);
       reloadPins();
     } catch (e) { toast(friendlyError(e)); } finally { setBusy(false); }
   }
@@ -103,11 +118,15 @@ export default function Distances({ round, course, hole }) {
               {pin && big('🚩 Pin', d.pin, true)}
             </div>
             <div className="small muted">GPS ±{Math.round(pos.accuracy)} m{far ? ` · you’re a long way from hole ${hole.n} — on the right hole?` : ''}</div>
+            {hole.osm && <div className="small muted">Green © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors</div>}
           </>
         )}
         {planner}
         {round.status === 'live' && (
           <button type="button" className="btn ghost sm" disabled={busy} onClick={setPin}>🚩 {pin ? 'Move' : 'Set'} today’s pin on {hole.n} — stand next to the flag</button>
+        )}
+        {pin && status.is_admin && (
+          <button type="button" className="btn danger" style={{ marginTop: 8 }} disabled={busy} onClick={clearPin}><span aria-hidden="true">✕</span> Clear today’s pin on {hole.n}</button>
         )}
       </div>
     </div>

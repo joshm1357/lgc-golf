@@ -1,0 +1,25 @@
+Expected (staging, after 035 and 035b). Run as one script; it rolls itself back.
+
+phone-only organiser shares = refused
+player shares = refused
+share a course with 17 holes = refused
+share with no pars / 9 holes = refused
+share with no pars / 9 holes = refused
+read the library table directly = refused
+search by name = Zzqx Test Links / Bowral NSW / 18 holes / 18 greens / osm true
+search near me (km) = 0.1
+what the library keeps = false / osm on hole 1: true      (only course details — nothing else from the group's copy)
+copy is N's own = true / Zzqx Test Links
+copy again gives the same course = true
+N can't unlink its copy from the app = true
+N changes its copy; library par 1 still = 4
+used by = 1
+N gives its tees back: same entry = true
+library: tee filled, par not changed = true / par 4
+N shares M's course = refused
+N sees M's course = 0
+share again updates, not a new entry = true
+library entries for it (name kept — others use it) = 1 / Zzqx Test Links
+searching for % finds = 0
+hidden by Josh = 0
+not signed in searches = 0

@@ -2,7 +2,8 @@
 // Anyone proposes; the lads vote (two taps, so no accidental votes); the admin decides.
 import React, { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
-import { useData, useRealtime, useSession, playerName } from '../lib/store.jsx';
+import { useData, useRealtime, useSession, playerName, useFeature } from '../lib/store.jsx';
+import { STARTERS } from '../lib/starters.js';
 import { Header, Sheet, Loading, toast } from '../components/ui.jsx';
 import { notify } from '../lib/push.js';
 import { useRun, must } from './Planner.jsx';
@@ -33,6 +34,7 @@ function useRules() {
 
 export default function Rulebook() {
   const { status } = useSession();
+  const votingOn = useFeature('rule_voting');
   const rb = useRules();
   const [filter, setFilter] = useState('all');
   const [editing, setEditing] = useState(null); // {} = new
@@ -41,6 +43,7 @@ export default function Rulebook() {
   const active = rb.rules.filter((r) => r.status === 'active' && fits(r));
   const proposed = rb.rules.filter((r) => r.status === 'proposed');
   const old = rb.rules.filter((r) => r.status === 'rejected' || r.status === 'retired');
+  const showPicker = status.is_admin && rb.rules.filter((r) => r.status === 'active' || r.status === 'proposed').length === 0;
 
   return (
     <div className="page">
@@ -49,6 +52,8 @@ export default function Rulebook() {
         <div className="seg light" role="group">
           {[['all', 'All'], ['stableford', 'Stableford'], ['ambrose', 'Ambrose']].map(([k, l]) => <button key={k} type="button" aria-pressed={filter === k} onClick={() => setFilter(k)}>{l}</button>)}
         </div>
+
+        {showPicker && <StarterPicker reload={rb.reload} />}
 
         {proposed.length > 0 && (
           <>
@@ -67,9 +72,9 @@ export default function Rulebook() {
             </div>
           );
         })}
-        {active.length === 0 && <div className="empty">No rules for this comp yet.</div>}
+        {active.length === 0 && !showPicker && <div className="empty">No rules for this comp yet.{!status.is_admin && rb.rules.length === 0 ? ' Your organiser can start from a ready-made Rulebook.' : ''}</div>}
 
-        <button type="button" className="btn gold block" onClick={() => setEditing({})}>+ Propose a rule</button>
+        {(status.is_admin || (votingOn && status.role !== 'guest')) && <button type="button" className="btn gold block" onClick={() => setEditing({})}>{votingOn ? '+ Propose a rule' : '+ Add a rule'}</button>}
 
         {old.length > 0 && (
           <details>
@@ -111,6 +116,7 @@ function RuleCard({ rule, onEdit }) {
 function ProposedCard({ rule, votes, reload, onEdit }) {
   const data = useData();
   const { status } = useSession();
+  const votingOn = useFeature('rule_voting');
   const me = status.player_id;
   const [pick, setPick] = useState(null);
   const [comment, setComment] = useState('');
@@ -139,7 +145,9 @@ function ProposedCard({ rule, votes, reload, onEdit }) {
       <div className="small muted">Proposed by {by ? playerName(by) : 'the admin'}</div>
       <div className="row" style={{ gap: 14, fontWeight: 800 }}><span>👍 {count('for')}</span><span>👎 {count('against')}</span><span className="muted">Abstain {count('abstain')}</span></div>
       {votes.length > 0 && <div className="small muted">{votes.map((v) => `${playerName(data.playersById[v.player_id])}: ${VOTE[v.vote].replace(/^\S+ /, '')}${v.comment ? ` — “${v.comment}”` : ''}`).join(' · ')}</div>}
-      {me && (
+      {status.role === 'guest' && <div className="small muted">Guests don’t vote on rules.</div>}
+      {!votingOn && <div className="small muted">Voting on rules is switched off for this group.</div>}
+      {me && status.role !== 'guest' && votingOn && (
         <>
           {mine && <div className="small"><strong>Your vote: {VOTE[mine.vote]}.</strong> <span className="muted">Pick another and confirm to change it.</span></div>}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
@@ -225,5 +233,28 @@ function RuleSheet({ rule, onClose, onSaved }) {
         )}
       </div>
     </Sheet>
+  );
+}
+
+/** A group with no rules yet: start from one of the starter rulebooks (organisers). */
+function StarterPicker({ reload }) {
+  const [busy, run] = useRun();
+  const bonusOn = useFeature('comp_bonus');
+  return (
+    <div className="card pad stack" style={{ gap: 10, borderColor: 'var(--gold)' }}>
+      <div><strong>📖 Start your Rulebook</strong><div className="small muted">Pick a starting point — you can change, add or remove any rule afterwards.</div></div>
+      {STARTERS.map((s) => (
+        <div key={s.key} className="card pad stack" style={{ gap: 6 }}>
+          <strong>{s.name}</strong>
+          <span className="small">{s.blurb}</span>
+          <span className="small muted">{s.rules.join(' · ')}</span>
+          {s.key === 'ambrose_stableford' && !bonusOn && <span className="small muted">The −2 strokes only come off once side comp bonus strokes are switched on (Group &amp; invites → Features).</span>}
+          <button type="button" className="btn gold block" disabled={busy} onClick={() => window.confirm(`Add the ${s.name} rules? You can edit or retire any of them afterwards.`) && run(async () => {
+            await must(supabase.rpc('use_starter_rulebook', { p_starter: s.key }));
+            reload();
+          }, `${s.name} rules added`)}>Use these rules</button>
+        </div>
+      ))}
+    </div>
   );
 }

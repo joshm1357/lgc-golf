@@ -1,0 +1,30 @@
+Expected (staging, after 029 + 030). The 'refused' lines added for 030 only count a 'switched off' refusal. 'feed off: delete own post = 0' is intended: a switched-off feature takes no changes at all;
+reading stays allowed.
+
+defaults for a new group: feed / location / comp bonus / rooms = true / false / false / false
+L.G.C: location / rooms / connector / comp bonus / scorecard photo / booking links = true / true / true / true / false / false
+location off by default: share location = refused
+feed on: post = ok
+player switches a feature = refused
+player writes the switches table = refused
+switches saved = 3
+feed off: post = refused
+feed off: old posts still readable = 2
+feed off: delete own post (rows) = 0
+planner off: say I'm in = refused
+planner off: shared cost (its child) = refused
+tribunal off: lodge a case = refused: Tribunal is switched off for this group
+scoring still works with everything off = ok
+feed off: no birdie post = 0
+comp bonus off: set bonus strokes = refused
+comp bonus on: set bonus strokes = 2
+parent off switches the child off = false
+bonus off: lock a round that has a bonus = locked
+bonus off: change the bonus = refused
+tribunal off: chair closes a case = refused
+tribunal off: accused writes a defence = refused
+tribunal off: vote = refused
+tribunal off: handicap unchanged = 15.0
+votes off: open trip votes = refused
+votes off: pick a winner = refused
+L.G.C sees F's switches = 0

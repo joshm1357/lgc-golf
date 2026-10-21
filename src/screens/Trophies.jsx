@@ -6,6 +6,7 @@ import { roundBoard, stablefordTrophyBoard, compBonuses } from '../lib/board.js'
 import { formatToPar } from '../lib/scoring.js';
 import { Seg, Avatar, AvatarStack, Icon, Sheet, toast } from '../components/ui.jsx';
 import { TrophyArt } from '../components/TrophyArt.jsx';
+import { honourOrder } from '../lib/history.js';
 
 /** The Trophy Room: every trophy in its own lit display case, live standings, and brass plaques. */
 export default function Trophies() {
@@ -46,7 +47,7 @@ export default function Trophies() {
     bonuses: compBonuses(aRound, data.teamsByRound[aRound.id] || [], aSide),
   }) : null), [aRound, data, scores.index, aSide]);
 
-  const plaquesFor = (name) => data.honour_board.filter((h) => h.trophy_name.toLowerCase() === name.toLowerCase()).sort((a, b) => b.sort_key - a.sort_key);
+  const plaquesFor = (name) => honourOrder(data.honour_board.filter((h) => h.trophy_name.toLowerCase() === name.toLowerCase()));
   const leaderLine = (t) => {
     if (t.type === 'stableford_total' && sBoard?.rows[0]?.total > 0) return `${sBoard.rows[0].name} leads · ${sBoard.rows[0].total} pts`;
     if (t.type === 'ambrose' && aBoard?.rows[0]?.thru > 0) return `${aBoard.rows[0].name} lead · ${formatToPar(aBoard.rows[0].netToPar)}`;
@@ -65,10 +66,10 @@ export default function Trophies() {
       <header className="hdr">
         <div className="hdr-row"><button type="button" className="back" onClick={() => (window.history.length > 1 ? nav(-1) : nav('/'))}>{Icon.back()}<span>Back</span></button></div>
         <div className="hdr-title">The Trophy Room</div>
-        <div className="hdr-sub">L.G.C{trip ? ` · ${trip.name}` : ''}</div>
+        <div className="hdr-sub">{status?.look?.short_name || status?.group_name}{trip ? ` · ${trip.name}` : ''}</div>
       </header>
 
-      {!trophies.length && <div className="empty" style={{ color: '#C9B48A' }}>The cabinet's empty. {status.is_admin && <Link to="/admin" style={{ color: '#EBD496' }}>Add trophies in Admin</Link>}</div>}
+      {!trophies.length && <div className="empty" style={{ color: '#C9B48A' }}>The cabinet's empty. {status.is_admin && <><Link to="/admin" style={{ color: '#EBD496' }}>Add trophies in Admin</Link>, or <Link to="/history" style={{ color: '#EBD496' }}>add past winners from before the app</Link>.</>}</div>}
 
       <div className="cabinet" role="group" aria-label="Trophies">
         {trophies.map((t) => {
@@ -156,6 +157,7 @@ export default function Trophies() {
               </div>
             </>
           )}
+          {status.is_admin && <Link to="/history" className="small" style={{ color: '#EBD496', fontWeight: 700, marginTop: 4 }}>+ Add past winners from before the app</Link>}
         </div>
       )}
 
@@ -188,7 +190,10 @@ function Engrave({ trophy, trip, suggested = [], onClose }) {
           setBusy(true);
           const names = ids.map((id) => data.playersById[id]?.name).filter(Boolean).join(' & ');
           const max = Math.max(0, ...data.honour_board.map((h) => h.sort_key));
-          const { error } = await supabase.from('honour_board').insert({ trophy_name: trophy.name, label: label.trim(), winner_names: names, player_ids: ids, sort_key: max + 10 });
+          const row = { trophy_name: trophy.name, label: label.trim(), winner_names: names, player_ids: ids, sort_key: max + 10 };
+          // Linked to the trip it was won on (an older database has no trip link: save without it).
+          let { error } = await supabase.from('honour_board').insert(trip ? { ...row, trip_id: trip.id } : row);
+          if (error && trip && /trip_id/.test(error.message || '')) ({ error } = await supabase.from('honour_board').insert(row));
           if (error) toast(friendlyError(error));
           else {
             await supabase.from('posts').insert({ kind: 'user', player_id: me, trip_id: trip?.id || null, body: `🏆 ${names} — engraved on the ${trophy.name} (${label.trim()})` });

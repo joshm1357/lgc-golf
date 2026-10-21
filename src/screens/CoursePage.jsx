@@ -1,0 +1,337 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { useLocation, useParams } from 'react-router-dom';
+import { supabase, friendlyError } from '../lib/supabase.js';
+import { useSession } from '../lib/store.jsx';
+import { setCurrentGroup } from '../lib/group.js';
+import { useRun, must } from '../lib/run.js';
+import { defaultComps, sourceFrom, rememberSource, rememberedSource, forgetSource, countScan } from '../lib/quick.js';
+import { NEW_GROUPS } from '../lib/beta.js';
+import { readHandicap, localToday } from '../lib/history.js';
+import { parTotal } from '../lib/scoring.js';
+import { paintLook, DEFAULT_LOOK } from '../lib/theme.js';
+import { GolfTripCrest } from '../components/Logo.jsx';
+import { Toaster, toast, Sheet } from '../components/ui.jsx';
+import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
+
+// Stage 7b: the public course page (#/c/<course>) — works without signing in — and the quick round.
+// Scan or tap → "Start a round with your mates" → your name, the format, the side comps → playing in under 2 minutes.
+
+const CourseMap = lazyScreen(() => import('../components/CourseMap.jsx'), 'default', { inline: true });
+const QUICK_KEY = 'lgc-quick'; // the round this phone just started: { gid, round, invite }
+
+async function ensureSignedIn() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    const { error } = await supabase.auth.signInAnonymously();
+    if (error) throw error;
+  }
+}
+
+export default function CoursePage() {
+  const { slug } = useParams();
+  const loc = useLocation();
+  const { status } = useSession() || {};
+  // Where they came from (a club's code, another group's card) — remembered for the group they start.
+  useEffect(() => { rememberSource(sourceFrom(loc.search)); }, [loc.search]);
+  useEffect(() => { if (!status?.is_member) paintLook(DEFAULT_LOOK, 'The Golf Trip'); }, [status?.is_member]);
+  return (
+    <div style={{ minHeight: '100vh', background: 'var(--bg, #F4F5F7)' }}>
+      {slug ? <Course slug={slug} /> : <FindACourse />}
+      <Toaster />
+    </div>
+  );
+}
+
+function Top({ title, sub }) {
+  return (
+    <div style={{ background: 'var(--navy)', color: '#fff', padding: '22px 16px 18px' }}>
+      <div className="row" style={{ gap: 12 }}>
+        <GolfTripCrest size={52} />
+        <span style={{ minWidth: 0 }}>
+          <div style={{ fontFamily: 'var(--display)', fontSize: 28, fontWeight: 700, lineHeight: 1.05 }}>{title}</div>
+          {sub && <div style={{ color: 'var(--on-navy-muted)' }}>{sub}</div>}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- No course in the link: find one
+
+function FindACourse() {
+  const [q, setQ] = useState('');
+  const [rows, setRows] = useState(null);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    const t = setTimeout(async () => {
+      try {
+        await ensureSignedIn();
+        let { data, error } = await supabase.rpc('find_courses', { p_query: q, p_lat: null, p_lng: null, p_limit: 20 });
+        if (error && /PGRST202|Could not find the function/i.test(`${error.code} ${error.message}`)) ({ data, error } = await supabase.rpc('search_courses', { p_query: q, p_lat: null, p_lng: null, p_limit: 20 }));
+        if (error) throw error;
+        setErr('');
+        setRows(data || []);
+      } catch (e) { setErr(friendlyError(e)); setRows([]); }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [q]);
+  return (
+    <>
+      <Top title="Play a round" sub="Pick your course — live scores for your group, no app store." />
+      <div className="stack" style={{ maxWidth: 520, margin: '0 auto', padding: 16, gap: 10 }}>
+        <input className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by course or town" aria-label="Search courses" autoFocus />
+        {err && <div className="err" style={{ margin: 0 }}>{err}</div>}
+        {rows?.map((r) => (
+          <a key={r.id} href={`#/c/${r.slug}`} className="card pad stack" style={{ gap: 2, textDecoration: 'none', color: 'inherit' }}>
+            <strong>{r.name}</strong>
+            <span className="small muted">{[r.area, r.holes ? `${r.holes} holes` : 'no scorecard yet', r.partner ? 'Partner course' : null].filter(Boolean).join(' · ')}</span>
+          </a>
+        ))}
+        {rows?.some((r) => r.osm) && <span className="small muted">Some course details © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors.</span>}
+        {rows && !rows.length && !err && <span className="small muted">No courses by that name yet. Groups add them as they play{NEW_GROUPS ? <> — or <a href="#/start">start a group</a> and add yours</> : null}.</span>}
+      </div>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------- The course and "Start a round"
+
+function Course({ slug }) {
+  const loc = useLocation();
+  const { status } = useSession() || {};
+  const [course, setCourse] = useState(undefined);
+  const [starting, setStarting] = useState(false);
+  const q = new URLSearchParams(loc.search);
+  const par3 = q.get('p') === 'par3' && Number(q.get('h')) > 0 ? Number(q.get('h')) : null;
+  useEffect(() => {
+    supabase.rpc('course_page', { p_slug: slug }).then(({ data, error }) => setCourse(error ? null : data || null));
+  }, [slug]);
+  // A club's code: count the scan once per visit (no person attached — counts only).
+  useEffect(() => {
+    const ref = q.get('ref');
+    const key = `lgc-scan-${ref}-${q.get('p')}-${q.get('h') || ''}`;
+    if (!ref) return;
+    try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, '1'); } catch { /* fine */ }
+    countScan(supabase, { ref, placement: q.get('p') || 'cart', slug, hole: par3 }).catch(() => {});
+  }, [loc.search, slug]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A par 3 sign: if this phone's group is playing this course today, go straight to closest to the pin.
+  useEffect(() => {
+    const gid = status?.group_id;
+    if (!par3 || !course?.id || !status?.is_member || !gid) return;
+    (async () => {
+      const { data: mine } = await supabase.from('courses').select('id').eq('group_id', gid).eq('library_id', course.id);
+      const ids = (mine || []).map((c) => c.id);
+      if (!ids.length) return;
+      const { data: live } = await supabase.from('rounds').select('id').eq('group_id', gid).eq('status', 'live')
+        .eq('play_date', localToday()).in('course_id', ids).limit(1);
+      if (live?.[0]) window.location.hash = `#/comps?r=${live[0].id}&kind=ctp&hole=${par3}`;
+    })().catch(() => {});
+  }, [par3, course?.id, status?.is_member, status?.group_id]);
+  if (course === undefined) return <><Top title="…" /><div className="muted" style={{ padding: 16 }}>Loading the course…</div></>;
+  if (!course) {
+    return (
+      <>
+        <Top title="Course not found" />
+        <div className="stack" style={{ padding: 16 }}>
+          <span>That course isn’t in the library (or the link is wrong).</span>
+          <a href="#/c" className="btn block">Find your course</a>
+        </div>
+      </>
+    );
+  }
+  if (!course.holes?.length) return <ListedOnly course={course} />;
+  const greens = course.holes.filter((h) => h.green);
+  return (
+    <>
+      <Top title={course.name} sub={[course.area, `${course.holes.length} holes · par ${parTotal(course.holes)}`].filter(Boolean).join(' · ')} />
+      <div className="stack" style={{ maxWidth: 520, margin: '0 auto', padding: 16, gap: 12 }}>
+        {!starting ? (
+          <>
+            {par3 && <div className="card pad small" style={{ borderColor: 'var(--gold)' }}>🎯 Closest to the pin on hole {par3}? Start your round below (or open the app you’re scoring in) — then scan again to log it.</div>}
+            {NEW_GROUPS ? (
+              <>
+                <button type="button" className="btn gold block" style={{ minHeight: 64, fontSize: 20 }} onClick={() => setStarting(true)}>⛳ Start a round with your mates</button>
+                <span className="small muted" style={{ textAlign: 'center' }}>Live scores and a leaderboard on everyone’s phone. No app store, no sign-up — your mates just tap a link.</span>
+              </>
+            ) : <div className="card pad small">Playing here with your group? Score in your group’s app. Starting a round from this page opens soon.</div>}
+            {greens.length > 0 && (
+              <LazyArea fallback={null} quiet>
+                <CourseMap className="map" markers={greens.map((h) => ({ id: `g${h.n}`, lat: h.green.lat, lng: h.green.lng, popup: `Hole ${h.n} · par ${h.par}` }))} osm={course.holes.some((h) => h.osm)} animate={false} />
+              </LazyArea>
+            )}
+            {course.club && <PartnerCard club={course.club} course={course} />}
+            <Scorecard holes={course.holes} />
+            {course.verified && <span className="small muted">✓ Hole data checked by the club.</span>}
+            {course.osm && <span className="small muted">Course details © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors.</span>}
+            {NEW_GROUPS && <a href="#/start" className="small" style={{ fontWeight: 700, textAlign: 'center' }}>Run a golf group? Start your own →</a>}
+            <span className="small muted" style={{ textAlign: 'center' }}><a href="#/privacy">Privacy</a> · <a href="#/terms">Terms</a></span>
+            {!course.club && <a href="#/club" className="small muted" style={{ textAlign: 'center' }}>Work at this club? Claim this page</a>}
+          </>
+        ) : <QuickStart course={course} onCancel={() => setStarting(false)} />}
+      </div>
+    </>
+  );
+}
+
+/** A course that's listed (from OpenStreetMap) but has no scorecard yet: where it is, and how to fill it in. */
+function ListedOnly({ course }) {
+  return (
+    <>
+      <Top title={course.name} sub={course.area || 'Golf course'} />
+      <div className="stack" style={{ maxWidth: 520, margin: '0 auto', padding: 16, gap: 12 }}>
+        {course.club && <PartnerCard club={course.club} course={course} />}
+        <div className="card pad stack" style={{ gap: 6 }}>
+          <strong>No scorecard yet</strong>
+          <span className="small">This course is listed, but nobody has added its pars yet, so rounds can’t start from here.</span>
+          <span className="small">Playing here with your group? In the app, add it under Courses with the pars and stroke indexes from the scorecard, then tap “Share” — it fills this page for everyone.</span>
+        </div>
+        {course.lat != null && course.lng != null && (
+          <a className="btn ghost block" href={`https://www.openstreetmap.org/?mlat=${course.lat}&mlon=${course.lng}#map=15/${course.lat}/${course.lng}`} target="_blank" rel="noopener noreferrer">📍 Where it is</a>
+        )}
+        {course.osm && <span className="small muted">Course details © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors.</span>}
+        {NEW_GROUPS && <a href="#/start" className="small" style={{ fontWeight: 700, textAlign: 'center' }}>Run a golf group? Start your own →</a>}
+            <span className="small muted" style={{ textAlign: 'center' }}><a href="#/privacy">Privacy</a> · <a href="#/terms">Terms</a></span>
+        {!course.club && <a href="#/club" className="small muted" style={{ textAlign: 'center' }}>Work at this club? Claim this page and add your hole data</a>}
+      </div>
+    </>
+  );
+}
+
+/** Stage 10: "Ask about a group booking" — logged against the club's code (the club sees it on its screen), then the
+ * phone's own email app opens, addressed to the club, with the details filled in. No money changes hands. */
+function Enquiry({ course, club, onClose }) {
+  const [busy, run] = useRun();
+  const [f, setF] = useState({ name: '', email: '', phone: '', start: '', end: '', size: '', rounds: '', note: '' });
+  const [sent, setSent] = useState(null);
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const ok = f.name.trim().length >= 2 && (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.trim()) || f.phone.trim().length >= 6);
+  const send = () => run(async () => {
+    await ensureSignedIn();
+    const r = await must(supabase.rpc('send_booking_enquiry', {
+      p_course_slug: course.slug, p_name: f.name.trim(), p_email: f.email.trim() || null, p_phone: f.phone.trim() || null,
+      p_start: f.start || null, p_end: f.end || null, p_size: f.size ? parseInt(f.size, 10) || null : null, p_rounds: f.rounds ? parseInt(f.rounds, 10) || null : null, p_note: f.note.trim() || null,
+    }));
+    setSent(r);
+    if (r?.to) window.location.href = `mailto:${r.to}?subject=${encodeURIComponent(r.subject)}&body=${encodeURIComponent(r.body)}`;
+  });
+  return (
+    <Sheet title={`Group booking — ${club.name}`} onClose={onClose}>
+      {sent ? (
+        <div className="stack" style={{ gap: 8 }}>
+          <strong>{sent.to ? 'Nearly done — press Send in your email app.' : `Saved for ${sent.club} — give them a call.`}</strong>
+          {sent.to && <span className="small">Your email app should have opened with it written out. If it didn’t: <a href={`mailto:${sent.to}?subject=${encodeURIComponent(sent.subject)}&body=${encodeURIComponent(sent.body)}`}>email {sent.to}</a>.</span>}
+          {sent.phone && <span className="small">{sent.to ? 'Or call them: ' : ''}<a href={`tel:${sent.phone.replace(/\s/g, '')}`}>{sent.phone}</a></span>}
+          <span className="small muted">{sent.club} also sees your enquiry on its page in The Golf Trip.</span>
+          <button type="button" className="btn ghost block" onClick={onClose}>Done</button>
+        </div>
+      ) : (
+        <div className="stack" style={{ gap: 8 }}>
+          <span className="small muted">Goes to the club with your contact details so they can reply. Nothing to pay here.</span>
+          <label className="field"><span>Your name</span><input className="input" value={f.name} maxLength={80} onChange={set('name')} /></label>
+          <div className="enquiry-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
+            <style>{'.enquiry-grid .field, .enquiry-grid .input { min-width: 0; width: 100%; box-sizing: border-box; }'}</style>
+            <label className="field"><span>Email</span><input className="input" type="email" value={f.email} onChange={set('email')} /></label>
+            <label className="field"><span>Phone</span><input className="input" type="tel" value={f.phone} onChange={set('phone')} /></label>
+            <label className="field"><span>From</span><input className="input" type="date" value={f.start} onChange={set('start')} /></label>
+            <label className="field"><span>To</span><input className="input" type="date" value={f.end} min={f.start || undefined} onChange={set('end')} /></label>
+            <label className="field"><span>How many golfers</span><input className="input" inputMode="numeric" value={f.size} onChange={set('size')} placeholder="e.g. 12" /></label>
+            <label className="field"><span>Rounds</span><input className="input" inputMode="numeric" value={f.rounds} onChange={set('rounds')} placeholder="e.g. 2" /></label>
+          </div>
+          <label className="field"><span>Anything else (optional)</span><textarea className="input" rows={2} value={f.note} maxLength={600} onChange={set('note')} placeholder="e.g. carts, a meal after, stay and play" /></label>
+          <button type="button" className="btn gold block" disabled={busy || !ok} onClick={send}>Send to the club</button>
+        </div>
+      )}
+    </Sheet>
+  );
+}
+
+/** A partner course: the club's logo, offers for groups and who to ask about a group booking. Clearly labelled. */
+function PartnerCard({ club, course }) {
+  const loc = useLocation();
+  const [asking, setAsking] = useState(() => new URLSearchParams(loc.search).get('enquire') === '1');
+  const canAsk = !!(club.booking_email || club.booking_phone);
+  return (
+    <div className="card pad stack" style={{ gap: 6 }}>
+      <div className="row" style={{ gap: 10 }}>
+        {club.logo_url && <img src={club.logo_url} alt={`${club.name} logo`} width={48} height={48} style={{ borderRadius: 8, objectFit: 'contain', background: '#fff', flex: 'none' }} />}
+        <span><strong>{club.name}</strong><div className="small muted">Partner course</div></span>
+      </div>
+      {club.offers && <span className="small">🎁 {club.offers}</span>}
+      {club.booking_note && <span className="small">{club.booking_note}</span>}
+      {(club.booking_email || club.booking_phone) && (
+        <span className="small">Group bookings: {club.booking_email && <a href={`mailto:${club.booking_email}`}>{club.booking_email}</a>}{club.booking_email && club.booking_phone ? ' · ' : ''}{club.booking_phone && <a href={`tel:${club.booking_phone.replace(/\s/g, '')}`}>{club.booking_phone}</a>}</span>
+      )}
+      {canAsk && <button type="button" className="btn block" onClick={() => setAsking(true)}>📨 Ask about a group booking</button>}
+      {canAsk && asking && <Enquiry course={course} club={club} onClose={() => setAsking(false)} />}
+    </div>
+  );
+}
+
+function Scorecard({ holes }) {
+  return (
+    <div className="card pad" style={{ display: 'grid', gridTemplateColumns: 'repeat(9, minmax(0, 1fr))', gap: 4, textAlign: 'center' }}>
+      {holes.map((h) => (
+        <div key={h.n} className="small" style={{ background: 'var(--ground, #F4F5F7)', borderRadius: 6, padding: '4px 0' }}>
+          <div className="muted" style={{ fontSize: 11 }}>{h.n}</div><strong>{h.par}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function QuickStart({ course, onCancel }) {
+  const { refresh } = useSession() || {};
+  const loc = useLocation();
+  const [busy, run] = useRun();
+  const comps = useMemo(() => defaultComps(course.holes), [course.holes]);
+  const [name, setName] = useState('');
+  const [hcp, setHcp] = useState('');
+  // Quick rounds are Stableford for now: Ambrose needs a teams step, stroke play a database change (both coming).
+  const format = 'stableford';
+  const [ctp, setCtp] = useState(comps.ctp);
+  const [ld, setLd] = useState(comps.ld);
+  const h = hcp.trim() === '' ? 18 : readHandicap(hcp);
+  const ok = name.trim().length >= 1 && h != null;
+  const toggle = (list, set, n) => set(list.includes(n) ? list.filter((x) => x !== n) : [...list, n].sort((a, b) => a - b));
+  const start = () => run(async () => {
+    await ensureSignedIn();
+    const r = await must(supabase.rpc('start_quick_round', {
+      p_slug: course.slug, p_my_name: name.trim(), p_handicap: h, p_format: format, p_ctp: ctp, p_ld: ld,
+      p_source: sourceFrom(loc.search) || rememberedSource() || {},
+    }));
+    try { localStorage.setItem(QUICK_KEY, JSON.stringify({ gid: r.group_id, round: r.round_id, invite: r.invite })); } catch { /* fine */ }
+    forgetSource();
+    setCurrentGroup(r.group_id);
+    await refresh?.();
+    window.location.hash = '#/round-ready';
+  });
+  return (
+    <>
+      <div className="card pad stack" style={{ gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 96px', gap: 8 }}>
+          <label className="field"><span>Your name</span><input className="input" value={name} maxLength={30} onChange={(e) => setName(e.target.value)} placeholder="e.g. Josh" autoFocus /></label>
+          <label className="field"><span>Handicap</span><input className="input" inputMode="decimal" value={hcp} onChange={(e) => setHcp(e.target.value)} placeholder="18" /></label>
+        </div>
+        {hcp.trim() !== '' && h == null && <span className="small err" style={{ margin: 0 }}>A handicap is a number from −10 to 54 (write a plus handicap as +2).</span>}
+        <span className="small muted" style={{ marginTop: -4 }}>No handicap? Leave it at 18.</span>
+        <div className="seg light" role="group" aria-label="Format">
+          <button type="button" aria-pressed="true">Stableford</button>
+          <button type="button" disabled title="Coming soon" style={{ opacity: 0.45 }}>Ambrose (soon)</button>
+          <button type="button" disabled title="Coming soon" style={{ opacity: 0.45 }}>Stroke play (soon)</button>
+        </div>
+        <div className="stack" style={{ gap: 6 }}>
+          <span className="label">🎯 Closest to the pin</span>
+          <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
+            {course.holes.filter((x) => Number(x.par) === 3).map((x) => <button key={x.n} type="button" className="chip" aria-pressed={ctp.includes(x.n)} onClick={() => toggle(ctp, setCtp, x.n)}>Hole {x.n}</button>)}
+          </div>
+          <span className="label">💣 Longest drive</span>
+          <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
+            {course.holes.filter((x) => Number(x.par) >= 5).map((x) => <button key={x.n} type="button" className="chip" aria-pressed={ld.includes(x.n)} onClick={() => toggle(ld, setLd, x.n)}>Hole {x.n}</button>)}
+          </div>
+        </div>
+      </div>
+      <button type="button" className="btn gold block" style={{ minHeight: 60, fontSize: 19 }} disabled={busy || !ok} onClick={start}>{busy ? 'Setting up…' : 'Start the round'}</button>
+      <button type="button" className="btn ghost block" disabled={busy} onClick={onCancel}>Back</button>
+    </>
+  );
+}

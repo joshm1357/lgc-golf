@@ -1,8 +1,15 @@
 // App-wide state: who I am, and the shared reference data (players, trips, rounds, teams…).
 // Everything re-loads automatically when the database changes (Supabase Realtime).
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { previewOf, viewAsStatus, stopPreview } from './preview.js';
 import { supabase } from './supabase.js';
 import { pendingScores, onQueueChange, freeCacheSpace } from './offline.js';
+import { currentGroup, setCurrentGroup, GROUP_TABLES } from './group.js';
+import { featureOn } from './features.js';
+import { applyLook, clearLook, DEFAULT_LOOK, LGC_LOOK } from './theme.js';
+
+// The offline copy of a group's players, rounds, courses… is kept per group.
+const refKey = () => `ref-${currentGroup() || 'x'}`;
 
 const SessionCtx = createContext(null);
 
@@ -47,14 +54,28 @@ export function SessionProvider({ children }) {
     if (!error && data) cacheSet(`status-${session.user.id}`, data);
     // No signal: use who I was last time on this phone, so the app still opens.
     const cached = error ? cacheGet(`status-${session.user.id}`) : null;
-    setState({ loading: false, user: session.user, status: error ? cached : data, offline: !!(error && cached) });
+    // An organiser viewing as one of their players (preview.js): the app works as that player, read only.
+    const viewing = previewOf();
+    const status = viewAsStatus(error ? cached : data, viewing);
+    // Viewing that no longer applies (another group, no longer an organiser, nothing loaded): stop it, so this phone
+    // isn't left refusing every change with no Stop bar.
+    if (viewing && !status?.viewing) stopPreview();
+    // The database says which group I'm in (the one this phone asked for, if I'm still in it).
+    if (status?.group_id) setCurrentGroup(status.group_id);
+    setState({ loading: false, user: session.user, status, offline: !!(error && cached) });
+    // The group's look. (An older database has no look: it only has L.G.C.)
+    if (status?.is_member) applyLook(status.look || (status.legacy === false ? DEFAULT_LOOK : LGC_LOOK), status.group_name);
+    else if (!error && data && !data.is_member) clearLook(); // not in a group (any more): don't keep another group's look
   }, []);
 
   useEffect(() => {
     refresh();
     const { data: sub } = supabase.auth.onAuthStateChange((evt) => {
       if (evt === 'SIGNED_OUT') {
+        stopPreview();
         freeCacheSpace(); // the saved offline copies belong to whoever was signed in
+        clearLook();
+        setCurrentGroup(null);
         refresh();
       }
     });
@@ -79,8 +100,11 @@ export function useRealtime(tables, onChange, filter) {
       t = setTimeout(() => cb.current(), 250);
     };
     const ch = supabase.channel('rt-' + key + '-' + Math.random().toString(36).slice(2, 7));
+    // Only this group's changes (a person in two groups isn't woken by the other one's).
+    const g = currentGroup();
     for (const table of tables) {
-      ch.on('postgres_changes', { event: '*', schema: 'public', table, ...(filter && table === 'scores' ? { filter } : {}) }, fire);
+      const f = filter && table === 'scores' ? filter : g && GROUP_TABLES.has(table) ? `group_id=eq.${g}` : null;
+      ch.on('postgres_changes', { event: '*', schema: 'public', table, ...(f ? { filter: f } : {}) }, fire);
     }
     ch.subscribe();
     // Catch up when the phone wakes or the app comes back to the front.
@@ -106,7 +130,7 @@ export function DataProvider({ children }) {
   const load = useCallback(async () => {
     let results;
     try {
-      if (typeof navigator !== 'undefined' && navigator.onLine === false && cacheGet('ref')) throw new Error('offline');
+      if (typeof navigator !== 'undefined' && navigator.onLine === false && cacheGet(refKey())) throw new Error('offline');
       results = await Promise.all(REF_TABLES.map((t) => supabase.from(t).select('*')));
     } catch (e) {
       results = [{ error: e }];
@@ -114,7 +138,8 @@ export function DataProvider({ children }) {
     const bad = results.find((r) => r.error);
     if (bad) {
       // No signal: open on the last copy saved on this phone.
-      const cached = cacheGet('ref');
+      // (A phone coming from v1.x has its one copy under the old name until its first load with signal.)
+      const cached = cacheGet(refKey()) || cacheGet('ref');
       if (cached) {
         setData((cur) => cur || cached);
         setOffline(true);
@@ -124,7 +149,8 @@ export function DataProvider({ children }) {
       return;
     }
     const d = Object.fromEntries(REF_TABLES.map((t, i) => [t, results[i].data || []]));
-    cacheSet('ref', d);
+    cacheSet(refKey(), d);
+    try { localStorage.removeItem('lgc-cache-ref'); } catch { /* ignore */ }
     setError(null);
     setOffline(false);
     setData(d);
@@ -133,10 +159,24 @@ export function DataProvider({ children }) {
   useEffect(() => {
     load();
   }, [load]);
-  useRealtime(['players', 'rounds', 'teams', 'team_players', 'quick_results', 'honour_board', 'trophies', 'round_players', 'courses'], load);
+
+  // Feature switches for this group (Stage 3). Loaded on their own, so an older database without them just means
+  // "everything at its default" rather than the app failing to load.
+  const [features, setFeatures] = useState(() => cacheGet(`features-${currentGroup()}`) || {});
+  const loadFeatures = useCallback(async () => {
+    const { data: rows, error: e } = await supabase.from('group_features').select('feature_key,enabled');
+    if (e) return;
+    const next = Object.fromEntries((rows || []).map((r) => [r.feature_key, r.enabled]));
+    cacheSet(`features-${currentGroup()}`, next);
+    setFeatures(next);
+  }, []);
+  useEffect(() => { loadFeatures(); }, [loadFeatures]);
+  useRealtime(['group_features'], loadFeatures);
+
+  useRealtime(['players', 'trips', 'rounds', 'teams', 'team_players', 'quick_results', 'honour_board', 'trophies', 'round_players', 'courses'], load);
 
   const value = useMemo(() => {
-    if (!data) return { ready: false, error, reload: load };
+    if (!data) return { ready: false, error, reload: load, features };
     const playersById = Object.fromEntries(data.players.map((p) => [p.id, p]));
     const coursesById = Object.fromEntries(data.courses.map((c) => [c.id, c]));
     const trips = [...data.trips].sort((a, b) => String(b.start_date || b.created_at).localeCompare(String(a.start_date || a.created_at)));
@@ -164,14 +204,20 @@ export function DataProvider({ children }) {
       rounds[rounds.length - 1] || null;
     return {
       ready: true, error, offline, reload: load, ...data, trips, rounds, playersById, coursesById,
-      teamsByRound, roundPlayers, currentTrip, liveRound, defaultRound,
+      teamsByRound, roundPlayers, currentTrip, liveRound, defaultRound, features,
     };
-  }, [data, error, load, offline]);
+  }, [data, error, load, offline, features]);
 
   return <DataCtx.Provider value={value}>{children}</DataCtx.Provider>;
 }
 
 export const useData = () => useContext(DataCtx);
+
+/** Is a feature switched on for this group? (lib/features.js has the list, defaults and which needs which.) */
+export function useFeature(key) {
+  const d = useContext(DataCtx);
+  return featureOn(key, d?.features || {});
+}
 
 /** Scores for one or more rounds, live, with my not-yet-synced saves merged in. */
 export function useScores(roundIds) {

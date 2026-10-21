@@ -9,7 +9,9 @@
 //   - No signal is never a reason to give up: items wait up to 7 days. A real refusal (e.g. the round
 //     has been locked, the photo can't be read) drops that one item and says so; the rest carry on.
 import { supabase } from './supabase.js';
+import { previewOf, READ_ONLY_MESSAGE } from './preview.js';
 import { uploadPhoto } from './images.js';
+import { groupFolder } from './group.js';
 
 const KEY = 'lgc-outbox';
 const MAX_AGE = 7 * 24 * 3600 * 1000;
@@ -62,6 +64,7 @@ const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xx
 
 /** A refusal that won't change by trying again: a database rule, or a photo the phone can't read/send. */
 function isPermanent(e) {
+  if (e?.code === 'VIEWING' || e?.statusCode === 'VIEWING' || /viewing as/i.test(e?.message || '')) return false;
   if (/^(42|23|22)/.test(e?.code || '')) return true;
   if (e?.localPhoto) return true;
   const st = Number(e?.statusCode || e?.status || 0);
@@ -95,9 +98,14 @@ async function insert(table, row) {
  * Returns { sent: true, row } or { sent: false } (queued). Throws only for a real refusal.
  */
 export async function sendOrQueue(table, row, opts = {}) {
+  // Viewing as a player is read only: nothing goes in the outbox (it would send later as the organiser).
+  const viewing = previewOf();
+  if (viewing) throw new Error(READ_ONLY_MESSAGE(viewing.name));
   const id = row.id || uuid();
   const item = { id, table, row: { ...row, id }, queued_at: new Date().toISOString() };
-  const photo = opts.photo?.file ? { field: opts.photo.field || 'photo_url', folder: opts.photo.folder || 'feed' } : null;
+  // The photo's folder is fixed now (with this group), so it lands in the right group even if it
+  // only sends after the phone has switched to another group.
+  const photo = opts.photo?.file ? { field: opts.photo.field || 'photo_url', folder: groupFolder(opts.photo.folder || 'feed') } : null;
   try {
     if (photo) item.row[photo.field] = await upload(opts.photo.file, photo.folder);
     await insert(table, item.row);
@@ -121,6 +129,7 @@ export async function sendOrQueue(table, row, opts = {}) {
 let flushing = false;
 export async function flushOutbox() {
   if (flushing || !read().length) return;
+  if (previewOf()) return; // viewing as someone: the outbox waits until Stop
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
   flushing = true;
   try {

@@ -5,6 +5,7 @@ import { useData, useRealtime, useSession, playerName } from '../lib/store.jsx';
 import { uploadPhoto } from '../lib/images.js';
 import { usePlayerHistory } from './Profile.jsx';
 import { Header, Avatar, Icon, Sheet, PhotoButtons, timeAgo, toast, Loading } from '../components/ui.jsx';
+import SharePicture from '../components/SharePicture.jsx';
 
 function fmtChange(n) {
   const v = Number(n);
@@ -29,6 +30,7 @@ function useCases() {
 
 export default function Tribunal() {
   const data = useData();
+  const { status } = useSession();
   const { cases, votes, reload } = useCases();
   const [lodging, setLodging] = useState(false);
   if (!cases) return <Loading />;
@@ -38,7 +40,7 @@ export default function Tribunal() {
     <div className="page">
       <Header court back title="Handicap Tribunal" sub="Lodge a case. The lads decide. The chair has the final say." />
       <div className="section stack">
-        <button type="button" className="btn gold block" onClick={() => setLodging(true)}>{Icon.gavel(20)}<span>Lodge a case</span></button>
+        {status?.role !== 'guest' && <button type="button" className="btn gold block" onClick={() => setLodging(true)}>{Icon.gavel(20)}<span>Lodge a case</span></button>}
         {open.length > 0 && <span className="label">Open cases</span>}
         {open.map((c) => <CaseRow key={c.id} c={c} votes={votes.filter((v) => v.case_id === c.id)} />)}
         {closed.length > 0 && <span className="label">Past verdicts</span>}
@@ -161,7 +163,7 @@ export function TribunalCase() {
         <div className="hdr-row"><Link to="/tribunal" className="back" style={{ textDecoration: 'none' }}>{Icon.back()}<span>Tribunal</span></Link></div>
         <div className="row label" style={{ color: 'var(--gold)', gap: 6 }}>{Icon.gavel(16)}<span>Handicap Tribunal · {open ? 'in session' : 'closed'}</span></div>
         <div className="hdr-row">
-          <Avatar player={accused} size={54} ring="#D9A521" />
+          <Avatar player={accused} size={54} ring="var(--gold)" />
           <div className="hdr-grow">
             <div className="hdr-title">The Lads v {playerName(accused)}</div>
             <div className="hdr-sub">Lodged by {playerName(lodger)} · {timeAgo(c.created_at)}</div>
@@ -239,7 +241,8 @@ export function TribunalCase() {
               <span className="muted">{v.vote === 'guilty' ? 'Guilty' : v.vote === 'not_guilty' ? 'Not guilty' : 'Abstain'}{v.comment ? ` — “${v.comment}”` : ''}</span>
             </div>
           ))}
-          {open && !isAccused && (
+          {open && status.role === 'guest' && <div className="small muted">Guests don’t vote in the Tribunal.</div>}
+          {open && !isAccused && status.role !== 'guest' && (
             <>
               <input className="input" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="One-liner for the court (optional)" />
               {myVote && <div className="small"><strong>Your vote: {VOTE_LABEL[myVote.vote]}.</strong> <span className="muted">Pick another and confirm to change it.</span></div>}
@@ -269,6 +272,12 @@ export function TribunalCase() {
               : `Closed ${timeAgo(c.closed_at)}.${c.overruled ? ' The chair overruled the vote.' : ''}`}
           </span>
           {c.chair_ruling && <div className="court-card card pad"><strong>Chair's ruling:</strong> {c.chair_ruling}</div>}
+          {!open && c.verdict && (
+            <SharePicture label="🖼️ Share the verdict" kind="verdict"
+              data={{ accused: playerName(accused), verdict: c.verdict, oldHcp: c.old_handicap != null ? Number(c.old_handicap) : null, newHcp: c.new_handicap != null ? Number(c.new_handicap) : null,
+                votes: `${c.guilty_votes ?? 0}–${c.not_guilty_votes ?? 0}`, overruled: c.overruled }}
+              text={`⚖️ The Handicap Tribunal: ${playerName(accused)} — ${c.verdict === 'upheld' ? 'GUILTY' : 'NOT GUILTY'}`} />
+          )}
           {open && status.is_admin && <button type="button" className="btn ghost" onClick={() => setChairOpen(true)}>{Icon.gavel(18)}<span>Chair: close the case</span></button>}
         </div>
       </div>

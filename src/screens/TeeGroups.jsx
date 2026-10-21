@@ -20,22 +20,26 @@ export function useTeeRows(roundIds) {
   const ids = (roundIds || []).filter(Boolean);
   const key = ids.join(',');
   const [rows, setRows] = useState([]);
+  // Returns the fresh rows by round too (or null if it couldn't load), for a caller that needs them straight away.
   const load = useCallback(async () => {
-    if (!ids.length) { setRows([]); return; }
+    if (!ids.length) { setRows([]); return {}; }
     try {
       const { data, error } = await supabase.from('tee_groups').select('*').in('round_id', ids);
-      if (!error && data) setRows(data);
+      if (!error && data) { setRows(data); return groupByRound(data); }
     } catch { /* keep what we have */ }
+    return null;
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [load]);
   useRealtime(['tee_groups'], load);
-  const byRound = useMemo(() => {
-    const out = {};
-    for (const r of rows) (out[r.round_id] ||= []).push(r);
-    for (const k of Object.keys(out)) out[k].sort((a, b) => a.group_no - b.group_no);
-    return out;
-  }, [rows]);
+  const byRound = useMemo(() => groupByRound(rows), [rows]);
   return [byRound, load];
+}
+
+function groupByRound(rows) {
+  const out = {};
+  for (const r of rows) (out[r.round_id] ||= []).push(r);
+  for (const k of Object.keys(out)) out[k].sort((a, b) => a.group_no - b.group_no);
+  return out;
 }
 
 // The organiser's "keep together" / "keep apart" pairs live on this phone only (a feud stays private).
@@ -107,8 +111,11 @@ function TeeGroupsEditor({ round, byRound, reload }) {
     return { ctx: scoringContext({ players: inputs.players, blocks, history, apart: rules.apart }), notes };
   }, [inputs, rules, oneMatch, history]);
 
-  const generate = (seed) => {
-    const res = makeTeeGroups({ ...opts, seed });
+  const generate = async (seed) => {
+    // Fresh from the database: another round's groups may have just been saved (on this phone or another).
+    const fresh = await reload();
+    const h = fresh ? pastPartners({ round, rounds: data.rounds, teeRowsByRound: fresh, teamsByRound: data.teamsByRound }) : history;
+    const res = makeTeeGroups({ ...opts, history: h, seed });
     setDraft({ groups: res.groups, seed });
     setPicked(null);
   };

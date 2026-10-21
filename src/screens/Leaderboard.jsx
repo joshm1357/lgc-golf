@@ -14,7 +14,7 @@ import { GamesChip } from '../components/GamesChip.jsx';
 import { CompChips } from '../components/CompsChip.jsx';
 import { TeeGroupsBoard } from './TeeGroups.jsx';
 import { AwardCards } from '../components/Awards.jsx';
-import ReplayButton from '../components/ReplayButton.jsx';
+import RoundRecap from '../components/RoundRecap.jsx';
 import { CourseGuideChip } from '../components/CourseGuideLink.jsx';
 import { WeatherChip } from '../components/Weather.jsx';
 import { AskChip } from '../components/AskChip.jsx';
@@ -170,7 +170,6 @@ export default function Leaderboard() {
         </div>
       )}
 
-      {!status?.quick && <ReplayButton round={round} board={board} />}
       {status?.quick && <QuickRoundDone round={round} board={board} course={course} />}
       {status?.is_admin && ((tvOn && round.status !== 'locked') || round.tv) && <TvToggle round={round} />}
 
@@ -275,6 +274,7 @@ export default function Leaderboard() {
             ? `Net to par for the holes each team has played, so teams on different holes compare fairly.${round.comp_bonus ? ` Gold tags = side comp won (−${round.comp_bonus} strokes, already in the score).` : ''} Arrows show movement since you last looked. Tap a team for its card.`
             : 'Points, and +/− against the expected 2 points a hole, so players on different holes compare fairly. * = typed in from a paper card.'}
       </p>
+      {!status?.quick && <RoundRecap round={round} board={board} course={course} />}
       {scores.pendingCount > 0 && <div className="sync">{scores.pendingCount} score{scores.pendingCount > 1 ? 's' : ''} waiting to sync — they'll send when signal's back.</div>}
 
       {canScore && (

@@ -7,6 +7,7 @@ import { formatToPar } from '../lib/scoring.js';
 import { Seg, Avatar, AvatarStack, Icon, Sheet, toast } from '../components/ui.jsx';
 import { TrophyArt } from '../components/TrophyArt.jsx';
 import { honourOrder } from '../lib/history.js';
+import { StatsLink } from '../components/PlayerStats.jsx';
 
 /** The Trophy Room: every trophy in its own lit display case, live standings, and brass plaques. */
 export default function Trophies() {
@@ -85,6 +86,7 @@ export default function Trophies() {
         })}
       </div>
 
+      <div style={{ padding: '10px 16px 0', textAlign: 'center' }}><StatsLink /></div>
       {trophy && (
         <div className="section stack" style={{ paddingTop: 14 }}>
           <div className="row between">

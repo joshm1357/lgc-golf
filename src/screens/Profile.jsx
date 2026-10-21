@@ -10,6 +10,7 @@ const namedIn = (winners, name) => winnerNames(winners).some((w) => w.toLowerCas
 import { uploadPhoto } from '../lib/images.js';
 import { Header, Avatar, Icon, Loading, toast, PhotoButtons } from '../components/ui.jsx';
 import { ViewAsButton } from '../components/Viewing.jsx';
+import { PlayerStatsCard } from '../components/PlayerStats.jsx';
 
 /** Everything we know about a player: Stableford rounds, Ambrose results, trophies, comps, Tribunal, handicap. */
 export function usePlayerHistory(playerId) {
@@ -150,6 +151,8 @@ export default function Profile() {
             </div>
           ))}
         </div>
+
+        <PlayerStatsCard playerId={playerId} />
 
         {h.honours.length > 0 && (
           <div className="card pad stack">

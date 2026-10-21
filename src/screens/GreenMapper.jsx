@@ -2,7 +2,7 @@
 // Then everyone gets GPS distances on the score screen. Can fill the lot from OpenStreetMap if the
 // course is drawn there; every point can be dragged to fine-tune.
 import React, { useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useSession } from '../lib/store.jsx';
 import { courseHoles } from '../lib/board.js';
@@ -10,6 +10,8 @@ import { distanceM, getFix } from '../lib/geo.js';
 import { holesFromOsm, mergeGreens, osmQuery, greensMapped } from '../lib/greens.js';
 import CourseMap, { labelIcon, teeIcon } from '../components/CourseMap.jsx';
 import { Header, Loading, toast } from '../components/ui.jsx';
+import { holeFromParam, mappingProgress, nextUnmapped } from '../lib/courseguide.js';
+import { CourseGuideHoleLink } from '../components/CourseGuideLink.jsx';
 
 const MODES = [
   { key: 'tee', label: 'Tee' },
@@ -32,8 +34,10 @@ export default function GreenMapper() {
   const { status } = useSession();
   const course = data.coursesById?.[courseId];
   const [holes, setHoles] = useState(() => (course ? courseHoles(course).map((h) => ({ ...h })) : []));
-  const [n, setN] = useState(1);
-  const [mode, setMode] = useState('green');
+  // Opened from the course guide on a hole (?hole=7): start there.
+  const [params] = useSearchParams();
+  const [n, setN] = useState(() => holeFromParam(holes, params.get('hole')) ?? 1);
+  const [mode, setMode] = useState(() => { const x = holes.find((y) => y.n === n); return x && !x.tee ? 'tee' : 'green'; });
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [centre, setCentre] = useState(null);
@@ -69,6 +73,9 @@ export default function GreenMapper() {
   }));
   const prev = holes.find((x) => x.n === h.n - 1);
   const fit = markers.length ? markers : prev?.green ? [prev.green] : anyPoint ? [anyPoint] : centre ? [centre] : [];
+  const progress = mappingProgress(holes);
+  const nextGap = nextUnmapped(holes, h?.n);
+  const goTo = (x) => { setN(x.n); setMode(x.tee ? (x.green ? 'green' : 'front') : 'tee'); };
   const lengthM = h?.tee && h?.green ? Math.round(distanceM(h.tee, h.green)) : null;
   const depthM = h?.front && h?.back ? Math.round(distanceM(h.front, h.back)) : null;
 
@@ -123,12 +130,29 @@ export default function GreenMapper() {
       <Header back title="Map the greens" sub={`${course.name} · ${greensMapped(holes)}/${holes.length} mapped`} />
       <div className="chips" role="group" aria-label="Hole" style={{ padding: '10px 16px' }}>
         {holes.map((x) => (
-          <button key={x.n} type="button" className="chip" aria-pressed={x.n === h.n} onClick={() => { setN(x.n); setMode(x.tee ? (x.green ? 'green' : 'front') : 'tee'); }}>
+          <button key={x.n} type="button" className="chip" aria-pressed={x.n === h.n} onClick={() => goTo(x)}>
             {x.n}{x.green ? ' ✓' : ''}
           </button>
         ))}
       </div>
       <div className="section stack" style={{ paddingTop: 0 }}>
+        <details className="card pad small" open={progress.mapped === 0} style={{ lineHeight: 1.45 }}>
+          <summary style={{ fontWeight: 700, cursor: 'pointer' }}>How it works (about 2 minutes)</summary>
+          <ol style={{ margin: '8px 0 0', paddingLeft: 20 }}>
+            <li>First try <strong>Fill from OpenStreetMap</strong> (below the map) — it often does every hole at once.</li>
+            <li>Otherwise, for each hole tap the <strong>tee</strong>, then the <strong>front</strong>, <strong>middle</strong> and <strong>back</strong> of the green. It moves on by itself.</li>
+            <li>Only the middle is a must; drag any point to fine-tune. Then <strong>Save</strong>.</li>
+          </ol>
+        </details>
+        <div className="stack" style={{ gap: 6 }} data-testid="map-progress">
+          <div className="row between">
+            <strong>{progress.mapped} of {progress.total} greens mapped{progress.done ? ' ✓' : ''}</strong>
+            {nextGap != null && nextGap !== h.n && <button type="button" className="btn ghost sm" onClick={() => goTo(holes.find((x) => x.n === nextGap))}>Next to map: hole {nextGap} →</button>}
+          </div>
+          <div style={{ height: 8, borderRadius: 999, background: 'var(--line)', overflow: 'hidden' }} aria-hidden="true">
+            <div style={{ height: '100%', width: `${progress.total ? (100 * progress.mapped) / progress.total : 0}%`, background: 'var(--gold)' }} />
+          </div>
+        </div>
         <div className="row between">
           <strong>Hole {h.n} · par {h.par}</strong>
           <span className="small muted">{lengthM ? `${lengthM} m tee to middle` : ''}{depthM ? ` · green ${depthM} m deep` : ''}</span>
@@ -144,6 +168,7 @@ export default function GreenMapper() {
           {(h.tee || h.green) && <button type="button" className="btn ghost sm" onClick={clearHole}>Clear hole {h.n}</button>}
         </div>
         <button type="button" className="btn ghost block" disabled={busy} onClick={fromOsm}>🌐 Fill from OpenStreetMap (if the course is drawn there)</button>
+        {!dirty && h.green && <CourseGuideHoleLink course={course} hole={h} />}
         <p className="note" style={{ margin: 0 }}>Points from OpenStreetMap (© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors) are drawn by volunteers — check each hole on the satellite picture. Phone GPS is good to about 5–10 m, so distances are a guide, like any golf GPS app.</p>
       </div>
       <div className="fab" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, boxShadow: 'none' }}>

@@ -51,6 +51,7 @@ const TvBoard = lazyScreen(() => import('./screens/TvBoard.jsx'));
 const RoundReady = lazyScreen(() => import('./screens/QuickRound.jsx'), 'RoundReady');
 const Cup = lazyScreen(() => import('./screens/Cup.jsx'));
 const CupMatch = lazyScreen(() => import('./screens/Cup.jsx'), 'CupMatch');
+const CourseGuide = lazyScreen(() => import('./screens/CourseGuide.jsx'));
 
 // A fresh plan screen per plan, so nothing carries over when a notification jumps to another one.
 function PlanDetailRoute() {
@@ -212,6 +213,7 @@ function Inside() {
         <Route path="/plan/:planId" element={<FeatureRoute feature="planner" label="The Trips planner"><PlanDetailRoute /></FeatureRoute>} />
         <Route path="/rules" element={<Rulebook />} />
         <Route path="/courses/:courseId/greens" element={<GreenMapper />} />
+        <Route path="/guide/:courseId/:hole?" element={<FeatureRoute feature="gps" label="The course guide"><CourseGuide /></FeatureRoute>} />
         <Route path="/group" element={<Group />} />
         <Route path="/groups" element={<YourGroupsInside />} />
         <Route path="/history" element={<History />} />

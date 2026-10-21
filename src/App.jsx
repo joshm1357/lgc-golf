@@ -10,6 +10,7 @@ import { FeedbackHost } from './components/Feedback.jsx';
 import { WhatsNew } from './components/WhatsNew.jsx';
 import { ViewingBar, StopViewing } from './components/Viewing.jsx';
 import { AwardWatcher } from './components/Awards.jsx';
+import { Shortcuts } from './components/Shortcuts.jsx';
 import { NEW_GROUPS } from './lib/beta.js';
 import { supabase } from './lib/supabase.js';
 import { sourceFrom, countScan } from './lib/quick.js';
@@ -60,6 +61,7 @@ const CourseGuide = lazyScreen(() => import('./screens/CourseGuide.jsx'));
 const Ask = lazyScreen(() => import('./screens/AiHelper.jsx'));
 const Stats = lazyScreen(() => import('./screens/Stats.jsx'));
 const DinnerAwards = lazyScreen(() => import('./screens/DinnerAwards.jsx'));
+const Desk = lazyScreen(() => import('./screens/Desk.jsx')); // Stage 11c: the full desktop (Trip desk, tables, paper cards)
 
 // A fresh plan screen per plan, so nothing carries over when a notification jumps to another one.
 function PlanDetailRoute() {
@@ -235,6 +237,7 @@ function Inside() {
         <Route path="/round-ready" element={<RoundReady />} />
         <Route path="/wishes" element={<Wishes />} />
         <Route path="/join/:code" element={<JoinInsideRoute />} />
+        <Route path="/desk/*" element={<Desk />} />
         <Route path="*" element={<Leaderboard />} />
       </Routes>
       </LazyArea>
@@ -243,6 +246,7 @@ function Inside() {
       <UpdateBanner />
       <FeedbackHost />
       <WhatsNew />
+      <Shortcuts />
       <Toaster />
     </div>
   );

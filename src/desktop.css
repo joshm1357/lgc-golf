@@ -1,0 +1,44 @@
+/* ---------- Stage 11c (full desktop, 21 Oct 2026): app-wide bits ----------
+   Everything here is either a new class (only on new screens and overlays) or inside a laptop-width media query,
+   so phones (under 768 px) look exactly as before. The desk screens' own styles are in screens/desk.css. */
+
+/* Keyboard shortcuts: the "?" list and the "/" finder (components/Shortcuts.jsx). */
+kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 6px; background: var(--card); font-family: var(--body); font-size: .85em; font-weight: 700; text-align: center; line-height: 1.4; color: var(--text); }
+.kbd-bg { position: fixed; inset: 0; z-index: 70; background: rgba(10, 16, 26, .5); display: flex; align-items: flex-start; justify-content: center; padding: 12vh 16px 16px; }
+.kbd-dialog { width: 100%; max-width: 520px; background: var(--ground); border-radius: 16px; padding: 16px; box-shadow: 0 20px 60px rgba(0, 0, 0, .3); max-height: 76vh; overflow-y: auto; }
+.kbd-title { margin: 0; font-family: var(--display); font-size: 24px; }
+.kbd-table { width: 100%; border-collapse: collapse; }
+.kbd-table td { padding: 8px 6px; border-top: 1px solid var(--line-soft); vertical-align: middle; }
+.kbd-table td:first-child { white-space: nowrap; width: 1%; }
+.kbd-list { list-style: none; margin: 10px 0 0; padding: 0; }
+.kbd-list button { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 0 12px; border: 0; border-radius: 10px; background: none; text-align: left; font-weight: 600; }
+.kbd-list button.on { background: var(--navy); color: #fff; }
+.kbd-list button.on .muted { color: var(--on-navy-muted); }
+
+/* Wide screens: sheets open as a panel down the right, so the page stays in view beside them.
+   (1024–1279 px keeps the centred dialog from Stage 1.) */
+@media (min-width: 1280px) {
+  .sheet-bg { justify-content: flex-end; align-items: stretch; padding: 0; }
+  .sheet { max-width: 520px; height: 100vh; max-height: none; border-radius: 0; box-shadow: -12px 0 40px rgba(0, 0, 0, .18); }
+}
+
+/* Room for the round replay on a big screen (it's 480 px wide on a phone). */
+@media (min-width: 1024px) {
+  .rp-inner { max-width: 760px; }
+}
+@media (min-width: 1600px) {
+  .rp-inner { max-width: 960px; }
+}
+
+/* Printing (results, scorecards): only the page itself, no sidebar, tabs or buttons. */
+@media print {
+  .side, .tabs, .no-print, .sync, .toast, .update-banner, .viewing-bar, .fab { display: none !important; }
+  .app, .app.with-side { margin: 0 !important; max-width: none !important; }
+  .app.with-side > .page, .page { max-width: none !important; padding: 0 !important; }
+  body, .app, .page { background: #fff !important; }
+  .print-sheet { padding: 0 !important; }
+  .print-table { font-size: 11px; }
+  .print-table th, .print-table td { padding: 3px 4px !important; }
+  .print-h { break-after: avoid; }
+  tr { break-inside: avoid; }
+}

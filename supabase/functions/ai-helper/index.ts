@@ -28,6 +28,7 @@ import {
 } from './logic.ts';
 import { aiConfig } from './providers.ts';
 import { shapePastTrips, shapeNear } from './plan.ts';
+import { importRequest } from './import.ts';
 
 const AI = aiConfig((k) => Deno.env.get(k));
 if (!AI.ok) console.warn('ai-helper: AI provider not set up:', AI.reason); // the reason never includes a key
@@ -106,7 +107,7 @@ function makeDeps(db: SupabaseClient, g: string, uid: string, status: Any): Deps
     // The row goes in before the model is called, so two questions at once both count. Never any text.
     logStart: async (row) => {
       const { data } = await admin.from('helper_log').insert({
-        group_id: g, user_id: uid, mode: row.mode, area: row.area, capped: false, ok: false,
+        group_id: g, user_id: uid, mode: row.mode, area: row.area, capped: false, ok: false, ...((row as Any).job ? { job: (row as Any).job } : {}),
         provider: row.provider ? clean(row.provider, 20) : null, model: row.model ? clean(row.model, 80) : null,
       }).select('id').single();
       return data?.id ?? null;
@@ -243,6 +244,8 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // "Bring your history" (import.ts): text and photos read into a proposal the organiser confirms in the app.
+    if (body.mode === 'import') return json(await importRequest(body, { ...makeDeps(db, status.group_id, who.user.id, status), visionModel: Deno.env.get('AI_VISION_MODEL') || null }));
     return json(await helperRequest(body, makeDeps(db, status.group_id, who.user.id, status)));
   } catch (e) {
     console.error('ai-helper failed:', errorKind(e)); // only the kind of error: never values, text or keys

@@ -7,6 +7,9 @@ import { STARTERS } from '../lib/starters.js';
 import { Header, Sheet, Loading, toast } from '../components/ui.jsx';
 import { notify } from '../lib/push.js';
 import { useRun, must } from './Planner.jsx';
+import { Link } from 'react-router-dom';
+import { useGovernance } from './Cases.jsx';
+import { ruleLine, closesIn } from '../lib/governance.js';
 
 const CATS = [
   ['format', 'Format & scoring'], ['side_comp', 'Side comps'], ['bonus', 'Bonuses'], ['handicap', 'Handicaps'],
@@ -36,6 +39,8 @@ export default function Rulebook() {
   const { status } = useSession();
   const votingOn = useFeature('rule_voting');
   const rb = useRules();
+  const g = useGovernance();
+  const gov = g?.ok ? g : null;
   const [filter, setFilter] = useState('all');
   const [editing, setEditing] = useState(null); // {} = new
   if (!rb) return <div className="page"><Header logo title="The Rulebook" /><Loading /></div>;
@@ -58,7 +63,8 @@ export default function Rulebook() {
         {proposed.length > 0 && (
           <>
             <span className="label">🗳️ Up for a vote ({proposed.length})</span>
-            {proposed.map((r) => <ProposedCard key={r.id} rule={r} votes={rb.votes.filter((v) => v.rule_id === r.id)} reload={rb.reload} onEdit={() => setEditing(r)} />)}
+            {proposed.map((r) => <ProposedCard key={r.id} rule={r} votes={rb.votes.filter((v) => v.rule_id === r.id)} reload={() => { rb.reload(); gov?.reload(); }} onEdit={() => setEditing(r)}
+              c={gov?.cases.find((x) => x.rule_id === r.id && x.kind === 'new_rule' && x.status === 'open')} />)}
           </>
         )}
 
@@ -68,7 +74,7 @@ export default function Rulebook() {
           return (
             <div key={cat} className="stack" style={{ gap: 8 }}>
               <span className="label">{label}</span>
-              {list.map((r) => <RuleCard key={r.id} rule={r} onEdit={status.is_admin ? () => setEditing(r) : null} />)}
+              {list.map((r) => <RuleCard key={r.id} rule={r} />)}
             </div>
           );
         })}
@@ -79,16 +85,16 @@ export default function Rulebook() {
         {old.length > 0 && (
           <details>
             <summary className="label" style={{ padding: '8px 0', cursor: 'pointer' }}>Rejected & retired ({old.length})</summary>
-            <div className="stack">{old.map((r) => <RuleCard key={r.id} rule={r} onEdit={status.is_admin ? () => setEditing(r) : null} />)}</div>
+            <div className="stack">{old.map((r) => <RuleCard key={r.id} rule={r} />)}</div>
           </details>
         )}
       </div>
-      {editing && <RuleSheet rule={editing.id ? editing : null} onClose={() => setEditing(null)} onSaved={rb.reload} />}
+      {editing && <RuleSheet rule={editing.id ? editing : null} settings={gov?.settings} onClose={() => setEditing(null)} onSaved={rb.reload} />}
     </div>
   );
 }
 
-function Chips({ rule }) {
+export function Chips({ rule }) {
   return (
     <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
       {rule.value && <span className="small" style={{ padding: '2px 10px', borderRadius: 999, background: 'var(--gold-soft)', border: '1px solid var(--gold)', fontWeight: 800 }}>{rule.value}</span>}
@@ -97,11 +103,12 @@ function Chips({ rule }) {
   );
 }
 
-function RuleCard({ rule, onEdit }) {
+// Tap any rule to open it: wording, history, rulings, and "Challenge this rule" (RulePage.jsx).
+function RuleCard({ rule }) {
   const data = useData();
   const by = data.playersById[rule.proposed_by];
   return (
-    <button type="button" className="card pad stack" disabled={!onEdit} onClick={onEdit || undefined} style={{ gap: 6, textAlign: 'left', color: 'inherit', width: '100%', opacity: rule.status === 'active' || rule.status === 'proposed' ? 1 : 0.65 }}>
+    <Link to={`/rules/${rule.id}`} className="card pad stack" style={{ gap: 6, textAlign: 'left', color: 'inherit', textDecoration: 'none', width: '100%', opacity: rule.status === 'active' || rule.status === 'proposed' ? 1 : 0.65 }}>
       <div className="row between" style={{ alignItems: 'flex-start', gap: 8 }}>
         <strong style={{ fontSize: 16 }}>{rule.title}</strong>
         {rule.status !== 'active' && <span className="small muted" style={{ fontWeight: 700, textTransform: 'uppercase' }}>{rule.status}</span>}
@@ -109,11 +116,11 @@ function RuleCard({ rule, onEdit }) {
       <Chips rule={rule} />
       {rule.detail && <div style={{ fontSize: 15, lineHeight: 1.45 }}>{rule.detail}</div>}
       {(rule.decision_note || by) && <div className="small muted">{by ? `Proposed by ${playerName(by)}. ` : ''}{rule.decision_note || ''}</div>}
-    </button>
+    </Link>
   );
 }
 
-function ProposedCard({ rule, votes, reload, onEdit }) {
+function ProposedCard({ rule, votes, reload, onEdit, c }) {
   const data = useData();
   const { status } = useSession();
   const votingOn = useFeature('rule_voting');
@@ -124,11 +131,14 @@ function ProposedCard({ rule, votes, reload, onEdit }) {
   const mine = votes.find((v) => v.player_id === me);
   const count = (k) => votes.filter((v) => v.vote === k).length;
   const by = data.playersById[rule.proposed_by];
+  // The group's decision rule (Stage 11b): an organiser decides (L.G.C, as before), or the vote does.
+  const byVote = c && c.stage === 'voting';
   const decide = (to) => {
     const note = window.prompt(to === 'active' ? 'Adopt this rule. Any note? (optional)' : 'Reject this rule. Reason? (optional)', '');
     if (note === null) return;
     run(async () => {
-      await must(supabase.from('rules').update({ status: to, decided_at: new Date().toISOString(), decision_note: note.trim() || `${count('for')}–${count('against')} vote.` }).eq('id', rule.id));
+      if (c) await must(supabase.rpc('decide_case', { p_case: c.id, p_outcome: to === 'active' ? 'passed' : 'failed', p_verdict: note.trim() || `${count('for')}–${count('against')} vote.` }));
+      else await must(supabase.from('rules').update({ status: to, decided_at: new Date().toISOString(), decision_note: note.trim() || `${count('for')}–${count('against')} vote.` }).eq('id', rule.id));
       await supabase.from('posts').insert({ kind: 'user', player_id: me, link: '/rules', body: `${to === 'active' ? '✅ New rule' : '❌ Rule rejected'}: ${rule.title}${rule.value ? ` (${rule.value})` : ''}. Vote was ${count('for')}–${count('against')}.` });
       await notify('rule_decided', { rule_id: rule.id });
       reload();
@@ -160,14 +170,16 @@ function ProposedCard({ rule, votes, reload, onEdit }) {
             <>
               <input className="input" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="One-liner (optional)" />
               <button type="button" className="btn gold block" disabled={busy} onClick={() => run(async () => {
-                await must(supabase.from('rule_votes').upsert({ rule_id: rule.id, player_id: me, vote: pick, comment: comment.trim() || null, updated_at: new Date().toISOString() }));
+                if (c) await must(supabase.rpc('vote_case', { p_case: c.id, p_vote: pick, p_comment: comment.trim() || null }));
+                else await must(supabase.from('rule_votes').upsert({ rule_id: rule.id, player_id: me, vote: pick, comment: comment.trim() || null, updated_at: new Date().toISOString() }));
                 setPick(null); setComment(''); reload();
               }, 'Vote recorded')}>Cast my vote: {VOTE[pick]}</button>
             </>
           )}
         </>
       )}
-      {status.is_admin && (
+      {c && <div className="small muted">{ruleLine('new_rule', c.settings || {})}{byVote && c.closes_at ? ` · ${closesIn(c.closes_at)}` : ''} · <Link to={`/tribunal/case/${c.id}`}>the case</Link></div>}
+      {status.is_admin && !byVote && (
         <div className="row" style={{ gap: 8 }}>
           <button type="button" className="btn gold sm" disabled={busy} onClick={() => decide('active')}>✅ Adopt</button>
           <button type="button" className="btn ghost sm" disabled={busy} onClick={() => decide('rejected')}>❌ Reject</button>
@@ -177,9 +189,12 @@ function ProposedCard({ rule, votes, reload, onEdit }) {
   );
 }
 
-function RuleSheet({ rule, onClose, onSaved }) {
+export function RuleSheet({ rule, onClose, onSaved, settings }) {
   const { status } = useSession();
   const isAdmin = status.is_admin;
+  // Stage 11b: an organiser adds, changes or retires rules directly only where the group's decision rule says an
+  // organiser decides (L.G.C does). Otherwise it's a vote / a challenge — the database refuses the shortcut.
+  const direct = (k) => !settings || settings[k]?.decides === 'organiser';
   const [v, set] = useState(() => rule || { category: 'side_comp', applies_to: ['ambrose'], status: 'proposed' });
   const [busy, run] = useRun();
   const f = (k) => ({ value: v[k] ?? '', onChange: (e) => set({ ...v, [k]: e.target.value }) });
@@ -218,15 +233,16 @@ function RuleSheet({ rule, onClose, onSaved }) {
           {APPLIES.map(([k, l]) => <button key={k} type="button" className="chip" aria-pressed={v.applies_to.includes(k)} onClick={() => toggle(k)}>{l}</button>)}
         </div>
         {!rule && !isAdmin && <span className="small muted">It goes up for a vote; the admin decides.</span>}
-        {!rule && isAdmin && (
+        {!rule && isAdmin && direct('new_rule') && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <button type="button" className="btn gold" disabled={busy || !ok} onClick={() => save('proposed')}>Put it to a vote</button>
             <button type="button" className="btn ghost" disabled={busy || !ok} onClick={() => save('active')}>Add it straight in</button>
           </div>
         )}
+        {!rule && isAdmin && !direct('new_rule') && <button type="button" className="btn gold block" disabled={busy || !ok} onClick={() => save('proposed')}>Put it up for a vote</button>}
         {!rule && !isAdmin && <button type="button" className="btn gold block" disabled={busy || !ok} onClick={() => save('proposed')}>Put it up for a vote</button>}
         {rule && <button type="button" className="btn gold block" disabled={busy || !ok} onClick={() => save(rule.status)}>Save</button>}
-        {rule && isAdmin && rule.status === 'active' && <button type="button" className="btn ghost block" disabled={busy} onClick={() => save('retired')}>Retire this rule</button>}
+        {rule && isAdmin && rule.status === 'active' && direct('scrap_rule') && <button type="button" className="btn ghost block" disabled={busy} onClick={() => save('retired')}>Retire this rule</button>}
         {rule && isAdmin && (rule.status === 'retired' || rule.status === 'rejected') && <button type="button" className="btn ghost block" disabled={busy} onClick={() => save('active')}>Bring it back</button>}
         {rule && (isAdmin || rule.status === 'proposed') && (
           <button type="button" className="btn ghost block" onClick={() => { if (window.confirm('Delete this rule completely?')) run(async () => { await must(supabase.from('rules').delete().eq('id', rule.id)); onSaved(); onClose(); toast('Deleted'); }); }}>Delete</button>

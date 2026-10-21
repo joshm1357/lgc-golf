@@ -138,6 +138,8 @@ Rule of thumb: everything a group needs to run a trip stays free. Premium is ext
 - Player stats: history, scoring vs handicap, best and worst holes.
 - "Same as last time" template for a new trip.
 - Handicap check against GolfLink (manual — no public connection found).
+- Tribunal (Stage 11b): "add the penalty to costs" — **STOP** before building it; penalties are words only for now.
+- Tribunal: a "joke constitution" page generated from the governance settings (Josh to decide tone and signing).
 
 ## Decisions and options
 

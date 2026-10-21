@@ -40,6 +40,9 @@ export const GROUP_TABLES = new Set([
   'player_home_areas', 'trip_finds', 'trip_start_points', 'course_notes', 'course_ratings',
   // Comps — what you're playing for (migration 067)
   'comps',
+  // Governance and the Tribunal (migration 061)
+  'governance_group', 'governance_settings', 'committees', 'committee_seats', 'cases', 'case_votes', 'case_posts',
+  'rule_versions', 'round_rule_versions',
 ]);
 
 let current = (() => {

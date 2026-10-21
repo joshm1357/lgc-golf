@@ -44,6 +44,9 @@ const Courses = lazyScreen(() => import('./screens/Courses.jsx'));
 const Planner = lazyScreen(() => import('./screens/Trips.jsx'));
 const PlanDetail = lazyScreen(() => import('./screens/Planner.jsx'), 'PlanDetail');
 const Rulebook = lazyScreen(() => import('./screens/Rulebook.jsx'));
+const RulePage = lazyScreen(() => import('./screens/RulePage.jsx'));
+const CaseHearing = lazyScreen(() => import('./screens/Cases.jsx'), 'CaseHearing');
+const Governance = lazyScreen(() => import('./screens/Cases.jsx'), 'Governance');
 const GreenMapper = lazyScreen(() => import('./screens/GreenMapper.jsx'));
 const Group = lazyScreen(() => import('./screens/Group.jsx'));
 const History = lazyScreen(() => import('./screens/History.jsx'));
@@ -227,6 +230,8 @@ function Inside() {
         <Route path="/tribunal/:caseId" element={<FeatureRoute feature="tribunal" label="The Handicap Tribunal"><TribunalCase /></FeatureRoute>} />
         <Route path="/stats" element={<FeatureRoute feature="stats" label="Player stats"><Stats /></FeatureRoute>} />
         <Route path="/dinner/:tripId?" element={<FeatureRoute feature="dinner_awards" label="Fines and dinner awards"><DinnerAwards /></FeatureRoute>} />
+        <Route path="/tribunal/case/:caseId" element={<FeatureRoute feature="tribunal" label="The Tribunal"><CaseHearing /></FeatureRoute>} />
+        <Route path="/governance" element={<FeatureRoute feature="tribunal" label="The Tribunal"><Governance /></FeatureRoute>} />
         <Route path="/in-jokes" element={<FeatureRoute feature="in_jokes" label="In-jokes"><InJokes /></FeatureRoute>} />
         <Route path="/player/:playerId" element={<Profile />} />
         <Route path="/courses" element={<Courses />} />
@@ -236,6 +241,7 @@ function Inside() {
         <Route path="/plan/:planId" element={<FeatureRoute feature="planner" label="The Trips planner"><PlanDetailRoute /></FeatureRoute>} />
         <Route path="/plan/:planId/find" element={<FeatureRoute feature="trip_finder" label="The trip finder"><TripFinder /></FeatureRoute>} />
         <Route path="/rules" element={<Rulebook />} />
+        <Route path="/rules/:ruleId" element={<RulePage />} />
         <Route path="/courses/:courseId/greens" element={<GreenMapper />} />
         <Route path="/guide/:courseId/:hole?" element={<FeatureRoute feature="gps" label="The course guide"><CourseGuide /></FeatureRoute>} />
         <Route path="/group" element={<Group />} />

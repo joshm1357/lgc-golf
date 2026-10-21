@@ -53,6 +53,10 @@ A mobile web app for a group of mates' golf weekends. Live scoring, a live leade
 - **Words:** group, organiser, player, guest, trip, round, rulebook, history, feature — used the same way in code,
   comments and UI. The planner's `plan_groups` / `plan_group_members` tables are rooms and cars, not groups in this
   sense. Leave their names alone and never mix the two up.
+- **Tribunal words (Stage 11b):** case (anything raised for the group to decide, serious or silly), hearing (the time a
+  case is open), verdict (its result), decision rule (who decides a kind of case, and how), committee (a named set of
+  players who decide certain kinds of case), seat / term (a place on a committee, and how long it's held). Organiser,
+  not "admin".
 - **Plain language, Australian English, mobile first** (375px, one hand, sunlight), as before.
 - **Branding (replaces rule 10):** brand values come from the current group (Stage 4); until then they live in
   `src/styles.css` (`:root`) and `src/components/Logo.jsx`.

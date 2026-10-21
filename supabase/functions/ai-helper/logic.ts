@@ -749,7 +749,7 @@ export async function helperRequest(body: Any, d: Deps): Promise<Record<string, 
     }
   } catch (e) {
     console.error('ai-helper loop failed:', errorKind(e)); // only the kind of error: never values, text or keys
-    result ={ kind: 'error', code: 'crash', message: 'The AI helper hit a snag — try again in a minute.', usage: result.usage };
+    result = { kind: 'error', code: 'crash', message: 'The AI helper hit a snag — try again in a minute.', usage: result.usage };
   } finally {
     await d.logEnd(logId, {
       ok: result.kind !== 'error', input_tokens: result.usage.input_tokens, output_tokens: result.usage.output_tokens, ms: Date.now() - started,

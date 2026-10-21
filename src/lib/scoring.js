@@ -166,6 +166,30 @@ export function stablefordCountback(holes, perHole) {
   return [last(9), last(6), last(3), last(1)];
 }
 
+// ---------- 4BBB (four-ball better ball Stableford) ----------
+
+/**
+ * A pair's 4BBB status. players: [{ id, hcp, scores }]. A hole counts once everyone in the pair has a score (or
+ * picked up) there; the pair gets the better Stableford points. counted[hole] = whose points counted.
+ */
+export function fourballStatus(holes, players) {
+  const perHole = {};
+  const counted = {};
+  let points = 0;
+  let thru = 0;
+  for (const h of holes) {
+    const entries = players.map((p) => ({ id: p.id, s: p.scores?.[h.n] }));
+    if (!players.length || entries.some((e) => !e.s || (e.s.strokes == null && !e.s.picked_up))) continue;
+    const pts = entries.map((e, i) => ({ id: e.id, v: stablefordPoints(h, e.s.strokes, players[i].hcp, e.s.picked_up) }));
+    const best = Math.max(...pts.map((x) => x.v));
+    perHole[h.n] = best;
+    counted[h.n] = pts.filter((x) => x.v === best).map((x) => x.id);
+    points += best;
+    thru += 1;
+  }
+  return { thru, points, vsExpected: points - 2 * thru, finished: thru === holes.length && holes.length > 0, perHole, counted };
+}
+
 // ---------- Momentum (for headlines) ----------
 
 /**

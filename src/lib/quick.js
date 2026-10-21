@@ -1,5 +1,6 @@
 // Stage 7b: the quick round — pure helpers (tested in quick.test.js).
 import { distanceM } from './geo.js';
+import { isNetFormat } from './board.js';
 
 /** Closest to the pin on every par 3; longest drive on the longest par 5 (by the map if it knows, else the first). */
 export function defaultComps(holes = []) {
@@ -49,7 +50,7 @@ export function startOwnLink(groupSlug, base = typeof window !== 'undefined' ? `
 /** The results, as text for the group chat. */
 export function resultsText({ roundName, courseName, rows, format, groupSlug, base }) {
   const lines = rows.filter((r) => r.thru > 0).slice(0, 12).map((r, i) => {
-    const score = format === 'ambrose' ? `${r.netToPar > 0 ? '+' : ''}${r.netToPar} net` : `${r.points} pts`;
+    const score = isNetFormat(format) ? `${r.netToPar > 0 ? '+' : ''}${r.netToPar} net` : `${r.points} pts`;
     return `${i + 1}. ${r.name} — ${score}${r.finished ? '' : ` (thru ${r.thru})`}`;
   });
   return [`⛳ ${roundName}${courseName && !roundName.includes(courseName) ? ` at ${courseName}` : ''}`, ...lines, '',

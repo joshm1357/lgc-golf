@@ -17,6 +17,7 @@ const FORMATS = [
   { value: 'stableford', label: 'Stableford (individual)' },
   { value: 'ambrose', label: 'Ambrose (teams)' },
   { value: 'stroke', label: 'Stroke play (individual, net)' },
+  { value: 'fourball', label: '4BBB (pairs, better-ball Stableford)' },
 ];
 const todayIso = () => {
   const d = new Date();
@@ -163,14 +164,14 @@ function RoundsStep({ trip, onDone }) {
           <div key={day || 'any'} className="card pad stack" style={{ gap: 6, background: 'var(--ground)' }}>
             <strong>{day ? dayLabel(day) : 'A round'}</strong>
             {have.map((r) => (
-              <div key={r.id} className="small">✓ {r.name} · {data.coursesById[r.course_id]?.name || 'course'} · {{ ambrose: 'Ambrose', stroke: 'Stroke play' }[r.format] || 'Stableford'}{r.status === 'live' ? ' · live' : r.status === 'locked' ? ' · finished' : ''}</div>
+              <div key={r.id} className="small">✓ {r.name} · {data.coursesById[r.course_id]?.name || 'course'} · {{ ambrose: 'Ambrose', stroke: 'Stroke play', fourball: '4BBB' }[r.format] || 'Stableford'}{r.status === 'live' ? ' · live' : r.status === 'locked' ? ' · finished' : ''}</div>
             ))}
             <AddRound trip={trip} day={day} first={!have.length} />
           </div>
         );
       })}
       {rounds.length > 0 && <button type="button" className="btn sm" onClick={onDone}>Next: players →</button>}
-      <p className="note" style={{ margin: 0 }}>Ambrose teams, and who’s playing a Stableford round, are set in Admin → Rounds &amp; teams (or with The Draw).</p>
+      <p className="note" style={{ margin: 0 }}>Ambrose teams, 4BBB pairs, and who’s playing a Stableford or stroke round, are set in Admin → Rounds &amp; teams (or with The Draw).</p>
     </>
   );
 }

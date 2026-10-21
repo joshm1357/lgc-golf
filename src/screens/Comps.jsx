@@ -22,7 +22,7 @@ export function sortEntries(kind, list) {
 
 function roundPlayerIds(data, round) {
   if (!round) return [];
-  if (round.format === 'ambrose') return (data.teamsByRound[round.id] || []).flatMap((t) => t.players.map((p) => p.id));
+  if (round.format === 'ambrose' || round.format === 'fourball') return (data.teamsByRound[round.id] || []).flatMap((t) => t.players.map((p) => p.id));
   return (data.roundPlayers[round.id] || []).map((rp) => rp.player_id);
 }
 
@@ -58,6 +58,8 @@ export default function Comps() {
   const scoreIdx = useScores(round?.id);
   const subjects = !round ? [] : round.format === 'ambrose'
     ? (data.teamsByRound[round.id] || []).map((t) => t.id)
+    : round.format === 'fourball'
+    ? (data.teamsByRound[round.id] || []).flatMap((t) => t.players.map((p) => p.id))
     : (data.roundPlayers[round.id] || []).map((rp) => rp.player_id);
   const allThrough = subjects.length > 0 && subjects.every((id) => scoreIdx?.[round.id]?.[id]?.[hole]);
   const decided = round?.status === 'locked' || allThrough;

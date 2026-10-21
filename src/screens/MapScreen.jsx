@@ -53,6 +53,8 @@ export default function MapScreen() {
     const idx = scores.index[round.id] || {};
     const subjects = round.format === 'ambrose'
       ? (data.teamsByRound[round.id] || []).map((t) => ({ id: t.id, name: t.name, players: t.players }))
+      : round.format === 'fourball'
+      ? (data.teamsByRound[round.id] || []).flatMap((t) => t.players.map((p) => ({ id: p.id, name: playerName(p), players: [p] })))
       : (data.roundPlayers[round.id] || []).map((rp) => ({ id: rp.player_id, name: playerName(data.playersById[rp.player_id]), players: [data.playersById[rp.player_id]] }));
     return subjects.map((s) => {
       const holes = Object.values(idx[s.id] || {});

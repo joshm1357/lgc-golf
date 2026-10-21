@@ -271,6 +271,7 @@ function RoundsAdmin() {
               <option value="ambrose">Ambrose (teams)</option>
               <option value="stableford">Stableford (individual)</option>
               <option value="stroke">Stroke play (individual, net)</option>
+              <option value="fourball">4BBB (pairs, better-ball Stableford)</option>
             </select>
           </label>
         </div>
@@ -346,7 +347,7 @@ function RoundCard({ round }) {
       {sideCompsOn && <RoundOwnComps round={round} onSaved={data.reload} />}
       <RoundRules round={round} />
       {round.format === 'ambrose' && drawOn && <DrawButton round={round} />}
-      {round.format === 'ambrose' ? <TeamsEditor round={round} /> : <StablefordPlayers round={round} />}
+      {round.format === 'ambrose' || round.format === 'fourball' ? <TeamsEditor round={round} pairs={round.format === 'fourball'} /> : <StablefordPlayers round={round} />}
       <details>
         <summary className="small muted">Delete this round</summary>
         <button type="button" className="btn danger sm" style={{ marginTop: 8 }} onClick={() => { if (window.confirm(`Delete ${round.name} and all its scores?`)) run(() => supabase.from('rounds').delete().eq('id', round.id), 'Round deleted').then(data.reload); }}>Delete round</button>
@@ -377,7 +378,7 @@ function PlayerPicker({ selected, onToggle, exclude = [] }) {
   );
 }
 
-function TeamsEditor({ round }) {
+function TeamsEditor({ round, pairs = false }) {
   const data = useData();
   const teams = data.teamsByRound[round.id] || [];
   const taken = teams.flatMap((t) => t.players.map((p) => p.id));
@@ -388,31 +389,32 @@ function TeamsEditor({ round }) {
   const total = sel.reduce((s, id) => s + Number(data.playersById[id]?.handicap || 0), 0);
   return (
     <div className="stack">
-      <span className="label">Teams</span>
-      {teams.map((t) => <TeamRow key={t.id} team={t} takenElsewhere={teams.filter((o) => o.id !== t.id).flatMap((o) => o.players.map((p) => p.id))} />)}
+      <span className="label">{pairs ? 'Pairs (4BBB)' : 'Teams'}</span>
+      {pairs && <span className="small muted">Two players a pair. Each plays off their own handicap (change it under 3. Players); the better Stableford points on each hole count.</span>}
+      {teams.map((t) => <TeamRow key={t.id} team={t} pairs={pairs} takenElsewhere={teams.filter((o) => o.id !== t.id).flatMap((o) => o.players.map((p) => p.id))} />)}
       {data.players.length < 2 && <span className="small muted">Only {data.players.length} player so far — the lads appear here once they join with the PIN, or add them under 3. Players.</span>}
       <div className="stack card pad">
-        <strong>Add a team</strong>
-        <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Team name" />
+        <strong>{pairs ? 'Add a pair' : 'Add a team'}</strong>
+        <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={pairs ? 'Pair name (e.g. Kurt & Al)' : 'Team name'} />
         <span className="small muted">Pick players (already-teamed players are hidden):</span>
         <PlayerPicker selected={sel} onToggle={toggle} exclude={taken} />
-        <div className="row">
+        {!pairs && <div className="row">
           <label className="field grow"><span>Team handicap</span><input className="input" inputMode="decimal" value={hcp} onChange={(e) => setHcp(e.target.value)} placeholder={sel.length ? `e.g. ${(total / (sel.length * 2)).toFixed(1)}` : ''} /></label>
-        </div>
-        {sel.length > 0 && <span className="small muted">Players' handicaps add to {total}. Common rules: 4-player team ÷ 8, 3-player ÷ 6, 2-player ÷ 4.</span>}
-        <button type="button" className="btn" disabled={!name || !sel.length || hcp === ''} onClick={async () => {
-          const res = await run(() => supabase.from('teams').insert({ round_id: round.id, name, handicap: Number(hcp) }).select().single());
+        </div>}
+        {sel.length > 0 && !pairs && <span className="small muted">Players' handicaps add to {total}. Common rules: 4-player team ÷ 8, 3-player ÷ 6, 2-player ÷ 4.</span>}
+        <button type="button" className="btn" disabled={!name || !sel.length || (pairs ? sel.length !== 2 : hcp === '')} onClick={async () => {
+          const res = await run(() => supabase.from('teams').insert({ round_id: round.id, name, handicap: pairs ? 0 : Number(hcp) }).select().single());
           if (res) {
             await run(() => supabase.from('team_players').insert(sel.map((pid) => ({ team_id: res.id, player_id: pid }))), 'Team added');
             setName(''); setHcp(''); setSel([]); data.reload();
           }
-        }}>Add team</button>
+        }}>{pairs ? 'Add pair' : 'Add team'}</button>
       </div>
     </div>
   );
 }
 
-function TeamRow({ team, takenElsewhere = [] }) {
+function TeamRow({ team, takenElsewhere = [], pairs = false }) {
   const data = useData();
   const [hcp, setHcp] = useState(String(team.handicap));
   const [editing, setEditing] = useState(false);
@@ -426,8 +428,8 @@ function TeamRow({ team, takenElsewhere = [] }) {
         <div className="small muted ellipsis">{team.players.map(playerName).join(', ') || 'No players'}</div>
         <button type="button" className="small" style={{ background: 'none', border: 0, padding: 0, color: 'var(--navy)', fontWeight: 700 }} onClick={() => setEditing(!editing)}>{editing ? 'Done' : 'Change players'}</button>
       </div>
-      <input className="input" style={{ width: 70, minHeight: 38 }} inputMode="decimal" value={hcp} onChange={(e) => setHcp(e.target.value)} aria-label="Team handicap" />
-      {Number(hcp) !== Number(team.handicap) && hcp !== '' && (
+      {!pairs && <input className="input" style={{ width: 70, minHeight: 38 }} inputMode="decimal" value={hcp} onChange={(e) => setHcp(e.target.value)} aria-label="Team handicap" />}
+      {!pairs && Number(hcp) !== Number(team.handicap) && hcp !== '' && (
         <button type="button" className="btn sm" onClick={() => run(() => supabase.from('teams').update({ handicap: Number(hcp) }).eq('id', team.id), 'Saved').then(data.reload)}>Save</button>
       )}
       <button type="button" className="btn ghost sm" aria-label={`Remove ${team.name}`} onClick={() => { if (window.confirm(`Remove ${team.name}?`)) run(() => supabase.from('teams').delete().eq('id', team.id), 'Team removed').then(data.reload); }}>✕</button>

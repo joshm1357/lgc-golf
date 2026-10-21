@@ -1,5 +1,6 @@
 // Stage 9: share cards — a winner, a final leaderboard or a Tribunal verdict as a picture for the group chat, with a
 // small "Made with The Golf Trip". Drawn on the phone (no outside service, nothing to install).
+import { isNetFormat } from './board.js';
 
 const W = 1080;
 const H = 1350;
@@ -101,7 +102,7 @@ export async function sharePicture(file, text) {
 
 /** A round's board as card data (top 8). */
 export function boardCard(board, { roundName, courseName, playDate, final } = {}) {
-  const isA = board?.format === 'ambrose' || board?.format === 'stroke'; // net to par
+  const isA = isNetFormat(board?.format); // net to par
   const fmt = (n) => (n > 0 ? `+${n}` : n === 0 ? 'E' : String(n));
   const date = playDate ? new Date(`${playDate}T00:00:00`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
   return {

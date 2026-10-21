@@ -125,6 +125,7 @@ function TripSetupSheet({ plan, onClose, onDone }) {
                 <option value="stableford">Stableford</option>
                 <option value="ambrose">Ambrose</option>
                 <option value="stroke">Stroke play</option>
+                <option value="fourball">4BBB (pairs)</option>
               </select>
             </div>
           </div>

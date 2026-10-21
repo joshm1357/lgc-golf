@@ -12,6 +12,7 @@ import { SIGN_IN } from '../lib/auth.js';
 import { SignInCard } from './Group.jsx';
 import SharePicture from '../components/SharePicture.jsx';
 import { boardCard } from '../lib/shareCard.js';
+import { isNetFormat } from '../lib/board.js';
 
 // Stage 7b: the quick round inside the app — getting your mates in, joining with just a name, and what happens
 // after the last hole (share the results, the winner on the honour board, same time next year, make it official).
@@ -113,7 +114,7 @@ export function QuickRoundDone({ round, board, course }) {
       <div className="section"><Link to="/round-ready" className="small" style={{ fontWeight: 700 }}>📤 Invite more mates</Link></div>
     ) : null;
   }
-  const isA = round.format !== 'stableford'; // net to par (Ambrose or stroke play)
+  const isA = isNetFormat(round.format); // net to par (Ambrose or stroke play)
   const top = rows[0];
   const slug = (status?.groups || []).find((g) => g.id === status?.group_id)?.slug;
   const engraved = data.honour_board.some((h) => h.trip_id === round.trip_id);

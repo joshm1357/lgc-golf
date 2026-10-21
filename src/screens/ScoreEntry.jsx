@@ -33,6 +33,13 @@ export default function ScoreEntry() {
   const subjects = useMemo(() => {
     if (!round) return [];
     if (isA) return (data.teamsByRound[round.id] || []).map((t) => ({ id: t.id, name: t.name, hcp: t.handicap, players: t.players }));
+    if (round.format === 'fourball') {
+      // 4BBB: each player in each pair enters their own score, off their own handicap (the round's, if set).
+      const hcpOf = Object.fromEntries((data.roundPlayers[round.id] || []).map((rp) => [rp.player_id, rp.playing_handicap]));
+      return (data.teamsByRound[round.id] || []).flatMap((t) => t.players.map((p) => ({
+        id: p.id, name: `${playerName(p)} (${t.name})`, hcp: hcpOf[p.id] ?? Number(p.handicap ?? 0), players: [p],
+      })));
+    }
     return (data.roundPlayers[round.id] || []).map((rp) => ({
       id: rp.player_id, name: playerName(data.playersById[rp.player_id]), hcp: rp.playing_handicap, players: [data.playersById[rp.player_id]],
     }));
@@ -205,7 +212,7 @@ export default function ScoreEntry() {
             <button type="button" className="step solid" aria-label="One more" onClick={() => { setHoleN(hole.n); setPickedUp(false); setValue(Math.min(20, strokes + 1)); }}>{Icon.plus()}</button>
           </div>
           <span style={{ fontWeight: 700, color: !isPickup && strokes < hole.par ? 'var(--under)' : 'var(--muted)' }}>
-            {isPickup ? (round.format === 'stroke' ? 'Picked up — counts as net double bogey' : 'Picked up — 0 points') : `${scoreWord(strokes, hole.par)}${recv ? ` · net ${scoreWord(net, hole.par).toLowerCase()}` : ''}${round.format === 'stableford' ? ` · ${stablefordPoints(hole, strokes, subject.hcp)} pts` : ''}`}
+            {isPickup ? (round.format === 'stroke' ? 'Picked up — counts as net double bogey' : 'Picked up — 0 points') : `${scoreWord(strokes, hole.par)}${recv ? ` · net ${scoreWord(net, hole.par).toLowerCase()}` : ''}${round.format === 'stableford' || round.format === 'fourball' ? ` · ${stablefordPoints(hole, strokes, subject.hcp)} pts` : ''}`}
           </span>
           {!isA && (
             <button type="button" className="chip" aria-pressed={!!isPickup} onClick={() => { setHoleN(hole.n); setPickedUp(!isPickup); }}>Picked up</button>

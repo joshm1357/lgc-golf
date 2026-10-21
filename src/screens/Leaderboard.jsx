@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { useData, useScores, useSession, useSideEntries, useFeature } from '../lib/store.jsx';
-import { roundBoard, headlines, compBonuses } from '../lib/board.js';
+import { useData, useScores, useSession, useSideEntries, useFeature, playerName } from '../lib/store.jsx';
+import { roundBoard, headlines, compBonuses, isNetFormat, isTeamFormat } from '../lib/board.js';
 import { formatToPar, strokesReceived, stablefordPoints, strokeHoleNet } from '../lib/scoring.js';
 import { Header, Seg, AvatarStack, Icon, Sheet, Loading, toast } from '../components/ui.jsx';
 import { supabase, friendlyError } from '../lib/supabase.js';
@@ -105,17 +105,19 @@ export default function Leaderboard() {
   }
 
   const isA = board.format === 'ambrose';
-  const isNet = board.format !== 'stableford'; // Ambrose and stroke play: net to par, lower better
+  const isNet = isNetFormat(board.format); // Ambrose and stroke play: net to par, lower better
+  const isTeams = isTeamFormat(board.format); // Ambrose teams, 4BBB pairs
   const isStroke = board.format === 'stroke';
+  const isFour = board.format === 'fourball';
   const projected = mode === 'proj';
   const rows = projected ? board.projection : board.rows;
   const heads = headlines(board, prevRanks, { projected });
   const me = status?.player_id;
-  const myTeam = isA ? (data.teamsByRound[round.id] || []).find((t) => t.players.some((p) => p.id === me)) : null;
-  const imPlaying = isA ? !!myTeam : (data.roundPlayers[round.id] || []).some((rp) => rp.player_id === me);
+  const myTeam = isTeams ? (data.teamsByRound[round.id] || []).find((t) => t.players.some((p) => p.id === me)) : null;
+  const imPlaying = isTeams ? !!myTeam : (data.roundPlayers[round.id] || []).some((rp) => rp.player_id === me);
   const canScore = round.status === 'live' && (imPlaying || status?.is_admin);
   const winner = round.status === 'locked' ? board.rows[0] : null;
-  const trophy = data.trophies.find((t) => t.trip_id === round.trip_id && t.type === (isA ? 'ambrose' : isStroke ? 'none' : 'stableford_total'));
+  const trophy = data.trophies.find((t) => t.trip_id === round.trip_id && t.type === (isA ? 'ambrose' : isStroke || isFour ? 'none' : 'stableford_total'));
 
   return (
     <div className="page">
@@ -135,7 +137,7 @@ export default function Leaderboard() {
         <div className="winner">
           <TrophyArt name={trophy?.name} type={trophy?.type} size={72} />
           <div className="grow">
-            <div className="label">{trophy ? trophy.name : 'Winner'}{isA ? '' : ' · this round'}</div>
+            <div className="label">{trophy ? trophy.name : 'Winner'}{isTeams ? '' : ' · this round'}</div>
             <div className="t">{winner.name}</div>
             <div className="hdr-sub">{isA ? `${formatToPar(winner.netToPar, 1)} net` : isStroke ? `${formatToPar(winner.netToPar)} net · ${winner.gross} gross` : `${winner.points} points`}</div>
           </div>
@@ -187,7 +189,7 @@ export default function Leaderboard() {
 
       <div className="lb-cols">
         <span style={{ textAlign: 'center' }}>#</span>
-        <span>{isA ? 'Team' : 'Player'}</span>
+        <span>{isA ? 'Team' : isFour ? 'Pair' : 'Player'}</span>
         <span style={{ textAlign: 'center' }}>Thru</span>
         <span style={{ textAlign: 'right' }}>{projected ? 'Proj.' : isNet ? 'Net' : 'Pts'}</span>
         <span style={{ textAlign: 'right' }}>{projected ? 'Win' : isA ? 'Move' : isStroke ? 'Gross' : '+/−'}</span>
@@ -201,7 +203,7 @@ export default function Leaderboard() {
                 {drawOn && <button type="button" className="btn gold" onClick={() => setDrawing(true)}>🎲 Random draw — live for everyone</button>}
                 <Link to="/admin" className="btn ghost">Pick the teams myself</Link>
               </div>
-            ) : (drawOn ? 'Teams come out of the draw — keep the app open and it will pop up.' : 'Teams aren’t set yet.')) : 'No players in this round yet.'}
+            ) : (drawOn ? 'Teams come out of the draw — keep the app open and it will pop up.' : 'Teams aren’t set yet.')) : isFour ? (status?.is_admin ? <Link to="/admin" className="btn ghost">Pick the pairs in Admin</Link> : 'The pairs aren’t set yet.') : 'No players in this round yet.'}
           </div>
         )}
         {rows.map((r, i) => {
@@ -218,7 +220,7 @@ export default function Leaderboard() {
               <span className="stack" style={{ gap: 5, minWidth: 0 }}>
                 <span className="lb-name ellipsis">{r.name}</span>
                 <span className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-                  <AvatarStack players={r.players} size={isA ? 26 : 22} />
+                  <AvatarStack players={r.players} size={isTeams ? 26 : 22} />
                   {(r.bonusWins || []).map((w) => (
                     <span key={w} title={`${w}: −${round.comp_bonus} strokes`} style={{ marginLeft: 8, display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 7px', borderRadius: 999, background: 'var(--gold)', color: 'var(--text)', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap' }}>
                       {w.split(' ')[0]} {w.split(' ')[1]} −{round.comp_bonus}
@@ -249,6 +251,8 @@ export default function Leaderboard() {
       <p className="note">
         {projected
           ? 'Projected = score so far + expected score on the holes left, based on how the groups ahead played them, adjusted for each team’s form. Win % comes from 2,000 simulated finishes. Early on, with few holes played, treat it as banter.'
+          : isFour
+            ? '4BBB: each pair scores the better Stableford points on every hole (a hole counts once both have a score). +/− is against the expected 2 points a hole. Tap a pair for both cards.'
           : isStroke
             ? 'Stroke play: net to par for the holes each player has played, so players on different holes compare fairly. Gross is the total strokes so far; a pick-up counts as net double bogey. Tap a player for their card.'
           : isA
@@ -272,8 +276,9 @@ export default function Leaderboard() {
 }
 
 export function Scorecard({ row, board }) {
+  if (board.format === 'fourball') return <FourballCard row={row} board={board} />;
   const isA = board.format === 'ambrose';
-  const isNet = board.format !== 'stableford';
+  const isNet = isNetFormat(board.format);
   const isStroke = board.format === 'stroke';
   const holes = board.holes;
   const tot = { par: 0, s: 0, x: 0 };
@@ -340,6 +345,41 @@ function TvToggle({ round }) {
         <span className="small"><strong>📺 Show on the clubhouse TV</strong><div className="muted">On the club’s TV screen today — first names only, no photos. Anyone with the club’s TV link can see it.</div></span>
         <input type="checkbox" checked={!!round.tv} disabled={busy} onChange={(e) => flip(e.target.checked)} style={{ width: 24, height: 24, flex: 'none' }} aria-label="Show on the clubhouse TV" />
       </label>
+    </div>
+  );
+}
+
+/** A 4BBB pair's card: both players' scores and points, and the better ball that counted. */
+function FourballCard({ row, board }) {
+  const holes = board.holes;
+  const m = row.members || [];
+  const name = (id) => playerName(row.players.find((p) => p.id === id));
+  const tot = Object.fromEntries(m.map((x) => [x.id, 0]));
+  return (
+    <div className="stack">
+      <div className="row"><AvatarStack players={row.players} size={34} /><span className="muted small">{m.map((x) => `${name(x.id)} off ${Math.round(x.hcp)}`).join(' · ')}</span></div>
+      <div className="card" style={{ overflowX: 'auto' }}>
+        <table className="sc">
+          <thead><tr><th>Hole</th><th>Par</th><th>SI</th>{m.map((x) => <th key={x.id}>{name(x.id).split(' ')[0]}</th>)}<th>Best</th></tr></thead>
+          <tbody>
+            {holes.map((h) => (
+              <tr key={h.n}>
+                <td><strong>{h.n}</strong></td><td>{h.par}</td><td>{h.si}</td>
+                {m.map((x) => {
+                  const s = x.scores[h.n];
+                  const pts = s ? stablefordPoints(h, s.strokes, x.hcp, s.picked_up) : null;
+                  if (pts != null) tot[x.id] += pts;
+                  const counts = (row.counted?.[h.n] || []).includes(x.id);
+                  return <td key={x.id} style={counts ? { fontWeight: 800, background: 'var(--gold-soft)' } : undefined}>{s ? `${s.picked_up ? 'P' : s.strokes}·${pts}` : ''}</td>;
+                })}
+                <td><strong>{row.perHole[h.n] ?? ''}</strong></td>
+              </tr>
+            ))}
+            <tr><td><strong>Tot</strong></td><td /><td />{m.map((x) => <td key={x.id}>{tot[x.id]}</td>)}<td><strong>{row.points}</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <span className="small muted">Each box: strokes · points. Gold = the points that counted.</span>
     </div>
   );
 }

@@ -103,7 +103,8 @@ export function Privacy() {
           (names, nicknames, handicaps, scores, trips, courses and honour boards) are sent to the AI company the app uses
           at the time (for example Anthropic, Moonshot or OpenRouter) to work out the answer. Guests don’t get it. We keep
           counts only — which group, which part of the app, how many words (tokens) it used, whether it worked and any
-          👍 / 👎 — never the question or the answer.</>,
+          👍 / 👎 — never the question or the answer. Photos and text you give it to bring in your group’s history are sent to the
+          AI company to read them, and aren’t kept by the app or logged.</>,
       ]} />
       <P>No advertising networks, no analytics or tracking tools, and nothing is sold.</P>
 

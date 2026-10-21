@@ -34,7 +34,7 @@ export type ToolDef = { name: string; description: string; input_schema: Any };
 export type Call = { id: string; name: string; input: Any; raw?: string; bad?: boolean };
 export type ToolResult = { id: string; name: string; content: string; is_error?: boolean };
 export type Msg =
-  | { role: 'user'; text: string }
+  | { role: 'user'; text: string; images?: string[] } // images: data URLs (data:image/jpeg;base64,…) — import mode only
   | { role: 'assistant'; text: string; calls: Call[] }
   | { role: 'tool'; results: ToolResult[] };
 export type Usage = { input_tokens: number; output_tokens: number; estimated?: boolean };
@@ -129,11 +129,17 @@ export function headers(cfg: AiConfig): Record<string, string> {
   return { Authorization: `Bearer ${cfg.apiKey}`, 'content-type': 'application/json', 'X-Title': 'The Golf Trip', 'HTTP-Referer': 'https://thegolftrip.app' };
 }
 
+/** A photo (a data URL) as an Anthropic image block. */
+function anthropicImage(url: string) {
+  const m = /^data:(image\/[a-z]+);base64,(.*)$/s.exec(url);
+  return { type: 'image', source: { type: 'base64', media_type: m ? m[1] : 'image/jpeg', data: m ? m[2] : url } };
+}
+
 /** The request body for one model call, in the provider's own format. */
 export function requestBody(cfg: AiConfig, o: { system: string; tools: ToolDef[]; messages: Msg[]; maxTokens: number }) {
   if (cfg.provider === 'anthropic') {
     const messages = o.messages.map((m) => {
-      if (m.role === 'user') return { role: 'user', content: m.text };
+      if (m.role === 'user') return { role: 'user', content: m.images?.length ? [...m.images.map(anthropicImage), { type: 'text', text: m.text }] : m.text };
       if (m.role === 'assistant') {
         const content: Any[] = [];
         if (m.text) content.push({ type: 'text', text: m.text });
@@ -147,7 +153,7 @@ export function requestBody(cfg: AiConfig, o: { system: string; tools: ToolDef[]
   }
   const messages: Any[] = [{ role: 'system', content: o.system }];
   for (const m of o.messages) {
-    if (m.role === 'user') messages.push({ role: 'user', content: m.text });
+    if (m.role === 'user') messages.push({ role: 'user', content: m.images?.length ? [{ type: 'text', text: m.text }, ...m.images.map((url) => ({ type: 'image_url', image_url: { url } }))] : m.text });
     else if (m.role === 'assistant') {
       messages.push({
         role: 'assistant', content: m.text || '',

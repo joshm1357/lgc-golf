@@ -15,6 +15,7 @@ import { TeeGroupsForTrip } from './TeeGroups.jsx';
 import { upcomingTrips, tripDays, dayLabel, roundName, setupSteps, nextAction } from '../lib/setupguide.js';
 import { parseHoles } from '../lib/sidecomps.js';
 import { SetupHelperBox } from './AiHelper.jsx';
+import { ImportCard } from './AiImport.jsx';
 import { CompsStep, RoundCompsCard } from './CompsBoard.jsx';
 import { useTripComps } from '../components/CompsChip.jsx';
 
@@ -67,6 +68,7 @@ export default function SetupGuide() {
       <Header back title="Set up your trip" sub={`${doneCount} of ${needed} done`} />
       <div className="section stack" style={{ gap: 10 }}>
         <SetupHelperBox onApplied={(id) => { if (id) setTripId(id); setOpen('players'); }} />
+        <ImportCard />
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${needed}, 1fr)`, gap: 4 }} aria-hidden="true">
           {steps.filter((s) => !s.optional).map((s) => <span key={s.key} style={{ height: 6, borderRadius: 3, background: s.done ? 'var(--gold)' : 'var(--line-soft, #E3E7EC)' }} />)}
         </div>

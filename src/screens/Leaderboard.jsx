@@ -89,9 +89,17 @@ export default function Leaderboard() {
     return (
       <div className="page">
         <Header logo title={trip?.name || (status?.legacy ? 'L.G.C Golf' : status?.group_name) || 'The Golf Trip'} sub="No rounds set up yet" />
-        <div className="empty">
-          Nothing to show yet.{status?.is_admin ? <> Set up the course, teams and round in <Link to="/admin">Admin</Link>.</> : ' The admin is setting things up.'}
-        </div>
+        {status?.is_admin && !status?.viewing ? (
+          <div className="section">
+            <Link to="/setup" className="card pad row" style={{ gap: 12, textDecoration: 'none', color: 'inherit', borderColor: 'var(--navy)' }}>
+              <span style={{ fontSize: 30 }} aria-hidden="true">🏌️</span>
+              <span className="grow"><strong style={{ fontSize: 18 }}>Set up your trip</strong><div className="small muted">5 quick steps: trip, courses, rounds, players, side comps.</div></span>
+              <span className="btn gold sm">Start</span>
+            </Link>
+          </div>
+        ) : (
+          <div className="empty">Nothing to show yet. The organiser is setting things up.</div>
+        )}
       </div>
     );
   }

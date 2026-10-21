@@ -28,6 +28,7 @@ import More from './screens/More.jsx';
 
 // Loaded when first opened (the service worker saves them all for offline use in the background).
 const Admin = lazyScreen(() => import('./screens/Admin.jsx'));
+const SetupGuide = lazyScreen(() => import('./screens/SetupGuide.jsx'));
 const Privacy = lazyScreen(() => import('./screens/Legal.jsx'), 'Privacy');
 const Terms = lazyScreen(() => import('./screens/Legal.jsx'), 'Terms');
 const Profile = lazyScreen(() => import('./screens/Profile.jsx'));
@@ -206,6 +207,7 @@ function Inside() {
         <Route path="/player/:playerId" element={<Profile />} />
         <Route path="/courses" element={<Courses />} />
         <Route path="/admin" element={<Admin />} />
+        <Route path="/setup" element={<SetupGuide />} />
         <Route path="/plan" element={<FeatureRoute feature="planner" label="The Trips planner"><Planner /></FeatureRoute>} />
         <Route path="/plan/:planId" element={<FeatureRoute feature="planner" label="The Trips planner"><PlanDetailRoute /></FeatureRoute>} />
         <Route path="/rules" element={<Rulebook />} />

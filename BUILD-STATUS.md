@@ -919,3 +919,20 @@ screen, "Viewing as Mike · read only", and Stop.
   screens; push on/off; auth writes; stricter block-list; queues; draw presence; read-only list wording).
 - **Tested:** 184 unit tests (`preview.test.js` 9); `view-as-test.mjs` 14; beta 47; signin-home 69; every other browser
   check passes.
+
+## Wave 3 — "Bring your history" (AI import), branch `ov3-import`, 21 Oct 2026
+- **What:** `/import` (organisers, behind `ai_helper`): paste text, upload .txt/.csv/.md/.docx/.xlsx (read in the
+  browser, no new library) or up to 4 photos (shrunk to 1600px JPEG, never stored) → the ai-helper `import` mode
+  proposes players, past trips, winners, past handicaps and rules → a confirm screen (tick, edit, "→ already a player",
+  "→ new past trip", "not sure about" notes) → **Add these** writes with the organiser's own sign-in
+  (admin_create_player, trips, import_honours, import_handicaps, import_rules). Safe to run twice.
+- **Ways in:** guided setup card, History ("✨ Import with AI"), Rulebook ("✨ Import rules from a photo or text"),
+  Ask (organisers' chip). Privacy page line.
+- **Server:** `supabase/functions/ai-helper/import.ts` (+ a 2-line dispatch in index.ts; images in providers.ts).
+  Optional secret `AI_VISION_MODEL` for photos (else `AI_MODEL`). Counts against the cap like setup; helper_log gets
+  counts only, `job = 'import'`.
+- **Migration 070** (staging only): `helper_log.job`, `admin_ai_usage` shows jobs, `import_rules()` (normal rules,
+  version 1; in force when the organiser decides or the Rulebook is empty, otherwise up for a vote).
+- **Tested:** Deno `import.test.ts` 8 (55 in the folder); Vitest `aiimport.test.js` 22; `ai-import-test.mjs` 35 checks;
+  staging SQL checks (organiser adds / re-run skips / player and other group refused / voting group → proposed;
+  empty-Rulebook voting group → in force; guard back on afterwards). ai-helper v4 deployed to staging and boot-checked.

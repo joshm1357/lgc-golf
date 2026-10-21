@@ -10,6 +10,7 @@ import { QuickRoundDone } from './QuickRound.jsx';
 import SharePicture from '../components/SharePicture.jsx';
 import { boardCard } from '../lib/shareCard.js';
 import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
+import ReplayButton from '../components/ReplayButton.jsx';
 
 const DrawSetup = lazyScreen(() => import('../components/DrawSetup.jsx'), 'default', { inline: true });
 
@@ -157,6 +158,7 @@ export default function Leaderboard() {
         </div>
       )}
 
+      {!status?.quick && <ReplayButton round={round} board={board} />}
       {status?.quick && <QuickRoundDone round={round} board={board} course={course} />}
       {status?.is_admin && ((tvOn && round.status !== 'locked') || round.tv) && <TvToggle round={round} />}
 

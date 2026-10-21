@@ -154,6 +154,59 @@ export function popWord(moment) {
   }
 }
 
+// The win and the close finish have their own scenes, so a race frame talks about its next-best moment.
+const OWN_SCENE = new Set(['win', 'close']);
+
+/** The moment a race frame is about (or null for a quiet hole). */
+export function topMoment(frame) {
+  return (frame?.moments || []).find((m) => !OWN_SCENE.has(m.kind)) || null;
+}
+
+/** The big word for a race frame: the most dramatic moment that has one. */
+export function popFor(frame) {
+  for (const m of frame?.moments || []) {
+    if (OWN_SCENE.has(m.kind)) continue;
+    const w = popWord(m);
+    if (w) return { word: w, kind: m.kind };
+  }
+  return null;
+}
+
+/**
+ * The words under every step of the replay (buildTimeline's steps). Same replay + style + seed = same words.
+ * In-jokes are each used once, in order.
+ */
+export function captionsFor(replay, steps, { style = DEFAULT_STYLE, seed = 0, jokes = [], roundName = '', courseName = '' } = {}) {
+  const used = new Set();
+  return steps.map((s, i) => {
+    const sd = seed + i * 7919;
+    if (s.scene === 'welcome') return pickLine('welcome', style, { round: roundName || 'Today’s round', course: courseName || 'the course' }, sd);
+    if (s.scene === 'field') return pickLine('field', style, { count: replay.subjects.length }, sd);
+    if (s.scene === 'race') {
+      const f = replay.frames[s.frame];
+      const m = topMoment(f);
+      return m ? captionFor(m, { style, seed: sd, jokes, used }) : captionFor({ kind: 'quiet', hole: f.hole }, { style, seed: sd });
+    }
+    if (s.scene === 'finish' && replay.finish) {
+      const f = replay.finish;
+      return pickLine(f.close ? 'close' : 'gap', style, { name: f.leader, other: f.second, gap: f.gapText, left: f.left }, sd);
+    }
+    if (s.scene === 'winner' && replay.winner) {
+      const last = replay.frames[replay.frames.length - 1];
+      return captionFor(last.moments.find((m) => m.kind === 'win'), { style, seed: sd, jokes, used });
+    }
+    if (s.scene === 'awards') {
+      const a = replay.awards;
+      if (a.worst && a.worst.diff >= 2) return pickLine('award_worst', style, { name: a.worst.name, strokes: a.worst.strokes, hole: `the ${ordinal(a.worst.hole)}` }, sd);
+      if (a.climber) return pickLine('award_climber', style, { name: a.climber.name, places: a.climber.places }, sd);
+      if (a.best) return pickLine('award_best', style, { name: a.best.name, strokes: a.best.strokes, hole: `the ${ordinal(a.best.hole)}` }, sd);
+      return '';
+    }
+    if (s.scene === 'end') return pickLine('end', style, {}, sd);
+    return '';
+  });
+}
+
 /** The group's chosen style, kept on this phone (per group) for now. */
 const styleKey = (groupId) => `tgt-replay-style-${groupId || 'x'}`;
 export function savedStyle(groupId) {

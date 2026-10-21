@@ -3,6 +3,7 @@ import { buildReplay, buildTimeline, isRoundFinished, raceSubjects, gapWords, ho
 import { roundBoard } from './board.js';
 import {
   LINES, STYLES, pickLine, fill, captionFor, pickInJoke, popWord, ordinal, savedStyle, saveStyle, DEFAULT_STYLE,
+  captionsFor, popFor, topMoment,
 } from './replay-lines.js';
 
 const PARS = [[5, 17], [4, 9], [3, 8], [4, 3], [3, 11], [5, 16], [4, 18], [4, 15], [4, 1], [4, 6], [3, 14], [4, 5], [4, 10], [5, 7], [3, 12], [5, 2], [4, 13], [4, 4]];
@@ -306,6 +307,29 @@ describe('replay lines', () => {
     expect(hits.every((h) => h === 'Somebody call the greenkeeper.')).toBe(true);
     expect(pickInJoke(null, { kind: 'win' })).toBeNull();
     expect(captionFor({ kind: 'win', subjectId: 'b', name: 'Bo', score: '38 points' }, { jokes, used: new Set(), seed: 1 })).toMatch(/cab/);
+  });
+
+  it('captions for every step: steady, in the chosen style, quiet holes get a quiet line', () => {
+    const r = buildReplay(stableford());
+    const steps = buildTimeline(r);
+    const opts = { style: 'larrikins', seed: 42, roundName: 'Saturday', courseName: 'Cypress Lakes' };
+    const a = captionsFor(r, steps, opts);
+    expect(a).toEqual(captionsFor(r, steps, opts));
+    expect(a).toHaveLength(steps.length);
+    expect(a.every((x) => typeof x === 'string')).toBe(true);
+    expect(a[0]).toMatch(/Saturday|Cypress Lakes/);
+    expect(a.slice(0, -1).every((x) => x.length > 0)).toBe(true);
+    expect(LINES.larrikins.welcome.some((l) => a[0] === fill(l, { round: 'Saturday', course: 'Cypress Lakes' }))).toBe(true);
+    const winIdx = steps.findIndex((s) => s.scene === 'winner');
+    expect(a[winIdx]).toMatch(/Bo/);
+    const fin = steps.findIndex((s) => s.scene === 'finish');
+    expect(a[fin]).toMatch(/2 points/);
+    // The race frame for hole 10 talks about the lead change and pops NEW LEADER.
+    const h10 = steps.findIndex((s) => s.scene === 'race' && s.frame === 9);
+    expect(a[h10]).toMatch(/Bo/);
+    expect(popFor(r.frames[9])).toEqual({ word: 'NEW LEADER', kind: 'lead_change' });
+    expect(topMoment(r.frames[4])).toBeNull();
+    expect(popFor(r.frames[4])).toBeNull();
   });
 
   it('the style is kept per group, Broadcast by default', () => {

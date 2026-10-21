@@ -13,6 +13,8 @@
 //
 // Protocol: MCP over plain HTTP (JSON-RPC 2.0, JSON responses — no streaming needed).
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
+// Trip finder (Stage 16): the same ranking the app uses (pure maths, shared with the app and its tests).
+import { searchBox, findCourses, pickFacts, factLine, startsText, defaultDay, FACTS } from '../../../src/lib/tripfinder.js';
 
 const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
   auth: { persistSession: false, autoRefreshToken: false },
@@ -160,6 +162,7 @@ async function featureOn(c: Ctx, key: string) {
 const TOOL_FEATURE: Record<string, string> = {
   confirm_side_comp: 'side_comps', post_to_feed: 'feed', plan_details: 'planner', set_rsvp: 'planner',
   add_job: 'planner_tasks', create_poll: 'planner_tasks', add_cost: 'planner_costs',
+  find_courses: 'trip_finder', get_course_facts: 'trip_finder', propose_course_fact: 'trip_finder',
 };
 async function post(c: Ctx, text: string) {
   if (!(await featureOn(c, 'feed'))) return; // no feed: nothing to post to
@@ -415,6 +418,79 @@ const TOOLS: Tool[] = [
       if (opts.length) await must(db.from('plan_options').insert(opts));
       await post(c, `🗳️ New vote: ${a.question} — have your say in Trips.`);
       return `Vote "${a.question}" is up with ${opts.length} options (id=${poll.id}) and posted to the feed. Push notifications go out when the admin opens votes from the app.`;
+    },
+  },
+  // ---------- Trip finder (Stage 16): the organiser's own assistant researches for free; facts it finds stay pending ----------
+  {
+    name: 'find_courses',
+    description: "Trip finder: the courses that suit a planned trip, ranked, each with why (tee-time window, longest drive, price, rating). Uses the trip's starting areas (set in the app: Trips → the trip → Find a course). Drive times are estimates (straight line × 1.3 at 80 km/h). Courses marked CHECK have unknown facts — research them (club website, booking page) and save what you find with propose_course_fact.",
+    inputSchema: {
+      type: 'object', required: ['trip_id'],
+      properties: {
+        trip_id: str('Plan id (a planned trip or round) from lgc_overview'),
+        preset: { type: 'string', enum: ['fair', 'cheap', 'best'], description: 'Ranking: fair drive (default), cheapest, or best course' },
+        limit: num('How many to list (default 10, up to 30)'),
+      },
+    },
+    async run(a, c) {
+      let pl: Record<string, any> | null = null;
+      const { data: byPlan } = await db.from('plans').select('*').eq('id', a.trip_id).eq('group_id', c.g).maybeSingle();
+      pl = byPlan as Record<string, any> | null;
+      if (!pl) {
+        const { data: byTrip } = await db.from('plans').select('*').eq('trip_id', a.trip_id).eq('group_id', c.g).limit(1);
+        pl = (byTrip as Record<string, any>[] | null)?.[0] || fail('No such trip in this group — check the id with lgc_overview.');
+      }
+      const [{ data: sp }, { data: find }] = await Promise.all([
+        db.from('trip_start_points').select('*').eq('plan_id', pl!.id).order('sort'),
+        db.from('trip_finds').select('*').eq('plan_id', pl!.id).maybeSingle(),
+      ]);
+      const starts = ((sp || []) as Record<string, any>[]).map((r) => ({ label: r.label, lat: r.lat, lng: r.lng, count: r.headcount, leave: r.leave_after, finish: r.finish_by }));
+      if (!starts.length) fail('No starting areas on this trip yet — the organiser adds them in the app (Trips → the trip → Find a course), e.g. "Inner West ×8, Newcastle ×2".');
+      const f = (find || {}) as Record<string, any>;
+      const maxDrive = f.max_drive_min || 180;
+      const box = searchBox(starts, maxDrive)!;
+      const rows = await must(db.rpc('trip_finder_courses', { p_south: box.south, p_west: box.west, p_north: box.north, p_east: box.east, p_lat: box.lat, p_lng: box.lng, p_limit: 300, p_group: c.g })) as Record<string, any>[];
+      const players = f.players ?? starts.reduce((n, x) => n + x.count, 0);
+      const day = f.day || defaultDay(pl);
+      const ranked = findCourses(rows || [], { starts, players, holes: f.holes || 18, day, maxDriveMin: maxDrive, now: new Date() }, a.preset || f.preset || 'fair', f.filters || {});
+      const n = Math.max(1, Math.min(30, Number(a.limit) || 10));
+      const word: Record<string, string> = { fits: 'FITS', check: 'CHECK', no: "DOESN'T FIT" };
+      const lines = [`${pl!.name} · ${day} · ${players} players · ${f.holes || 18} holes · coming from ${startsText(starts)} · longest drive up to about ${Math.round(maxDrive / 6) / 10} h`];
+      ranked.slice(0, n).forEach((r: any, i: number) => lines.push(`${i + 1}. ${r.course.name}${r.course.area ? ` (${r.course.area})` : ''} [${word[r.status]}] course_id=${r.course.id} — ${r.why}`));
+      if (!ranked.length) lines.push('No courses in reach — try a longer drive in the app.');
+      lines.push('Put options to the group from the app (Find a course → tick up to 3 → Put to the group).');
+      return lines.join('\n');
+    },
+  },
+  {
+    name: 'get_course_facts',
+    description: "What's known about a course (shared by every group): visitor times, members-only times, largest group, prices, booking ahead, start interval, carts, stay and play — with where each fact came from and when it was checked (never who). Plus this group's own private notes on it.",
+    inputSchema: { type: 'object', required: ['course_id'], properties: { course_id: str('course_id from find_courses') } },
+    async run(a, c) {
+      const rows = await must(db.rpc('course_facts_for', { p_course: a.course_id })) as Record<string, any>[];
+      const best = pickFacts(rows || [], new Date()) as Record<string, any>;
+      const lines = FACTS.map((d: { key: string; label: string }) => `${d.label}: ${best[d.key] ? factLine(best[d.key]) : 'not known yet'}${best[d.key]?.source_link ? ` (${best[d.key].source_link})` : ''}`);
+      const { data: notes } = await db.from('course_notes').select('body').eq('group_id', c.g).eq('course_id', a.course_id).order('created_at', { ascending: false }).limit(10);
+      if (notes?.length) lines.push(`Your group's notes: ${(notes as { body: string }[]).map((x) => `"${x.body}"`).join('; ')}`);
+      return lines.join('\n');
+    },
+  },
+  {
+    name: 'propose_course_fact',
+    description: 'Save a fact you found about a course (from the club website, booking page or an email). It is saved as PENDING ("not confirmed yet") until the club or the app team confirms it. Facts: visitor_times and member_times like "Sat 7:00-12:00; Sun 9:00-13:00"; max_group, start_interval, round_length (minutes) as numbers; price_18 / price_9 as dollars each; book_ahead, carts as short text; stay_play as "Yes — …" or "No". Always include the source link if there is one.',
+    inputSchema: {
+      type: 'object', required: ['course_id', 'fact', 'value'],
+      properties: {
+        course_id: str('course_id from find_courses'),
+        fact: { type: 'string', enum: FACTS.map((d: { key: string }) => d.key) },
+        value: str('The fact, short (up to 200 characters)'),
+        source_link: str('Where it came from (https://…), if any'),
+        checked_on: str('YYYY-MM-DD the source says or was read (default today)'),
+      },
+    },
+    async run(a, c) {
+      await must(db.rpc('propose_course_fact', { p_course: a.course_id, p_fact: a.fact, p_value: String(a.value ?? ''), p_source: 'research', p_link: a.source_link || null, p_checked: a.checked_on || null, p_group: c.g }));
+      return `Saved as pending: ${a.fact} = ${a.value}. It shows as "not confirmed yet" for every group until it's checked.`;
     },
   },
   {

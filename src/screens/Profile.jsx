@@ -11,6 +11,7 @@ import { uploadPhoto } from '../lib/images.js';
 import { Header, Avatar, Icon, Loading, toast, PhotoButtons } from '../components/ui.jsx';
 import { ViewAsButton } from '../components/Viewing.jsx';
 import { PlayerStatsCard } from '../components/PlayerStats.jsx';
+import { HomeArea } from '../components/HomeArea.jsx';
 
 /** Everything we know about a player: Stableford rounds, Ambrose results, trophies, comps, Tribunal, handicap. */
 export function usePlayerHistory(playerId) {
@@ -143,6 +144,7 @@ export default function Profile() {
           <button type="button" className="btn ghost" onClick={() => { setName(p.name); setNick(p.nickname || ''); setEdit(true); }}>Edit name / nickname</button>
         ))}
 
+        {isMe && <HomeArea player={p} />}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}>
           {[['Rounds', h.stableford.length + h.ambrose.length], ['Avg pts', h.avg != null ? h.avg.toFixed(1) : '–'], ['Best', h.best ?? '–'], ['Comp wins', h.sideWins]].map(([k, v]) => (
             <div key={k} className="card" style={{ padding: '10px 6px', textAlign: 'center' }}>

@@ -62,6 +62,7 @@ const Ask = lazyScreen(() => import('./screens/AiHelper.jsx'));
 const Stats = lazyScreen(() => import('./screens/Stats.jsx'));
 const DinnerAwards = lazyScreen(() => import('./screens/DinnerAwards.jsx'));
 const Desk = lazyScreen(() => import('./screens/Desk.jsx')); // Stage 11c: the full desktop (Trip desk, tables, paper cards)
+const TripFinder = lazyScreen(() => import('./screens/TripFinder.jsx'));
 
 // A fresh plan screen per plan, so nothing carries over when a notification jumps to another one.
 function PlanDetailRoute() {
@@ -228,6 +229,7 @@ function Inside() {
         <Route path="/setup" element={<SetupGuide />} />
         <Route path="/plan" element={<FeatureRoute feature="planner" label="The Trips planner"><Planner /></FeatureRoute>} />
         <Route path="/plan/:planId" element={<FeatureRoute feature="planner" label="The Trips planner"><PlanDetailRoute /></FeatureRoute>} />
+        <Route path="/plan/:planId/find" element={<FeatureRoute feature="trip_finder" label="The trip finder"><TripFinder /></FeatureRoute>} />
         <Route path="/rules" element={<Rulebook />} />
         <Route path="/courses/:courseId/greens" element={<GreenMapper />} />
         <Route path="/guide/:courseId/:hole?" element={<FeatureRoute feature="gps" label="The course guide"><CourseGuide /></FeatureRoute>} />

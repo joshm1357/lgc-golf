@@ -38,6 +38,8 @@ export const GROUP_TABLES = new Set([
   'dinner_awards', 'dinner_award_nominations', 'dinner_award_votes',
   // Trip finder (migration 063)
   'player_home_areas', 'trip_finds', 'trip_start_points', 'course_notes', 'course_ratings',
+  // Comps — what you're playing for (migration 067)
+  'comps',
 ]);
 
 let current = (() => {

@@ -327,7 +327,7 @@ function FeaturesStep({ onNext, gid }) {
       ))}
       {preset === 'custom' && (
         <div className="card pad stack" style={{ gap: 8 }}>
-          {FEATURES.map((f) => {
+          {FEATURES.filter((f) => !f.hidden).map((f) => {
             const parentOff = f.parent && !featureOn(f.parent, custom);
             const disabled = f.soon || parentOff;
             return (

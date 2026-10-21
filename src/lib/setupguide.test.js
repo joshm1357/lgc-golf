@@ -29,7 +29,8 @@ describe('guided setup', () => {
   });
   it('an empty group has everything to do, starting with the trip', () => {
     const steps = setupSteps({ trips: [], courses: [], rounds: [], players: [] });
-    expect(steps.map((s) => s.done)).toEqual([false, false, false, false, false]);
+    expect(steps.map((s) => s.done)).toEqual([false, false, false, false, false, false]);
+    expect(steps.map((s) => s.key)).toEqual(['trip', 'courses', 'rounds', 'comps', 'players', 'extras']);
     expect(nextAction(steps, [], '2026-10-21')).toMatchObject({ kind: 'step', key: 'trip' });
   });
   it('a set-up trip: done, and points at the next round', () => {
@@ -38,7 +39,7 @@ describe('guided setup', () => {
       { id: 'r2', trip_id: 't1', name: 'Saturday — The Vintage', play_date: '2026-10-24', status: 'setup', ctp_holes: [3], ld_holes: [] },
     ];
     const steps = setupSteps({ trips: [trip], courses: [{ name: 'Cypress Lakes' }], rounds, players: [{ id: 1 }, { id: 2 }] }, {}, trip);
-    expect(steps.map((s) => s.done)).toEqual([true, true, true, true, true]);
+    expect(steps.map((s) => s.done)).toEqual([true, true, true, false, true, true]);
     expect(steps[2].summary).toContain('nothing on Thursday');
     expect(nextAction(steps, rounds, '2026-10-21')).toMatchObject({ kind: 'ready', round: { id: 'r1' } });
     expect(nextAction(steps, rounds, '2026-10-21').label).toContain('start it on the day');
@@ -50,10 +51,16 @@ describe('guided setup', () => {
   it('a Cup isn’t ready while anyone has no team', () => {
     const players = [{ id: 1, cup_side: 'a' }, { id: 2, cup_side: null }];
     const steps = setupSteps({ trips: [trip], courses: [{}], rounds: [{ trip_id: 't1' }], players }, { cup: true }, trip);
-    expect(steps[3]).toMatchObject({ done: false, summary: '2 in · 1 not on a team yet' });
+    expect(steps[4]).toMatchObject({ done: false, summary: '2 in · 1 not on a team yet' });
   });
   it('unapproved players don’t count', () => {
     const steps = setupSteps({ trips: [trip], courses: [], rounds: [], players: [{ id: 1 }, { id: 2, approved: false }] }, {}, trip);
-    expect(steps[3].done).toBe(false);
+    expect(steps[4].done).toBe(false);
+  });
+  it('what you’re playing for: optional, done once the trip has a comp', () => {
+    const comps = [{ trip_id: 't1', name: 'BD Trophy' }, { trip_id: 't1', name: 'Old', retired: true }, { trip_id: 'other', name: 'Elsewhere' }];
+    const steps = setupSteps({ trips: [trip], courses: [], rounds: [], players: [], comps }, {}, trip);
+    expect(steps[3]).toMatchObject({ key: 'comps', optional: true, done: true, summary: 'BD Trophy' });
+    expect(setupSteps({ trips: [trip], courses: [], rounds: [], players: [] }, {}, trip)[3].done).toBe(false);
   });
 });

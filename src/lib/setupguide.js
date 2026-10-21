@@ -1,4 +1,4 @@
-// "Set up your trip" (guided setup, 21 Oct 2026): which of the five steps are done, and what to do next.
+// "Set up your trip" (guided setup, 21 Oct 2026): which of the steps are done, and what to do next.
 // Pure functions so the screen (screens/SetupGuide.jsx) stays simple and this is tested (setupguide.test.js).
 
 const DOW = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -54,8 +54,8 @@ export function roundName(day, courseName) {
 }
 
 /**
- * The five steps, each { key, title, done, summary, optional }.
- * data: { trips, courses, rounds, players }; on: { cup, side_comps } (features switched on); trip: the trip being set
+ * The steps, each { key, title, done, summary, optional }.
+ * data: { trips, courses, rounds, players, comps? (the trip's comps, migration 067) }; on: { cup, side_comps } (features switched on); trip: the trip being set
  * up (default: guideTrip).
  */
 export function setupSteps(data, on = {}, trip = guideTrip(data.trips)) {
@@ -65,6 +65,7 @@ export function setupSteps(data, on = {}, trip = guideTrip(data.trips)) {
   const players = (data.players || []).filter((p) => p.approved !== false);
   const missingDays = days.filter((d) => !rounds.some((r) => r.play_date === d));
   const noTeam = on.cup ? players.filter((p) => !p.cup_side).length : 0;
+  const comps = (data.comps || []).filter((c) => !c.retired && (!trip || c.trip_id === trip.id));
   return [
     {
       key: 'trip', title: 'Your trip', done: !!trip && !!trip.start_date,
@@ -78,6 +79,10 @@ export function setupSteps(data, on = {}, trip = guideTrip(data.trips)) {
       key: 'rounds', title: days.length > 1 ? 'Rounds — one a day' : 'Rounds', done: rounds.length > 0,
       summary: !rounds.length ? 'Pick a course and a format for each day.'
         : `${rounds.length} round${rounds.length === 1 ? '' : 's'}${missingDays.length ? ` · nothing on ${missingDays.map((d) => dayLabel(d).split(' ')[0]).join(', ')} (that’s fine for a rest day)` : ''}`,
+    },
+    {
+      key: 'comps', title: 'What are you playing for?', optional: true, done: comps.length > 0,
+      summary: comps.length ? comps.map((c) => c.name).join(', ') : 'A trophy over the weekend, Ambrose teams, a Cup… Optional.',
     },
     {
       key: 'players', title: 'Players', done: players.length >= 2 && noTeam === 0,

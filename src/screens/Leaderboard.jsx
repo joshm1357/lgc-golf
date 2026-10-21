@@ -10,6 +10,7 @@ import { QuickRoundDone } from './QuickRound.jsx';
 import SharePicture from '../components/SharePicture.jsx';
 import { boardCard } from '../lib/shareCard.js';
 import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
+import { GamesChip } from '../components/GamesChip.jsx';
 
 const DrawSetup = lazyScreen(() => import('../components/DrawSetup.jsx'), 'default', { inline: true });
 
@@ -172,6 +173,7 @@ export default function Leaderboard() {
           </Link>
         </div>
       )}
+      <GamesChip round={round} />
       {round.rules && round.status !== 'locked' && (
         <div className="section"><div className="card pad small" style={{ lineHeight: 1.45 }}><strong>Today's rules:</strong> {round.rules}{status?.legacy && <> <a href="?guide" style={{ fontWeight: 700 }}>How it works</a></>}</div></div>
       )}

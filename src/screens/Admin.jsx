@@ -9,6 +9,7 @@ import { Header, Avatar, Loading, toast } from '../components/ui.jsx';
 import DrawSetup from '../components/DrawSetup.jsx';
 import { FindCourse, ShareCourse } from '../components/CourseLibrary.jsx';
 import { OwnCompsAdmin, RoundOwnComps } from './OwnComps.jsx';
+import { RoundGames } from './Games.jsx';
 
 async function run(fn, okMsg) {
   try {
@@ -346,6 +347,7 @@ function RoundCard({ round }) {
         <button type="button" className="btn sm" onClick={() => run(() => supabase.from('rounds').update({ ld_holes: parseNums(ld).filter((n) => n >= 1 && n <= 18), ctp_holes: parseNums(ctp).filter((n) => n >= 1 && n <= 18) }).eq('id', round.id), 'Side comps saved').then(data.reload)}>Save side comp holes</button>
       )}
       {sideCompsOn && <RoundOwnComps round={round} onSaved={data.reload} />}
+      <RoundGames round={round} />
       <RoundRules round={round} />
       {round.format === 'ambrose' && drawOn && <DrawButton round={round} />}
       {round.format === 'ambrose' || round.format === 'fourball' ? <TeamsEditor round={round} pairs={round.format === 'fourball'} /> : <StablefordPlayers round={round} />}

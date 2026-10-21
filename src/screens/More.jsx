@@ -12,7 +12,7 @@ export default function More() {
   const data = useData();
   const me = data.playersById[status.player_id];
   const pending = status.is_admin ? data.players.filter((p) => p.approved === false).length : 0;
-  const on = { location: useFeature('location'), rule_voting: useFeature('rule_voting'), trophies: useFeature('trophies'), tribunal: useFeature('tribunal'), notifications: useFeature('notifications') };
+  const on = { location: useFeature('location'), rule_voting: useFeature('rule_voting'), trophies: useFeature('trophies'), tribunal: useFeature('tribunal'), notifications: useFeature('notifications'), games: useFeature('games') };
   const manyGroups = (status.groups?.length || 0) > 1;
   const items = [
     // The way back to Your groups (switch group, start one, join another). Builds without sign-in only show it
@@ -21,6 +21,7 @@ export default function More() {
     on.location && { to: '/map', icon: Icon.pin, label: 'Where’s everyone', sub: 'Course map with each group’s location' },
     { to: '/rules', icon: Icon.book, label: 'The Rulebook', sub: on.rule_voting ? 'Our rules and bonuses — propose and vote on changes' : 'Our rules and bonuses' },
     on.trophies && { to: '/trophies', icon: Icon.trophy, label: 'The Trophy Room', sub: status.legacy ? 'BD, Putt Buddies, Noodle Cup and the honour boards' : 'Trophies and the honour boards' },
+    on.games && { to: '/games', icon: Icon.flag, label: 'Games & side bets', sub: 'Skins, Nassau, pots — and who pays who' },
     on.tribunal && { to: '/tribunal', icon: Icon.gavel, label: 'Handicap Tribunal', sub: 'Lodge a case, vote, see verdicts' },
     { to: '/courses', icon: Icon.map, label: 'Courses', sub: 'Every course and its history' },
     { to: `/player/${status.player_id}`, icon: Icon.user, label: 'My profile', sub: 'Photo, nickname, history' },

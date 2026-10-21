@@ -214,7 +214,7 @@ const sortHoles = (holes) => [...(holes || [])].sort((a, b) => a.n - b.n);
  */
 export function skins({ holes, subjects, scores, options, stakeCents = 0, locked = false }) {
   const o = cleanOptions('skins', options);
-  const out = { holes: [], won: {}, pot: 0, final: false, money: {} };
+  const out = { holes: [], won: {}, pot: 0, final: false, money: {}, carry: o.carry };
   if (subjects.length < 2) return out;
   let carry = 0;
   let blocked = false;

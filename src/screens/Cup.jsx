@@ -1,6 +1,6 @@
 // Team match play, Ryder Cup style (migration 050, feature 'cup'). The board, a match's hole-by-hole scoring, and the
 // organiser's set-up (teams, team links, who's on which team, the matches). The maths is in lib/cup.js.
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
 import { useData, useRealtime, useSession, playerName, cacheGet, cacheSet } from '../lib/store.jsx';
@@ -151,6 +151,9 @@ export function CupMatch() {
   const [busy, run] = useRun();
   const m = cup.matches.find((x) => x.id === matchId);
   const [hole, setHole] = useState(null);
+  const [picked, setPicked] = useState(false); // a hole chip was tapped (to fix one) rather than moved on to
+  const [saved, setSaved] = useState(null); // "✓ Hole 3: Team Blue" after a save, for a moment
+  const coolUntil = useRef(0); // a quick second tap mustn't land on the next hole
   const [local, setLocal] = useState(null); // holes just saved, until the live copy catches up
   useEffect(() => { setLocal(null); }, [m?.updated_at]);
   if (!cup.ready) return <div className="page"><Header back title="Match" /><Loading /></div>;
@@ -168,13 +171,25 @@ export function CupMatch() {
   const { side: shotSide, diff } = shots(match);
 
   const save = async (result) => {
+    if (Date.now() < coolUntil.current) return;
     const holes = await run(() => must(supabase.rpc('set_cup_hole', { p_match: m.id, p_hole: h, p_result: result })));
     if (!holes) return;
     setLocal(holes);
     const after = matchState({ ...match, holes });
-    if (result && !after.decided && h < 18) setHole(h + 1);
-    else if (after.decided) toast(matchText({ ...match, holes }, n));
+    setSaved(result ? { hole: h, text: result === 'h' ? 'halved' : result === 'a' ? n.a : n.b } : null);
+    if (result && !after.decided && h < 18) {
+      coolUntil.current = Date.now() + 1200;
+      setPicked(false);
+      setHole(h + 1);
+    } else if (after.decided) toast(matchText({ ...match, holes }, n));
   };
+  useEffect(() => {
+    if (!saved) return undefined;
+    const t = setTimeout(() => setSaved(null), 4000);
+    return () => clearTimeout(t);
+  }, [saved]);
+  // Once the match is decided, the buttons only come back for a hole that's tapped (to fix a mistake).
+  const locked = s.decided && !res && !picked;
   const big = (side, label, colour) => (
     <button type="button" className="btn block" disabled={busy || status.viewing}
       onClick={() => save(res === side ? null : side)}
@@ -202,7 +217,7 @@ export function CupMatch() {
           const bg = r === 'a' ? sides[0]?.colour : r === 'b' ? sides[1]?.colour : r === 'h' ? '#8A94A3' : undefined;
           const hasShot = shotsOnHole(match, course?.holes?.find((x) => x.n === k)).n > 0;
           return (
-            <button key={k} type="button" className="chip" aria-pressed={k === h} onClick={() => setHole(k)}
+            <button key={k} type="button" className="chip" aria-pressed={k === h} onClick={() => { setHole(k); setPicked(true); coolUntil.current = 0; }}
               style={bg && k !== h ? { background: bg, borderColor: bg, color: '#fff' } : undefined}>
               {k}{hasShot ? '•' : ''}
             </button>
@@ -220,10 +235,13 @@ export function CupMatch() {
             ? <div style={{ fontWeight: 700, color: shot.side === 'a' ? sides[0]?.colour : sides[1]?.colour }}>🎯 {shot.side === 'a' ? n.a : n.b} ({names(data, shot.side === 'a' ? m.a_players : m.b_players)}) get {shot.n === 1 ? 'a shot' : `${shot.n} shots`} here</div>
             : <div className="small muted">No shots on this hole</div>}
         </div>
-        <div className="label" style={{ textAlign: 'center' }}>Who won the hole (after shots)?</div>
-        {big('a', `${n.a} — ${names(data, m.a_players)}`, sides[0]?.colour || 'var(--navy)')}
-        {big('h', 'Halved', '#5B6573')}
-        {big('b', `${n.b} — ${names(data, m.b_players)}`, sides[1]?.colour || 'var(--navy)')}
+        {saved && <div className="small" style={{ textAlign: 'center', fontWeight: 700 }} role="status">✓ Hole {saved.hole} saved: {saved.text}</div>}
+        {!locked && <>
+          <div className="label" style={{ textAlign: 'center' }}>Who won the hole (after shots)?</div>
+          {big('a', `${n.a} — ${names(data, m.a_players)}`, sides[0]?.colour || 'var(--navy)')}
+          {big('h', 'Halved', '#5B6573')}
+          {big('b', `${n.b} — ${names(data, m.b_players)}`, sides[1]?.colour || 'var(--navy)')}
+        </>}
         {res && <button type="button" className="btn ghost sm" disabled={busy || status.viewing} onClick={() => save(null)}>Clear hole {h}</button>}
         {s.decided && <div className="card pad" style={{ textAlign: 'center', fontWeight: 700 }}>Match over: {matchText(match, n)}. Tap a hole above to fix a mistake.</div>}
         <button type="button" className="btn ghost block" onClick={() => nav('/cup')}>Back to the board</button>

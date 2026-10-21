@@ -52,6 +52,7 @@ const RoundReady = lazyScreen(() => import('./screens/QuickRound.jsx'), 'RoundRe
 const Cup = lazyScreen(() => import('./screens/Cup.jsx'));
 const CupMatch = lazyScreen(() => import('./screens/Cup.jsx'), 'CupMatch');
 const InJokes = lazyScreen(() => import('./screens/InJokes.jsx'));
+const Wishes = lazyScreen(() => import('./screens/Wishes.jsx'));
 
 // A fresh plan screen per plan, so nothing carries over when a notification jumps to another one.
 function PlanDetailRoute() {
@@ -218,6 +219,7 @@ function Inside() {
         <Route path="/groups" element={<YourGroupsInside />} />
         <Route path="/history" element={<History />} />
         <Route path="/round-ready" element={<RoundReady />} />
+        <Route path="/wishes" element={<Wishes />} />
         <Route path="/join/:code" element={<JoinInsideRoute />} />
         <Route path="*" element={<Leaderboard />} />
       </Routes>

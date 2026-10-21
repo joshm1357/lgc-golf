@@ -4,6 +4,7 @@ import { sendOrQueue } from '../lib/outbox.js';
 import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useRealtime, useSession, playerName } from '../lib/store.jsx';
 import { Header, Avatar, Icon, Sheet, timeAgo, toast, PhotoButtons } from '../components/ui.jsx';
+import { DinnerAwardsLink } from '../components/DinnerAwardsLink.jsx';
 
 const REACTIONS = ['🔥', '😂', '👏', '🤦', '🍺'];
 
@@ -52,6 +53,7 @@ export default function Feed() {
         right={<button type="button" className="btn gold sm" onClick={() => setComposing(true)}>{Icon.camera(18)}<span>Post</span></button>}
       />
       <div className="section stack">
+        <DinnerAwardsLink />
         {!posts.length && <div className="empty">Nothing yet. Birdies, photos and Tribunal news will show up here.</div>}
         {posts.map((p) => (
           <Post key={p.id} post={p} me={me}

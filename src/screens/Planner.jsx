@@ -14,6 +14,7 @@ import {
 import { notify, shareText, appLink, pushState, enablePush, disablePush, isIOS } from '../lib/push.js';
 import { DetailsTab, JobsTab, KittyTab, GroupsTab } from './PlanTabs.jsx';
 import { TripSetupCard } from './TripSetup.jsx';
+import TripExtras from './TripExtras.jsx';
 import { STAGES, STAGE_LABEL, tripStage, canDecide } from '../lib/trips.js';
 
 const PLAN_TABLES = ['plans', 'plan_polls', 'plan_options', 'plan_votes', 'plan_rsvps', 'plan_items', 'plan_costs', 'plan_payments', 'plan_groups', 'plan_group_members', 'plan_transfers', 'plan_comments'];
@@ -134,6 +135,7 @@ export function PlanDetail() {
         <LockInCard pd={pd} />
         {on.planner_tasks && <Checklist pd={pd} onGo={setTab} />}
         <TripSetupCard plan={plan} reload={pd.reload} />
+        <TripExtras pd={pd} />
         {current === 'vote' && <VoteTab pd={pd} />}
         {current === 'chat' && <ChatTab pd={pd} />}
         {current === 'people' && <PeopleTab pd={pd} />}

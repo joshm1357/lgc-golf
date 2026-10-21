@@ -4,11 +4,8 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useFeature } from '../lib/store.jsx';
+import { finishedRounds } from '../lib/replay.js';
 
-export function finishedRounds(rounds = []) {
-  return rounds.filter((r) => r.status === 'locked')
-    .sort((a, b) => String(a.play_date || '').localeCompare(String(b.play_date || '')) || String(a.created_at || '').localeCompare(String(b.created_at || '')));
-}
 
 export function ReplayChips({ rounds = [], title = null, style = null }) {
   const on = useFeature('replay');

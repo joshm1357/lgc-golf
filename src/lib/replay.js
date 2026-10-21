@@ -378,3 +378,9 @@ export function buildTimeline(replay, { fast = false } = {}) {
 
 /** Total running time in seconds (for "a 60-second replay"). */
 export const timelineSeconds = (steps) => Math.round(steps.reduce((a, s) => a + (s.ms || 0), 0) / 1000);
+
+/** A trip's finished (locked) rounds, in the order they were played — for the replay buttons after the round. */
+export function finishedRounds(rounds = []) {
+  return rounds.filter((r) => r.status === 'locked')
+    .sort((a, b) => String(a.play_date || '').localeCompare(String(b.play_date || '')) || String(a.created_at || '').localeCompare(String(b.created_at || '')));
+}

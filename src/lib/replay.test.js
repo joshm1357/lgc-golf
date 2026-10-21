@@ -345,3 +345,17 @@ describe('replay lines', () => {
     if (had === undefined) delete globalThis.localStorage; else globalThis.localStorage = had;
   });
 });
+
+describe('finishedRounds', () => {
+  it('lists only locked rounds, in playing order', async () => {
+    const { finishedRounds } = await import('./replay.js');
+    const rounds = [
+      { id: 'c', status: 'live', play_date: '2026-10-24' },
+      { id: 'b', status: 'locked', play_date: '2026-10-23' },
+      { id: 'a', status: 'locked', play_date: '2026-10-22' },
+      { id: 's', status: 'setup', play_date: '2026-10-25' },
+    ];
+    expect(finishedRounds(rounds).map((r) => r.id)).toEqual(['a', 'b']);
+    expect(finishedRounds()).toEqual([]);
+  });
+});

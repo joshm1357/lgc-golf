@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { useData, useSession, playerName, useFeature } from '../lib/store.jsx';
 import { Header, Icon, Avatar } from '../components/ui.jsx';
-import { NotifyCard } from '../components/NotifyCard.jsx';
+import { notifyItem } from '../components/NotifyPrompt.jsx';
 import { SIGN_IN } from '../lib/auth.js';
 import { NEW_GROUPS } from '../lib/beta.js';
 import { BetaCard, InstallCard } from '../components/Feedback.jsx';
@@ -30,6 +30,7 @@ export default function More() {
     on.ai_helper && { to: '/ask', icon: Icon.feed, label: 'Ask about our history', sub: 'Who’s won the most, best rounds, handicaps — in plain words' },
     useFeature('stats') && { to: '/stats', icon: Icon.board, label: 'Stats & season ladder', sub: 'Order of merit, records and head-to-heads' },
     { to: '/courses', icon: Icon.map, label: 'Courses', sub: 'Every course and its history' },
+    on.notifications && !status.viewing && notifyItem(),
     { to: `/player/${status.player_id}`, icon: Icon.user, label: 'My profile', sub: 'Photo, nickname, history' },
     { to: '/group', icon: Icon.user, label: 'Group & invites', sub: status.is_admin ? 'Invite links, QR code, people and roles' : (status.groups?.length > 1 ? 'Switch group, how you’re signed in' : 'Your group and how you’re signed in') },
     // The admin PIN is L.G.C's only; other groups make organisers in Group & invites.
@@ -55,7 +56,6 @@ export default function More() {
           ))}
         </div>
         <InstallCard />
-        {on.notifications && <div style={{ marginTop: 12 }}><NotifyCard /></div>}
         {status?.legacy && <a href="?guide" className="btn ghost block" style={{ marginTop: 12 }}>How the app works</a>}
         <p className="note">Tip: add this app to your home screen — Share → Add to Home Screen (iPhone) or ⋮ → Add to Home screen (Android).</p>
       </div>

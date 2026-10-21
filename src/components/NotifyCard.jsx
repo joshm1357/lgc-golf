@@ -4,7 +4,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { previewOf } from '../lib/preview.js';
 import { useRun, must } from '../lib/run.js';
-import { notify, pushState, enablePush, disablePush, isIOS } from '../lib/push.js';
+import { notify, myPushState, enablePush, disablePush, isIOS } from '../lib/push.js';
 import { supabase } from '../lib/supabase.js';
 import { currentGroup } from '../lib/group.js';
 
@@ -19,7 +19,7 @@ export function NotifyCard({ compact }) {
   if (previewOf()) return null; // viewing as someone: notifications belong to this phone's real owner
   const [state, setState] = useState(null);
   const [busy, run] = useRun();
-  const refresh = useCallback(() => pushState().then(setState), []);
+  const refresh = useCallback(() => myPushState().then(setState), []);
   useEffect(() => { refresh(); }, [refresh]);
   if (!state || (compact && state === 'on')) return null;
   const body = {
@@ -56,7 +56,7 @@ export function NotifyCard({ compact }) {
 
 
 /** When you hear about things, for the group this phone is in. Saved per person per group. */
-function WhenCard() {
+export function WhenCard() {
   const [pref, setPref] = useState(null);
   const [busy, run] = useRun();
   const g = currentGroup();

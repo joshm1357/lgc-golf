@@ -10,6 +10,7 @@ import { Header, Loading } from '../components/ui.jsx';
 import { FindCourse } from '../components/CourseLibrary.jsx';
 import { InviteCard } from './Group.jsx';
 import { OwnCompsAdmin, RoundOwnComps } from './OwnComps.jsx';
+import { TeeGroupsForTrip } from './TeeGroups.jsx';
 import { upcomingTrips, tripDays, dayLabel, roundName, setupSteps, nextAction } from '../lib/setupguide.js';
 import { parseHoles } from '../lib/sidecomps.js';
 
@@ -268,6 +269,7 @@ function ExtrasStep({ trip, sideCompsOn, cupOn }) {
   return (
     <>
       {cupOn && <Link to="/cup" className="btn sm" style={{ alignSelf: 'flex-start' }}>🏆 Set up the Cup — teams and matches</Link>}
+      <TeeGroupsForTrip trip={trip} />
       {sideCompsOn ? (
         <>
           {!rounds.length && <div className="small muted">Add a round first (step 3).</div>}

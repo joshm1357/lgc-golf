@@ -63,6 +63,7 @@ const Games = lazyScreen(() => import('./screens/Games.jsx'));
 const Replay = lazyScreen(() => import('./screens/Replay.jsx'));
 const CourseGuide = lazyScreen(() => import('./screens/CourseGuide.jsx'));
 const Ask = lazyScreen(() => import('./screens/AiHelper.jsx'));
+const AiImport = lazyScreen(() => import('./screens/AiImport.jsx'));
 const Stats = lazyScreen(() => import('./screens/Stats.jsx'));
 const DinnerAwards = lazyScreen(() => import('./screens/DinnerAwards.jsx'));
 const Desk = lazyScreen(() => import('./screens/Desk.jsx')); // Stage 11c: the full desktop (Trip desk, tables, paper cards)
@@ -221,6 +222,7 @@ function Inside() {
         <Route path="/notifications" element={<FeatureRoute feature="notifications" label="Phone notifications"><Notifications /></FeatureRoute>} />
         <Route path="/comps-board" element={<CompsBoard />} />
         <Route path="/ask" element={<FeatureRoute feature="ai_helper" label="The AI helper"><Ask /></FeatureRoute>} />
+        <Route path="/import" element={<FeatureRoute feature="ai_helper" label="The AI helper"><AiImport /></FeatureRoute>} />
         <Route path="/cup" element={<FeatureRoute feature="cup" label="The Cup"><Cup /></FeatureRoute>} />
         <Route path="/cup/:matchId" element={<FeatureRoute feature="cup" label="The Cup"><CupMatch /></FeatureRoute>} />
         <Route path="/games" element={<FeatureRoute feature="games" label="Games and side bets"><Games /></FeatureRoute>} />

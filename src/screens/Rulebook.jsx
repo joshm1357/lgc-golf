@@ -10,6 +10,7 @@ import { useRun, must } from './Planner.jsx';
 import { Link } from 'react-router-dom';
 import { useGovernance } from './Cases.jsx';
 import { ruleLine, closesIn } from '../lib/governance.js';
+import { ImportLink } from './AiImport.jsx';
 
 const CATS = [
   ['format', 'Format & scoring'], ['side_comp', 'Side comps'], ['bonus', 'Bonuses'], ['handicap', 'Handicaps'],
@@ -81,6 +82,8 @@ export default function Rulebook() {
         {active.length === 0 && !showPicker && <div className="empty">No rules for this comp yet.{!status.is_admin && rb.rules.length === 0 ? ' Your organiser can start from a ready-made Rulebook.' : ''}</div>}
 
         {(status.is_admin || (votingOn && status.role !== 'guest')) && <button type="button" className="btn gold block" onClick={() => setEditing({})}>{votingOn ? '+ Propose a rule' : '+ Add a rule'}</button>}
+
+        {status.is_admin && <ImportLink label="✨ Import rules from a photo or text" about="rules" />}
 
         {old.length > 0 && (
           <details>

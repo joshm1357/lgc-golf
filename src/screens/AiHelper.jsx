@@ -10,10 +10,10 @@
 // function, which checks who you are, the feature switch and the limits, and only ever reads or writes as you.
 // Hidden when the 'ai_helper' feature is off.
 import React, { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
 import { currentGroup } from '../lib/group.js';
-import { useData, useFeature } from '../lib/store.jsx';
+import { useData, useFeature, useSession } from '../lib/store.jsx';
 import { Header, toast } from '../components/ui.jsx';
 import { SETUP_EXAMPLE, MAX_TEXT, canSend, remainingLabel, readReply, nextRating, askExamples, askTitle } from '../lib/aihelper.js';
 
@@ -120,6 +120,7 @@ export function SetupHelperBox({ onApplied }) {
 export default function Ask() {
   const [params] = useSearchParams();
   const about = params.get('about');
+  const { status } = useSession();
   const head = askTitle(about);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -144,6 +145,7 @@ export default function Ask() {
       <div className="section stack" style={{ gap: 10 }}>
         <div className="chips" role="group" aria-label="Try asking">
           {askExamples(about).map((q) => <button key={q} type="button" className="chip" disabled={busy} onClick={() => ask(q)}>{q}</button>)}
+          {status?.is_admin && <Link to="/import" className="chip" style={{ display: 'inline-flex', alignItems: 'center', textDecoration: 'none', color: 'inherit', borderColor: 'var(--gold)' }}>✨ Bring in our history</Link>}
         </div>
         <form className="stack" style={{ gap: 8 }} onSubmit={(e) => { e.preventDefault(); ask(text); }}>
           <textarea className="textarea" rows={2} style={{ padding: 12 }} value={text} maxLength={MAX_TEXT} aria-label="Your question"

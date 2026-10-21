@@ -212,7 +212,7 @@ CLUB.v = { signed_in: true, platform_admin: false, claims: [], club: { id: 'c100
 PAGE.v = { id: LIB[0].id, slug: LIB[0].slug, name: LIB[0].name, area: 'Bowral NSW', osm: false, verified: false, club: null, holes: H };
 await page.goto(`${BASE}#/club`);
 await page.reload();
-await page.getByText('Your course page').waitFor({ timeout: 15000 });
+await page.getByText('Your course page', { exact: true }).waitFor({ timeout: 15000 });
 await page.getByLabel('Group bookings email').fill('bookings@bowral.example');
 await page.getByLabel('Offers for visiting groups').fill('Stay and play from $99');
 await page.getByRole('button', { name: 'Save', exact: true }).click();

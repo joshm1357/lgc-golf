@@ -11,6 +11,7 @@ import { notify, shareText } from '../lib/push.js';
 import { useRun, must } from '../lib/run.js';
 import { NotifyCard } from '../components/NotifyCard.jsx';
 import { TripsAi } from './AiPlanner.jsx';
+import { ReplayChips } from '../components/ReplayChips.jsx';
 
 const TABLES = ['plans', 'plan_rsvps', 'plan_polls', 'plan_options'];
 
@@ -85,7 +86,7 @@ export default function Trips() {
         <TripsAi />
 
         {past.length > 0 && <span className="label" style={{ marginTop: 6 }}>Past trips</span>}
-        {past.map((x) => <PastCard key={x.plan.id} plan={x.plan} stage={x.stage} photo={photos[x.plan.trip_id]} rounds={data.rounds.filter((r) => x.plan.trip_id && r.trip_id === x.plan.trip_id).length}
+        {past.map((x) => <PastCard key={x.plan.id} plan={x.plan} stage={x.stage} photo={photos[x.plan.trip_id]} rounds={data.rounds.filter((r) => x.plan.trip_id && r.trip_id === x.plan.trip_id)}
           winners={trophiesOn && x.plan.trip_id ? data.honour_board.filter((h) => h.trip_id === x.plan.trip_id).sort((a, b) => a.trophy_name.localeCompare(b.trophy_name)) : []} />)}
       </div>
       {suggesting && <SuggestSheet initial={typeof suggesting === 'object' ? suggesting : null} onClose={() => setSuggesting(false)} onSaved={(p) => nav(`/plan/${p.id}`)} />}
@@ -187,10 +188,12 @@ export function tripsWithoutPlan(trips, plans) {
   }));
 }
 
-function PastCard({ plan, stage, photo, rounds, winners = [] }) {
+function PastCard({ plan, stage, photo, rounds: roundList = [], winners = [] }) {
   const cancelled = stage === 'cancelled';
+  const rounds = roundList.length;
   return (
-    <Link to={plan.tripOnly ? '/trophies' : `/plan/${plan.id}`} className="card row" style={{ gap: 12, padding: 10, textDecoration: 'none', color: 'inherit', opacity: cancelled ? 0.55 : 1 }}>
+    <div className="card" style={{ padding: 0, opacity: cancelled ? 0.55 : 1 }}>
+    <Link to={plan.tripOnly ? '/trophies' : `/plan/${plan.id}`} className="row" style={{ gap: 12, padding: 10, textDecoration: 'none', color: 'inherit' }}>
       <div style={{ width: 64, height: 64, flex: 'none', borderRadius: 10, overflow: 'hidden', background: 'var(--gold-soft)', display: 'grid', placeItems: 'center', fontSize: 26 }}>
         {photo ? <img src={photo} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (cancelled ? '✖️' : '⛳')}
       </div>
@@ -202,6 +205,8 @@ function PastCard({ plan, stage, photo, rounds, winners = [] }) {
         {winners.length > 3 && <div className="small muted">+{winners.length - 3} more in the Trophy Room</div>}
       </div>
     </Link>
+    {!cancelled && <ReplayChips rounds={roundList} style={{ padding: '0 10px 10px' }} />}
+    </div>
   );
 }
 

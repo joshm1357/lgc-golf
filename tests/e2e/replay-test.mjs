@@ -90,7 +90,7 @@ await ctx.addInitScript(([uid]) => {
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
   if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated' } }));
-  localStorage.setItem('tgt-whats-new', 'beta-1');
+  localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-notify-prompt', String(Date.now()));
   // Record each scene the replay shows, and the winner's name, as it plays.
   window.__scenes = [];
   window.__winner = null;

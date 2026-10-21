@@ -144,6 +144,7 @@ await ctx.addInitScript(([uid]) => {
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
   if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated', is_anonymous: true } }));
+  try { localStorage.setItem('tgt-notify-prompt', String(Date.now())); } catch {}
 }, ['99999999-9999-4999-8999-999999999999']);
 const page = await ctx.newPage();
 let dialogs = 0;

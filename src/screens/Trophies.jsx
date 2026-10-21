@@ -8,6 +8,7 @@ import { Seg, Avatar, AvatarStack, Icon, Sheet, toast } from '../components/ui.j
 import { TrophyArt } from '../components/TrophyArt.jsx';
 import { honourOrder } from '../lib/history.js';
 import { StatsLink } from '../components/PlayerStats.jsx';
+import { ReplayChips } from '../components/ReplayChips.jsx';
 import { useTripComps } from '../components/CompsChip.jsx';
 import { useCompData, CompStandingsView } from './CompsBoard.jsx';
 import { compStandings } from '../lib/comps.js';
@@ -87,6 +88,8 @@ export default function Trophies() {
       </header>
 
       {!trophies.length && <div className="empty" style={{ color: '#C9B48A' }}>The cabinet's empty. {status.is_admin && <><Link to="/admin" style={{ color: '#EBD496' }}>Add trophies in Admin</Link>, or <Link to="/history" style={{ color: '#EBD496' }}>add past winners from before the app</Link>.</>}</div>}
+
+      <ReplayChips rounds={tripRounds} title="This trip’s replays" style={{ padding: '0 16px 10px' }} />
 
       <div className="cabinet" role="group" aria-label="Trophies">
         {trophies.map((t) => {

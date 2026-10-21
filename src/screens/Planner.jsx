@@ -16,6 +16,8 @@ import { DetailsTab, JobsTab, KittyTab, GroupsTab } from './PlanTabs.jsx';
 import { TripSetupCard } from './TripSetup.jsx';
 import TripExtras from './TripExtras.jsx';
 import { TripFinderCard } from '../components/TripFinderCard.jsx';
+import { TripOverview } from './TripOverview.jsx';
+import { defaultView } from '../lib/tripsummary.js';
 import { STAGES, STAGE_LABEL, tripStage, canDecide } from '../lib/trips.js';
 
 const PLAN_TABLES = ['plans', 'plan_polls', 'plan_options', 'plan_votes', 'plan_rsvps', 'plan_items', 'plan_costs', 'plan_payments', 'plan_groups', 'plan_group_members', 'plan_transfers', 'plan_comments'];
@@ -104,16 +106,22 @@ export function PlanDetail() {
   const [params, setParams] = useSearchParams();
   const { status } = useSession();
   const pd = usePlanData(planId);
+  const data = useData();
   const [editing, setEditing] = useState(false);
   // Tabs for switched-off features (Group & invites → Features) aren't shown.
   const on = { planner_tasks: useFeature('planner_tasks'), planner_costs: useFeature('planner_costs'), planner_rooms: useFeature('planner_rooms') };
   const tabs = TABS.filter((t) => !t.feature || on[t.feature]);
   const tab = tabs.some((t) => t.value === params.get('tab')) ? params.get('tab') : null;
-  const setTab = (t) => setParams((p) => { const n = new URLSearchParams(p); n.set('tab', t); return n; }, { replace: true });
+  const setTab = (t) => setParams((p) => { const n = new URLSearchParams(p); n.set('view', 'organise'); n.set('tab', t); return n; }, { replace: true });
+  // Overview (what the trip is: results, courses, who's in) or Organise (votes, jobs, kitty…). Josh, 21 Oct.
+  const setView = (v, t = null) => setParams((p) => { const n = new URLSearchParams(p); n.set('view', v); if (t) n.set('tab', t); else if (v === 'overview') n.delete('tab'); return n; }, { replace: true });
 
   if (!pd) return <div className="page"><Header back="Trips" title="Loading…" /><Loading /></div>;
   if (!pd.plan) return <div className="page"><Header back="Trips" title="Not found" /><div className="empty">This trip has been removed.</div></div>;
   const { plan } = pd;
+  const trip = plan.trip_id ? data.trips.find((t) => t.id === plan.trip_id) : null;
+  const stage = tripStage(plan, trip);
+  const view = params.get('view') === 'organise' || params.get('view') === 'overview' ? params.get('view') : (tab ? 'organise' : defaultView(stage));
   // Open on the most useful tab: vote while a vote is open, otherwise the details.
   const current = tab || (on.planner_tasks && pd.polls.some((p) => p.status === 'open') ? 'vote' : plan.start_date ? 'details' : 'people');
   const sub = [plan.start_date ? `${fmtRange(plan.start_date, plan.end_date)} · ${countdown(plan.start_date)}` : 'Dates TBC', plan.location_name || 'Location TBC'].join(' · ');
@@ -122,13 +130,28 @@ export function PlanDetail() {
     <div className="page">
       <Header back="Trips" title={plan.name} sub={sub}
         right={(status.is_admin || (plan.proposed && plan.created_by === status.player_id)) && <button type="button" className="btn ghost sm" style={{ color: '#fff', background: 'transparent', borderColor: 'rgba(255,255,255,.45)' }} onClick={() => setEditing(true)}>Edit</button>}>
-        <div className="chips" role="tablist" aria-label="Sections" style={{ margin: '4px -16px 0', padding: '0 16px' }}>
+        {plan.status !== 'cancelled' && (
+          <div className="chips" role="tablist" aria-label="View" style={{ margin: '4px -16px 0', padding: '0 16px' }}>
+            {[{ value: 'overview', label: '⛳ Overview' }, { value: 'organise', label: '🧰 Organise' }].map((v) => (
+              <button key={v.value} type="button" role="tab" className="chip" aria-selected={v.value === view} onClick={() => setView(v.value)}
+                style={v.value === view ? { background: '#fff', borderColor: '#fff', color: 'var(--navy)', fontWeight: 800 } : { background: 'transparent', borderColor: 'rgba(255,255,255,.35)', color: '#fff' }}>{v.label}</button>
+            ))}
+          </div>
+        )}
+        {(view === 'organise' || plan.status === 'cancelled') && <div className="chips" role="tablist" aria-label="Sections" style={{ margin: '4px -16px 0', padding: '0 16px' }}>
           {tabs.map((t) => (
             <button key={t.value} type="button" role="tab" className="chip" aria-selected={t.value === current} onClick={() => setTab(t.value)}
               style={t.value === current ? { background: 'var(--gold)', borderColor: 'var(--gold)', color: 'var(--navy)' } : { background: 'rgba(255,255,255,.08)', borderColor: 'rgba(255,255,255,.35)', color: '#fff' }}>{t.label}</button>
           ))}
-        </div>
+        </div>}
       </Header>
+      {view === 'overview' && plan.status !== 'cancelled' ? (
+        <div className="section">
+          <TripOverview trip={trip} plan={plan} rsvps={pd.rsvps} items={pd.items} stage={stage} onOrganise={(t) => setView('organise', t)} />
+          {/* After the trip: rate the course, dinner awards, and "same as last time" belong with the summary. */}
+          {stage === 'done' && <div className="stack" style={{ marginTop: 14 }}><TripFinderCard pd={pd} /><TripExtras pd={pd} /></div>}
+        </div>
+      ) : (
       <div className="section stack">
         {plan.status === 'cancelled' && <div className="err">{plan.proposed ? 'The admin passed on this one.' : 'This one’s been called off.'}</div>}
         {plan.status !== 'cancelled' && <StageBar pd={pd} />}
@@ -146,6 +169,7 @@ export function PlanDetail() {
         {current === 'kitty' && <KittyTab pd={pd} />}
         {current === 'groups' && <GroupsTab pd={pd} />}
       </div>
+      )}
       {editing && <PlanSheet plan={plan} onClose={() => setEditing(false)} onSaved={() => pd.reload()} />}
     </div>
   );

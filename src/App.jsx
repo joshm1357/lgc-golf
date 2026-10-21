@@ -69,6 +69,7 @@ const Desk = lazyScreen(() => import('./screens/Desk.jsx')); // Stage 11c: the f
 const TripFinder = lazyScreen(() => import('./screens/TripFinder.jsx'));
 const Notifications = lazyScreen(() => import('./screens/Notifications.jsx'));
 const CompsBoard = lazyScreen(() => import('./screens/CompsBoard.jsx'));
+const TripOverviewScreen = lazyScreen(() => import('./screens/TripOverview.jsx')); // a trip's overview (trips with no plan)
 
 // A fresh plan screen per plan, so nothing carries over when a notification jumps to another one.
 function PlanDetailRoute() {
@@ -220,6 +221,7 @@ function Inside() {
         <Route path="/more" element={<More />} />
         <Route path="/notifications" element={<FeatureRoute feature="notifications" label="Phone notifications"><Notifications /></FeatureRoute>} />
         <Route path="/comps-board" element={<CompsBoard />} />
+        <Route path="/trip/:tripId" element={<TripOverviewScreen />} />
         <Route path="/ask" element={<FeatureRoute feature="ai_helper" label="The AI helper"><Ask /></FeatureRoute>} />
         <Route path="/cup" element={<FeatureRoute feature="cup" label="The Cup"><Cup /></FeatureRoute>} />
         <Route path="/cup/:matchId" element={<FeatureRoute feature="cup" label="The Cup"><CupMatch /></FeatureRoute>} />

@@ -128,7 +128,7 @@ function NowCard({ plan, stage, rsvps, me }) {
   const on = stage === 'on';
   return (
     <div className="card" style={{ overflow: 'hidden', borderColor: 'var(--navy)' }}>
-      <Link to={plan.tripOnly ? '/' : `/plan/${plan.id}`} className="stack" style={{ gap: 6, padding: 16, textDecoration: 'none', color: '#fff', background: 'var(--navy)' }}>
+      <Link to={plan.tripOnly ? `/trip/${plan.trip_id}` : `/plan/${plan.id}`} className="stack" style={{ gap: 6, padding: 16, textDecoration: 'none', color: '#fff', background: 'var(--navy)' }}>
         <div className="row between" style={{ alignItems: 'flex-start' }}>
           <span className="small" style={{ fontWeight: 800, letterSpacing: '.04em', color: 'var(--gold)' }}>{on ? '⛳ ON NOW' : '🔒 NEXT UP'} · {plan.kind === 'round' ? 'ONE-DAY ROUND' : 'TRIP'}</span>
           {plan.start_date && !on && <Chip strong>{countdown(plan.start_date)}</Chip>}
@@ -155,7 +155,7 @@ function TripCard({ plan, stage, rsvps, me, decide, suggestedBy }) {
   const ins = rsvps.filter((r) => r.status === 'in');
   const mine = rsvps.find((r) => r.player_id === me);
   return (
-    <Link to={plan.tripOnly ? '/' : `/plan/${plan.id}`} className="card pad stack" style={{ gap: 6, textDecoration: 'none', color: 'inherit' }}>
+    <Link to={plan.tripOnly ? `/trip/${plan.trip_id}` : `/plan/${plan.id}`} className="card pad stack" style={{ gap: 6, textDecoration: 'none', color: 'inherit' }}>
       <div className="row between" style={{ alignItems: 'flex-start', gap: 8 }}>
         <div>
           <div className="small muted" style={{ fontWeight: 700 }}>{STAGE_LABEL[stage]} · {plan.kind === 'round' ? 'One-day round' : 'Trip'}{suggestedBy && stage === 'idea' ? ` · from ${playerName(suggestedBy)}` : ''}</div>
@@ -193,7 +193,7 @@ function PastCard({ plan, stage, photo, rounds: roundList = [], winners = [] }) 
   const rounds = roundList.length;
   return (
     <div className="card" style={{ padding: 0, opacity: cancelled ? 0.55 : 1 }}>
-    <Link to={plan.tripOnly ? '/trophies' : `/plan/${plan.id}`} className="row" style={{ gap: 12, padding: 10, textDecoration: 'none', color: 'inherit' }}>
+    <Link to={plan.tripOnly ? `/trip/${plan.trip_id}` : `/plan/${plan.id}`} className="row" style={{ gap: 12, padding: 10, textDecoration: 'none', color: 'inherit' }}>
       <div style={{ width: 64, height: 64, flex: 'none', borderRadius: 10, overflow: 'hidden', background: 'var(--gold-soft)', display: 'grid', placeItems: 'center', fontSize: 26 }}>
         {photo ? <img src={photo} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (cancelled ? '✖️' : '⛳')}
       </div>

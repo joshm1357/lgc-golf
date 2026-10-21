@@ -7,6 +7,7 @@ import { distanceM, getFix } from '../lib/geo.js';
 import { Header, Seg, Avatar, Icon, Sheet, timeAgo, toast, PhotoButtons } from '../components/ui.jsx';
 import CourseMap, { avatarIcon, teeIcon } from '../components/CourseMap.jsx';
 import { useRoundChoice, RoundChips } from './Leaderboard.jsx';
+import { OwnComp, useRoundOwnComps } from './OwnComps.jsx';
 
 const LABEL = { ctp: 'Closest to pin', ld: 'Longest drive' };
 
@@ -30,7 +31,11 @@ export default function Comps() {
   const { status } = useSession();
   const [round, choose] = useRoundChoice();
   const [params] = useSearchParams();
-  const [kind, setKind] = useState(params.get('kind') === 'ld' ? 'ld' : 'ctp');
+  const [kindSel, setKind] = useState(params.get('kind') || 'ctp');
+  const own = useRoundOwnComps(round);
+  const ownComp = own.find((c) => c.id === kindSel);
+  // 'ctp', 'ld', or one of the group's own comps on this round (anything else falls back to closest to pin).
+  const kind = ownComp ? kindSel : kindSel === 'ld' ? 'ld' : 'ctp';
   const [holeSel, setHoleSel] = useState(params.get('hole') ? Number(params.get('hole')) : null);
   const [entries, setEntries] = useState([]);
   const [adding, setAdding] = useState(false);
@@ -59,6 +64,19 @@ export default function Comps() {
 
   if (!round) return <div className="page"><Header logo title="Side comps" /><div className="empty">No rounds yet.</div></div>;
 
+  const segOptions = [{ value: 'ctp', label: 'Closest to pin' }, { value: 'ld', label: 'Longest drive' }, ...own.map((c) => ({ value: c.id, label: `${c.emoji ? `${c.emoji} ` : ''}${c.name}` }))];
+  if (ownComp) {
+    return (
+      <div className="page">
+        <Header logo title="Side comps" sub={round.name}>
+          <div className={segOptions.length > 2 ? 'seg-many' : undefined}><Seg value={kind} onChange={(k) => { setKind(k); setHoleSel(null); }} options={segOptions} /></div>
+        </Header>
+        <RoundChips round={round} onChoose={choose} />
+        <OwnComp key={`${round.id}-${ownComp.id}`} round={round} comp={ownComp} playerIds={roundPlayerIds(data, round)} />
+      </div>
+    );
+  }
+
   const markers = [
     ...(kind === 'ld' && holeInfo?.tee ? [{ id: 'tee', ...holeInfo.tee, icon: teeIcon }] : []),
     ...list.filter((e) => e.lat != null).map((e, i) => ({
@@ -71,7 +89,7 @@ export default function Comps() {
   return (
     <div className="page">
       <Header logo title="Side comps" sub={round.name}>
-        <Seg value={kind} onChange={(k) => { setKind(k); setHoleSel(null); }} options={[{ value: 'ctp', label: 'Closest to pin' }, { value: 'ld', label: 'Longest drive' }]} />
+        <div className={segOptions.length > 2 ? 'seg-many' : undefined}><Seg value={kind} onChange={(k) => { setKind(k); setHoleSel(null); }} options={segOptions} /></div>
       </Header>
       <RoundChips round={round} onChoose={choose} />
       {!holes.length ? (

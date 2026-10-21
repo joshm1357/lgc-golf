@@ -24,6 +24,8 @@ export const GROUP_TABLES = new Set([
   'group_features',
   // Team match play (migration 050)
   'cup_sides', 'cup_matches',
+  // A group's own side comps (migration 051)
+  'side_comp_defs', 'side_comp_entries',
 ]);
 
 let current = (() => {

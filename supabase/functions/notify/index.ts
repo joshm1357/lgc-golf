@@ -43,7 +43,8 @@ type Msg = { title: string; body: string; url: string; tag?: string };
 /** Always straight away, whatever someone picked. */
 const ALWAYS_NOW = new Set(['draw_open', 'test']);
 /** What "only important" people still get: the draw room, a job given to them or due, money, their trip tomorrow. */
-// 'award': a winner decided (migration 054 queues these from the database; they go out with the hourly send).
+// 'award': a round, trophy or Cup match decided (054/054b queue these; they go out with the hourly send).
+// 'award_minor': closest to the pin / longest drive — not "important".
 const IMPORTANT = new Set(['draw_open', 'test', 'job_assigned', 'job_due', 'payment_recorded', 'nudge_kitty', 'trip_tomorrow', 'award']);
 
 /** Which feature each kind of message belongs to (Stage 3): nothing goes out for a switched-off feature. */
@@ -53,7 +54,7 @@ const KIND_FEATURE: Record<string, string> = {
   plan_new: 'planner', plan_proposed: 'planner', trip_locked: 'planner', rsvp_locked: 'planner', rsvp_deadline: 'planner',
   nudge_rsvp: 'planner', trip_week: 'planner', trip_tomorrow: 'planner', comment: 'planner',
   nudge_kitty: 'planner_costs', payment_recorded: 'planner_costs', groups_set: 'planner_rooms',
-  rule_proposed: 'rule_voting', draw_open: 'draw', award: 'awards',
+  rule_proposed: 'rule_voting', draw_open: 'draw', award: 'awards', award_minor: 'awards',
   // rule_decided: not tied to voting — organisers deciding rules is part of the Rulebook itself.
 };
 /** Is a feature on for group g? (An older database without switches: everything on.) */
@@ -153,7 +154,8 @@ async function digest() {
     const more = items.length > 3 ? ` · +${items.length - 3} more` : '';
     const msg = items.length === 1
       ? { title: items[0].title, body: gname, url: items[0].url || APP }
-      : { title: `📬 ${gname}: ${items.length} things since your last update`, body: shown + more, url: `${APP}#/plan`, tag: `digest-${g}` };
+      // Only winners in it (054 awards): open the leaderboard, not the planner.
+      : { title: `📬 ${gname}: ${items.length} things since your last update`, body: shown + more, url: items.every((i) => i.kind === 'award' || i.kind === 'award_minor') ? `${APP}#/` : `${APP}#/plan`, tag: `digest-${g}` };
     if (items.length) sent += await pushTo([user], msg);
     await db.from('notify_queue').update({ sent_at: new Date().toISOString() }).in('id', all.map((i) => i.id));
   }

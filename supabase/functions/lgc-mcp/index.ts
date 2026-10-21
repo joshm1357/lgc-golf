@@ -7,6 +7,10 @@
 // (connector_keys, stored as a SHA-256 hash) and can only see and change that group. Anyone with
 // the link acts as that group's organiser, so keep it private; delete its row to cut it off.
 //
+// Learning loop (057): every tool call is logged as counts only (group, tool, worked or not, time, a short error
+// kind — never what was asked), and suggest_feature saves a one-line job no tool can do yet. Josh sees both on the
+// Wishes screen (platform admins only).
+//
 // Protocol: MCP over plain HTTP (JSON-RPC 2.0, JSON responses — no streaming needed).
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 
@@ -47,9 +51,47 @@ type P = { id: string; name: string; nickname?: string; handicap?: number; appro
 const fail = (msg: string) => { throw new Error(msg); };
 const must = async <T>(q: PromiseLike<{ data: T; error: unknown }>) => {
   const { data, error } = await q;
-  if (error) fail((error as { message?: string }).message || 'Database error');
+  if (error) throw Object.assign(new Error((error as { message?: string }).message || 'Database error'), { kind: 'database' });
   return data;
 };
+
+// ---------- the learning loop (057): which tools organisers use, and what they wish they could do ----------
+// Each tool call is logged as group + tool + worked or not + how long + a short error KIND. Never the arguments, never
+// the error's wording (it can name players), never any chat text. Logging is fire-and-forget: it can't slow or break
+// a call, and an older database without the table just doesn't log.
+/** A short, name-free label for why a tool call failed. */
+function errorKind(e: unknown): string {
+  const kind = (e as { kind?: string })?.kind;
+  if (kind) return kind;
+  const m = String((e as Error)?.message || e || '');
+  if (/^No (such|player|team|rounds)|isn't in /i.test(m)) return 'not_found';
+  if (/could be|matches .* and |more specific/i.test(m)) return 'ambiguous';
+  if (/is locked/i.test(m)) return 'locked';
+  if (/isn't 1–18|doesn't look right|^Say which|^No scores given|^Amount must|^Nothing to|^Describe the job/i.test(m)) return 'bad_input';
+  return 'other';
+}
+function logCall(c: Ctx, tool: string, ok: boolean, started: number, error: string | null = null) {
+  try {
+    const p = db.from('connector_calls').insert({
+      group_id: c.g, tool: tool.slice(0, 60), ok, ms: Math.max(0, Math.round(performance.now() - started)),
+      error: ok ? null : (error || 'other').slice(0, 40),
+    }).then(() => {}, () => {});
+    // Keep the function alive until the row is written, even after the answer has gone back.
+    (globalThis as { EdgeRuntime?: { waitUntil?: (p: PromiseLike<unknown>) => void } }).EdgeRuntime?.waitUntil?.(p);
+  } catch { /* logging never breaks a call */ }
+}
+/** The wish as one plain line: no email addresses, phone numbers or links, at most 200 characters. */
+function cleanJob(text: unknown): string {
+  return String(text ?? '')
+    .replace(/https?:\/\/\S+/gi, '')
+    .replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, '')
+    .replace(/\+?\d[\d\s()-]{6,}\d/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 200)
+    .trim();
+}
+const WISHES_PER_DAY = 50; // per group: a runaway assistant can't flood the list
 async function players(c: Ctx): Promise<P[]> {
   return ((await must(db.from('players').select('id,name,nickname,handicap,approved').eq('group_id', c.g))) as P[]).filter((p) => p.approved !== false);
 }
@@ -384,6 +426,19 @@ const TOOLS: Tool[] = [
       return rules.map((r) => `${r.status === 'proposed' ? '[up for a vote] ' : ''}${r.title}${r.value ? ` (${r.value})` : ''} — applies to ${r.applies_to.join(', ')}${r.detail ? `: ${r.detail}` : ''}`).join('\n') || 'No rules yet.';
     },
   },
+  {
+    name: 'suggest_feature',
+    description: "Call this when the organiser asks for something that none of the other tools can do (for example: \"remind everyone who hasn't paid\" or \"book us a tee time\"). Describe the job in ONE short plain line — what they wanted done, not who it was for. Never include names, nicknames, phone numbers, emails, amounts owed or any other personal details. Don't call it for things another tool already does. Afterwards, tell the organiser it's been passed on and help them as best you can with the tools there are.",
+    inputSchema: { type: 'object', required: ['job'], properties: { job: str('The job in one plain line, 3–200 characters, no names or personal details, e.g. "Remind players who haven\'t paid the kitty"') } },
+    async run(a, c) {
+      const job = cleanJob(a.job);
+      if (job.length < 3) fail('Describe the job in a few words (no names).');
+      const since = new Date(Date.now() - 86400000).toISOString();
+      const { count } = await db.from('feature_wishes').select('id', { count: 'exact', head: true }).eq('group_id', c.g).gte('created_at', since);
+      if ((count ?? 0) < WISHES_PER_DAY) await must(db.from('feature_wishes').insert({ group_id: c.g, job, source: 'connector' }));
+      return "Noted — thanks. That's passed on to the people who build The Golf Trip; the most-asked-for jobs get built first.";
+    },
+  },
 ];
 
 // ---------- MCP over HTTP ----------
@@ -395,7 +450,7 @@ async function handle(msg: Record<string, any>, c: Ctx) {
   switch (method) {
     case 'initialize': {
       const v = VERSIONS.includes(params?.protocolVersion) ? params.protocolVersion : VERSIONS[0];
-      return ok({ protocolVersion: v, capabilities: { tools: {} }, serverInfo: { name: 'lgc-golf', version: '1.0.0' }, instructions: `${c.groupName} golf app (The Golf Trip). Everything here is this group only. Call lgc_overview first to get round, team and plan ids. Scores go in with enter_scores; check names against lgc_overview.` });
+      return ok({ protocolVersion: v, capabilities: { tools: {} }, serverInfo: { name: 'lgc-golf', version: '1.0.0' }, instructions: `${c.groupName} golf app (The Golf Trip). Everything here is this group only. Call lgc_overview first to get round, team and plan ids. Scores go in with enter_scores; check names against lgc_overview. If the organiser asks for something no tool can do, call suggest_feature with a one-line description of the job (no names or personal details).` });
     }
     case 'ping': return ok({});
     case 'tools/list': {
@@ -404,14 +459,20 @@ async function handle(msg: Record<string, any>, c: Ctx) {
       return ok({ tools: offered.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })) });
     }
     case 'tools/call': {
+      const started = performance.now();
       const tool = TOOLS.find((t) => t.name === params?.name);
-      if (!tool) return err(-32602, `Unknown tool ${params?.name}`);
+      // Only our own tool names are logged — an unknown name could be anything the assistant typed.
+      if (!tool) { logCall(c, 'unknown', false, started, 'unknown_tool'); return err(-32602, `Unknown tool ${params?.name}`); }
       if (TOOL_FEATURE[tool.name] && !(await featureOn(c, TOOL_FEATURE[tool.name]))) {
+        logCall(c, tool.name, false, started, 'switched_off');
         return ok({ content: [{ type: 'text', text: `That's switched off for ${c.groupName} (Group & invites → Features).` }], isError: true });
       }
       try {
-        return ok({ content: [{ type: 'text', text: await tool.run(params?.arguments || {}, c) }] });
+        const text = await tool.run(params?.arguments || {}, c);
+        logCall(c, tool.name, true, started);
+        return ok({ content: [{ type: 'text', text }] });
       } catch (e) {
+        logCall(c, tool.name, false, started, errorKind(e));
         return ok({ content: [{ type: 'text', text: String((e as Error)?.message || e) }], isError: true });
       }
     }

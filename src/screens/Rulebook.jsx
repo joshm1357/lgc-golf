@@ -13,7 +13,7 @@ const CATS = [
   ['etiquette', 'On the course'], ['fines', 'Fines'], ['other', 'Other'],
 ];
 const CAT = Object.fromEntries(CATS);
-const APPLIES = [['all', 'Everything'], ['stableford', 'Stableford'], ['ambrose', 'Ambrose'], ['trip', 'Trips']];
+const APPLIES = [['all', 'Everything'], ['stableford', 'Stableford'], ['ambrose', 'Ambrose'], ['stroke', 'Stroke play'], ['fourball', '4BBB'], ['trip', 'Trips']];
 const APPLY = Object.fromEntries(APPLIES);
 const VOTE = { for: '👍 For', against: '👎 Against', abstain: 'Abstain' };
 

@@ -36,7 +36,7 @@ export function usePlayerHistory(playerId) {
         const b = roundBoard({ round: r, course, roundPlayers: data.roundPlayers[r.id] || [], playersById: data.playersById, scoresIdx: scores.index, quickResults: data.quick_results });
         const row = b.rows.find((x) => x.id === playerId);
         if (row && row.thru > 0) stableford.push({ round: r, course, points: row.points, finished: row.finished, rank: row.rankLabel, of: b.rows.length });
-      } else {
+      } else if (r.format === 'ambrose') {
         const team = (data.teamsByRound[r.id] || []).find((t) => t.players.some((p) => p.id === playerId));
         if (!team) continue;
         const b = roundBoard({ round: r, course, teams: data.teamsByRound[r.id], playersById: data.playersById, scoresIdx: scores.index });

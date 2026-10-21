@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { roundSettingsFromRules } from '../lib/plan.js';
 import { honourOrder } from '../lib/history.js';
+import { formatName } from '../lib/board.js';
 import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useSession, playerName, useFeature } from '../lib/store.jsx';
 import { Header, Avatar, Loading, toast } from '../components/ui.jsx';
@@ -334,7 +335,7 @@ function RoundCard({ round }) {
   return (
     <div className="card pad stack" style={{ background: 'var(--ground)' }}>
       <div className="row between">
-        <div><strong>{round.name}</strong><div className="small muted">{course?.name} · {round.format} · {round.status}</div></div>
+        <div><strong>{round.name}</strong><div className="small muted">{course?.name} · {formatName(round.format)} · {round.status}</div></div>
         <button type="button" className={'btn sm' + (round.status === 'setup' ? ' gold' : ' ghost')} onClick={() => run(() => supabase.from('rounds').update({ status: next[0] }).eq('id', round.id), 'Round updated').then(data.reload)}>{next[1]}</button>
       </div>
       {sideCompsOn && <div className="row">
@@ -390,7 +391,7 @@ function TeamsEditor({ round, pairs = false }) {
   return (
     <div className="stack">
       <span className="label">{pairs ? 'Pairs (4BBB)' : 'Teams'}</span>
-      {pairs && <span className="small muted">Two players a pair. Each plays off their own handicap (change it under 3. Players); the better Stableford points on each hole count.</span>}
+      {pairs && <span className="small muted">Two players a pair. Each plays off their own handicap, fixed for this round (change it below); the better Stableford points on each hole count.</span>}
       {teams.map((t) => <TeamRow key={t.id} team={t} pairs={pairs} takenElsewhere={teams.filter((o) => o.id !== t.id).flatMap((o) => o.players.map((p) => p.id))} />)}
       {data.players.length < 2 && <span className="small muted">Only {data.players.length} player so far — the lads appear here once they join with the PIN, or add them under 3. Players.</span>}
       <div className="stack card pad">
@@ -405,13 +406,24 @@ function TeamsEditor({ round, pairs = false }) {
         <button type="button" className="btn" disabled={!name || !sel.length || (pairs ? sel.length !== 2 : hcp === '')} onClick={async () => {
           const res = await run(() => supabase.from('teams').insert({ round_id: round.id, name, handicap: pairs ? 0 : Number(hcp) }).select().single());
           if (res) {
-            await run(() => supabase.from('team_players').insert(sel.map((pid) => ({ team_id: res.id, player_id: pid }))), 'Team added');
+            await run(() => supabase.from('team_players').insert(sel.map((pid) => ({ team_id: res.id, player_id: pid }))), pairs ? 'Pair added' : 'Team added');
+            // 4BBB: each player's handicap is fixed for the round (so changing it later doesn't change this result).
+            if (pairs) await addRoundHcps(round.id, sel, data);
             setName(''); setHcp(''); setSel([]); data.reload();
           }
         }}>{pairs ? 'Add pair' : 'Add team'}</button>
       </div>
+      {pairs && <PairHandicaps round={round} />}
     </div>
   );
+}
+
+/** 4BBB: put players in the round at their current handicap (a playing handicap for the round), if not already. */
+async function addRoundHcps(roundId, playerIds, data) {
+  const have = new Set((data.roundPlayers[roundId] || []).map((rp) => rp.player_id));
+  const add = playerIds.filter((pid) => !have.has(pid))
+    .map((pid) => ({ round_id: roundId, player_id: pid, playing_handicap: Math.round(Number(data.playersById[pid]?.handicap || 0)) }));
+  if (add.length) await run(() => supabase.from('round_players').insert(add));
 }
 
 function TeamRow({ team, takenElsewhere = [], pairs = false }) {
@@ -439,11 +451,38 @@ function TeamRow({ team, takenElsewhere = [], pairs = false }) {
         <span className="small muted">Tap to add or remove. Players in other teams are hidden. Handicaps add to {total}.</span>
         <PlayerPicker selected={ids} exclude={takenElsewhere} onToggle={async (pid) => {
           if (ids.includes(pid)) await run(() => supabase.from('team_players').delete().eq('team_id', team.id).eq('player_id', pid));
-          else await run(() => supabase.from('team_players').insert({ team_id: team.id, player_id: pid }));
+          else if (pairs && ids.length >= 2) { toast('A pair is two players — take one out first'); return; }
+          else {
+            await run(() => supabase.from('team_players').insert({ team_id: team.id, player_id: pid }));
+            if (pairs) await addRoundHcps(team.round_id, [pid], data);
+          }
           data.reload();
         }} />
       </div>
     )}
+    </div>
+  );
+}
+
+/** 4BBB: each paired player's playing handicap for this round, with the World Handicap four-ball allowance. */
+function PairHandicaps({ round }) {
+  const data = useData();
+  const inPairs = new Set((data.teamsByRound[round.id] || []).flatMap((t) => t.players.map((p) => p.id)));
+  const rps = (data.roundPlayers[round.id] || []).filter((rp) => inPairs.has(rp.player_id));
+  if (!rps.length) return null;
+  return (
+    <div className="stack" style={{ gap: 6 }}>
+      <span className="label">Playing handicaps for this round</span>
+      {rps.map((rp) => <RoundPlayerRow key={rp.player_id} round={round} rp={rp} />)}
+      <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={async () => {
+        if (!window.confirm('Set everyone to 85% of their handicap (the World Handicap allowance for four-ball stroke play / Stableford)?')) return;
+        for (const rp of rps) {
+          const full = Number(data.playersById[rp.player_id]?.handicap || 0);
+          await run(() => supabase.from('round_players').update({ playing_handicap: Math.round(full * 0.85) }).eq('round_id', round.id).eq('player_id', rp.player_id));
+        }
+        toast('Set to 85%');
+        data.reload();
+      }}>Use 85% of handicap (four-ball allowance)</button>
     </div>
   );
 }
@@ -467,7 +506,7 @@ function StablefordPlayers({ round }) {
         else await run(() => supabase.from('round_players').insert({ round_id: round.id, player_id: pid, playing_handicap: Math.round(Number(data.playersById[pid].handicap)) }));
         data.reload();
       }} />
-      <span className="small muted">Played on paper? Type each player's total Stableford points in the "Card pts" box — it counts toward the trophy.</span>
+      {round.format === 'stableford' && <span className="small muted">Played on paper? Type each player's total Stableford points in the "Card pts" box — it counts toward the trophy.</span>}
     </div>
   );
 }
@@ -483,11 +522,12 @@ function RoundPlayerRow({ round, rp, points }) {
       <Avatar player={p} size={28} />
       <span className="grow ellipsis">{playerName(p)}</span>
       <label className="field" style={{ width: 64 }}><span className="small">Hcp</span><input className="input" style={{ minHeight: 38 }} inputMode="numeric" value={h} onChange={(e) => setH(e.target.value)} /></label>
-      <label className="field" style={{ width: 70 }}><span className="small">Card pts</span><input className="input" style={{ minHeight: 38 }} inputMode="numeric" value={pts} onChange={(e) => setPts(e.target.value)} /></label>
+      {round.format === 'stableford' && <label className="field" style={{ width: 70 }}><span className="small">Card pts</span><input className="input" style={{ minHeight: 38 }} inputMode="numeric" value={pts} onChange={(e) => setPts(e.target.value)} /></label>}
       {dirty && (
         <button type="button" className="btn sm" style={{ alignSelf: 'flex-end' }} onClick={async () => {
           await run(() => supabase.from('round_players').update({ playing_handicap: Math.round(Number(h)) }).eq('round_id', round.id).eq('player_id', rp.player_id));
-          if (pts === '') await run(() => supabase.from('quick_results').delete().eq('round_id', round.id).eq('player_id', rp.player_id));
+          if (round.format !== 'stableford') { /* card points are Stableford only */ }
+          else if (pts === '') await run(() => supabase.from('quick_results').delete().eq('round_id', round.id).eq('player_id', rp.player_id));
           else await run(() => supabase.from('quick_results').upsert({ round_id: round.id, player_id: rp.player_id, points: Number(pts) }));
           toast('Saved');
           data.reload();

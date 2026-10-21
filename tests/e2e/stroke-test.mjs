@@ -121,6 +121,7 @@ page.on('dialog', (d) => d.accept());
 // 1. The leaderboard: net to par, gross, Kurt leads.
 await page.goto(`${BASE}#/?r=${R1}`);
 await page.locator('.lb-row').first().waitFor({ timeout: 15000 });
+await page.locator('.lb-main', { hasText: '−1' }).waitFor({ timeout: 15000 }); // scores load just after the rows
 const cols = await page.locator('.lb-cols').innerText();
 check(/net/i.test(cols) && /gross/i.test(cols), 'columns are Net and Gross');
 const rowsTxt = await page.locator('.lb-row').allInnerTexts();

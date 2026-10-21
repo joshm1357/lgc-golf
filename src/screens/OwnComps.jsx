@@ -111,10 +111,12 @@ function OwnEntryForm({ round, comp, hole, leader, playerIds, onClose, onSaved }
   const [busy, setBusy] = useState(false);
   const options = [...new Set([...playerIds, me])].map((id) => data.playersById[id]).filter(Boolean);
   const pick = comp.how === 'pick';
+  const num = value.trim() === '' ? null : Number(value.trim().replace(',', '.'));
+  const badNum = !pick && (num == null || !Number.isFinite(num) || num < 0);
   const save = async () => {
     setBusy(true);
     try {
-      const v = pick || value === '' ? null : Number(value);
+      const v = pick ? null : num;
       const res = await sendOrQueue('side_comp_entries', {
         round_id: round.id, comp_id: comp.id, hole, player_id: playerId, value: v, note: note.trim() || null, photo_url: null, created_by: me,
       }, { photo: file ? { file, field: 'photo_url', folder: 'comps' } : null });
@@ -140,15 +142,18 @@ function OwnEntryForm({ round, comp, hole, leader, playerIds, onClose, onSaved }
           </select>
         </label>
         {!pick && (
-          <label className="field"><span>{comp.unit ? `How many ${comp.unit}` : 'Number'}</span>
-            <input className="input" inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} style={{ fontSize: 22 }} />
-          </label>
+          <>
+            <label className="field"><span>{comp.unit ? `How many ${comp.unit}` : 'Number'}</span>
+              <input className="input" inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} style={{ fontSize: 22 }} />
+            </label>
+            {value.trim() !== '' && badNum && <span className="small err" style={{ margin: 0 }}>That isn’t a number — e.g. 12 or 12.5</span>}
+          </>
         )}
         <label className="field"><span>{pick ? 'What happened' : 'Note (optional)'}</span>
           <input className="input" value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} placeholder={pick ? 'e.g. holed out from the bunker' : ''} />
         </label>
         <PhotoButtons onPick={setFile} picked={!!file} cameraLabel={file ? 'Retake' : 'Take a photo'} />
-        <button type="button" className="btn gold block" disabled={busy || (!pick && value === '') || (pick && !note.trim() && !file)} onClick={save}>{busy ? 'Saving…' : 'Save'}</button>
+        <button type="button" className="btn gold block" disabled={busy || badNum || (pick && !note.trim() && !file)} onClick={save}>{busy ? 'Saving…' : 'Save'}</button>
       </div>
     </Sheet>
   );

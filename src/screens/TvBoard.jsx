@@ -22,7 +22,7 @@ export function boardFor(r) {
   return roundBoard({ round: r, course: { holes: r.holes || [] }, teams, roundPlayers: r.round_players || [], playersById, scoresIdx: idx });
 }
 
-const FORMATS = { stableford: 'Stableford', ambrose: 'Ambrose', stroke: 'Stroke play' };
+const FORMATS = { stableford: 'Stableford', ambrose: 'Ambrose', stroke: 'Stroke play', fourball: '4BBB' };
 
 export default function TvBoard() {
   const { slug } = useParams();

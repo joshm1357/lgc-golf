@@ -90,6 +90,15 @@ async function subjectsOf(round: Record<string, unknown>, all: P[]) {
     return teams.map((t) => ({ id: t.id, type: 'team', name: t.name, handicap: Number(t.handicap), members: t.team_players.map((x) => all.find((p) => p.id === x.player_id)).filter(Boolean) as P[] }));
   }
   const rps = (await must(db.from('round_players').select('*').eq('round_id', round.id))) as { player_id: string; playing_handicap: number }[];
+  if (round.format === 'fourball') {
+    // 4BBB: each player in each pair scores their own ball, off the round's playing handicap (else their handicap).
+    const hcp = Object.fromEntries(rps.map((rp) => [rp.player_id, Number(rp.playing_handicap)]));
+    const teams = (await must(db.from('teams').select('*, team_players(player_id)').eq('round_id', round.id))) as { id: string; name: string; team_players: { player_id: string }[] }[];
+    return teams.flatMap((t) => t.team_players.map((x) => {
+      const p = all.find((y) => y.id === x.player_id);
+      return { id: x.player_id, type: 'player', name: pname(p), handicap: hcp[x.player_id] ?? Math.round(Number(p?.handicap || 0)), members: p ? [p] : [], pair: t.name, pairId: t.id };
+    }));
+  }
   return rps.map((rp) => { const p = all.find((x) => x.id === rp.player_id); return { id: rp.player_id, type: 'player', name: pname(p), handicap: Number(rp.playing_handicap), members: p ? [p] : [] }; });
 }
 function findSubject(subs: Awaited<ReturnType<typeof subjectsOf>>, who: string) {
@@ -134,7 +143,7 @@ const TOOLS: Tool[] = [
       for (const r of rounds) {
         const subs = await subjectsOf(r, all);
         lines.push(`- Round "${r.name}" id=${r.id} · ${r.courses?.name} · ${r.format} · ${r.status} · ${r.play_date || ''}${r.comp_bonus ? ` · side comps −${r.comp_bonus}` : ''}${r.ctp_holes?.length ? ` · CTP ${r.ctp_holes.join(',')}` : ''}${r.ld_holes?.length ? ` · LD ${r.ld_holes.join(',')}` : ''}`);
-        for (const s of subs) lines.push(`    ${s.name} (hcp ${s.handicap})${s.type === 'team' ? `: ${s.members.map(pname).join(', ')}` : ''}`);
+        for (const s of subs as any[]) lines.push(`    ${s.name} (hcp ${s.handicap})${s.type === 'team' ? `: ${s.members.map(pname).join(', ')}` : s.pair ? ` — pair ${s.pair}` : ''}`);
       }
       const plans = await must(db.from('plans').select('id,name,kind,status,start_date,end_date,location_name,proposed').eq('group_id', c.g).neq('status', 'cancelled').order('start_date', { nullsFirst: false })) as Record<string, any>[];
       lines.push('Trips (ideas, being decided, locked in, past):');
@@ -145,7 +154,7 @@ const TOOLS: Tool[] = [
   },
   {
     name: 'get_leaderboard',
-    description: 'The scores for a round (default: the live round, else the latest). Gross, holes played, handicap and net (Ambrose) or Stableford points.',
+    description: 'The scores for a round (default: the live round, else the latest). Gross, holes played, handicap and net (Ambrose), net to par (stroke play), Stableford points, or better-ball points per pair (4BBB).',
     inputSchema: { type: 'object', properties: { round_id: str('Round id (optional)') } },
     async run(a, c) {
       const round = await currentRound(c, a.round_id);
@@ -166,6 +175,28 @@ const TOOLS: Tool[] = [
           }
         }
       }
+      const stab = (h: { par: number; si: number }, x: Record<string, any>, hcp: number) =>
+        (x.picked_up || x.strokes == null ? 0 : Math.max(0, 2 + h.par + strokesReceived(hcp, h.si) - x.strokes));
+      if (round.format === 'fourball') {
+        // 4BBB: per pair, the better points on each hole once both have a score (or picked up).
+        const pairs = new Map<string, { name: string; members: typeof subs }>();
+        for (const sub of subs as any[]) {
+          if (!pairs.has(sub.pairId)) pairs.set(sub.pairId, { name: sub.pair, members: [] });
+          pairs.get(sub.pairId)!.members.push(sub);
+        }
+        const prow = [...pairs.values()].map((pr) => {
+          let pts = 0; let thru = 0;
+          for (const h of holes) {
+            const each = pr.members.map((m) => scores.find((x) => x.subject_id === m.id && x.hole === h.n));
+            if (each.some((x) => !x || (x.strokes == null && !x.picked_up))) continue;
+            pts += Math.max(...each.map((x, i) => stab(h, x!, pr.members[i].handicap)));
+            thru += 1;
+          }
+          return { pr, pts, thru };
+        }).sort((x, y) => y.pts - 2 * y.thru - (x.pts - 2 * x.thru));
+        return [`${round.name} (4BBB, better-ball Stableford, ${round.status}) at ${course.name}`,
+          ...prow.map((r, i) => `${i + 1}. ${r.pr.name} (${r.pr.members.map((m) => `${m.name} off ${m.handicap}`).join(', ')}) — thru ${r.thru} · ${r.pts} pts (${r.pts - 2 * r.thru >= 0 ? '+' : ''}${r.pts - 2 * r.thru} on 2 a hole)`)].join('\n');
+      }
       const rows = subs.map((s) => {
         const mine = scores.filter((x) => x.subject_id === s.id);
         const played = mine.filter((x) => x.strokes != null || x.picked_up);
@@ -177,6 +208,18 @@ const TOOLS: Tool[] = [
           const net = (played.length === holes.length ? gross - s.handicap : gross - recv) - off;
           return { s, played: played.length, gross, toPar: gross - par, net, sort: net - par, comps: bonus[s.id] || [] };
         }
+        if (round.format === 'stroke') {
+          // Stroke play: net to par through the holes played; a pick-up counts as net double bogey.
+          let netToPar = 0; let g = 0;
+          for (const x of played) {
+            const h = holes.find((hh) => hh.n === x.hole);
+            if (!h) continue;
+            const recv = strokesReceived(s.handicap, h.si);
+            netToPar += x.picked_up ? 2 : x.strokes - h.par - recv;
+            g += x.picked_up ? h.par + 2 + recv : x.strokes;
+          }
+          return { s, played: played.length, gross: g, toPar: g - par, netToPar, sort: netToPar };
+        }
         const pts = mine.reduce((t, x) => {
           const h = holes.find((hh) => hh.n === x.hole);
           if (!h || x.strokes == null) return t;
@@ -185,18 +228,18 @@ const TOOLS: Tool[] = [
         return { s, played: played.length, gross, toPar: gross - par, points: pts, sort: -pts };
       }).sort((x, y) => x.sort - y.sort);
       const head = `${round.name} (${round.format}, ${round.status}) at ${course.name}, par ${holes.reduce((t, h) => t + h.par, 0)}${round.comp_bonus ? `. Side comps worth −${round.comp_bonus}, already taken off the net below` : ''}`;
-      return [head, ...rows.map((r, i) => `${i + 1}. ${r.s.name} — thru ${r.played} · gross ${r.gross} (${r.toPar >= 0 ? '+' : ''}${r.toPar}) · hcp ${r.s.handicap} · ${'points' in r ? `${r.points} pts` : `net ${Math.round((r.net as number) * 10) / 10}${(r as any).comps?.length ? ` (incl. ${(r as any).comps.join(', ')})` : ''}`}`)].join('\n');
+      return [head, ...rows.map((r, i) => `${i + 1}. ${r.s.name} — thru ${r.played} · gross ${r.gross} (${r.toPar >= 0 ? '+' : ''}${r.toPar}) · hcp ${r.s.handicap} · ${'netToPar' in r ? `net ${(r as any).netToPar > 0 ? '+' : ''}${(r as any).netToPar === 0 ? 'E' : (r as any).netToPar} to par` : 'points' in r ? `${r.points} pts` : `net ${Math.round((r.net as number) * 10) / 10}${(r as any).comps?.length ? ` (incl. ${(r as any).comps.join(', ')})` : ''}`}`)].join('\n');
     },
   },
   {
     name: 'enter_scores',
-    description: 'Enter or correct hole scores for one team (Ambrose) or player (Stableford), e.g. from a photo of a scorecard. Overwrites those holes. Optionally who drove (Ambrose minimum-drives rule).',
+    description: 'Enter or correct hole scores for one team (Ambrose) or player (Stableford, stroke play, or one player of a 4BBB pair), e.g. from a photo of a scorecard. Overwrites those holes. Optionally who drove (Ambrose minimum-drives rule).',
     inputSchema: {
       type: 'object', required: ['who', 'scores'],
       properties: {
         round_id: str('Round id (optional: the live round)'),
         who: str('Team name (Ambrose) or player name (Stableford)'),
-        scores: { type: 'array', items: { type: 'object', required: ['hole', 'strokes'], properties: { hole: num('1–18'), strokes: num('Strokes, 1–15; 0 = picked up (Stableford)'), drive_by: str('Ambrose: player whose tee shot was used (optional)') } } },
+        scores: { type: 'array', items: { type: 'object', required: ['hole', 'strokes'], properties: { hole: num('1–18'), strokes: num('Strokes, 1–15; 0 = picked up (Stableford, 4BBB; in stroke play it counts as net double bogey)'), drive_by: str('Ambrose: player whose tee shot was used (optional)') } } },
       },
     },
     async run(a, c) {

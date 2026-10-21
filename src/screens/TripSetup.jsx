@@ -8,6 +8,7 @@ import { Sheet, toast } from '../components/ui.jsx';
 import { FindCourse } from '../components/CourseLibrary.jsx';
 import { fmtRange, parseDate, daysUntil, roundSettingsFromRules } from '../lib/plan.js';
 import { useRun, must, feedPost } from './Planner.jsx';
+import { formatName } from '../lib/board.js';
 
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const DOW = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -85,7 +86,7 @@ function TripSetupSheet({ plan, onClose, onDone }) {
         const s = roundSettingsFromRules(rules || [], r.format);
         return {
           trip_id: trip.id, course_id: r.course_id, play_date: r.date, format: r.format, status: 'setup',
-          name: `${DOW[parseDate(r.date).getDay()]} ${r.format === 'ambrose' ? 'Ambrose' : 'Stableford'} — ${course?.name || ''}`.trim(),
+          name: `${DOW[parseDate(r.date).getDay()]} ${formatName(r.format)} — ${course?.name || ''}`.trim(),
           ...(r.format === 'ambrose' ? { comp_bonus: bonusOn ? s.comp_bonus ?? 0 : 0, min_drives: s.min_drives } : {}),
           rules: s.text || null,
         };

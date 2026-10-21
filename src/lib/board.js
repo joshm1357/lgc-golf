@@ -5,6 +5,10 @@ import {
 } from './scoring.js';
 import { project, needToTie } from './projection.js';
 
+/** A format's name for people. */
+export const FORMAT_NAMES = { stableford: 'Stableford', ambrose: 'Ambrose', stroke: 'Stroke play', fourball: '4BBB' };
+export const formatName = (format) => FORMAT_NAMES[format] || format;
+
 /** Formats scored as net to par (lower better); the rest are Stableford points (higher better). */
 export const isNetFormat = (format) => format === 'ambrose' || format === 'stroke';
 /** Formats played in teams (Ambrose teams, 4BBB pairs). */

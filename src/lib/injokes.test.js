@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   MOMENTS, BLOCKED, BLOCKED_PHRASES, EXAMPLES, normalise, isBlocked, checkJoke, canEdit, fillJoke, pickJoke, jokePicker, groupJokes,
+  jokesFromLines, lineFor,
 } from './injokes.js';
 
 const AL = 'p-al';
@@ -156,5 +157,32 @@ describe('groupJokes', () => {
     expect(out[2].jokes.map((x) => x.id)).toEqual(['2', '1']);
     expect(out[1].jokes.map((x) => x.id)).toEqual(['4']);
     expect(groupJokes([j('5', 'gone', 'any', AL, { active: false })], players, { withRetired: true })[0].jokes).toHaveLength(1);
+  });
+});
+
+describe('jokesFromLines (072: a few lines from in_joke_lines, never the list)', () => {
+  it('turns lines into any-moment jokes for nobody in particular', () => {
+    expect(jokesFromLines(['Dave still owes everyone for the cab', '  The ferry   to nowhere '])).toEqual([
+      { id: 'line-0', text: 'Dave still owes everyone for the cab', moment: 'any', player_id: null, active: true },
+      { id: 'line-1', text: 'The ferry to nowhere', moment: 'any', player_id: null, active: true },
+    ]);
+  });
+  it('drops junk, blocked words, leftover {name}, repeats and anything too long', () => {
+    expect(jokesFromLines(['ok fine', 'OK  fine!', null, 7, '', 'x', 'what a retard', '{name} again', 'y'.repeat(141)]).map((j) => j.text)).toEqual(['ok fine']);
+    expect(jokesFromLines(null)).toEqual([]);
+    expect(jokesFromLines({})).toEqual([]);
+  });
+  it('lineFor: steady for a seed, null when there is nothing', () => {
+    const lines = ['One joke here', 'Two jokes here', 'Three jokes here'];
+    expect(lineFor(lines, 'award-1')).toBe(lineFor(lines, 'award-1'));
+    expect(lines).toContain(lineFor(lines, 'award-2'));
+    expect(new Set(['a', 'b', 'c', 'd', 'e', 'f'].map((s) => lineFor(lines, s))).size).toBeGreaterThan(1);
+    expect(lineFor([], 'x')).toBeNull();
+    expect(lineFor(['retard'], 'x')).toBeNull();
+  });
+  it('the AI job (jokes.ts) uses the same block list', () => {
+    const ts = fs.readFileSync(path.resolve(__dirname, '../../supabase/functions/ai-helper/jokes.ts'), 'utf8');
+    const words = ts.split('// BLOCKED-START')[1].split('// BLOCKED-END')[0].match(/'([a-z ]+)'/g).map((s) => s.slice(1, -1));
+    expect(new Set(words)).toEqual(new Set(BLOCKED));
   });
 });

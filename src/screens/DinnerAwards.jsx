@@ -14,6 +14,7 @@ import {
   STATUS_LABEL, KIND_LABEL, TITLE_MAX, PENALTY_MAX, REASON_MAX, AWARD_IDEAS, FINE_IDEAS, checkAward, checkReason,
   canNominate, canVote, nextStep, myVote, tally, resultLine, sortAwards, closedPost, resultsCard,
 } from '../lib/dinnerawards.js';
+import { lineFor } from '../lib/injokes.js';
 
 const TABLES = ['dinner_awards', 'dinner_award_nominations', 'dinner_award_votes'];
 
@@ -37,6 +38,19 @@ function useDinner(tripId) {
   return [d, load];
 }
 
+/** A few of the group's running jokes for the decided awards' captions (072: in_joke_lines, never the whole list). */
+function useJokeLines() {
+  const on = useFeature('in_jokes');
+  const [lines, setLines] = useState([]);
+  useEffect(() => {
+    let live = true;
+    if (!on) { setLines([]); return undefined; }
+    supabase.rpc('in_joke_lines', { p_n: 5 }).then(({ data, error }) => { if (live && !error) setLines(data || []); }, () => {});
+    return () => { live = false; };
+  }, [on]);
+  return lines;
+}
+
 export default function DinnerAwards() {
   const data = useData();
   const { status } = useSession();
@@ -44,6 +58,7 @@ export default function DinnerAwards() {
   const trip = (tripId && data.trips.find((t) => t.id === tripId)) || (!tripId && data.currentTrip) || null;
   const [d, reload] = useDinner(trip?.id);
   const [nominating, setNominating] = useState(null);
+  const jokes = useJokeLines();
   const readOnly = !!status.viewing;
   const nameOf = useCallback((id) => playerName(data.playersById[id]) || 'Someone', [data.playersById]);
   const card = useMemo(() => (d ? resultsCard({ tripName: trip?.name, awards: d.awards, nominations: d.nominations, votes: d.votes, nameOf }) : null), [d, trip, nameOf]);
@@ -59,7 +74,7 @@ export default function DinnerAwards() {
         {d.failed && <div className="err">Couldn’t load the awards — check your signal.</div>}
         {list.length === 0 && <div className="empty">No awards or fines yet. Add the first — the group nominates, then votes at dinner.</div>}
         {list.map((a) => (
-          <AwardCard key={a.id} award={a} d={d} nameOf={nameOf} readOnly={readOnly} onNominate={() => setNominating(a)} reload={reload} trip={trip} />
+          <AwardCard key={a.id} award={a} d={d} nameOf={nameOf} readOnly={readOnly} onNominate={() => setNominating(a)} reload={reload} trip={trip} joke={lineFor(jokes, a.id)} />
         ))}
         {!readOnly && <AddAward trip={trip} onSaved={reload} />}
         {card?.rows.length > 0 && (
@@ -76,7 +91,7 @@ export default function DinnerAwards() {
   );
 }
 
-function AwardCard({ award, d, nameOf, readOnly, onNominate, reload, trip }) {
+function AwardCard({ award, d, nameOf, readOnly, onNominate, reload, trip, joke }) {
   const data = useData();
   const { status } = useSession();
   const feedOn = useFeature('feed');
@@ -118,6 +133,7 @@ function AwardCard({ award, d, nameOf, readOnly, onNominate, reload, trip }) {
           {canRemove && <button type="button" className="btn ghost sm" disabled={busy} aria-label="Remove" onClick={() => window.confirm(`Remove “${award.title}”?`) && remove()}>✕</button>}
         </div>
         {closed && <div style={{ marginTop: 6, fontWeight: 800 }} data-testid="award-result">🏆 {resultLine(award, result, nameOf)}</div>}
+        {closed && joke && result.winners.length > 0 && <div className="small muted" style={{ marginTop: 4, fontStyle: 'italic' }} data-testid="award-joke">🎙️ {joke}</div>}
         {award.status === 'voting' && <div className="small muted" style={{ marginTop: 4 }}>{result.total} vote{result.total === 1 ? '' : 's'} in so far{mine ? ' · yours is in' : ''}</div>}
       </div>
       {result.rows.length === 0 && <div className="small muted" style={{ padding: '0 14px 10px' }}>No nominations yet.</div>}

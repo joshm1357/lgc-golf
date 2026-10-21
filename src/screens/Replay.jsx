@@ -10,6 +10,7 @@ import { shareText, appLink } from '../lib/push.js';
 import { currentGroup } from '../lib/group.js';
 import { buildReplay, buildTimeline, holeWord, gapWords } from '../lib/replay.js';
 import { STYLES, captionsFor, popFor, topMoment, hashSeed, savedStyle, saveStyle, ordinal } from '../lib/replay-lines.js';
+import { jokesFromLines } from '../lib/injokes.js';
 import './replay.css';
 
 const ROW_H = 56; // one leaderboard row (50px) + gap
@@ -32,12 +33,13 @@ function useReplayExtras(roundId, jokesOn) {
         safe(supabase.from('posts').select('*').eq('round_id', roundId)),
         safe(supabase.from('side_comp_defs').select('*')),
         safe(supabase.from('side_comp_entries').select('*').eq('round_id', roundId)),
-        jokesOn ? safe(supabase.from('in_jokes').select('*')) : Promise.resolve([]),
+        // A few running jokes for the captions (072: never the whole list).
+        jokesOn ? safe(supabase.rpc('in_joke_lines', { p_n: 5 })) : Promise.resolve([]),
       ]);
       if (!live) return;
       setExtras({
         scores: scores ?? cacheGet(`scores-${roundId}`) ?? [],
-        sideEntries: sideEntries || [], posts: posts || [], ownDefs: ownDefs || [], ownEntries: ownEntries || [], jokes: jokes || [],
+        sideEntries: sideEntries || [], posts: posts || [], ownDefs: ownDefs || [], ownEntries: ownEntries || [], jokes: jokesFromLines(jokes),
       });
     })();
     return () => { live = false; };

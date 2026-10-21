@@ -37,7 +37,7 @@ export const FEATURES = [
   { key: 'games', name: 'Games and side bets', description: 'Skins, Nassau and other games worked out from the scores, with a running tally.', newGroup: false },
   { key: 'tee_groups', name: 'Tee groups', description: 'Fair groups of four for each round — new partners each day, handicaps mixed.', newGroup: false },
   { key: 'replay', name: 'Round replay', description: 'Watch a finished round as a 60-second animated replay.', newGroup: true },
-  { key: 'in_jokes', name: 'In-jokes', description: 'Your group’s nicknames and running jokes, used in awards and replays.', newGroup: false },
+  { key: 'in_jokes', name: 'Running jokes', description: 'The AI quietly picks up running jokes from the feed and trip chat to use in commentary and the replay. They’re never shown as a list.', newGroup: false },
   { key: 'ai_helper', name: 'AI helper', description: 'Ask the app in plain words: set up a trip for you, or answer questions about your group’s history.', newGroup: true },
   { key: 'rule_challenges', name: 'Rule challenges', description: 'Anyone can challenge a rule: change it, scrap it or ask for a ruling.', parent: 'tribunal', newGroup: true },
   { key: 'other_cases', name: '“Anything else” cases', description: 'Raise anything with the Tribunal — that shirt on day 2.', parent: 'tribunal', newGroup: true },

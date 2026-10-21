@@ -30,6 +30,7 @@ import { aiConfig } from './providers.ts';
 import { shapePastTrips, shapeNear } from './plan.ts';
 import { commentaryRequest, commentaryCap } from './commentary.ts';
 import { importRequest } from './import.ts';
+import { jokesRequest, jokesCap } from './jokes.ts';
 
 const AI = aiConfig((k) => Deno.env.get(k));
 if (!AI.ok) console.warn('ai-helper: AI provider not set up:', AI.reason); // the reason never includes a key
@@ -222,6 +223,8 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return json({ error: 'Use POST.' }, 405);
   // Live commentary (071): the database's every-minute job, with the server's cron secret — not a person. See commentary.ts.
+  // Running jokes (072): the database's daily job, {"type":"jokes"} with the same secret. See jokes.ts.
+  if (req.headers.get('x-cron-secret') && (await req.clone().json().catch(() => null))?.type === 'jokes') { const r = await jokesRequest(req, admin, AI.ok ? AI.cfg : null, jokesCap((k) => Deno.env.get(k))); return json(r.body, r.status); }
   if (req.headers.get('x-cron-secret')) { const r = await commentaryRequest(req, admin, SUPABASE_URL, AI.ok ? AI.cfg : null, commentaryCap((k) => Deno.env.get(k))); return json(r.body, r.status); }
   const auth = req.headers.get('Authorization') || '';
   const token = auth.replace(/^Bearer\s+/i, '');

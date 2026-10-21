@@ -1,6 +1,8 @@
-// In-jokes (migration 058, feature 'in_jokes'): a group's nicknames and running jokes, used by award moments and
-// round replays ("{name}'s driver has a mind of its own"). Pure functions only — screens and other builders import
-// these. The database has the same rules (length, moments and the block list) so an old app can't get around them.
+// In-jokes (migration 058, feature 'in_jokes'): a group's nicknames and running jokes, used by round replays, dinner
+// awards and live commentary ("{name}'s driver has a mind of its own"). Pure functions only. The database has the same
+// rules (length, moments and the block list) so an old app can't get around them.
+// Since 072 they live only in the background: the AI picks them up from the feed and trip chat, nobody sees them as a
+// list, and the app gets a few at a time from in_joke_lines() (jokesFromLines / lineFor below).
 
 /** When a joke can come up. Same list as the database's check (058). */
 export const MOMENTS = [
@@ -169,4 +171,29 @@ export function groupJokes(jokes, playersById = {}, { withRetired = false, nameO
   const out = [...groups.values()];
   for (const g of out) g.jokes.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
   return out.sort((a, b) => (a.playerId ? 1 : 0) - (b.playerId ? 1 : 0) || a.name.localeCompare(b.name));
+}
+
+/**
+ * The few lines in_joke_lines() hands back (072) → joke objects the replay's picker takes. Not strings, too short or
+ * long, blocked, or repeated: left out. They fit any moment and nobody in particular (the database already put names in).
+ */
+export function jokesFromLines(lines) {
+  const seen = new Set();
+  const out = [];
+  for (const l of Array.isArray(lines) ? lines : []) {
+    if (typeof l !== 'string') continue;
+    const text = l.replace(/\s+/g, ' ').trim();
+    const key = text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+    if (text.length < MIN_LEN || text.length > MAX_LEN || !key || seen.has(key) || isBlocked(text) || /\{\s*name\s*\}/i.test(text)) continue;
+    seen.add(key);
+    out.push({ id: `line-${out.length}`, text, moment: 'any', player_id: null, active: true });
+  }
+  return out;
+}
+
+/** One of the lines for a caption (a dinner award, say): the same seed always gives the same line. Null if none. */
+export function lineFor(lines, seed = 0) {
+  const ok = jokesFromLines(lines);
+  if (!ok.length) return null;
+  return ok[hashSeed(seed) % ok.length].text;
 }

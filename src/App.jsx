@@ -58,7 +58,6 @@ const TvBoard = lazyScreen(() => import('./screens/TvBoard.jsx'));
 const RoundReady = lazyScreen(() => import('./screens/QuickRound.jsx'), 'RoundReady');
 const Cup = lazyScreen(() => import('./screens/Cup.jsx'));
 const CupMatch = lazyScreen(() => import('./screens/Cup.jsx'), 'CupMatch');
-const InJokes = lazyScreen(() => import('./screens/InJokes.jsx'));
 const Wishes = lazyScreen(() => import('./screens/Wishes.jsx'));
 const Games = lazyScreen(() => import('./screens/Games.jsx'));
 const Replay = lazyScreen(() => import('./screens/Replay.jsx'));
@@ -238,7 +237,6 @@ function Inside() {
         <Route path="/dinner/:tripId?" element={<FeatureRoute feature="dinner_awards" label="Fines and dinner awards"><DinnerAwards /></FeatureRoute>} />
         <Route path="/tribunal/case/:caseId" element={<FeatureRoute feature="tribunal" label="The Tribunal"><CaseHearing /></FeatureRoute>} />
         <Route path="/governance" element={<FeatureRoute feature="tribunal" label="The Tribunal"><Governance /></FeatureRoute>} />
-        <Route path="/in-jokes" element={<FeatureRoute feature="in_jokes" label="In-jokes"><InJokes /></FeatureRoute>} />
         <Route path="/player/:playerId" element={<Profile />} />
         <Route path="/courses" element={<Courses />} />
         <Route path="/admin" element={<Admin />} />

@@ -15,6 +15,7 @@ import { TeeGroupsBoard } from './TeeGroups.jsx';
 import { AwardCards } from '../components/Awards.jsx';
 import ReplayButton from '../components/ReplayButton.jsx';
 import { CourseGuideChip } from '../components/CourseGuideLink.jsx';
+import { WeatherChip } from '../components/Weather.jsx';
 
 const DrawSetup = lazyScreen(() => import('../components/DrawSetup.jsx'), 'default', { inline: true });
 
@@ -182,6 +183,7 @@ export default function Leaderboard() {
         </div>
       )}
       <GamesChip round={round} />
+      <WeatherChip round={round} course={course} />
       {round.rules && round.status !== 'locked' && (
         <div className="section"><div className="card pad small" style={{ lineHeight: 1.45 }}><strong>Today's rules:</strong> {round.rules}{status?.legacy && <> <a href="?guide" style={{ fontWeight: 700 }}>How it works</a></>}</div></div>
       )}

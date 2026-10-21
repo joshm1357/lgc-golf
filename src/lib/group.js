@@ -34,6 +34,8 @@ export const GROUP_TABLES = new Set([
   'helper_log',
   // The season ladder's settings (migration 062)
   'season_settings',
+  // Fines and dinner awards (migration 064)
+  'dinner_awards', 'dinner_award_nominations', 'dinner_award_votes',
 ]);
 
 let current = (() => {

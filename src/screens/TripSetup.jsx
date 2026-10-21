@@ -124,6 +124,7 @@ function TripSetupSheet({ plan, onClose, onDone }) {
               <select className="select" value={r.format} onChange={(e) => set(i, { format: e.target.value })} aria-label="Format">
                 <option value="stableford">Stableford</option>
                 <option value="ambrose">Ambrose</option>
+                <option value="stroke">Stroke play</option>
               </select>
             </div>
           </div>

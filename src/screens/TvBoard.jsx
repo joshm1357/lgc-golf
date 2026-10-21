@@ -71,14 +71,14 @@ export default function TvBoard() {
       )}
       {board && (
         <table style={{ width: '100%', marginTop: '3vh', borderCollapse: 'collapse', fontSize: 'clamp(18px, 3vw, 44px)' }}>
-          <thead><tr style={{ opacity: 0.6, textAlign: 'left', fontSize: '0.55em', letterSpacing: '0.08em' }}><th>#</th><th>{board.format === 'ambrose' ? 'TEAM' : 'PLAYER'}</th><th>THRU</th><th style={{ textAlign: 'right' }}>{board.format === 'ambrose' ? 'NET' : 'PTS'}</th></tr></thead>
+          <thead><tr style={{ opacity: 0.6, textAlign: 'left', fontSize: '0.55em', letterSpacing: '0.08em' }}><th>#</th><th>{board.format === 'ambrose' ? 'TEAM' : 'PLAYER'}</th><th>THRU</th><th style={{ textAlign: 'right' }}>{board.format !== 'stableford' ? 'NET' : 'PTS'}</th></tr></thead>
           <tbody>
             {board.rows.slice(0, 12).map((row, n) => (
               <tr key={row.id} style={{ borderTop: '1px solid rgba(255,255,255,.12)' }}>
                 <td style={{ padding: '0.35em 0', width: '2.5em', opacity: 0.8 }}>{row.thru ? n + 1 : '–'}</td>
                 <td style={{ fontWeight: 700 }}>{row.name}</td>
                 <td style={{ opacity: 0.8 }}>{row.finished ? 'F' : row.thru || '–'}</td>
-                <td style={{ textAlign: 'right', fontWeight: 800, color: '#E0B84A' }}>{!row.thru ? '–' : board.format === 'ambrose' ? formatToPar(row.netToPar) : row.points}</td>
+                <td style={{ textAlign: 'right', fontWeight: 800, color: '#E0B84A' }}>{!row.thru ? '–' : board.format !== 'stableford' ? formatToPar(row.netToPar) : row.points}</td>
               </tr>
             ))}
           </tbody>

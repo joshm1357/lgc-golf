@@ -101,7 +101,7 @@ export async function sharePicture(file, text) {
 
 /** A round's board as card data (top 8). */
 export function boardCard(board, { roundName, courseName, playDate, final } = {}) {
-  const isA = board?.format === 'ambrose';
+  const isA = board?.format === 'ambrose' || board?.format === 'stroke'; // net to par
   const fmt = (n) => (n > 0 ? `+${n}` : n === 0 ? 'E' : String(n));
   const date = playDate ? new Date(`${playDate}T00:00:00`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
   return {

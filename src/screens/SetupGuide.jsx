@@ -16,6 +16,7 @@ import { parseHoles } from '../lib/sidecomps.js';
 const FORMATS = [
   { value: 'stableford', label: 'Stableford (individual)' },
   { value: 'ambrose', label: 'Ambrose (teams)' },
+  { value: 'stroke', label: 'Stroke play (individual, net)' },
 ];
 const todayIso = () => {
   const d = new Date();
@@ -162,7 +163,7 @@ function RoundsStep({ trip, onDone }) {
           <div key={day || 'any'} className="card pad stack" style={{ gap: 6, background: 'var(--ground)' }}>
             <strong>{day ? dayLabel(day) : 'A round'}</strong>
             {have.map((r) => (
-              <div key={r.id} className="small">✓ {r.name} · {data.coursesById[r.course_id]?.name || 'course'} · {r.format === 'ambrose' ? 'Ambrose' : 'Stableford'}{r.status === 'live' ? ' · live' : r.status === 'locked' ? ' · finished' : ''}</div>
+              <div key={r.id} className="small">✓ {r.name} · {data.coursesById[r.course_id]?.name || 'course'} · {{ ambrose: 'Ambrose', stroke: 'Stroke play' }[r.format] || 'Stableford'}{r.status === 'live' ? ' · live' : r.status === 'locked' ? ' · finished' : ''}</div>
             ))}
             <AddRound trip={trip} day={day} first={!have.length} />
           </div>

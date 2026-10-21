@@ -270,6 +270,7 @@ function RoundsAdmin() {
             <select className="select" value={form.format} onChange={(e) => setForm({ ...form, format: e.target.value })}>
               <option value="ambrose">Ambrose (teams)</option>
               <option value="stableford">Stableford (individual)</option>
+              <option value="stroke">Stroke play (individual, net)</option>
             </select>
           </label>
         </div>

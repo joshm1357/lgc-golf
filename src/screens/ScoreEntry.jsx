@@ -205,7 +205,7 @@ export default function ScoreEntry() {
             <button type="button" className="step solid" aria-label="One more" onClick={() => { setHoleN(hole.n); setPickedUp(false); setValue(Math.min(20, strokes + 1)); }}>{Icon.plus()}</button>
           </div>
           <span style={{ fontWeight: 700, color: !isPickup && strokes < hole.par ? 'var(--under)' : 'var(--muted)' }}>
-            {isPickup ? 'Picked up — 0 points' : `${scoreWord(strokes, hole.par)}${recv ? ` · net ${scoreWord(net, hole.par).toLowerCase()}` : ''}${!isA ? ` · ${stablefordPoints(hole, strokes, subject.hcp)} pts` : ''}`}
+            {isPickup ? (round.format === 'stroke' ? 'Picked up — counts as net double bogey' : 'Picked up — 0 points') : `${scoreWord(strokes, hole.par)}${recv ? ` · net ${scoreWord(net, hole.par).toLowerCase()}` : ''}${round.format === 'stableford' ? ` · ${stablefordPoints(hole, strokes, subject.hcp)} pts` : ''}`}
           </span>
           {!isA && (
             <button type="button" className="chip" aria-pressed={!!isPickup} onClick={() => { setHoleN(hole.n); setPickedUp(!isPickup); }}>Picked up</button>

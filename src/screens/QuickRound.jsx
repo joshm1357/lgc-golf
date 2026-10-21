@@ -113,7 +113,7 @@ export function QuickRoundDone({ round, board, course }) {
       <div className="section"><Link to="/round-ready" className="small" style={{ fontWeight: 700 }}>📤 Invite more mates</Link></div>
     ) : null;
   }
-  const isA = round.format === 'ambrose';
+  const isA = round.format !== 'stableford'; // net to par (Ambrose or stroke play)
   const top = rows[0];
   const slug = (status?.groups || []).find((g) => g.id === status?.group_id)?.slug;
   const engraved = data.honour_board.some((h) => h.trip_id === round.trip_id);

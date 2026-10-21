@@ -7,6 +7,7 @@ import { getFix, useWatchPosition } from '../lib/geo.js';
 import { greenDistances } from '../lib/greens.js';
 import { toast } from './ui.jsx';
 import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
+import { CourseGuideHoleLink } from './CourseGuideLink.jsx';
 
 // The shot planner brings the map library with it, so it only loads when opened.
 const ShotPlanner = lazyScreen(() => import('./ShotPlanner.jsx'), 'default', { inline: true });
@@ -81,6 +82,7 @@ export default function Distances({ round, course, hole }) {
           <button type="button" className="btn ghost" onClick={toggle}>📍 GPS distances</button>
           <button type="button" className="btn ghost" onClick={() => setPlanning(true)}>🗺️ Plan my shots</button>
         </div>
+        <div style={{ textAlign: 'center', marginTop: 8 }}><CourseGuideHoleLink course={course} hole={hole} round={round} /></div>
         {planner}
       </div>
     );
@@ -121,6 +123,7 @@ export default function Distances({ round, course, hole }) {
             {hole.osm && <div className="small muted">Green © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors</div>}
           </>
         )}
+        <CourseGuideHoleLink course={course} hole={hole} round={round} />
         {planner}
         {round.status === 'live' && (
           <button type="button" className="btn ghost sm" disabled={busy} onClick={setPin}>🚩 {pin ? 'Move' : 'Set'} today’s pin on {hole.n} — stand next to the flag</button>

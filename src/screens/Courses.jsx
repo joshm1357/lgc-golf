@@ -5,6 +5,7 @@ import { greensMapped, courseTiles } from '../lib/greens.js';
 import { Header, Sheet, toast } from '../components/ui.jsx';
 import { roundBoard, courseHoles } from '../lib/board.js';
 import { formatToPar, parTotal } from '../lib/scoring.js';
+import { CourseGuideButton } from '../components/CourseGuideLink.jsx';
 
 const TILE = (t) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${t.z}/${t.y}/${t.x}`;
 
@@ -74,6 +75,7 @@ export default function Courses() {
                 </tbody>
               </table>
             </div>
+            <CourseGuideButton course={open} onClick={() => setOpen(null)} />
             {status.is_admin && <Link to={`/courses/${open.id}/greens`} className="btn gold block" onClick={() => setOpen(null)}>📍 Map the greens for GPS distances</Link>}
             {greensMapped(open.holes) > 0 && (
               <button type="button" className="btn ghost block" disabled={progress != null} onClick={() => saveCourseMap(open, setProgress)}>

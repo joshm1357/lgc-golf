@@ -14,6 +14,7 @@ import { GamesChip } from '../components/GamesChip.jsx';
 import { TeeGroupsBoard } from './TeeGroups.jsx';
 import { AwardCards } from '../components/Awards.jsx';
 import ReplayButton from '../components/ReplayButton.jsx';
+import { CourseGuideChip } from '../components/CourseGuideLink.jsx';
 
 const DrawSetup = lazyScreen(() => import('../components/DrawSetup.jsx'), 'default', { inline: true });
 
@@ -138,6 +139,7 @@ export default function Leaderboard() {
       <RoundChips round={round} onChoose={choose} />
       <TeeGroupsBoard round={round} />
       <AwardCards />
+      <CourseGuideChip course={course} round={round} />
 
       {winner && (
         <div className="winner">

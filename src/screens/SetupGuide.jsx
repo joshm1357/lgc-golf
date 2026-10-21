@@ -10,6 +10,7 @@ import { Header, Loading } from '../components/ui.jsx';
 import { FindCourse } from '../components/CourseLibrary.jsx';
 import { InviteCard } from './Group.jsx';
 import { OwnCompsAdmin, RoundOwnComps } from './OwnComps.jsx';
+import { SetupGames } from './Games.jsx';
 import { upcomingTrips, tripDays, dayLabel, roundName, setupSteps, nextAction } from '../lib/setupguide.js';
 import { parseHoles } from '../lib/sidecomps.js';
 
@@ -280,6 +281,7 @@ function ExtrasStep({ trip, sideCompsOn, cupOn }) {
       ) : (
         <div className="small muted">Side comps are switched off for this group — switch them on in <Link to="/group">Group → Features</Link>.</div>
       )}
+      <SetupGames rounds={rounds} />
     </>
   );
 }

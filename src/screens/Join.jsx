@@ -76,7 +76,7 @@ export function InviteJoin({ code, inside = false, onLook }) {
         <>
           <div style={{ fontSize: 20 }}>You’re invited to</div>
           <div style={{ fontFamily: 'var(--display)', fontSize: 32, fontWeight: 700 }}>{info.group_name}</div>
-          <div style={{ color: 'var(--on-navy-muted)' }}>{info.role === 'guest' ? 'as a guest — play, score and join in (no votes on rules or in the Tribunal).' : 'as a player.'}</div>
+          <div style={{ color: 'var(--on-navy-muted)' }}>{info.role === 'organiser' ? 'as the organiser — you set up rounds, players and invites. This link works once.' : info.role === 'guest' ? 'as a guest — play, score and join in (no votes on rules or in the Tribunal).' : 'as a player.'}</div>
           {err && <div className="err" style={{ color: '#FFB4AB' }}>{err}</div>}
           {info.already_in
             ? <button type="button" className="btn gold block" onClick={() => { setCurrentGroup(info.group_id); window.location.hash = '#/'; window.location.reload(); }}>You’re already in — open it</button>

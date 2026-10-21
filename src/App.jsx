@@ -10,6 +10,7 @@ import { FeedbackHost } from './components/Feedback.jsx';
 import { WhatsNew } from './components/WhatsNew.jsx';
 import { ViewingBar, StopViewing } from './components/Viewing.jsx';
 import { AwardWatcher } from './components/Awards.jsx';
+import { CommentaryWatcher } from './components/Commentary.jsx';
 import { Shortcuts } from './components/Shortcuts.jsx';
 import { NotifyPrompt } from './components/NotifyPrompt.jsx';
 import { NEW_GROUPS } from './lib/beta.js';
@@ -208,6 +209,7 @@ function Inside() {
       <Sidebar />
       <ViewingBar />
       <AwardWatcher />
+      <CommentaryWatcher />
       {waiting > 0 && !offline && <div className="sync" role="status">📤 {waiting} post{waiting === 1 ? '' : 's'} or entr{waiting === 1 ? 'y' : 'ies'} waiting to send…</div>}
       {offline && <div className="sync" role="status">📵 No signal — showing the copy saved on this phone.{status.viewing ? '' : ' Scores you enter are kept and sent when signal comes back.'}</div>}
       <LazyArea resetKey={loc.pathname} fallback={<Loading />}>

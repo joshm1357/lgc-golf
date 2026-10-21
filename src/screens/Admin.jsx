@@ -12,6 +12,7 @@ import { OwnCompsAdmin, RoundOwnComps } from './OwnComps.jsx';
 import { RoundGames } from './Games.jsx';
 import { TeeGroupsCard } from './TeeGroups.jsx';
 import { RoundCompsCard, useScrollToRound } from './CompsBoard.jsx';
+import { CommentarySettings } from '../components/Commentary.jsx';
 
 async function run(fn, okMsg) {
   try {
@@ -78,6 +79,7 @@ export default function Admin() {
         <PlayersAdmin />
         <RoundsAdmin />
         {sideCompsOn && <Section title="Your own side comps"><OwnCompsAdmin /></Section>}
+        <CommentarySettings />
         {trophiesOn && <TrophiesAdmin />}
         {trophiesOn ? <HonourAdmin /> : <Link to="/history" className="btn ghost block">Add past handicaps (from before the app) →</Link>}
         <PinsAdmin />

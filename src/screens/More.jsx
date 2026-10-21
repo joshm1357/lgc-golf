@@ -27,6 +27,7 @@ export default function More() {
     on.tribunal && { to: '/tribunal', icon: Icon.gavel, label: 'Handicap Tribunal', sub: 'Lodge a case, vote, see verdicts' },
     useFeature('in_jokes') && { to: '/in-jokes', icon: Icon.hot, label: 'In-jokes', sub: 'Nicknames and running jokes — roast the golf, keep it friendly' },
     on.ai_helper && { to: '/ask', icon: Icon.feed, label: 'Ask about our history', sub: 'Who’s won the most, best rounds, handicaps — in plain words' },
+    useFeature('stats') && { to: '/stats', icon: Icon.board, label: 'Stats & season ladder', sub: 'Order of merit, records and head-to-heads' },
     { to: '/courses', icon: Icon.map, label: 'Courses', sub: 'Every course and its history' },
     { to: `/player/${status.player_id}`, icon: Icon.user, label: 'My profile', sub: 'Photo, nickname, history' },
     { to: '/group', icon: Icon.user, label: 'Group & invites', sub: status.is_admin ? 'Invite links, QR code, people and roles' : (status.groups?.length > 1 ? 'Switch group, how you’re signed in' : 'Your group and how you’re signed in') },

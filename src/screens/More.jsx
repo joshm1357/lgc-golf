@@ -6,6 +6,7 @@ import { NotifyCard } from '../components/NotifyCard.jsx';
 import { SIGN_IN } from '../lib/auth.js';
 import { NEW_GROUPS } from '../lib/beta.js';
 import { BetaCard, InstallCard } from '../components/Feedback.jsx';
+import { usePlatformAdmin, wishesItem } from '../components/WishesLink.jsx';
 
 export default function More() {
   const { status } = useSession();
@@ -14,6 +15,7 @@ export default function More() {
   const pending = status.is_admin ? data.players.filter((p) => p.approved === false).length : 0;
   const on = { location: useFeature('location'), rule_voting: useFeature('rule_voting'), trophies: useFeature('trophies'), tribunal: useFeature('tribunal'), notifications: useFeature('notifications') };
   const manyGroups = (status.groups?.length || 0) > 1;
+  const platformAdmin = usePlatformAdmin();
   const items = [
     // The way back to Your groups (switch group, start one, join another). Builds without sign-in only show it
     // to someone in more than one group, so L.G.C's live app looks the same as before.
@@ -27,6 +29,7 @@ export default function More() {
     { to: '/group', icon: Icon.user, label: 'Group & invites', sub: status.is_admin ? 'Invite links, QR code, people and roles' : (status.groups?.length > 1 ? 'Switch group, how you’re signed in' : 'Your group and how you’re signed in') },
     // The admin PIN is L.G.C's only; other groups make organisers in Group & invites.
     status.is_admin && !status.viewing && { to: '/setup', icon: Icon.cog, label: 'Set up your trip', sub: 'Trip, courses, rounds, players, side comps — step by step' },
+    platformAdmin && !status.viewing && wishesItem(Icon.feed),
     ...(status.is_admin || status.legacy !== false ? [{ to: '/admin', icon: Icon.cog, label: status.is_admin ? 'Admin' : "I'm the admin", sub: status.is_admin ? (pending ? `${pending} waiting for approval` : 'Trips, courses, players, rounds') : 'Needs the admin PIN' }] : []),
   ].filter(Boolean);
   return (

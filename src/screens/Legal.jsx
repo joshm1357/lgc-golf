@@ -95,7 +95,9 @@ export function Privacy() {
         <><strong>Google or Facebook</strong> — only if you choose to sign in with them. The sign-in screen loads Google’s
           sign-in button from Google.</>,
         <><strong>Claude (Anthropic)</strong> — only if your group switches on the Claude connector: then the group’s names,
-          handicaps, scores and plans can be read by Claude when your organiser asks it to.</>,
+          handicaps, scores and plans can be read by Claude when your organiser asks it to. To improve the app, we log
+          how it’s used only as counts (which group, which action, whether it worked) and one-line descriptions of jobs
+          it couldn’t do yet — never the chat or what was asked.</>,
       ]} />
       <P>No advertising networks, no analytics or tracking tools, and nothing is sold.</P>
 

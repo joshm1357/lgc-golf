@@ -1,26 +1,36 @@
-// ai-helper — the AI helper inside the app (21 Oct 2026). Two jobs:
+// ai-helper — the AI helper inside the app (21 Oct 2026; v2 the same night). Its jobs:
 //   * "Set it up for me" (organisers): plain words → a setup plan (trip, courses, rounds, side comps). Nothing is
 //     saved until the organiser taps "Do it", which calls this function again with { mode: 'apply', plan }.
-//   * "Ask about our history" (anyone in the group): answers questions from the group's own trips, rounds and
-//     honour boards.
+//   * "✨ Plan it with AI" (organisers, Trips tab): plain words → a trip plan to vote on (dates, places, jobs, bring
+//     list, rough costs). Nothing is saved until [Create it] → { mode: 'plan_apply', plan }.
+//   * Ask (anyone in the group): what's on (current trip, live round, who's leading, what someone needs) and the
+//     group's history (trips, rounds, honour boards, records, handicaps).
 //
 // Safe by design:
 //   * Called with the person's own sign-in (verify_jwt on). Every read and write goes through a Supabase client that
 //     carries THEIR sign-in and group, so the database rules (RLS) apply exactly as if they'd tapped the buttons.
 //     The server key is used for one thing only: the usage log and the cap (helper_log, which the app can't touch).
-//   * The model only gets a fixed list of read-only tools. It can't write: "Do it" is a separate call from the app,
-//     and the plan is checked again before anything is made. No SQL, no deletes, no messages.
+//   * The model only gets a fixed list of read-only tools. It can't write: "Do it" / "Create it" is a separate call
+//     from the app, and the plan is checked again before anything is made. No SQL, no deletes, no messages.
 //   * Names from the database go to the model as data inside <data> tags, and the prompt says never to obey them.
-//   * Cap: 60 questions a group a month and 10 a person a day, checked before the model is called. The feature
-//     switch 'ai_helper' must be on.
-//   * The Anthropic key is the Supabase secret ANTHROPIC_API_KEY. Not set: the helper says it isn't on yet.
+//   * Cap (by default 60 questions a group a month and 10 a person a day), checked before the model is called. The
+//     feature switch 'ai_helper' must be on (and 'planner' for planning).
+//   * Any provider (providers.ts), chosen by secrets: AI_PROVIDER, AI_BASE_URL, AI_API_KEY, AI_MODEL (or the older
+//     ANTHROPIC_API_KEY + AI_MODEL), and optional AI_GROUP_MONTHLY_CAP / AI_PERSON_DAILY_CAP. Not set: the helper
+//     says it isn't on yet. Keys are never logged.
 //
-// The pure parts (prompts, tools, plan checks, cap maths, history summaries) are in logic.ts, tested by logic.test.ts.
+// The pure parts (prompts, tools, plan checks, cap maths, history and live summaries) are in logic.ts, plan.ts,
+// live.ts and providers.ts, tested by logic.test.ts and providers.test.ts.
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.45.4';
 import {
-  helperRequest, isUuid, zonedStart, zonedToday, planIds, shapeLibrary, shapeOwnCourses, clean, TZ,
+  helperRequest, isUuid, zonedStart, zonedToday, planIds, shapeLibrary, shapeOwnCourses, clean, TZ, tripPlanIds,
   type Deps, type PlanContext, type History,
 } from './logic.ts';
+import { aiConfig } from './providers.ts';
+import { shapePastTrips, shapeNear } from './plan.ts';
+
+const AI = aiConfig((k) => Deno.env.get(k));
+if (!AI.ok) console.warn('ai-helper: AI provider not set up:', AI.reason); // the reason never includes a key
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -67,28 +77,82 @@ function makeDeps(db: SupabaseClient, g: string, uid: string, status: Any): Deps
     const { data, error } = await db.rpc('feature_on', { p_group: g, p_key: key });
     return !error && data === true;
   };
+  const searchLibrary = async (query: string, lat: number | null = null, lng: number | null = null, limit = 8) => {
+    const args = { p_query: query, p_lat: lat, p_lng: lng, p_limit: limit };
+    let { data, error } = await db.rpc('find_courses', args);
+    if (error) ({ data, error } = await db.rpc('search_courses', args));
+    if (error) throw new Error('The course library isn’t available just now.');
+    return (data || []) as Any[];
+  };
   return {
-    status: { is_member: !!status?.is_member, is_admin: !!status?.is_admin, group_id: status?.group_id || null, group_name: status?.group_name || null },
-    apiKey: Deno.env.get('ANTHROPIC_API_KEY') || null,
+    status: {
+      is_member: !!status?.is_member, is_admin: !!status?.is_admin, group_id: status?.group_id || null, group_name: status?.group_name || null,
+      player_name: status?.player_name || null,
+    },
+    ai: AI.ok ? AI.cfg : null,
     fetchFn: fetch,
     now: () => new Date(),
-    featureOn: () => featureOn('ai_helper'),
+    featureOn,
+    // Questions so far (refused ones — cap hits — don't count).
     usage: async () => {
       const now = new Date();
       const month = await admin.from('helper_log').select('id', { count: 'exact', head: true })
-        .eq('group_id', g).in('mode', ['setup', 'history']).gte('created_at', zonedStart(now, 'month', TZ));
+        .eq('group_id', g).in('mode', ['setup', 'history']).eq('capped', false).gte('created_at', zonedStart(now, 'month', TZ));
       const today = await admin.from('helper_log').select('id', { count: 'exact', head: true })
-        .eq('user_id', uid).in('mode', ['setup', 'history']).gte('created_at', zonedStart(now, 'day', TZ));
+        .eq('user_id', uid).in('mode', ['setup', 'history']).eq('capped', false).gte('created_at', zonedStart(now, 'day', TZ));
       if (month.error || today.error) throw new Error('Couldn’t check the helper’s limit');
       return { month: month.count || 0, today: today.count || 0 };
     },
-    // The row goes in before the model is called, so two questions at once both count.
-    logStart: async (mode) => {
-      const { data } = await admin.from('helper_log').insert({ group_id: g, user_id: uid, mode, ok: false }).select('id').single();
+    // The row goes in before the model is called, so two questions at once both count. Never any text.
+    logStart: async (row) => {
+      const { data } = await admin.from('helper_log').insert({
+        group_id: g, user_id: uid, mode: row.mode, area: row.area, capped: !!row.capped, ok: false,
+        provider: row.provider ? clean(row.provider, 20) : null, model: row.model ? clean(row.model, 80) : null,
+      }).select('id').single();
       return data?.id ?? null;
     },
     logEnd: async (id, row) => {
-      if (id != null) await admin.from('helper_log').update(row).eq('id', id);
+      if (id != null) await admin.from('helper_log').update({ ...row, error: row.error ? clean(row.error, 40) : null }).eq('id', id);
+    },
+    tripPlanContext: async (raw) => {
+      const lib: Record<string, Any> = {};
+      await Promise.all(tripPlanIds(raw).map(async (id) => { const l = await library(id); if (l) lib[id] = { id: l.id, name: l.name, area: l.area }; }));
+      return { today: zonedToday(new Date(), TZ), library: lib, tasksOn: await featureOn('planner_tasks') };
+    },
+    planTool: async (name, input) => {
+      if (name === 'our_players') {
+        const ps = (await must(db.from('players').select('name,nickname,approved').eq('group_id', g))) as Any[];
+        const ok = ps.filter((p) => p.approved !== false);
+        return { count: ok.length, names: ok.slice(0, 40).map((p) => clean(p.nickname || p.name, 40)) };
+      }
+      if (name === 'past_trips') {
+        const [trips, plans, rounds, courses] = await Promise.all([
+          must(db.from('trips').select('id,name,start_date,end_date').eq('group_id', g)) as Promise<Any[]>,
+          must(db.from('plans').select('name,kind,start_date,end_date,location_name,status,budget_pp,trip_id').eq('group_id', g)) as Promise<Any[]>,
+          must(db.from('rounds').select('trip_id,course_id').eq('group_id', g)) as Promise<Any[]>,
+          ownCourses(),
+        ]);
+        return shapePastTrips(trips, plans, rounds, courses);
+      }
+      if (name === 'find_course') return shapeNear(await searchLibrary(clean(input?.query, 60)));
+      if (name === 'courses_near') {
+        // The place → the first library course there that has a location → courses near that point.
+        const place = clean(input?.place, 60);
+        const hits = await searchLibrary(place, null, null, 5);
+        for (const h of hits.slice(0, 3)) {
+          const l = await library(h.id);
+          if (l?.lat != null && l?.lng != null) return { near: place, courses: shapeNear(await searchLibrary('', Number(l.lat), Number(l.lng), 10)) };
+        }
+        return hits.length ? { near: place, courses: shapeNear(hits) } : { near: place, courses: [], note: 'Nothing in the course library there yet.' };
+      }
+      throw new Error('No such tool');
+    },
+    planDb: {
+      insertPlan: async (row) => ((await must(db.from('plans').insert(row).select('id').single())) as Any).id,
+      startVotes: async (planId, dates, places, closes) => { await must(db.rpc('start_trip_votes', { p_plan: planId, p_dates: dates, p_places: places, p_closes_on: closes })); },
+      insertItems: async (rows) => { await must(db.from('plan_items').insert(rows)); },
+      rsvpIn: async (planId) => { if (status?.player_id) await must(db.from('plan_rsvps').upsert({ plan_id: planId, player_id: status.player_id, status: 'in' })); },
+      post: async (planId, body) => { if (status?.player_id) await db.from('posts').insert({ kind: 'user', player_id: status.player_id, link: `/plan/${planId}`, body }); },
     },
     planContext: async (raw) => {
       const [courses, trips, sideComps] = await Promise.all([
@@ -172,6 +236,11 @@ Deno.serve(async (req) => {
   const { data: status, error } = await db.rpc('my_status');
   if (error || !status) return json({ error: 'Couldn’t check who you are — try again.' });
   if (group && status.group_id !== group) return json({ error: 'You’re not in this group.' });
+  // Who's asking (so "what do I need?" works on the Ask screen). Just the name; it goes to the model as data.
+  if (status.player_id && /^(history|ask)$/.test(String(body.mode))) {
+    const { data: me } = await db.from('players').select('name,nickname').eq('id', status.player_id).maybeSingle();
+    status.player_name = me ? (me.nickname || me.name) : null;
+  }
 
   try {
     return json(await helperRequest(body, makeDeps(db, status.group_id, who.user.id, status)));

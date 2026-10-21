@@ -31,6 +31,23 @@ export async function pushState() {
   }
 }
 
+/** Like pushState, but 'on' only if this phone is saved for ME (a phone set up under an earlier sign-in, or by
+ * someone else, counts as 'off' — "Turn on" saves it for me). Can't check (no signal, older database): trust the phone. */
+export async function myPushState() {
+  const s = await pushState();
+  if (s !== 'on') return s;
+  try {
+    const reg = await navigator.serviceWorker.getRegistration(SW_URL);
+    const sub = await reg?.pushManager.getSubscription();
+    if (!sub) return 'off';
+    const { data, error } = await supabase.from('push_subscriptions').select('endpoint').eq('endpoint', sub.endpoint).maybeSingle();
+    if (error) return 'on';
+    return data ? 'on' : 'off';
+  } catch {
+    return 'on';
+  }
+}
+
 function keyBytes(b64) {
   const pad = '='.repeat((4 - (b64.length % 4)) % 4);
   const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));

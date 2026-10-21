@@ -110,3 +110,14 @@ export function roundRecap(board, { done = false, courseName = '' } = {}) {
 export function recapText(lines, title) {
   return [`📝 ${title}`, ...lines.map((l) => `${l.icon} ${l.text}`)].join('\n');
 }
+
+/**
+ * The full message for the group chat: the recap, a link to the leaderboard, and (for organisers, who can make one)
+ * the group's join link so anyone not on the app yet can jump in.
+ */
+export function recapShare(text, { boardLink = '', joinLink = '', groupName = '' } = {}) {
+  const out = [text];
+  if (boardLink) out.push('', `📊 Full leaderboard: ${boardLink}`);
+  if (joinLink) out.push(`🙋 Not on the app yet? Join ${groupName || 'the group'}: ${joinLink}`);
+  return out.join('\n');
+}

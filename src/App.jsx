@@ -55,6 +55,7 @@ const CupMatch = lazyScreen(() => import('./screens/Cup.jsx'), 'CupMatch');
 const InJokes = lazyScreen(() => import('./screens/InJokes.jsx'));
 const Wishes = lazyScreen(() => import('./screens/Wishes.jsx'));
 const Games = lazyScreen(() => import('./screens/Games.jsx'));
+const Replay = lazyScreen(() => import('./screens/Replay.jsx'));
 
 // A fresh plan screen per plan, so nothing carries over when a notification jumps to another one.
 function PlanDetailRoute() {
@@ -207,6 +208,7 @@ function Inside() {
         <Route path="/cup" element={<FeatureRoute feature="cup" label="The Cup"><Cup /></FeatureRoute>} />
         <Route path="/cup/:matchId" element={<FeatureRoute feature="cup" label="The Cup"><CupMatch /></FeatureRoute>} />
         <Route path="/games" element={<FeatureRoute feature="games" label="Games and side bets"><Games /></FeatureRoute>} />
+        <Route path="/replay/:roundId" element={<FeatureRoute feature="replay" label="Round replay"><Replay /></FeatureRoute>} />
         <Route path="/trophies" element={<FeatureRoute feature="trophies" label="The Trophy Room"><Trophies /></FeatureRoute>} />
         <Route path="/tribunal" element={<FeatureRoute feature="tribunal" label="The Handicap Tribunal"><Tribunal /></FeatureRoute>} />
         <Route path="/tribunal/:caseId" element={<FeatureRoute feature="tribunal" label="The Handicap Tribunal"><TribunalCase /></FeatureRoute>} />

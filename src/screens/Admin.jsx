@@ -63,6 +63,9 @@ export default function Admin() {
     <div className="page">
       <Header back title="Admin" sub="Set up trips, courses, players and rounds" />
       <div className="section stack" style={{ paddingBottom: 20 }}>
+        <Link to="/setup" className="card pad row" style={{ gap: 10, textDecoration: 'none', color: 'inherit', borderColor: 'var(--navy)' }}>
+          <span aria-hidden="true">🧭</span><span className="grow"><strong>Set up your trip</strong> <span className="small muted">— the step-by-step guide</span></span><span className="muted">›</span>
+        </Link>
         <p className="note" style={{ margin: '0 4px' }}>Order for a new round: 1. Trip → 2. Course → 3. Players → 4. Round & teams → Start round.</p>
         <PendingApprovals />
         <TripsAdmin />

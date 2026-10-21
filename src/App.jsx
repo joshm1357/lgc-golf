@@ -9,6 +9,7 @@ import { Sidebar } from './components/Sidebar.jsx';
 import { FeedbackHost } from './components/Feedback.jsx';
 import { WhatsNew } from './components/WhatsNew.jsx';
 import { ViewingBar, StopViewing } from './components/Viewing.jsx';
+import { AwardWatcher } from './components/Awards.jsx';
 import { NEW_GROUPS } from './lib/beta.js';
 import { supabase } from './lib/supabase.js';
 import { sourceFrom, countScan } from './lib/quick.js';
@@ -192,6 +193,7 @@ function Inside() {
     <div className="app with-side">
       <Sidebar />
       <ViewingBar />
+      <AwardWatcher />
       {waiting > 0 && !offline && <div className="sync" role="status">📤 {waiting} post{waiting === 1 ? '' : 's'} or entr{waiting === 1 ? 'y' : 'ies'} waiting to send…</div>}
       {offline && <div className="sync" role="status">📵 No signal — showing the copy saved on this phone.{status.viewing ? '' : ' Scores you enter are kept and sent when signal comes back.'}</div>}
       <LazyArea resetKey={loc.pathname} fallback={<Loading />}>

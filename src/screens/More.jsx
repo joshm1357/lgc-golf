@@ -22,6 +22,7 @@ export default function More() {
     { to: '/rules', icon: Icon.book, label: 'The Rulebook', sub: on.rule_voting ? 'Our rules and bonuses — propose and vote on changes' : 'Our rules and bonuses' },
     on.trophies && { to: '/trophies', icon: Icon.trophy, label: 'The Trophy Room', sub: status.legacy ? 'BD, Putt Buddies, Noodle Cup and the honour boards' : 'Trophies and the honour boards' },
     on.tribunal && { to: '/tribunal', icon: Icon.gavel, label: 'Handicap Tribunal', sub: 'Lodge a case, vote, see verdicts' },
+    useFeature('in_jokes') && { to: '/in-jokes', icon: Icon.hot, label: 'In-jokes', sub: 'Nicknames and running jokes — roast the golf, keep it friendly' },
     { to: '/courses', icon: Icon.map, label: 'Courses', sub: 'Every course and its history' },
     { to: `/player/${status.player_id}`, icon: Icon.user, label: 'My profile', sub: 'Photo, nickname, history' },
     { to: '/group', icon: Icon.user, label: 'Group & invites', sub: status.is_admin ? 'Invite links, QR code, people and roles' : (status.groups?.length > 1 ? 'Switch group, how you’re signed in' : 'Your group and how you’re signed in') },

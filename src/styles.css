@@ -47,6 +47,7 @@ img { max-width: 100%; }
 .seg button { min-height: 42px; border: 0; border-radius: 9px; background: transparent; color: #fff; font-weight: 600; }
 .seg button[aria-pressed="true"] { background: var(--gold); color: var(--text); font-weight: 700; }
 .seg.light { background: #E6EAEF; }
+.seg-many .seg { grid-auto-flow: row; grid-template-columns: repeat(2, 1fr); gap: 4px; }
 .seg.light button { color: var(--text); }
 .seg.light button[aria-pressed="true"] { background: var(--navy); color: #fff; }
 

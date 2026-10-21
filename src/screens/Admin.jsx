@@ -7,6 +7,7 @@ import { useData, useSession, playerName, useFeature } from '../lib/store.jsx';
 import { Header, Avatar, Loading, toast } from '../components/ui.jsx';
 import DrawSetup from '../components/DrawSetup.jsx';
 import { FindCourse, ShareCourse } from '../components/CourseLibrary.jsx';
+import { OwnCompsAdmin, RoundOwnComps } from './OwnComps.jsx';
 
 async function run(fn, okMsg) {
   try {
@@ -36,6 +37,7 @@ export default function Admin() {
   const { status, refresh } = useSession();
   const data = useData();
   const trophiesOn = useFeature('trophies');
+  const sideCompsOn = useFeature('side_comps');
   const [pin, setPin] = useState('');
 
   if (!data.ready) return <Loading />;
@@ -67,6 +69,7 @@ export default function Admin() {
         <CoursesAdmin />
         <PlayersAdmin />
         <RoundsAdmin />
+        {sideCompsOn && <Section title="Your own side comps"><OwnCompsAdmin /></Section>}
         {trophiesOn && <TrophiesAdmin />}
         {trophiesOn ? <HonourAdmin /> : <Link to="/history" className="btn ghost block">Add past handicaps (from before the app) →</Link>}
         <PinsAdmin />
@@ -336,6 +339,7 @@ function RoundCard({ round }) {
       {sideCompsOn && (ld !== round.ld_holes.join(' ') || ctp !== round.ctp_holes.join(' ')) && (
         <button type="button" className="btn sm" onClick={() => run(() => supabase.from('rounds').update({ ld_holes: parseNums(ld).filter((n) => n >= 1 && n <= 18), ctp_holes: parseNums(ctp).filter((n) => n >= 1 && n <= 18) }).eq('id', round.id), 'Side comps saved').then(data.reload)}>Save side comp holes</button>
       )}
+      {sideCompsOn && <RoundOwnComps round={round} onSaved={data.reload} />}
       <RoundRules round={round} />
       {round.format === 'ambrose' && drawOn && <DrawButton round={round} />}
       {round.format === 'ambrose' ? <TeamsEditor round={round} /> : <StablefordPlayers round={round} />}

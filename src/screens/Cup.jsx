@@ -3,7 +3,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
-import { useData, useRealtime, useSession, playerName } from '../lib/store.jsx';
+import { useData, useRealtime, useSession, playerName, cacheGet, cacheSet } from '../lib/store.jsx';
+import { currentGroup } from '../lib/group.js';
 import { Header, Avatar, Loading, toast } from '../components/ui.jsx';
 import { useRun, must } from '../lib/run.js';
 import { inviteLink } from '../lib/invite.js';
@@ -14,9 +15,13 @@ const FORMAT_LABEL = { ambrose: 'Ambrose pairs', singles: 'Singles' };
 const DEFAULT_SIDES = [{ name: 'Team Blue', colour: '#1F4B9E', sort: 1 }, { name: 'Team Red', colour: '#B3261E', sort: 2 }];
 const COLOURS = ['#1F4B9E', '#B3261E', '#1F6B3A', '#C9A227', '#5B2A86', '#E06A1B', '#111827', '#0E7490'];
 
-/** The cup's teams and matches, live. */
+/** The cup's teams and matches, live. The last good copy stays on the phone for poor signal on the course. */
 export function useCup() {
-  const [state, setState] = useState({ ready: false, sides: [], matches: [] });
+  const key = `cup-${currentGroup() || 'none'}`;
+  const [state, setState] = useState(() => {
+    const kept = cacheGet(key);
+    return kept ? { ready: true, sides: kept.sides || [], matches: kept.matches || [], stale: true } : { ready: false, sides: [], matches: [] };
+  });
   const load = useCallback(async () => {
     try {
       const [s, m] = await Promise.all([
@@ -24,14 +29,30 @@ export function useCup() {
         supabase.from('cup_matches').select('*').order('sort').order('created_at'),
       ]);
       if (s.error || m.error) throw s.error || m.error;
-      setState({ ready: true, sides: s.data || [], matches: m.data || [] });
+      const next = { sides: s.data || [], matches: m.data || [] };
+      cacheSet(key, next);
+      setState({ ready: true, ...next });
     } catch {
-      setState((cur) => ({ ...cur, ready: true }));
+      // No signal (or a hiccup): keep what's on screen and say so, rather than "no teams yet".
+      setState((cur) => ({ ...cur, ready: true, failed: true }));
     }
-  }, []);
+  }, [key]);
   useEffect(() => { load(); }, [load]);
   useRealtime(['cup_sides', 'cup_matches'], load);
   return { ...state, reload: load };
+}
+
+/** Shown when the cup couldn't load: what's on screen may be old. */
+function Offline({ cup }) {
+  if (!cup.failed) return null;
+  return (
+    <div className="section">
+      <div className="card pad row" style={{ gap: 8, background: '#FFF4E5', borderColor: '#E0A23B' }}>
+        <span className="grow small">{cup.matches.length || cup.sides.length ? 'No signal — showing the last scores this phone saw.' : 'Can’t reach the cup — check your signal.'}</span>
+        <button type="button" className="btn ghost sm" onClick={cup.reload}>Try again</button>
+      </div>
+    </div>
+  );
 }
 
 function names(data, ids) {
@@ -51,6 +72,8 @@ export default function Cup() {
   const { sides, matches } = cup;
   const rounds = useMemo(() => data.rounds.filter((r) => matches.some((m) => m.round_id === r.id)), [data.rounds, matches]);
   const totals = cupTotals(matches);
+  // The whole cup's points (set by the organiser, e.g. 28), so "to win" is right before every day's matches exist.
+  const cupPoints = Number(data.currentTrip?.cup_points) || totals.total;
   const n = sideNames(sides);
   const [A, B] = sides;
 
@@ -58,11 +81,12 @@ export default function Cup() {
   return (
     <div className="page">
       <Header logo title={data.currentTrip?.name || 'The Cup'} sub="Team match play" />
+      <Offline cup={cup} />
       {sides.length === 2 ? (
         <div className="section">
           <div className="card pad" style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 8, textAlign: 'center' }}>
             <div><div style={{ fontWeight: 800, color: A.colour }}>{A.name}</div><div style={{ fontSize: 40, fontWeight: 800, color: A.colour }}>{pts(totals.won.a)}</div></div>
-            <div className="small muted">{totals.total ? <>{pts(toWin(totals.total))}<br />to win</> : 'v'}</div>
+            <div className="small muted">{cupPoints ? <>{pts(toWin(cupPoints))}<br />to win</> : 'v'}</div>
             <div><div style={{ fontWeight: 800, color: B.colour }}>{B.name}</div><div style={{ fontSize: 40, fontWeight: 800, color: B.colour }}>{pts(totals.won.b)}</div></div>
             {(totals.projected.a !== totals.won.a || totals.projected.b !== totals.won.b) && (
               <div className="small muted" style={{ gridColumn: '1 / -1' }}>If it finished now: {A.name} {pts(totals.projected.a)} – {pts(totals.projected.b)} {B.name}</div>
@@ -70,7 +94,7 @@ export default function Cup() {
           </div>
         </div>
       ) : (
-        <div className="empty">{status.is_admin ? 'Set up the two teams below to start the cup.' : 'The organiser hasn’t set up the teams yet.'}</div>
+        cup.failed ? null : <div className="empty">{status.is_admin ? 'Set up the two teams below to start the cup.' : 'The organiser hasn’t set up the teams yet.'}</div>
       )}
 
       {rounds.map((r) => {
@@ -130,7 +154,7 @@ export function CupMatch() {
   const [local, setLocal] = useState(null); // holes just saved, until the live copy catches up
   useEffect(() => { setLocal(null); }, [m?.updated_at]);
   if (!cup.ready) return <div className="page"><Header back title="Match" /><Loading /></div>;
-  if (!m) return <div className="page"><Header back title="Match" /><div className="empty">That match isn’t here any more.</div></div>;
+  if (!m) return <div className="page"><Header back title="Match" /><Offline cup={cup} />{!cup.failed && <div className="empty">That match isn’t here any more.</div>}</div>;
   const match = local ? { ...m, holes: local } : m;
   const sides = cup.sides;
   const n = sideNames(sides);
@@ -162,6 +186,7 @@ export function CupMatch() {
   return (
     <div className="page">
       <Header back="The Cup" title={`${names(data, m.a_players)} v ${names(data, m.b_players)}`} sub={`${round?.name || ''} · ${FORMAT_LABEL[m.format]} · ${pts(Number(m.points))} pt${Number(m.points) === 1 ? '' : 's'}`} />
+      <Offline cup={cup} />
       <div className="section">
         <div className="card pad" style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 26, fontWeight: 800, color: s.leader === 'a' ? sides[0]?.colour : s.leader === 'b' ? sides[1]?.colour : 'inherit' }}>{matchText(match, n)}</div>
@@ -188,8 +213,10 @@ export function CupMatch() {
       <div className="section stack" style={{ gap: 10 }}>
         <div className="card pad stack" style={{ gap: 6, textAlign: 'center' }}>
           <div style={{ fontSize: 22, fontWeight: 800 }}>Hole {h}</div>
-          {info && <div className="muted">Par {info.par} · Stroke index {info.si}</div>}
-          {shot.n > 0
+          {info?.si ? <div className="muted">Par {info.par} · Stroke index {info.si}</div> : null}
+          {!info?.si && shotSide
+            ? <div style={{ fontWeight: 700 }}>This course has no stroke index here — {shotSide === 'a' ? n.a : n.b} get a shot on stroke index 1{diff > 1 ? `–${Math.min(diff, 18)}` : ''}{diff > 18 ? ' (and a second on 1–' + (diff - 18) + ')' : ''}. Check the card.</div>
+            : shot.n > 0
             ? <div style={{ fontWeight: 700, color: shot.side === 'a' ? sides[0]?.colour : sides[1]?.colour }}>🎯 {shot.side === 'a' ? n.a : n.b} ({names(data, shot.side === 'a' ? m.a_players : m.b_players)}) get {shot.n === 1 ? 'a shot' : `${shot.n} shots`} here</div>
             : <div className="small muted">No shots on this hole</div>}
         </div>
@@ -225,10 +252,35 @@ function CupSetup({ cup }) {
   return (
     <div className="stack" style={{ gap: 12, marginTop: 10 }}>
       <TeamsCard cup={cup} />
+      <CupPoints />
       {sides.map((s) => <TeamLink key={s.id} side={s} />)}
       <PlayersCard cup={cup} />
       <AddMatch cup={cup} />
       <MatchList cup={cup} data={data} />
+    </div>
+  );
+}
+
+function CupPoints() {
+  const data = useData();
+  const trip = data.currentTrip;
+  const [busy, run] = useRun();
+  const [val, setVal] = useState(trip?.cup_points != null ? String(Number(trip.cup_points)) : '');
+  if (!trip) return null;
+  const changed = val !== (trip.cup_points != null ? String(Number(trip.cup_points)) : '');
+  return (
+    <div className="card pad stack" style={{ gap: 8 }}>
+      <strong>Points in the whole cup</strong>
+      <div className="small muted">All days added up (e.g. 14 on Friday + 14 on Saturday = 28), so the board shows the right number to win from day one.</div>
+      <div className="row" style={{ gap: 8 }}>
+        <input className="input" style={{ maxWidth: 110 }} inputMode="decimal" value={val} placeholder="e.g. 28" onChange={(e) => setVal(e.target.value)} />
+        {changed && <button type="button" className="btn sm" disabled={busy} onClick={() => run(async () => {
+          const n = val.trim() === '' ? null : Number(val.replace(',', '.'));
+          await must(supabase.from('trips').update({ cup_points: n }).eq('id', trip.id));
+          await data.reload();
+        }, 'Saved')}>Save</button>}
+        {!changed && val && <span className="small muted">{pts(toWin(Number(val)))} to win</span>}
+      </div>
     </div>
   );
 }
@@ -262,17 +314,20 @@ function TeamsCard({ cup }) {
 
 function TeamLink({ side }) {
   const [code, setCode] = useState(null);
+  const [failed, setFailed] = useState(false);
   const [busy, run] = useRun();
   const load = useCallback(async (fresh = false) => {
+    setFailed(false);
     const { data, error } = await supabase.rpc('team_invite', { p_side: side.id, p_new: fresh });
-    if (!error) setCode(data);
+    if (error) { setFailed(true); throw error; }
+    setCode(data);
   }, [side.id]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load().catch(() => {}); }, [load]);
   const link = code ? inviteLink(code) : '';
   return (
     <div className="card pad stack" style={{ gap: 8, borderLeft: `5px solid ${side.colour}` }}>
       <div><strong style={{ color: side.colour }}>✉️ {side.name} link</strong><div className="small muted">Anyone who opens it joins as a player on {side.name}, approved straight away.</div></div>
-      {!code ? <Loading /> : (
+      {!code && failed ? <button type="button" className="btn ghost sm" onClick={() => load().catch(() => {})}>Couldn’t get the link — try again</button> : !code ? <Loading /> : (
         <>
           <code style={{ fontSize: 13, wordBreak: 'break-all', background: 'var(--bg, #F4F5F7)', padding: 8, borderRadius: 8 }}>{link}</code>
           <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
@@ -357,12 +412,14 @@ function AddMatch({ cup }) {
     .sort((x, y) => playerName(x).localeCompare(playerName(y)));
   const max = format === 'ambrose' ? 2 : 1;
   const auto = (ids) => sideHandicap(format, ids.map((id) => data.playersById[id]?.handicap));
-  const aH = hcp.a === '' ? auto(a) : Number(hcp.a);
-  const bH = hcp.b === '' ? auto(b) : Number(hcp.b);
-  const ok = roundId && a.length && b.length && (format === 'singles' || (a.length === 2 && b.length === 2)) && Number(points) > 0;
+  const num = (t) => Number(String(t).replace(',', '.'));
+  const aH = hcp.a === '' ? auto(a) : num(hcp.a);
+  const bH = hcp.b === '' ? auto(b) : num(hcp.b);
+  const ok = roundId && a.length && b.length && (format === 'singles' || (a.length === 2 && b.length === 2)) && num(points) > 0
+    && Number.isFinite(aH) && Number.isFinite(bH) && aH >= -10 && aH <= 54 && bH >= -10 && bH <= 54;
   const add = () => run(async () => {
     const sort = cup.matches.filter((m) => m.round_id === roundId).length + 1;
-    await must(supabase.from('cup_matches').insert({ round_id: roundId, sort, format, a_players: a, b_players: b, a_hcp: aH, b_hcp: bH, points: Number(points) }));
+    await must(supabase.from('cup_matches').insert({ round_id: roundId, sort, format, a_players: a, b_players: b, a_hcp: aH, b_hcp: bH, points: num(points) }));
     setA([]); setB([]); setHcp({ a: '', b: '' });
     await cup.reload();
   }, 'Match added');

@@ -78,9 +78,10 @@ export function InviteJoin({ code, inside = false, onLook }) {
           <div style={{ fontFamily: 'var(--display)', fontSize: 32, fontWeight: 700 }}>{info.group_name}</div>
           <div style={{ color: 'var(--on-navy-muted)' }}>{info.role === 'organiser' ? 'as the organiser — you set up rounds, players and invites. This link works once.' : info.team ? <>as a player on <strong style={{ color: '#fff' }}>{info.team}</strong>.</> : info.role === 'guest' ? 'as a guest — play, score and join in (no votes on rules or in the Tribunal).' : 'as a player.'}</div>
           {err && <div className="err" style={{ color: '#FFB4AB' }}>{err}</div>}
-          {info.already_in
+          {info.team && info.my_team && <div className="small" style={{ color: 'var(--on-navy-muted)' }}>You’re already on {info.my_team} — a link never moves you to another team.</div>}
+          {info.already_in && !(info.team && !info.my_team)
             ? <button type="button" className="btn gold block" onClick={() => { setCurrentGroup(info.group_id); window.location.hash = '#/'; window.location.reload(); }}>You’re already in — open it</button>
-            : <button type="button" className="btn gold block" disabled={busy} onClick={join}>{busy ? 'Joining…' : 'Join'}</button>}
+            : <button type="button" className="btn gold block" disabled={busy} onClick={join}>{busy ? 'Joining…' : info.already_in && info.team ? `Join ${info.team}` : 'Join'}</button>}
         </>
       )}
     </div>

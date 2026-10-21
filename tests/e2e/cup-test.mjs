@@ -124,6 +124,12 @@ check(setupText.includes('#/join/BLUETEAM2345'), 'Team Blue has its own link');
 check(setupText.includes('#/join/REDTEAM23456'), 'Team Red has its own link');
 await page.screenshot({ path: `${SHOTS}/1-setup.png`, fullPage: true });
 
+// 1b. Points in the whole cup (two days of 14).
+await page.getByPlaceholder('e.g. 28').fill('28');
+await page.locator('.card', { hasText: 'Points in the whole cup' }).getByRole('button', { name: 'Save' }).click();
+await page.waitForTimeout(600);
+check(Number(db.trips[0].cup_points) === 28, 'cup points saved (28)');
+
 // 2. Put players on teams.
 await page.getByRole('button', { name: /Who’s on which team/ }).click();
 const rowOf = (name) => page.locator('.card .row', { hasText: name });
@@ -173,7 +179,7 @@ await page.getByText('Team Blue won 3&2').waitFor({ timeout: 10000 });
 check(true, 'board: Team Blue won 3&2');
 const board = await page.locator('.page').innerText();
 check(/Team Blue\s*2\s/.test(board), 'Team Blue has 2 points');
-check(board.includes('to win'), 'shows points needed to win');
+check(board.includes('14½') && board.includes('to win'), 'shows 14½ to win (of 28) with only one match entered');
 await page.screenshot({ path: `${SHOTS}/4-won.png`, fullPage: true });
 
 // 6. A player (not organiser) sees no set-up.

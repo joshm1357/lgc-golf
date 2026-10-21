@@ -22,6 +22,7 @@ export default function More() {
     (SIGN_IN.length > 0 || manyGroups) && { to: '/groups', icon: Icon.user, label: 'Your groups', sub: manyGroups ? (NEW_GROUPS ? 'Switch group, start a new one or join another' : 'Switch group or join another') : (NEW_GROUPS ? 'Start a new group or join another' : 'Join another group') },
     on.location && { to: '/map', icon: Icon.pin, label: 'Where’s everyone', sub: 'Course map with each group’s location' },
     { to: '/rules', icon: Icon.book, label: 'The Rulebook', sub: on.rule_voting ? 'Our rules and bonuses — propose and vote on changes' : 'Our rules and bonuses' },
+    { to: '/comps-board', icon: Icon.trophy, label: 'What we’re playing for', sub: 'Every trophy, team comp and Cup this trip — who’s leading' },
     on.trophies && { to: '/trophies', icon: Icon.trophy, label: 'The Trophy Room', sub: status.legacy ? 'BD, Putt Buddies, Noodle Cup and the honour boards' : 'Trophies and the honour boards' },
     on.games && { to: '/games', icon: Icon.flag, label: 'Games & side bets', sub: 'Skins, Nassau, pots — and who pays who' },
     on.tribunal && { to: '/tribunal', icon: Icon.gavel, label: 'Handicap Tribunal', sub: 'Lodge a case, vote, see verdicts' },

@@ -7,6 +7,14 @@ import { formatToPar } from '../lib/scoring.js';
 import { Seg, Avatar, AvatarStack, Icon, Sheet, toast } from '../components/ui.jsx';
 import { TrophyArt } from '../components/TrophyArt.jsx';
 import { honourOrder } from '../lib/history.js';
+import { useTripComps } from '../components/CompsChip.jsx';
+import { useCompData, CompStandingsView } from './CompsBoard.jsx';
+import { compStandings } from '../lib/comps.js';
+
+/** Is this trophy's comp the classic kind the Trophy Room always showed (all the trip's Stableford / Ambrose rounds,
+ *  or awarded)? Then it's shown exactly as before; any other comp shows its own standings (lib/comps.js). */
+const classic = (t, c) => !c || (!c.round_ids?.length && ((c.kind === 'individual_points' && t.type === 'stableford_total')
+  || (c.kind === 'ambrose_teams' && t.type === 'ambrose') || (c.kind === 'manual' && t.type === 'manual')));
 
 /** The Trophy Room: every trophy in its own lit display case, live standings, and brass plaques. */
 export default function Trophies() {
@@ -34,6 +42,11 @@ export default function Trophies() {
   const trophy = trophies.find((t) => t.id === sel) || trophies[0];
   const tripRounds = trip ? data.rounds.filter((r) => r.trip_id === trip.id) : [];
   const scores = useScores(tripRounds.map((r) => r.id));
+  // Comps (migration 067): a trophy is a comp with a trophy.
+  const [comps] = useTripComps(trip?.id);
+  const cd = useCompData(trip?.id, { scoresIdx: scores.index });
+  const compOf = (t) => comps.find((c) => c.trophy_id === t.id);
+  const compSt = (t) => { const c = compOf(t); return c && !classic(t, c) ? { c, st: compStandings(c, cd) } : null; };
 
   const sBoard = useMemo(() => (trip ? stablefordTrophyBoard({
     trip, rounds: data.rounds, coursesById: data.coursesById, roundPlayers: data.roundPlayers,
@@ -49,6 +62,8 @@ export default function Trophies() {
 
   const plaquesFor = (name) => honourOrder(data.honour_board.filter((h) => h.trophy_name.toLowerCase() === name.toLowerCase()));
   const leaderLine = (t) => {
+    const g = compSt(t);
+    if (g) return g.st.leaderText;
     if (t.type === 'stableford_total' && sBoard?.rows[0]?.total > 0) return `${sBoard.rows[0].name} leads · ${sBoard.rows[0].total} pts`;
     if (t.type === 'ambrose' && aBoard?.rows[0]?.thru > 0) return `${aBoard.rows[0].name} lead · ${formatToPar(aBoard.rows[0].netToPar)}`;
     if (t.type === 'ambrose' && aRound) return `${aRound.status === 'setup' ? 'Tees off' : 'Live'} ${aRound.play_date ? new Date(aRound.play_date).toLocaleDateString('en-AU', { weekday: 'long' }) : ''}`;
@@ -58,6 +73,7 @@ export default function Trophies() {
   const projected = mode === 'proj' && sBoard?.projection;
   const sRows = projected ? sBoard.projection : sBoard?.rows || [];
   const plaques = trophy ? plaquesFor(trophy.name) : [];
+  const general = trophy ? compSt(trophy) : null;
   const counts = {};
   for (const h of plaques) counts[h.winner_names] = (counts[h.winner_names] || 0) + 1;
 
@@ -97,7 +113,14 @@ export default function Trophies() {
             )}
           </div>
 
-          {trophy.type === 'stableford_total' && sBoard && (
+          {general && (
+            <>
+              <CompStandingsView comp={general.c} st={general.st} data={cd} />
+              {general.st.note && <p className="note" style={{ margin: 0 }}>{general.c.name}: {general.st.note} <Link to={`/comps-board?c=${general.c.id}`} style={{ color: '#EBD496' }}>More</Link></p>}
+            </>
+          )}
+
+          {!general && trophy.type === 'stableford_total' && sBoard && (
             <>
               {sBoard.projection && <Seg value={mode} onChange={setMode} options={[{ value: 'live', label: 'Live' }, { value: 'proj', label: 'Projected' }]} />}
               {!sBoard.rounds.length ? <div className="card pad">No Stableford rounds yet.</div> : (
@@ -124,7 +147,7 @@ export default function Trophies() {
             </>
           )}
 
-          {trophy.type === 'ambrose' && (aBoard ? (
+          {!general && trophy.type === 'ambrose' && (aBoard ? (
             <>
               <div className="card" style={{ overflow: 'hidden' }}>
                 {aBoard.rows.map((r, i) => (
@@ -140,7 +163,7 @@ export default function Trophies() {
             </>
           ) : <div className="card pad">No Ambrose round set up yet.</div>)}
 
-          {trophy.type === 'manual' && !plaques.length && (
+          {!general && trophy.type === 'manual' && !plaques.length && (
             <div className="card pad">No winners engraved yet.{status.is_admin && !trophy.historyOnly ? ' Tap “Engrave winner” when it’s decided.' : ''}</div>
           )}
 
@@ -163,7 +186,8 @@ export default function Trophies() {
 
       {awarding && trophy && (
         <Engrave trophy={trophy} trip={trip}
-          suggested={trophy.type === 'stableford_total' ? sBoard?.rows[0]?.players.map((p) => p.id) : trophy.type === 'ambrose' ? aBoard?.rows[0]?.players.map((p) => p.id) : []}
+          suggested={general ? (general.c.kind === 'cup' ? data.players.filter((p) => p.cup_side && p.cup_side === general.st.rows[0]?.id).map((p) => p.id) : (general.st.rows[0]?.players || []).map((p) => p?.id))
+            : trophy.type === 'stableford_total' ? sBoard?.rows[0]?.players.map((p) => p.id) : trophy.type === 'ambrose' ? aBoard?.rows[0]?.players.map((p) => p.id) : []}
           onClose={() => setAwarding(false)} />
       )}
     </div>

@@ -15,6 +15,8 @@ import { TeeGroupsForTrip } from './TeeGroups.jsx';
 import { upcomingTrips, tripDays, dayLabel, roundName, setupSteps, nextAction } from '../lib/setupguide.js';
 import { parseHoles } from '../lib/sidecomps.js';
 import { SetupHelperBox } from './AiHelper.jsx';
+import { CompsStep, RoundCompsCard } from './CompsBoard.jsx';
+import { useTripComps } from '../components/CompsChip.jsx';
 
 const FORMATS = [
   { value: 'stableford', label: 'Stableford (individual)' },
@@ -35,7 +37,8 @@ export default function SetupGuide() {
   const [tripId, setTripId] = useState(null); // the trip being set up (default: the nearest one that isn't over)
   const candidates = data.ready ? upcomingTrips(data.trips, todayIso()) : [];
   const trip = (tripId && tripId !== 'new' && data.trips?.find((t) => t.id === tripId)) || (tripId === 'new' ? null : candidates[0] || null);
-  const steps = data.ready ? setupSteps(data, { cup: cupOn, side_comps: sideCompsOn }, trip) : [];
+  const [comps] = useTripComps(trip?.id);
+  const steps = data.ready ? setupSteps({ ...data, comps }, { cup: cupOn, side_comps: sideCompsOn }, trip) : [];
   const firstTodo = steps.find((s) => !s.done && !s.optional)?.key;
   const [open, setOpen] = useState(null);
   useEffect(() => { if (open == null && data.ready) setOpen(firstTodo || 'none'); }, [data.ready]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -54,6 +57,7 @@ export default function SetupGuide() {
     trip: <TripStep key={trip?.id || 'new'} trip={trip} onNew={() => setTripId('new')} onDone={(id) => { setTripId(id); setOpen('courses'); }} />,
     courses: <CoursesStep onDone={() => setOpen('rounds')} />,
     rounds: <RoundsStep trip={trip} onDone={() => setOpen('players')} />,
+    comps: <CompsStep trip={trip} onStep={setOpen} />,
     players: <PlayersStep cupOn={cupOn} />,
     extras: <ExtrasStep trip={trip} sideCompsOn={sideCompsOn} cupOn={cupOn} />,
   };
@@ -301,6 +305,7 @@ function RoundExtras({ round }) {
   return (
     <div className="card pad stack" style={{ gap: 8, background: 'var(--ground)' }}>
       <strong>{round.name}</strong>
+      <RoundCompsCard round={round} />
       <div className="row" style={{ gap: 8 }}>
         <label className="field grow"><span>Closest to pin holes</span><input className="input" inputMode="numeric" value={ctp} onChange={(e) => setCtp(e.target.value)} placeholder="e.g. 3 7" /></label>
         <label className="field grow"><span>Longest drive holes</span><input className="input" inputMode="numeric" value={ld} onChange={(e) => setLd(e.target.value)} placeholder="e.g. 5" /></label>

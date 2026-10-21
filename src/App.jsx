@@ -58,6 +58,7 @@ const Games = lazyScreen(() => import('./screens/Games.jsx'));
 const Replay = lazyScreen(() => import('./screens/Replay.jsx'));
 const CourseGuide = lazyScreen(() => import('./screens/CourseGuide.jsx'));
 const Ask = lazyScreen(() => import('./screens/AiHelper.jsx'));
+const CompsBoard = lazyScreen(() => import('./screens/CompsBoard.jsx'));
 
 // A fresh plan screen per plan, so nothing carries over when a notification jumps to another one.
 function PlanDetailRoute() {
@@ -207,6 +208,7 @@ function Inside() {
         <Route path="/comps" element={<FeatureRoute feature="side_comps" label="Side comps"><Comps /></FeatureRoute>} />
         <Route path="/map" element={<FeatureRoute feature="location" label="Where’s everyone"><MapScreen /></FeatureRoute>} />
         <Route path="/more" element={<More />} />
+        <Route path="/comps-board" element={<CompsBoard />} />
         <Route path="/ask" element={<FeatureRoute feature="ai_helper" label="The AI helper"><Ask /></FeatureRoute>} />
         <Route path="/cup" element={<FeatureRoute feature="cup" label="The Cup"><Cup /></FeatureRoute>} />
         <Route path="/cup/:matchId" element={<FeatureRoute feature="cup" label="The Cup"><CupMatch /></FeatureRoute>} />

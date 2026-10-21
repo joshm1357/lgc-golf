@@ -11,6 +11,7 @@ import { FindCourse, ShareCourse } from '../components/CourseLibrary.jsx';
 import { OwnCompsAdmin, RoundOwnComps } from './OwnComps.jsx';
 import { RoundGames } from './Games.jsx';
 import { TeeGroupsCard } from './TeeGroups.jsx';
+import { RoundCompsCard, useScrollToRound } from './CompsBoard.jsx';
 
 async function run(fn, okMsg) {
   try {
@@ -42,6 +43,7 @@ export default function Admin() {
   const trophiesOn = useFeature('trophies');
   const sideCompsOn = useFeature('side_comps');
   const [pin, setPin] = useState('');
+  useScrollToRound(data.ready && status?.is_admin);
 
   if (!data.ready) return <Loading />;
 
@@ -335,11 +337,12 @@ function RoundCard({ round }) {
   const course = data.coursesById[round.course_id];
   const next = { setup: ['live', 'Start round'], live: ['locked', 'Finish & lock'], locked: ['live', 'Reopen'] }[round.status];
   return (
-    <div className="card pad stack" style={{ background: 'var(--ground)' }}>
+    <div className="card pad stack" id={`round-${round.id}`} style={{ background: 'var(--ground)' }}>
       <div className="row between">
         <div><strong>{round.name}</strong><div className="small muted">{course?.name} · {formatName(round.format)} · {round.status}</div></div>
         <button type="button" className={'btn sm' + (round.status === 'setup' ? ' gold' : ' ghost')} onClick={() => run(() => supabase.from('rounds').update({ status: next[0] }).eq('id', round.id), 'Round updated').then(data.reload)}>{next[1]}</button>
       </div>
+      <RoundCompsCard round={round} />
       {sideCompsOn && <div className="row">
         <label className="field grow"><span>Longest drive holes</span><input className="input" value={ld} onChange={(e) => setLd(e.target.value)} placeholder="e.g. 5" inputMode="numeric" /></label>
         <label className="field grow"><span>Closest to pin holes</span><input className="input" value={ctp} onChange={(e) => setCtp(e.target.value)} placeholder="e.g. 3 7" inputMode="numeric" /></label>

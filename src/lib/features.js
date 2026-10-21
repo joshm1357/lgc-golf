@@ -10,6 +10,7 @@
 // newGroup   — default for a new group
 // tier       — 'free' for everything now; a later premium plan can check it
 // soon       — not built yet: shown as "coming soon", can't be switched on
+// hidden     — switched on and off by the app itself (e.g. 'cup' by adding a Cup comp): not in the Features list
 
 export const FEATURES = [
   { key: 'feed', name: 'Feed, photos and auto-posts', description: 'The Feed tab: posts, photos, comments and the automatic birdie/result posts.', newGroup: true },
@@ -30,7 +31,8 @@ export const FEATURES = [
   { key: 'scorecard_photo', name: 'Scorecard photo reading', description: 'Read a photo of a scorecard into scores (needs an API key).', newGroup: false, soon: true },
   { key: 'booking_links', name: 'Booking links', description: 'Buttons on a trip to find accommodation, a course and directions, with your place and dates filled in.', newGroup: false },
   { key: 'clubhouse_tv', name: 'Clubhouse TV leaderboard', description: 'Show your round on the clubhouse TV — first names only, and only for rounds you choose.', newGroup: false },
-  { key: 'cup', name: 'Team match play (Ryder Cup)', description: 'Two teams, match play matches (singles or Ambrose pairs) scored hole by hole, and a live team points board.', newGroup: false },
+  // Managed automatically (hidden from the Features list): adding a Cup comp switches it on (migration 067).
+  { key: 'cup', name: 'Team match play (Ryder Cup)', description: 'Two teams, match play matches (singles or Ambrose pairs) scored hole by hole, and a live team points board.', newGroup: false, hidden: true },
   { key: 'awards', name: 'Award moments', description: 'When a round, side comp or trophy is decided: a winner card, the winner’s photo, a pinned post and a buzz.', newGroup: false },
   { key: 'games', name: 'Games and side bets', description: 'Skins, Nassau and other games worked out from the scores, with a running tally.', newGroup: false },
   { key: 'tee_groups', name: 'Tee groups', description: 'Fair groups of four for each round — new partners each day, handicaps mixed.', newGroup: false },

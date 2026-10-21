@@ -32,6 +32,8 @@ export const GROUP_TABLES = new Set([
   'round_games',
   // The AI helper's usage log (migration 059; only the edge function reads it)
   'helper_log',
+  // Comps — what you're playing for (migration 067)
+  'comps',
 ]);
 
 let current = (() => {

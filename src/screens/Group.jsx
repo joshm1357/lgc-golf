@@ -306,7 +306,7 @@ function FeaturesCard() {
         <div className="label">Features</div>
         <div className="small muted">Switch off what your group doesn’t use — it disappears for everyone. History stays.</div>
       </div>
-      {FEATURES.map((f) => {
+      {FEATURES.filter((f) => !f.hidden).map((f) => {
         const own = f.key in settings ? !!settings[f.key] : f.newGroup;
         const parentOff = f.parent && !featureOn(f.parent, settings);
         if (f.soon) {

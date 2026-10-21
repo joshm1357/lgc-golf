@@ -11,6 +11,7 @@ import SharePicture from '../components/SharePicture.jsx';
 import { boardCard } from '../lib/shareCard.js';
 import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
 import { GamesChip } from '../components/GamesChip.jsx';
+import { CompChips } from '../components/CompsChip.jsx';
 import { TeeGroupsBoard } from './TeeGroups.jsx';
 import { AwardCards } from '../components/Awards.jsx';
 import ReplayButton from '../components/ReplayButton.jsx';
@@ -137,6 +138,7 @@ export default function Leaderboard() {
         )}
       </Header>
       <RoundChips round={round} onChoose={choose} />
+      <CompChips round={round} />
       <TeeGroupsBoard round={round} />
       <AwardCards />
       <CourseGuideChip course={course} round={round} />

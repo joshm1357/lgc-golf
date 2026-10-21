@@ -1,7 +1,7 @@
 // Team match play, Ryder Cup style (migration 050, feature 'cup'). The board, a match's hole-by-hole scoring, and the
 // organiser's set-up (teams, team links, who's on which team, the matches). The maths is in lib/cup.js.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
 import { useData, useRealtime, useSession, playerName, cacheGet, cacheSet } from '../lib/store.jsx';
 import { currentGroup } from '../lib/group.js';
@@ -9,6 +9,8 @@ import { Header, Avatar, Loading, toast } from '../components/ui.jsx';
 import { useRun, must } from '../lib/run.js';
 import { inviteLink } from '../lib/invite.js';
 import { shareText } from '../lib/push.js';
+import { useComps } from '../components/CompsChip.jsx';
+import { cleanSettings } from '../lib/comps.js';
 import { sideHandicap, shotsOnHole, shots, matchState, matchText, cupTotals, toWin, pts, nextHole, matchPoints } from '../lib/cup.js';
 
 const FORMAT_LABEL = { ambrose: 'Ambrose pairs', singles: 'Singles' };
@@ -68,19 +70,23 @@ export default function Cup() {
   const data = useData();
   const { status } = useSession();
   const cup = useCup();
-  const [setup, setSetup] = useState(false);
+  // The Cup comp (migration 067) gives the Cup its name and points; none yet (an older group) = the trip's.
+  const [comps] = useComps();
+  const cupComp = comps.find((c) => c.kind === 'cup' && !c.retired) || null;
+  const [params] = useSearchParams();
+  const [setup, setSetup] = useState(params.get('setup') === '1');
   const { sides, matches } = cup;
   const rounds = useMemo(() => data.rounds.filter((r) => matches.some((m) => m.round_id === r.id)), [data.rounds, matches]);
   const totals = cupTotals(matches);
   // The whole cup's points (set by the organiser, e.g. 28), so "to win" is right before every day's matches exist.
-  const cupPoints = Number(data.currentTrip?.cup_points) || totals.total;
+  const cupPoints = Number(cupComp?.settings?.points) || Number(data.currentTrip?.cup_points) || totals.total;
   const n = sideNames(sides);
   const [A, B] = sides;
 
   if (!cup.ready) return <div className="page"><Header logo title="The Cup" /><Loading /></div>;
   return (
     <div className="page">
-      <Header logo title={data.currentTrip?.name || 'The Cup'} sub="Team match play" />
+      <Header logo title={cupComp?.name || data.currentTrip?.name || 'The Cup'} sub="Team match play" />
       <Offline cup={cup} />
       {sides.length === 2 ? (
         <div className="section">
@@ -115,7 +121,7 @@ export default function Cup() {
       {status.is_admin && !status.viewing && (
         <div className="section" style={{ paddingBottom: 24 }}>
           <button type="button" className="btn ghost block" onClick={() => setSetup(!setup)}>{setup ? 'Hide set-up' : '⚙️ Set up the cup (organiser)'}</button>
-          {setup && <CupSetup cup={cup} />}
+          {setup && <CupSetup cup={cup} cupComp={cupComp} />}
         </div>
       )}
       {!status.is_admin && <div className="section small muted" style={{ paddingBottom: 24 }}>Tap your match to score it. Anyone in the group can score, so one person per match is plenty.</div>}
@@ -251,7 +257,7 @@ export function CupMatch() {
 }
 
 // ------------------------------------------------------------------ Organiser set-up
-function CupSetup({ cup }) {
+function CupSetup({ cup, cupComp }) {
   const data = useData();
   const [busy, run] = useRun();
   const { sides } = cup;
@@ -261,7 +267,7 @@ function CupSetup({ cup }) {
         <strong>1. Make the two teams</strong>
         <div className="small muted">You can rename them and change their colours straight after.</div>
         <button type="button" className="btn gold" disabled={busy} onClick={() => run(async () => {
-          for (const s of DEFAULT_SIDES) if (!sides.some((x) => x.sort === s.sort)) await must(supabase.from('cup_sides').insert(s));
+          for (const s of DEFAULT_SIDES) if (!sides.some((x) => x.sort === s.sort)) await must(supabase.from('cup_sides').insert(cupComp ? { ...s, comp_id: cupComp.id } : s));
           await cup.reload();
         }, 'Teams made')}>Make Team Blue and Team Red</button>
       </div>
@@ -270,22 +276,23 @@ function CupSetup({ cup }) {
   return (
     <div className="stack" style={{ gap: 12, marginTop: 10 }}>
       <TeamsCard cup={cup} />
-      <CupPoints />
+      <CupPoints cupComp={cupComp} />
       {sides.map((s) => <TeamLink key={s.id} side={s} />)}
       <PlayersCard cup={cup} />
-      <AddMatch cup={cup} />
+      <AddMatch cup={cup} cupComp={cupComp} />
       <MatchList cup={cup} data={data} />
     </div>
   );
 }
 
-function CupPoints() {
+function CupPoints({ cupComp }) {
   const data = useData();
   const trip = data.currentTrip;
   const [busy, run] = useRun();
-  const [val, setVal] = useState(trip?.cup_points != null ? String(Number(trip.cup_points)) : '');
+  const saved = cupComp?.settings?.points ?? trip?.cup_points;
+  const [val, setVal] = useState(saved != null ? String(Number(saved)) : '');
   if (!trip) return null;
-  const changed = val !== (trip.cup_points != null ? String(Number(trip.cup_points)) : '');
+  const changed = val !== (saved != null ? String(Number(saved)) : '');
   return (
     <div className="card pad stack" style={{ gap: 8 }}>
       <strong>Points in the whole cup</strong>
@@ -295,6 +302,10 @@ function CupPoints() {
         {changed && <button type="button" className="btn sm" disabled={busy} onClick={() => run(async () => {
           const n = val.trim() === '' ? null : Number(val.replace(',', '.'));
           await must(supabase.from('trips').update({ cup_points: n }).eq('id', trip.id));
+          if (cupComp) {
+            const { points: _old, ...rest } = cupComp.settings || {};
+            await must(supabase.from('comps').update({ settings: cleanSettings('cup', n ? { ...rest, points: n } : rest) }).eq('id', cupComp.id));
+          }
           await data.reload();
         }, 'Saved')}>Save</button>}
         {!changed && val && <span className="small muted">{pts(toWin(Number(val)))} to win</span>}
@@ -414,15 +425,17 @@ function PlayerPick({ label, colour, options, value, onChange, max }) {
   );
 }
 
-function AddMatch({ cup }) {
+function AddMatch({ cup, cupComp }) {
   const data = useData();
   const [busy, run] = useRun();
   const tripRounds = data.rounds.filter((r) => r.trip_id === data.currentTrip?.id);
   const [roundId, setRoundId] = useState(() => (tripRounds.find((r) => r.status !== 'locked') || tripRounds[0])?.id || '');
-  const [format, setFormat] = useState('ambrose');
+  // Each session's format and points a match, as set on the Cup comp (migration 067).
+  const ses = (rid) => cupComp?.settings?.sessions?.[rid] || {};
+  const [format, setFormat] = useState(() => ses(roundId).format || 'ambrose');
   const [a, setA] = useState([]);
   const [b, setB] = useState([]);
-  const [points, setPoints] = useState('2');
+  const [points, setPoints] = useState(() => String(ses(roundId).points ?? ((ses(roundId).format || 'ambrose') === 'ambrose' ? 2 : 1)));
   const [hcp, setHcp] = useState({ a: '', b: '' });
   const [A, B] = cup.sides;
   const used = new Set(cup.matches.filter((m) => m.round_id === roundId).flatMap((m) => [...m.a_players, ...m.b_players]));
@@ -445,7 +458,12 @@ function AddMatch({ cup }) {
     <div className="card pad stack" style={{ gap: 10 }}>
       <strong>Add a match</strong>
       <label className="field"><span>Day</span>
-        <select className="select" value={roundId} onChange={(e) => { setRoundId(e.target.value); setA([]); setB([]); }}>
+        <select className="select" value={roundId} onChange={(e) => {
+          const s = ses(e.target.value);
+          setRoundId(e.target.value); setA([]); setB([]);
+          if (s.format) setFormat(s.format);
+          if (s.points != null || s.format) setPoints(String(s.points ?? (s.format === 'singles' ? 1 : 2)));
+        }}>
           {tripRounds.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
         </select>
       </label>

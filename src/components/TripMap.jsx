@@ -5,7 +5,8 @@ import 'leaflet/dist/leaflet.css';
 
 // The trip finder's map (Stage 16.5): starting AREAS shaded (never pins on houses), and courses coloured by fit —
 // teal fits, amber check (facts unknown), grey doesn't fit. Esri imagery like the other maps, plus Esri's free place
-// names on top so towns can be read at this zoom. No keys, nothing paid.
+// names on top so towns can be read at this zoom. No keys, nothing paid. No animations: on a phone the map comes and
+// goes (List / Map), and Leaflet's zoom animation fails if its map is taken away mid-zoom.
 
 const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 const ESRI_PLACES = 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}';
@@ -40,7 +41,7 @@ export default function TripMap({ starts = [], results = [], picked = new Set(),
   const centre = pts[0] ? [pts[0].lat, pts[0].lng] : [-33.87, 151.21];
   return (
     <div className={className} data-testid="tf-map">
-      <MapContainer center={centre} zoom={8} style={{ height: '100%', width: '100%' }} scrollWheelZoom={false}>
+      <MapContainer center={centre} zoom={8} style={{ height: '100%', width: '100%' }} scrollWheelZoom={false} zoomAnimation={false} markerZoomAnimation={false} fadeAnimation={false}>
         <TileLayer url={ESRI} maxZoom={18} attribution='Imagery © Esri · Places © Esri · Courses © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors' />
         <TileLayer url={ESRI_PLACES} maxZoom={18} />
         <Frame points={pts} />

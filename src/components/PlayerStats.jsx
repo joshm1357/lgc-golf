@@ -77,28 +77,34 @@ const BAD = 'var(--down)';
 export function Bars({ values, labels = [], tops = [], height = 120, goodUp = true, aria, zeroLabel }) {
   if (!values.length) return null;
   const w = 320;
-  const pad = { l: 6, r: 6, t: 16, b: 18 };
-  const max = Math.max(1, ...values.map((v) => Math.abs(v)));
-  const mid = pad.t + (height - pad.t - pad.b) / 2;
-  const half = (height - pad.t - pad.b) / 2 - 2;
+  const pad = { l: 6, r: 6, t: 14, b: labels.length ? 16 : 2 };
+  const lo = Math.min(0, ...values);
+  const hi = Math.max(0, ...values);
+  const span = hi - lo || 1;
+  // Room for the number over (or under) each bar.
+  const top = pad.t;
+  const bottom = height - pad.b - (lo < 0 ? 12 : 0);
+  const y = (v) => top + ((hi - v) / span) * (bottom - top);
+  const zero = y(0);
   const slot = (w - pad.l - pad.r) / values.length;
   const bw = Math.max(4, Math.min(34, slot * 0.66));
+  const small = slot < 20;
   return (
     <svg viewBox={`0 0 ${w} ${height}`} width="100%" height={height} role="img" aria-label={aria} style={{ display: 'block' }}>
-      <line x1={pad.l} x2={w - pad.r} y1={mid} y2={mid} stroke="var(--line)" strokeWidth="1.5" />
-      {zeroLabel && <text x={w - pad.r} y={mid - 4} textAnchor="end" fontSize="9" fill="var(--muted)">{zeroLabel}</text>}
+      <line x1={pad.l} x2={w - pad.r} y1={zero} y2={zero} stroke="var(--line)" strokeWidth="1.5" />
+      {zeroLabel && <text x={w - pad.r} y={zero - 4} textAnchor="end" fontSize="9" fill="var(--muted)">{zeroLabel}</text>}
       {values.map((v, i) => {
         const x = pad.l + slot * i + (slot - bw) / 2;
-        const hgt = Math.max(2, (Math.abs(v) / max) * half);
         const up = v >= 0;
+        const hgt = Math.max(2, Math.abs(y(v) - zero));
+        const by = up ? zero - hgt : zero;
         const good = goodUp ? v > 0 : v < 0;
         const fill = Math.abs(v) < 1e-9 ? 'var(--muted)' : good ? GOOD : BAD;
-        const y = up ? mid - hgt : mid;
         return (
           <g key={i}>
-            <rect x={x} y={y} width={bw} height={hgt} rx="2" fill={fill} opacity="0.85" />
-            {tops[i] != null && <text x={x + bw / 2} y={up ? y - 3 : y + hgt + 10} textAnchor="middle" fontSize={slot < 20 ? 8 : 11} fontWeight="700" fill="var(--text)">{tops[i]}</text>}
-            {labels[i] != null && <text x={x + bw / 2} y={height - 4} textAnchor="middle" fontSize={slot < 20 ? 8 : 10} fill="var(--muted)">{labels[i]}</text>}
+            <rect x={x} y={by} width={bw} height={hgt} rx="2" fill={fill} opacity="0.85" />
+            {tops[i] != null && <text x={x + bw / 2} y={up ? by - 3 : by + hgt + 10} textAnchor="middle" fontSize={small ? 8 : 11} fontWeight="700" fill="var(--text)">{tops[i]}</text>}
+            {labels[i] != null && <text x={x + bw / 2} y={height - 3} textAnchor="middle" fontSize={small ? 8 : 10} fill="var(--muted)">{labels[i]}</text>}
           </g>
         );
       })}
@@ -107,11 +113,11 @@ export function Bars({ values, labels = [], tops = [], height = 120, goodUp = tr
 }
 
 const MIX = [
-  ['eagles', 'Eagles+', 'var(--gold)'],
-  ['birdies', 'Birdies', 'var(--up)'],
-  ['pars', 'Pars', 'var(--navy)'],
-  ['bogeys', 'Bogeys', '#8FA0B5'],
-  ['doubles', 'Doubles+', 'var(--down)'],
+  ['eagles', 'eagle or better', 'eagles or better', 'var(--gold)'],
+  ['birdies', 'birdie', 'birdies', 'var(--up)'],
+  ['pars', 'par', 'pars', '#4A6FA5'],
+  ['bogeys', 'bogey', 'bogeys', '#8FA0B5'],
+  ['doubles', 'double or worse', 'doubles or worse', 'var(--down)'],
 ];
 
 /** How a player's holes went: one bar split eagles / birdies / pars / bogeys / doubles, with the counts. */
@@ -120,8 +126,8 @@ export function ScoringMix({ counts }) {
   let x = 0;
   return (
     <div className="stack" style={{ gap: 6 }}>
-      <svg viewBox="0 0 320 18" width="100%" height="18" role="img" aria-label={MIX.map(([k, l]) => `${l} ${counts[k]}`).join(', ')} style={{ display: 'block' }}>
-        {MIX.map(([k, , c]) => {
+      <svg viewBox="0 0 320 18" width="100%" height="18" role="img" aria-label={MIX.map(([k, , l]) => `${counts[k]} ${l}`).join(', ')} style={{ display: 'block' }}>
+        {MIX.map(([k, , , c]) => {
           const wd = (counts[k] / counts.holes) * 320;
           const el = wd > 0 ? <rect key={k} x={x} y="0" width={wd} height="18" fill={c} /> : null;
           x += wd;
@@ -129,8 +135,8 @@ export function ScoringMix({ counts }) {
         })}
       </svg>
       <div className="row small" style={{ flexWrap: 'wrap', gap: '4px 12px' }}>
-        {MIX.filter(([k]) => k !== 'eagles' || counts.eagles).map(([k, l, c]) => (
-          <span key={k} className="row" style={{ gap: 5 }}><span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: 3, background: c, display: 'inline-block' }} /><strong>{counts[k]}</strong> {l.toLowerCase()}</span>
+        {MIX.filter(([k]) => k !== 'eagles' || counts.eagles).map(([k, one, many, c]) => (
+          <span key={k} className="row" style={{ gap: 5 }}><span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: 3, background: c, display: 'inline-block' }} /><strong>{counts[k]}</strong> {counts[k] === 1 ? one : many}</span>
         ))}
       </div>
     </div>

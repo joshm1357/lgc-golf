@@ -168,13 +168,19 @@ function Records({ hist }) {
   const rec = useMemo(() => records(ctx, { winners: tripWinners(ctx) }), [ctx]);
   const empty = !rec.bestRounds.length && !rec.mostBirdies.length && !rec.mostTripWins.length;
   if (empty) return <div className="card pad muted">No records yet — they appear once rounds are finished.</div>;
-  const List = ({ title, testid, items, render }) => (items.length ? (
+  // Equal values share a place (T1), like the leaderboard.
+  const place = (items, value, i) => {
+    const v = value(items[i]);
+    const first = items.findIndex((y) => value(y) === v);
+    return (items.filter((y) => value(y) === v).length > 1 ? 'T' : '') + (first + 1);
+  };
+  const List = ({ title, testid, items, render, value }) => (items.length ? (
     <div className="stack" style={{ gap: 6 }}>
       <span className="label">{title}</span>
       <div className="card" style={{ overflow: 'hidden' }} data-testid={testid}>
         {items.map((x, i) => (
           <div key={i} className={'lb-row' + (i === 0 ? ' lead' : '')} style={{ gridTemplateColumns: '26px minmax(0,1fr) auto' }}>
-            <span className="lb-rank">{i + 1}</span>
+            <span className="lb-rank">{place(items, value, i)}</span>
             {render(x)}
           </div>
         ))}
@@ -183,19 +189,19 @@ function Records({ hist }) {
   ) : null);
   return (
     <>
-      <List title="Best rounds" testid="rec-best" items={rec.bestRounds} render={(x) => (
+      <List title="Best rounds" testid="rec-best" items={rec.bestRounds} value={(x) => x.score} render={(x) => (
         <>
-          <PlayerCell data={data} id={x.playerId} sub={`${x.round.name}${x.course ? ` · ${x.course.name}` : ''} · ${shortDate(x.date)}`} />
+          <PlayerCell data={data} id={x.playerId} sub={`${shortDate(x.date)} · ${x.round.name}${x.course ? ` · ${x.course.name}` : ''}`} />
           <span className="lb-main" style={{ fontSize: 20 }}>{x.points}<span className="small"> pts</span></span>
         </>
       )} />
-      <List title="Most birdies" testid="rec-birdies" items={rec.mostBirdies} render={(x) => (
+      <List title="Most birdies" testid="rec-birdies" items={rec.mostBirdies} value={(x) => x.total} render={(x) => (
         <>
           <PlayerCell data={data} id={x.playerId} sub={`${x.holes} holes${x.eagles ? ` · ${x.eagles} eagle${x.eagles === 1 ? '' : 's'} or better` : ''}`} />
           <span className="lb-main" style={{ fontSize: 20 }}>{x.total}</span>
         </>
       )} />
-      <List title="Most trip wins" testid="rec-trips" items={rec.mostTripWins} render={(x) => (
+      <List title="Most trip wins" testid="rec-trips" items={rec.mostTripWins} value={(x) => x.wins} render={(x) => (
         <>
           <PlayerCell data={data} id={x.playerId} />
           <span className="lb-main" style={{ fontSize: 20 }}>{x.wins}</span>
@@ -263,7 +269,7 @@ function HeadToHead({ hist, params, setParams }) {
                     <div className="small muted">{formatName(x.format)} · {shortDate(x.date)} · {x.format === 'stroke' && x.unit === 'shots' ? `net ${signed(x.a.netToPar, { level: 'E', dp: 0 })} v ${signed(x.b.netToPar, { level: 'E', dp: 0 })}` : `${x.a.points} v ${x.b.points} pts`}</div>
                   </span>
                   <span className="small" style={{ fontWeight: 700, textAlign: 'right', color: x.winner === 'half' ? 'var(--muted)' : x.winner === 'a' ? 'var(--up)' : 'var(--down)' }}>
-                    {x.winner === 'half' ? 'Halved' : `${x.winner === 'a' ? an : bn} by ${Math.abs(x.margin)}${x.unit === 'pts' ? ' pts' : ''}`}
+                    {x.winner === 'half' ? 'Halved' : `${x.winner === 'a' ? an : bn} by ${Math.abs(x.margin)}${x.unit === 'pts' ? (Math.abs(x.margin) === 1 ? ' pt' : ' pts') : ''}`}
                   </span>
                 </div>
               ))}

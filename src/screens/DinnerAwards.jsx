@@ -145,7 +145,7 @@ function AwardCard({ award, d, nameOf, readOnly, onNominate, reload, trip }) {
         <div className="row" style={{ gap: 8, padding: 10, borderTop: '1px solid var(--line-soft)' }}>
           {canNominate(award, org) && <button type="button" className="btn ghost sm grow" disabled={busy} onClick={onNominate}>+ Nominate someone</button>}
           {org && (award.status !== 'nominating' || result.rows.length > 0) && (
-            <button type="button" className={`btn sm grow ${step.status === 'closed' ? 'gold' : ''}`} disabled={busy || (step.status === 'voting' && result.rows.length === 0)} onClick={move}>{step.label}</button>
+            <button type="button" className={`btn sm grow ${step.status === 'closed' ? 'gold' : closed ? 'ghost' : ''}`} disabled={busy || (step.status === 'voting' && result.rows.length === 0)} onClick={move}>{step.label}</button>
           )}
         </div>
       )}

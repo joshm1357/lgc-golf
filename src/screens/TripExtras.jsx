@@ -136,8 +136,8 @@ function RepeatSheet({ pd, onClose }) {
         <label className="field"><span>Name</span><input className="input" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} /></label>
         <div style={{ display: 'grid', gridTemplateColumns: plan.kind === 'round' ? '1fr' : '1fr 1fr', gap: 8 }}>
           <label className="field"><span>{plan.kind === 'round' ? 'Date' : 'From'}</span>
-            <input className="input" type="date" value={start} min={todayISO()} onChange={(e) => { const v = e.target.value; if (!v) return; setStart(v); setEnd(shiftDate(v, length)); }} /></label>
-          {plan.kind !== 'round' && <label className="field"><span>to</span><input className="input" type="date" value={end || ''} min={start} onChange={(e) => setEnd(e.target.value)} /></label>}
+            <input className="input" style={{ minWidth: 0 }} type="date" value={start} min={todayISO()} onChange={(e) => { const v = e.target.value; if (!v) return; setStart(v); setEnd(shiftDate(v, length)); }} /></label>
+          {plan.kind !== 'round' && <label className="field"><span>to</span><input className="input" style={{ minWidth: 0 }} type="date" value={end || ''} min={start} onChange={(e) => setEnd(e.target.value)} /></label>}
         </div>
         <div className="card pad stack" style={{ gap: 4 }}>
           <strong>{built.plan.name}</strong>

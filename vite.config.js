@@ -64,6 +64,7 @@ export default defineConfig(({ command, mode }) => {
         },
       },
     },
-    test: { environment: 'node' },
+    // Edge functions' own tests (*.test.ts under supabase/functions) are Deno tests: run them with `deno test`.
+    test: { environment: 'node', exclude: ['**/node_modules/**', 'supabase/functions/**'] },
   };
 });

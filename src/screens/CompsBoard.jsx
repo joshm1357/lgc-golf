@@ -15,6 +15,7 @@ import {
 } from '../lib/comps.js';
 import { pts } from '../lib/cup.js';
 import CompEditor from './CompPicker.jsx';
+import { RulesLink } from '../components/RulesLinks.jsx';
 
 /**
  * Everything compStandings / compNeeds need for a trip. scores: false skips the scores (the to-do list doesn't need
@@ -178,6 +179,7 @@ export function CompCard({ comp, data, admin, open: startOpen = false, onEdit, o
         <div className="stack" style={{ padding: '0 14px 14px', gap: 10 }}>
           <CompStandingsView comp={comp} st={st} data={data} limit={8} />
           {st.note && <div className="small muted">{st.note}</div>}
+          <div><RulesLink value={`comp:${comp.id}`} /></div>
           {admin && needs.length > 0 && (
             <>
               <span className="label">To do</span>

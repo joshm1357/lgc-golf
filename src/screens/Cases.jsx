@@ -10,6 +10,7 @@ import { isBlocked } from '../lib/injokes.js';
 import { useRun, must } from '../lib/run.js';
 import { Header, Avatar, Icon, Sheet, PhotoButtons, timeAgo, toast, Loading } from '../components/ui.jsx';
 import SharePicture from '../components/SharePicture.jsx';
+import { VerdictToRulebook } from '../components/RuleLayers.jsx';
 import {
   KIND, DECIDES, EFFECT, PRESETS, decidesFor, effectiveSettings, settingsProblems, electorate, evaluate, tally, canRaise,
   canVote, canDecide, canApproveMidTrip, verdictWord, verdictLine, voteWords, closesIn, ruleLine, applyWords, termStatus,
@@ -460,6 +461,7 @@ function Verdict({ c, g, subject, nextTrip, shareOn }) {
           toast(r === 'applied' ? 'In force now' : 'Starts from the next round');
         })}>Approve: start it mid-trip (from the next round)</button>
       )}
+      <VerdictToRulebook c={c} />
       {shareOn && c.status !== 'withdrawn' && (
         <SharePicture label="🖼️ Share the verdict" kind="case"
           data={{ case: c, subject: subject ? playerName(subject) : '', tally: c.votes_for != null ? `${c.votes_for}–${c.votes_against}` : '' }}

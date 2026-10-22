@@ -1,0 +1,21 @@
+Expected (staging, after 082). Run 22 Oct 2026 — matches. The value is read by the server (the app sent 99); the
+other group's trip id in "where" is dropped.
+
+member raises a dispute = ruling / setting / value 2 / 1 stroke / where {"path": "/comps?r=1", "round_id": "00000000-0000-4000-8000-0000000d0c03"}
+same person, same thing again = refused
+a field that isn't a rule (round name) = refused
+a score = refused
+setting linked to a Rulebook rule = 00000000-0000-4000-8000-0000000d0c04
+member writes a case directly = refused
+member changes a dispute directly = refused
+another player, same setting = ok
+the rule while it already has an open case = refused
+a standard rule = standard / Ties: last round, then countback
+guest raises a dispute = refused
+guest can read the disputes = 4
+other group disputes D's round = refused
+other group with D's header = refused
+other group reads D's disputes = 0
+tribunal off = refused
+setting unchanged by disputes (comp bonus) = 2
+open disputes in D = 4

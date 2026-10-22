@@ -56,6 +56,11 @@ img { max-width: 100%; }
 .chips::-webkit-scrollbar { display: none; }
 .chip { flex: none; min-height: 38px; padding: 0 14px; border-radius: 999px; border: 1px solid #B9C2CC; background: #fff; font-size: 14px; font-weight: 600; white-space: nowrap; }
 .chip[aria-pressed="true"] { background: var(--navy); border-color: var(--navy); color: #fff; }
+/* A rule you can tap (RuleTag): looks like normal text with a faint dotted underline; a bigger hit area. */
+.rule-tag { all: unset; display: inline; cursor: pointer; font: inherit; color: inherit; text-decoration: underline dotted; text-decoration-color: rgba(0, 0, 0, .35); text-underline-offset: 3px; padding: 6px 0; margin: -6px 0; -webkit-tap-highlight-color: rgba(0, 0, 0, .08); }
+.rule-tag:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; border-radius: 4px; }
+.rule-tag.disputed { text-decoration-color: var(--gold); }
+.rule-tag-flag { font-size: .85em; }
 
 /* Cards & lists */
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; }

@@ -936,3 +936,21 @@ screen, "Viewing as Mike · read only", and Stop.
 - **Tested:** Deno `import.test.ts` 8 (55 in the folder); Vitest `aiimport.test.js` 22; `ai-import-test.mjs` 35 checks;
   staging SQL checks (organiser adds / re-run skips / player and other group refused / voting group → proposed;
   empty-Rulebook voting group → in force; guard back on afterwards). ai-helper v4 deployed to staging and boot-checked.
+
+## ov8 — Dispute anything that's a rule, branch `ov8-dispute`, 22 Oct 2026
+- **What:** `<RuleTag>` (`src/components/RuleTag.jsx`, logic in `src/lib/disputes.js`): a rule value shows as normal
+  text with a faint dotted underline. Tap → what it says, where it's from (Rulebook rule / round / comp / game setting,
+  value now), "See it in the Rulebook", and "⚖️ Dispute this" → the Tribunal's raise sheet, filled in (a `ruling` case).
+  ⚖️ on the chip while a case about it is open; "You've already raised this — see the case"; guests and Tribunal-off
+  get the explanation only. The case page shows what was disputed and its value when raised.
+- **Where:** side comp "Worth 2 strokes", today's rules (leaderboard), Ambrose team handicap (scorecard), minimum
+  drives (score entry), game stakes, Cup match points and handicaps, Cup "to win", comp "how it's decided", the
+  Stableford tie-break (countback), own side comps' "how it's won". Rulebook rules (fines, trophy rules) already had
+  "Challenge this rule".
+- **Migration 082** (staging only): `cases.subject_kind` / `subject_ref` (nullable, checked), one-open-dispute-per-
+  person index, `raise_dispute()` (members, not guests; tribunal + rule challenges on; fixed list of tables/fields;
+  the value is read by the server). No new way to change a setting: a verdict goes through `apply_verdict_draft`
+  (organiser-checked) or an organiser changes the setting where it's set.
+- **Tested:** Vitest `disputes.test.js` 17 (1032 in all); `supabase/tests/082_rule_disputes.sql` 18 checks (rolled
+  back); `dispute-test.mjs` 23; rulebook-v2/v3, governance, games, cup, comps, own-comps, stroke, fourball, stats pass.
+  `rulebook-test`, `phone-test`, `trip-overview-test` time out on wave2-all as well (not from this branch).

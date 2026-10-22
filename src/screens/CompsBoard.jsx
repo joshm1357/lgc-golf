@@ -16,6 +16,8 @@ import {
 import { pts } from '../lib/cup.js';
 import CompEditor from './CompPicker.jsx';
 import { RulesLink } from '../components/RulesLinks.jsx';
+import RuleTag from '../components/RuleTag.jsx';
+import { isDisputable } from '../lib/disputes.js';
 
 /**
  * Everything compStandings / compNeeds need for a trip. scores: false skips the scores (the to-do list doesn't need
@@ -178,7 +180,10 @@ export function CompCard({ comp, data, admin, open: startOpen = false, onEdit, o
       {open && (
         <div className="stack" style={{ padding: '0 14px 14px', gap: 10 }}>
           <CompStandingsView comp={comp} st={st} data={data} limit={8} />
-          {st.note && <div className="small muted">{st.note}</div>}
+          {st.note && <div className="small muted"><RuleTag testId="comp-rules" rule={isDisputable({ table: 'comps', id: comp.id, field: 'settings' })
+            ? { table: 'comps', id: comp.id, field: 'settings', label: `${comp.name}: how it’s decided`, value: comp.settings || {}, where: { comp_id: comp.id, trip_id: comp.trip_id, path: `/comps-board?c=${comp.id}` } }
+            : { table: 'standard', field: 'rule', key: `comp.${comp.kind}`, label: `${comp.name}: how it’s decided`, value: st.note, where: { path: '/comps-board' } }}
+            explain={st.note}>{st.note}</RuleTag></div>}
           <div><RulesLink value={`comp:${comp.id}`} /></div>
           {admin && needs.length > 0 && (
             <>

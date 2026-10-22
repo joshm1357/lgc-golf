@@ -16,6 +16,8 @@ import {
   canVote, canDecide, canApproveMidTrip, verdictWord, verdictLine, voteWords, closesIn, ruleLine, applyWords, termStatus,
   termLabel, challengeBlock, sydneyDate,
 } from '../lib/governance.js';
+import { disputeTitle, refForServer, valueWords, SOURCE, subjectLine } from '../lib/disputes.js';
+import { refreshDisputes } from '../components/RuleTag.jsx';
 
 const KIND_EMOJI = { new_rule: '📜', change_rule: '✏️', scrap_rule: '🗑️', ruling: '🔎', handicap: '⛳', other: '👔', election: '🪑', governance: '🏛️' };
 const SETTINGS_KINDS = ['new_rule', 'change_rule', 'scrap_rule', 'ruling', 'handicap', 'other', 'election', 'governance'];
@@ -123,7 +125,54 @@ export function useRaisableKinds(g) {
     .filter((k) => on(k) && canRaise({ role: status.role, settings: g.settings[k] }));
 }
 
-export function RaiseCase({ g, onClose, kind: initialKind, rule: initialRule, onHandicap }) {
+/** Raise a case. With `dispute` (a RuleTag's reference, migration 082) it's a dispute about that rule or setting. */
+export function RaiseCase(props) {
+  if (props.dispute) return <RaiseDispute {...props} />;
+  return <RaiseCaseForm {...props} />;
+}
+
+// A dispute: a ruling case about one rule or setting, filled in from where it was tapped.
+function RaiseDispute({ g, dispute, onClose }) {
+  const nav = useNavigate();
+  const [title, setTitle] = useState(() => disputeTitle(dispute.label));
+  const [body, setBody] = useState('');
+  const [suggest, setSuggest] = useState('');
+  const [file, setFile] = useState(null);
+  const [busy, run] = useRun();
+  const blocked = isBlocked([title, body, suggest].join(' '));
+  const ok = !blocked && title.trim().length >= 3;
+  const submit = () => run(async () => {
+    const url = file ? await uploadPhoto(file, 'tribunal') : null;
+    const id = await must(supabase.rpc('raise_dispute', {
+      p_ref: refForServer(dispute), p_title: title.trim(), p_body: body.trim() || null, p_suggest: suggest.trim() || null, p_evidence_url: url,
+    }));
+    g.reload();
+    refreshDisputes();
+    onClose();
+    nav(`/tribunal/case/${id}`);
+  }, 'Dispute raised');
+  return (
+    <Sheet title="Dispute this" onClose={onClose}>
+      <div className="stack" data-testid="raise-dispute">
+        <div className="card pad small stack" style={{ gap: 4 }} data-testid="dispute-subject">
+          <span className="muted">{SOURCE[dispute.table] || 'Setting'}{dispute.table !== 'standard' && dispute.value !== undefined ? ` · now: ${valueWords(dispute.value)}` : ''}</span>
+          <strong>{dispute.label}</strong>
+          {dispute.explain && <span className="muted">{dispute.explain}</span>}
+        </div>
+        <label className="field"><span>The question</span><input className="input" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={140} /></label>
+        <label className="field"><span>What it should be (optional)</span><input className="input" value={suggest} onChange={(e) => setSuggest(e.target.value)} maxLength={300} placeholder="e.g. 1 stroke, not 2" /></label>
+        <label className="field"><span>Why (optional)</span><textarea className="textarea" value={body} onChange={(e) => setBody(e.target.value)} maxLength={2000} placeholder="Too much for one lucky shot" /></label>
+        <span className="label">Evidence (optional)</span>
+        <PhotoButtons onPick={setFile} picked={!!file} cameraLabel={file ? 'Retake' : 'Take a photo'} />
+        {blocked && <div className="small" role="alert" style={{ color: 'var(--under)' }}>{KEEP_FRIENDLY}</div>}
+        <div className="small muted">How it’s decided: {ruleLine('ruling', g.settings.ruling || {}, g.committees)}. Nothing changes until the verdict — then an organiser makes the change.</div>
+        <button type="button" className="btn gold block" disabled={busy || !ok} onClick={submit}>{busy ? 'Raising…' : 'Raise the dispute'}</button>
+      </div>
+    </Sheet>
+  );
+}
+
+function RaiseCaseForm({ g, onClose, kind: initialKind, rule: initialRule, onHandicap }) {
   const data = useData();
   const { status } = useSession();
   const nav = useNavigate();
@@ -305,6 +354,7 @@ export function CaseHearing() {
           {c.kind === 'ruling' && <div style={{ fontWeight: 700, fontSize: 17 }}>{c.title}</div>}
           {c.body && <div style={{ fontSize: 16, lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>{c.body}</div>}
           <Proposal c={c} rule={rule} g={g} />
+          <DisputedThing c={c} organiser={status.role === 'organiser'} />
           {c.penalty && <div className="small"><strong>Penalty if guilty:</strong> {c.penalty} <span className="muted">(words only — no money moves)</span></div>}
           {c.evidence_url && <img src={c.evidence_url} alt="Evidence" style={{ width: '100%', borderRadius: 10, marginTop: 6 }} />}
           {post && <Link to="/feed" className="card pad small" style={{ color: 'inherit' }}>📎 From the feed: {(post.body || 'a photo').slice(0, 120)}{post.photo_url ? <img src={post.photo_url} alt="" style={{ width: '100%', borderRadius: 8, marginTop: 6 }} /> : null}</Link>}
@@ -334,6 +384,27 @@ export function CaseHearing() {
         </div>
         <CaseActions c={c} g={g} />
       </div>
+    </div>
+  );
+}
+
+// A dispute (082): what was disputed, its value when raised, and where it was seen. A verdict never changes a setting
+// by itself: an organiser changes it where it's set (or writes the verdict into the Rulebook, organiser-checked).
+function DisputedThing({ c, organiser }) {
+  const s = subjectLine(c);
+  if (!s) return null;
+  return (
+    <div className="card pad small stack" style={{ gap: 4 }} data-testid="disputed-thing">
+      <span className="muted">⚖️ Disputed · {s.source}</span>
+      <strong>{s.label}</strong>
+      <span>Value when raised: <strong>{s.value}</strong></span>
+      <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
+        {s.path && <Link to={s.path}>Where it was seen →</Link>}
+        {s.ruleId && !c.rule_id && <Link to={`/rules/${s.ruleId}`}>The rule →</Link>}
+      </div>
+      {c.status === 'passed' && organiser && c.subject_kind === 'setting' && (
+        <span className="muted">The verdict doesn’t change the setting by itself — if it should change, change it where it’s set.</span>
+      )}
     </div>
   );
 }

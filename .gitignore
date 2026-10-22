@@ -10,3 +10,5 @@ dist
 dist-flags/
 shots-*/
 shots/
+nav-shots/
+*-shots/

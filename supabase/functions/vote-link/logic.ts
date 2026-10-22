@@ -63,12 +63,12 @@ export async function handle(input: unknown, d: Deps): Promise<Reply> {
     if (!o || !poll) return no(403, 'That answer isn’t part of your vote.', base);
     if (poll.status !== 'open') return no(410, 'This vote has closed.', { closed: true, ...base });
     const r = poll.choice === 'single' ? 'yes' : String(body.r || '');
-    if (!(r in ANSWERS)) return no(400, 'Pick ✓ Can, ? Maybe or ✗ Can’t.', base);
+    if (!Object.hasOwn(ANSWERS, String(r))) return no(400, 'Pick ✓ Can, ? Maybe or ✗ Can’t.', base);
     await d.saveVote({ group_id: row.group_id, poll_id: poll.id, option_id: o.id, player_id: row.player_id, response: r });
     if (poll.choice === 'single') await d.clearOtherVotes(poll.id, row.player_id, o.id);
     recorded = { kind: 'vote', poll: poll.id, option: o.id, label: o.label, response: r };
   } else if (typeof body.rsvp === 'string') {
-    if (!(body.rsvp in RSVP_ANSWERS)) return no(400, 'Pick keen, maybe or out.', base);
+    if (!Object.hasOwn(RSVP_ANSWERS, String(body.rsvp))) return no(400, 'Pick keen, maybe or out.', base);
     if (!rsvpAsk || !openPolls.length) return no(410, 'The list for this trip is locked — ask the organiser.', { closed: !openPolls.length, ...base });
     await d.saveRsvp({ group_id: row.group_id, plan_id: plan.id, player_id: row.player_id, status: body.rsvp });
     recorded = { kind: 'rsvp', response: body.rsvp };

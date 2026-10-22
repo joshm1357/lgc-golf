@@ -90,7 +90,9 @@ export function abSetup(get: (k: string) => string | undefined, a: AiConfig | nu
   const baseUrl = (s('AI_BASE_URL_B') || (provider === a.provider ? a.baseUrl : provider === 'anthropic' ? ANTHROPIC_BASE : '')).replace(/\/+$/, '');
   if (!baseUrl) return { ...out, reason: 'AI_BASE_URL_B is not set' };
   if (!/^https:\/\/[^\s/]+/i.test(baseUrl)) return { ...out, reason: 'AI_BASE_URL_B must start with https://' };
-  const apiKey = s('AI_API_KEY_B') || a.apiKey;
+  // A's key only goes to A's own host (release review): a different host needs AI_API_KEY_B.
+  const apiKey = s('AI_API_KEY_B') || (baseUrl === a.baseUrl ? a.apiKey : '');
+  if (!apiKey) return { ...out, reason: 'AI_BASE_URL_B is a different host — set AI_API_KEY_B for it' };
   const splitRaw = num(get('AI_AB_SPLIT'));
   const split = splitRaw == null ? 50 : Math.min(100, Math.round(splitRaw));
   return { ...out, b: { provider, baseUrl, apiKey, model, caps: a.caps }, split };

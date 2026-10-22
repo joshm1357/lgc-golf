@@ -48,8 +48,10 @@ create index if not exists vote_emails_player_idx on public.vote_emails (player_
 create index if not exists vote_emails_user_idx on public.vote_emails (user_id);
 alter table public.vote_emails enable row level security;
 -- Only the person themselves reads their row (and the server). Changes go through the functions below.
+-- Release review B2: your own address only by your sign-in (not by the player name, which someone else could take over
+-- later); an address an organiser typed in is readable by whoever now has that player name.
 create policy "my email" on public.vote_emails for select
-  using (player_id = private.my_player_id(group_id));
+  using (user_id = auth.uid() or (source = 'invited' and player_id = private.my_player_id(group_id)));
 create policy "same group only" on public.vote_emails as restrictive for all
   using (group_id = any ((select private.my_group_ids())::uuid[]))
   with check (group_id = any ((select private.my_group_ids())::uuid[]));
@@ -71,7 +73,8 @@ begin
            (select np.vote_channel from public.notify_prefs np where np.group_id = v_g and np.user_id = auth.uid()),
            (select g.vote_channel from public.groups g where g.id = v_g)
     from (select 1) one
-    left join public.vote_emails e on e.group_id = v_g and e.player_id = v_p and v_p is not null;
+    left join public.vote_emails e on e.group_id = v_g and e.player_id = v_p and v_p is not null
+                                   and (e.user_id = auth.uid() or e.source = 'invited');
 end $$;
 revoke all on function public.my_vote_email() from public, anon;
 grant execute on function public.my_vote_email() to authenticated;
@@ -182,5 +185,21 @@ end $$;
 revoke all on function private.plan_votes_via() from public, anon, authenticated;
 create or replace trigger ac_plan_votes_via before insert or update on public.plan_votes
   for each row execute function private.plan_votes_via();
+
+
+-- Release review B2: when someone leaves (or their player name moves to another sign-in), their own address is wiped,
+-- so it's never shown to, or used to email, whoever takes the name over.
+create or replace function private.vote_email_on_leave() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  if old.player_id is not null and (tg_op = 'DELETE' or new.player_id is distinct from old.player_id or new.user_id is distinct from old.user_id) then
+    update public.vote_emails set email = null
+     where group_id = old.group_id and player_id = old.player_id and source = 'own' and user_id is not distinct from old.user_id;
+  end if;
+  return coalesce(new, old);
+end $$;
+revoke all on function private.vote_email_on_leave() from public, anon, authenticated;
+create trigger zz_vote_email_on_leave after delete or update on public.group_members
+  for each row execute function private.vote_email_on_leave();
 
 select private.add_same_group_checks();

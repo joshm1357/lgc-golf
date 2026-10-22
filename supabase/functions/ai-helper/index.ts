@@ -270,7 +270,7 @@ Deno.serve(async (req) => {
     // "Bring your history" (import.ts): text and photos read into a proposal the organiser confirms in the app.
     if (body.mode === 'import') return json(await importRequest(body, { ...makeDeps(db, status.group_id, who.user.id, status), visionModel: Deno.env.get('AI_VISION_MODEL') || null }));
     if (body.mode === 'course_lookup') return json(await coursebookRequest(body, coursebookDeps(makeDeps(db, status.group_id, who.user.id, status), db))); // "✨ Look it up" in the trip builder (coursebook.ts)
-    if (/^rules_/.test(String(body.mode))) return json(await rulesRequest(body, rulesDeps(makeDeps(db, status.group_id, who.user.id, status), db))); // The Rulebook's AI jobs (rules.ts)
+    if (/^rules_/.test(String(body.mode))) return json(await rulesRequest(body, rulesDeps(makeDeps(db, status.group_id, who.user.id, status), db, status.group_id))); // The Rulebook's AI jobs (rules.ts)
     return json(await helperRequest(body, makeDeps(db, status.group_id, who.user.id, status)));
   } catch (e) {
     console.error('ai-helper failed:', errorKind(e)); // only the kind of error: never values, text or keys

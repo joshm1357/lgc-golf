@@ -186,11 +186,13 @@ begin
       category = case when p ? 'category' and p->>'category' in ('format','side_comp','bonus','handicap','etiquette','fines','other') then p->>'category' else category end,
       applies_to = case when jsonb_typeof(p->'applies_to') = 'array' and jsonb_array_length(p->'applies_to') > 0
                         then array(select jsonb_array_elements_text(p->'applies_to')) else applies_to end,
-      scope_kind = case when p ? 'scope_kind' then nullif(p->>'scope_kind', '') else scope_kind end,
-      scope_id = case when p ? 'scope_kind' then nullif(p->>'scope_id', '')::uuid else scope_id end,
-      scope_key = case when p ? 'scope_kind' then nullif(p->>'scope_key', '') else scope_key end,
-      overrides = case when p ? 'overrides' then nullif(p->>'overrides', '') else overrides end,
-      overrides_rule = case when p ? 'overrides_rule' then nullif(p->>'overrides_rule', '')::uuid else overrides_rule end,
+      -- Scope and overrides only from a draft an organiser checked (apply_verdict_draft validates it and sets
+      -- draft_applied_at), never straight from whoever raised the case (release review B1).
+      scope_kind = case when p ? 'draft_applied_at' and p ? 'scope_kind' then nullif(p->>'scope_kind', '') else scope_kind end,
+      scope_id = case when p ? 'draft_applied_at' and p ? 'scope_kind' then nullif(p->>'scope_id', '')::uuid else scope_id end,
+      scope_key = case when p ? 'draft_applied_at' and p ? 'scope_kind' then nullif(p->>'scope_key', '') else scope_key end,
+      overrides = case when p ? 'draft_applied_at' and p ? 'overrides' then nullif(p->>'overrides', '') else overrides end,
+      overrides_rule = case when p ? 'draft_applied_at' and p ? 'overrides_rule' then nullif(p->>'overrides_rule', '')::uuid else overrides_rule end,
       decision_note = 'Changed by the Tribunal ' || v_tally || '.'
     where id = c.rule_id and status = 'active';
   elsif c.kind = 'scrap_rule' then
@@ -300,5 +302,20 @@ end $$;
 revoke all on function public.apply_verdict_draft(uuid, jsonb) from public, anon;
 grant execute on function public.apply_verdict_draft(uuid, jsonb) to authenticated;
 revoke execute on function public.apply_verdict_draft(uuid, jsonb) from service_role;
+
+-- Release review B1: a raised case can't carry the keys only a checked verdict draft may set (scope, overrides, the
+-- draft marker). Stripped whenever a case is created, whoever creates it.
+create or replace function private.cases_strip_draft_keys() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  if new.proposal is not null and jsonb_typeof(new.proposal) = 'object' then
+    new.proposal := new.proposal - array['draft_applied_at', 'draft_rule_id', 'draft_by', 'draft_ai',
+                                         'scope_kind', 'scope_id', 'scope_key', 'overrides', 'overrides_rule'];
+  end if;
+  return new;
+end $$;
+revoke all on function private.cases_strip_draft_keys() from public, anon, authenticated;
+create trigger aa_cases_strip_draft_keys before insert on public.cases
+  for each row execute function private.cases_strip_draft_keys();
 
 select private.add_same_group_checks();

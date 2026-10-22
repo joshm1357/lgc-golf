@@ -49,7 +49,7 @@ const deps: Deps = {
   },
   async featureOn(g, key) {
     const { data, error } = await db.rpc('feature_on', { p_group: g, p_key: key });
-    return error ? true : data !== false;
+    return error ? false : data === true; // fail closed (release review)
   },
   async saveVote(v) {
     must(await db.from('plan_votes').upsert({ ...v, via: 'email', updated_at: new Date().toISOString() }, { onConflict: 'option_id,player_id' }));

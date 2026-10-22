@@ -314,7 +314,9 @@ export async function rulesRequest(body: Any, d: RulesDeps): Promise<Record<stri
 // ------------------------------------------------------------------ the database side (the person's own sign-in)
 
 // deno-lint-ignore no-explicit-any
-export function rulesDeps(base: Any, db: any): RulesDeps {
+export function rulesDeps(base: Any, db: any, g?: string): RulesDeps {
+  // Every read is scoped to the group asked about (RLS alone would also return the person's other groups).
+  const inG = (q: Any) => (g ? q.eq('group_id', g) : q);
   const rows = async (q: PromiseLike<{ data: Any; error: unknown }>) => {
     const { data, error } = await q;
     if (error) throw new Error('Database error');
@@ -324,17 +326,17 @@ export function rulesDeps(base: Any, db: any): RulesDeps {
     ...base,
     loadGroup: async () => {
       const [rules, comps, trophies, customGames, games, sideDefs] = await Promise.all([
-        rows(db.from('rules').select('id,title,detail,value,status,category,scope_kind,scope_id,scope_key,overrides,overrides_rule').in('status', ['active', 'proposed']).order('sort').limit(RULES_LIMITS.rules)),
-        rows(db.from('comps').select('id,name,retired')),
-        rows(db.from('trophies').select('id,name')),
-        db.from('custom_games').select('id,name,base_type,retired').then((r: Any) => r.data || [], () => []),
-        db.from('round_games').select('id,kind').then((r: Any) => r.data || [], () => []),
-        db.from('side_comp_defs').select('id,name,retired').then((r: Any) => r.data || [], () => []),
+        rows(inG(db.from('rules').select('id,title,detail,value,status,category,scope_kind,scope_id,scope_key,overrides,overrides_rule')).in('status', ['active', 'proposed']).order('sort').limit(RULES_LIMITS.rules)),
+        rows(inG(db.from('comps').select('id,name,retired')).limit(200)),
+        rows(inG(db.from('trophies').select('id,name')).limit(200)),
+        inG(db.from('custom_games').select('id,name,base_type,retired')).limit(200).then((r: Any) => r.data || [], () => []),
+        inG(db.from('round_games').select('id,kind')).limit(300).then((r: Any) => r.data || [], () => []),
+        inG(db.from('side_comp_defs').select('id,name,retired')).limit(200).then((r: Any) => r.data || [], () => []),
       ]);
       return { rules, comps, trophies, customGames, games, sideDefs } as GroupRules;
     },
     loadCase: async (id: string) => {
-      const { data } = await db.from('cases').select('id,kind,title,body,rule_id,proposal,status,verdict,votes_for,votes_against,apply_state').eq('id', id).maybeSingle();
+      const { data } = await inG(db.from('cases').select('id,kind,title,body,rule_id,proposal,status,verdict,votes_for,votes_against,apply_state').eq('id', id)).maybeSingle();
       return data || null;
     },
   };

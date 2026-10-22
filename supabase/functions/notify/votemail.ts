@@ -34,6 +34,8 @@ export async function routing(db: Db, g: string) {
 
 /** Users who chose email only (with an address): they don't get the app notification for votes. */
 export async function emailOnlyUsers(db: Db, g: string) {
+  // Email isn't set up (no Resend key / sender): everyone keeps the app notification (release review).
+  if (!Deno.env.get('RESEND_API_KEY') || !Deno.env.get('EMAIL_FROM')) return new Set<string>();
   const r = await routing(db, g);
   if (!r.ready) return new Set<string>();
   return new Set(planVoteSends(r).emailOnlyUsers as string[]);

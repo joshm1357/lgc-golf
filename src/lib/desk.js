@@ -1,6 +1,7 @@
-// The Trip desk (Stage 11c, full desktop): the organiser's home on a laptop — one screen per trip with a panel for
-// each part of organising it. These pure functions work out what each panel says and its obvious next step, plus
-// the table helpers (sort, filter) and the costs CSV. Tested in desk.test.js; the screen is screens/Desk.jsx.
+// The organiser's panels on a laptop (Stage 11c, full desktop; folded into Trips → Organise on 22 Oct): a panel for
+// each part of organising a trip. These pure functions work out what each panel says and its obvious next step, plus
+// the table helpers (sort, filter), the costs CSV and where the old /desk addresses go now. Tested in desk.test.js;
+// the panels are screens/OrganisePanels.jsx.
 import { tallyPoll, nonVoters, kitty, countdown, fmtRange, todayISO, money } from './plan.js';
 import { sortTrips, tripStage, canDecide } from './trips.js';
 
@@ -164,6 +165,48 @@ export function costsCsv({ plan, costs = [], payments = [], transfers = [], inId
 export function csvName(name, what = 'costs') {
   const slug = String(name || 'trip').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'trip';
   return `${slug}-${what}.csv`;
+}
+
+// ------------------------------------------------------------------ Where the desk tools live now (22 Oct)
+// Josh: "Why is there still a Trip desk if there is Trips?" The Trip desk folded into the places things belong:
+// the trip panels are the laptop layout of Trips → a trip → Organise; the players table is in Group & invites; the
+// scorecard paste is on Courses; paper cards, Present and Print are on each round. Old /desk links still work.
+
+export const TOOL = {
+  organise: (planId) => `/plan/${planId}?view=organise`,
+  players: '/group/players',
+  coursePaste: '/courses/paste',
+  cards: '/cards',
+  card: (roundId) => `/round/${roundId}/cards`,
+  present: (roundId) => (roundId ? `/round/${roundId}/present` : '/present'),
+  print: (roundId) => `/round/${roundId}/print`,
+};
+
+/**
+ * An old /desk… address → its new home. Returns null for /desk itself (and anything not recognised): that one
+ * opens the Organise view of the trip that matters now (pickDeskPlan), or Trips if there isn't one.
+ */
+export function deskForward(pathname = '') {
+  const seg = String(pathname).split(/[?#]/)[0].split('/').filter(Boolean);
+  if (seg[0] !== 'desk') return null;
+  const [, what, id] = seg;
+  if (what === 'trip' && id) return TOOL.organise(id);
+  if (what === 'players') return TOOL.players;
+  if (what === 'courses') return TOOL.coursePaste;
+  if (what === 'cards') return TOOL.cards;
+  if (what === 'card' && id) return TOOL.card(id);
+  if (what === 'present') return TOOL.present(id);
+  if (what === 'print' && id) return TOOL.print(id);
+  return null;
+}
+
+/** Where a tool's back bar goes (screens/DeskNav.jsx), from its address. */
+export function toolHome(pathname = '') {
+  if (pathname.startsWith('/group/')) return { to: '/group', label: 'Group & invites' };
+  if (pathname.startsWith('/courses/')) return { to: '/courses', label: 'Courses' };
+  const m = pathname.match(/^\/round\/([^/]+)\//);
+  if (m) return { to: `/?r=${m[1]}`, label: 'Leaderboard' };
+  return { to: '/', label: 'Leaderboard' };
 }
 
 export { money };

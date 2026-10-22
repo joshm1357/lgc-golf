@@ -18,11 +18,15 @@ import { NEW_GROUPS } from '../lib/beta.js';
 import ForgetJokes from '../components/ForgetJokes.jsx';
 import { GovernanceLink } from './Cases.jsx';
 import { GroupVoteEmailCard } from '../components/VoteEmail.jsx';
+import { Link } from 'react-router-dom';
+import { GroupTabs } from './DeskNav.jsx';
+import { TOOL } from '../lib/desk.js';
 
 export default function Group() {
   const { status } = useSession();
   return (
     <div className="page">
+      <GroupTabs deskOnly />
       <Header back title="Group & invites" sub={status.group_name} />
       <div className="section stack">
         <MyGroups />
@@ -31,6 +35,7 @@ export default function Group() {
         {status.is_admin && <InviteCard role="guest" />}
         {status.is_admin && SIGN_IN.length > 0 && <PersonalLinksCard />}
         {status.is_admin && <Members />}
+        {status.is_admin && <PlayersTableLink />}
         {status.is_admin && <GroupVoteEmailCard />}
         {status.is_admin && <LookCard />}
         {status.is_admin && <FeaturesCard />}
@@ -42,6 +47,17 @@ export default function Group() {
         {!status.is_admin && <div className="small muted">You’re a {ROLE_LABEL[status.role] || 'member'} here — {ROLE_HELP[status.role] || ''} Ask an organiser for an invite link to bring someone in.</div>}
       </div>
     </div>
+  );
+}
+
+/** The players & handicaps table (was on the Trip desk): a tab on a laptop, this link everywhere. */
+function PlayersTableLink() {
+  return (
+    <Link to={TOOL.players} className="card pad row" style={{ gap: 12, textDecoration: 'none', color: 'inherit' }} data-testid="players-table-link">
+      <span style={{ fontSize: 24 }} aria-hidden="true">📋</span>
+      <span className="grow"><strong>Players table</strong><div className="small muted">Everyone’s handicap in a table — sort, filter, change in place, or paste a list.</div></span>
+      <span className="btn sm ghost">Open</span>
+    </Link>
   );
 }
 

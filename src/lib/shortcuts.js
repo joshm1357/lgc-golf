@@ -3,23 +3,24 @@
 //
 //   ?        show the list of shortcuts
 //   /        find a screen or a player
-//   g then t the Trip desk          g then l  the leaderboard
-//   g then p players & handicaps    g then c  paper cards
-//   n        new (a cost on the Trip desk, a player on the players table)
+//   g then t Trips                  g then l  the leaderboard
+//   g then p the players table      g then c  paper cards
+//   n        new (a cost on a trip's Organise view, a player on the players table)
 //   Esc      close whatever is open
 
 export const SHORTCUTS = [
   { keys: ['?'], does: 'Show this list' },
   { keys: ['/'], does: 'Find a screen or a player' },
-  { keys: ['g', 't'], does: 'Go to the Trip desk' },
+  { keys: ['g', 't'], does: 'Go to Trips' },
   { keys: ['g', 'l'], does: 'Go to the leaderboard' },
-  { keys: ['g', 'p'], does: 'Go to players & handicaps' },
+  { keys: ['g', 'p'], does: 'Go to the players table' },
   { keys: ['g', 'c'], does: 'Go to paper cards' },
-  { keys: ['n'], does: 'New — a cost on the Trip desk, a player on the players table' },
+  { keys: ['n'], does: 'New — a cost when organising a trip, a player on the players table' },
   { keys: ['Esc'], does: 'Close whatever is open' },
 ];
 
-const GO = { t: '/desk', l: '/', p: '/desk/players', c: '/desk/cards' };
+// The Trip desk folded into Trips (22 Oct): "g t" opens Trips; the tools have their own homes (lib/desk.js TOOL).
+const GO = { t: '/plan', l: '/', p: '/group/players', c: '/cards' };
 const WAIT = 1500; // ms to press the second key of "g t"
 
 /** Is the keyboard busy typing into something? (Then shortcuts stay out of the way.) */

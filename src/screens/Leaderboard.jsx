@@ -20,6 +20,7 @@ import RoundRecap from '../components/RoundRecap.jsx';
 import { CourseGuideChip } from '../components/CourseGuideLink.jsx';
 import { WeatherChip } from '../components/Weather.jsx';
 import { AskChip } from '../components/AskChip.jsx';
+import { RoundTools } from '../components/RoundTools.jsx';
 
 const DrawSetup = lazyScreen(() => import('../components/DrawSetup.jsx'), 'default', { inline: true });
 
@@ -175,6 +176,7 @@ export default function Leaderboard() {
 
       {status?.quick && <QuickRoundDone round={round} board={board} course={course} />}
       {status?.is_admin && ((tvOn && round.status !== 'locked') || round.tv) && <TvToggle round={round} />}
+      <RoundTools round={round} />
 
       {sideCompsOn && round.status === 'live' && ((round.ctp_holes || []).length > 0 || (round.ld_holes || []).length > 0) && (
         <div className="section">

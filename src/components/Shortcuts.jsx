@@ -1,4 +1,4 @@
-// Stage 11c — keyboard shortcuts on a laptop: "?" shows the list, "/" finds a screen or a player, "g t" the Trip desk,
+// Stage 11c — keyboard shortcuts on a laptop: "?" shows the list, "/" finds a screen or a player, "g t" Trips,
 // "g l" the leaderboard, "n" new, Esc closes. The key handling is in lib/shortcuts.js. Nothing shows on a phone
 // unless a keyboard is used, and shortcuts never fire while typing in a box.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -77,12 +77,11 @@ function Finder({ onClose }) {
   };
   const items = useMemo(() => [
     { label: 'Leaderboard', to: '/', kind: 'Screen', words: ['scores'] },
-    on.planner && { label: 'Trip desk', to: '/desk', kind: 'Screen', words: ['organise', 'costs', 'votes', 'jobs'] },
-    on.planner && { label: 'Trips', to: '/plan', kind: 'Screen' },
-    { label: 'Players & handicaps', to: '/desk/players', kind: 'Screen', words: ['handicap'] },
-    { label: 'Paper cards', to: '/desk/cards', kind: 'Screen', words: ['scorecard', 'enter scores'] },
-    { label: 'Course scorecards', to: '/desk/courses', kind: 'Screen', words: ['course', 'par', 'index'] },
-    { label: 'Present the leaderboard', to: '/desk/present', kind: 'Screen', words: ['tv', 'big screen'] },
+    on.planner && { label: 'Trips', to: '/plan', kind: 'Screen', words: ['organise', 'costs', 'votes', 'jobs', 'trip desk', 'desk'] },
+    { label: 'Players table', to: '/group/players', kind: 'Screen', words: ['handicap', 'players & handicaps'] },
+    { label: 'Paper cards', to: '/cards', kind: 'Screen', words: ['scorecard', 'enter scores'] },
+    { label: 'Paste a scorecard', to: '/courses/paste', kind: 'Screen', words: ['course', 'par', 'index', 'course scorecards'] },
+    { label: 'Present the leaderboard', to: '/present', kind: 'Screen', words: ['tv', 'big screen'] },
     on.feed && { label: 'Feed', to: '/feed', kind: 'Screen' },
     on.comps && { label: 'Side comps', to: '/comps', kind: 'Screen' },
     on.cup && { label: 'The Cup', to: '/cup', kind: 'Screen' },

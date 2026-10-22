@@ -39,18 +39,22 @@ describe('the catalogue', () => {
 
 describe('where it shows and what screen you’re on', () => {
   it('hides on full-screen views only', () => {
-    for (const p of ['/tv/lgc', '/replay/x', '/desk/present/x', '/desk/print/x', '/start', '/join/abc', '/score/x', '/ask']) expect(caddieHidden(p)).toBe(true);
-    for (const p of ['/', '/plan', '/rules', '/admin', '/desk', '/desk/players', '/more', '/trip/x']) expect(caddieHidden(p)).toBe(false);
+    for (const p of ['/tv/lgc', '/replay/x', '/round/x/present', '/round/x/print', '/present', '/desk/present/x', '/desk/print/x', '/start', '/join/abc', '/score/x', '/ask']) expect(caddieHidden(p)).toBe(true);
+    for (const p of ['/', '/plan', '/rules', '/admin', '/desk', '/group/players', '/courses/paste', '/round/x/cards', '/cards', '/more', '/trip/x']) expect(caddieHidden(p)).toBe(false);
   });
-  it('is a panel on a laptop and on the desk', () => {
+  it('is a panel on a laptop and on the laptop tools', () => {
     expect(usesPanel('/', 375)).toBe(false);
     expect(usesPanel('/', 1280)).toBe(true);
     expect(usesPanel('/desk/players', 375)).toBe(true);
+    for (const p of ['/group/players', '/courses/paste', '/cards', '/round/x/cards']) expect(usesPanel(p, 375)).toBe(true);
+    for (const p of ['/group', '/courses', '/plan/x']) expect(usesPanel(p, 375)).toBe(false);
   });
   it('route → context', () => {
     expect(caddieContext('/', '', { round: R })).toEqual({ screen: 'leaderboard', round_id: R });
     expect(caddieContext('/', `?r=${R2}`, { round: R })).toEqual({ screen: 'leaderboard', round_id: R2 });
     expect(caddieContext('/score/' + R)).toEqual({ screen: 'score', round_id: R });
+    expect(caddieContext(`/round/${R}/cards`)).toEqual({ screen: 'leaderboard', round_id: R });
+    expect(caddieContext('/cards', '', { round: R2 })).toEqual({ screen: 'leaderboard', round_id: R2 });
     expect(caddieContext(`/plan/${P}`, '?view=organise&tab=kitty')).toEqual({ screen: 'plan', plan_id: P, view: 'organise', tab: 'kitty' });
     expect(caddieContext('/plan')).toEqual({ screen: 'trips' });
     expect(caddieContext(`/trip/${T}`)).toEqual({ screen: 'trip', trip_id: T });

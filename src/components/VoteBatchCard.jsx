@@ -157,7 +157,7 @@ export function VoteBatchCard({ batch, pd, voterOnly = false }) {
             })}
           </div>
         )}
-        {showing && <OptionDetailsSheet option={showing.option} detail={showing.detail} onClose={() => setShowing(null)} />}
+        {showing && <OptionDetailsSheet option={showing.option} detail={showing.detail} st={st} onClose={() => setShowing(null)} />}
         {batch.keen && (
           <div className="card pad stack" data-testid="vote-batch-keen" style={{ gap: 8 }}>
             <div className="small muted" style={{ fontWeight: 800 }}>{sections} of {sections}</div>

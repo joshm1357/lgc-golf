@@ -7,10 +7,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
 import { useSession, useData, useFeature, useRealtime, playerName } from '../lib/store.jsx';
-import { Header, Loading, Sheet, Seg, toast } from '../components/ui.jsx';
+import { Header, Loading, Seg, toast } from '../components/ui.jsx';
 import { useRun, must } from '../lib/run.js';
 import { notify } from '../lib/push.js';
-import { currentGroup } from '../lib/group.js';
 import { usePlanData } from './Planner.jsx';
 import { TripSetupCard } from './TripSetup.jsx';
 import BuilderMap from '../components/BuilderMap.jsx';
@@ -25,7 +24,7 @@ import { CallVoteSheet, callBatch } from '../components/CallVote.jsx';
 import { CallsWho, CourseCall, BestPerDay, TeeGridTable, useSocialTimes } from '../components/TeeCalls.jsx';
 import { windowDates, slotsFor } from '../lib/teegrid.js';
 import { extrasSection } from '../lib/extras.js';
-import { useCourseResearch, AboutForGroups } from '../components/CourseResearch.jsx';
+import { useCourseResearch } from '../components/CourseResearch.jsx';
 import { shortFacts } from '../lib/courseresearch.js';
 // ov23: areas bar, every weekend in the window, how long, stays in step 2, the vote's results, primary / backup.
 import AreaBar, { useRegionGuides } from '../components/AreaBar.jsx';
@@ -35,6 +34,9 @@ import AreaVoteResults from '../components/AreaVoteResults.jsx';
 import { chooseAreaFromVotes, reopenArea, courseSummary, staySummary, areaSummary, regionNote } from '../lib/areavote.js';
 import { tripHeadcount, settlePrimaryBackup, openUpWeekend, makePrimary, weekendRole, rolesLine, lengthSection, leadingNights, resizeWeekend } from '../lib/weekends.js';
 import { detailCounts } from '../lib/callvote.js';
+import { CourseSheet, StaySheet } from '../components/PlaceSheets.jsx';
+import { usePlaceInfo, RowTip } from '../components/PlanMapTools.jsx';
+import { courseTip, stayTip } from '../lib/placeinfo.js';
 
 const STAY_LIMITS = [20, 30, 40, 50, 60];
 const FILTERS = [['notPlayed', 'Not played before'], ['favourites', 'Our favourites'], ['stayPlay', 'Stay & play']];
@@ -68,6 +70,11 @@ export default function TripBuilder() {
   const [batches] = useVoteBatches(planId);
   const [calling, setCalling] = useState(null);
   const [accom, setAccom] = useState([]);
+  // ov22: hover for a quick summary, click for everything (map pins and list rows).
+  const [staySheet, setStaySheet] = useState(null);
+  const pi = usePlaceInfo({ onOpen: (key) => (key.startsWith('c:') ? setOpen({ id: key.slice(2), day: null }) : setStaySheet(key.slice(2))) });
+  const hotCourse = pi.hot.hot?.startsWith('c:') ? pi.hot.hot.slice(2) : null;
+  const hotResearch = useCourseResearch(hotCourse ? [hotCourse] : []);
   const loadAccom = useCallback(async () => {
     const { data: a } = await supabase.from('plan_stays').select('*').eq('plan_id', planId).order('created_at');
     setAccom(a || []);
@@ -332,9 +339,24 @@ export default function TripBuilder() {
   const mapStays = (st.region ? stayChoices : areas.filter((a) => st.regionOptions.includes(a.region)).map((a) => ({ key: a.name, name: a.name, lat: a.lat, lng: a.lng })))
     .map((s) => ({ ...s, on: stays.some((x) => x.key === s.key) }));
   const openCourse = (c) => setOpen({ id: c.id, day: focusDay });
+  // The summary card for a course or a place to stay (ov22).
+  const tipFor = (kind, item) => {
+    if (kind === 'course') {
+      const c = courseMap[item.id] || item;
+      return courseTip({ course: c, research: research[item.id] || hotResearch[item.id], booking: booking[item.id], drive: item.sub || st.info?.[`${focusDay.index}:${item.id}`] || '', facts: c.facts });
+    }
+    return stayTip({ stay: item, courses: mapCourses, ideas: accom.filter((a) => !a.area || a.area === st.region), people: head.people || 0 });
+  };
+  const tipForKey = (key) => {
+    if (!key) return null;
+    if (key.startsWith('c:')) { const id = key.slice(2); const m = mapCourses.find((c) => c.id === id); return tipFor('course', m || courseMap[id] || { id }); }
+    const k = key.slice(2);
+    const sItem = [...mapStays, ...stayChoices].find((x) => (x.key || x.name) === k);
+    return sItem ? tipFor('stay', sItem) : null;
+  };
   const map = (
     <BuilderMap courses={mapCourses} stays={mapStays} origin={org ? origin : null}
-      onCourse={openCourse} onStay={org && st.region ? toggleStay : undefined}
+      onCourse={openCourse} onStay={org && st.region ? toggleStay : undefined} info={pi} tipFor={tipFor}
       onTap={org && addPin === 'tap' ? (p) => { setAddPin(p); setPinName(''); } : undefined} />
   );
 
@@ -424,7 +446,7 @@ export default function TripBuilder() {
           <span className="small muted" style={{ alignSelf: 'center' }}>Stay near:</span>
           {[...suggestions, ...pins].map((s) => {
             const k = s.key || s.name;
-            return <button key={k} type="button" className="chip" aria-pressed={stays.some((x) => x.key === k)} disabled={!org} onClick={() => toggleStay({ key: k, name: s.name, lat: s.lat, lng: s.lng })}>{s.name}{ptsBadge(`stay:${k}`)}</button>;
+            return <button key={k} type="button" className={`chip${pi.isHot(`s:${k}`) ? ' pm-row-hot' : ''}`} {...pi.row(`s:${k}`)} aria-pressed={stays.some((x) => x.key === k)} disabled={!org} onClick={() => toggleStay({ key: k, name: s.name, lat: s.lat, lng: s.lng })}>{s.name}{ptsBadge(`stay:${k}`)}</button>;
           })}
         </div>
       )}
@@ -452,7 +474,7 @@ export default function TripBuilder() {
       {stays.length > 0 && days.map((d) => (
         <DayCard key={d.index} d={d} active={focusDay.index === d.index} onFocus={() => setFocus(d.index)} dates={weekendDates(d.index)}
           cands={focusDay.index === d.index ? cands : []} courseMap={courseMap} info={st.info || {}} org={org} booking={booking} history={history} research={research}
-          votes={TB.dayVotes(points, d.index)} onToggle={(c) => toggleOption(d, c)} onOpen={(id) => setOpen({ id, day: d })} />
+          votes={TB.dayVotes(points, d.index)} onToggle={(c) => toggleOption(d, c)} onOpen={(id) => setOpen({ id, day: d })} pi={pi} />
       ))}
       {/* ov23: where to stay — ideas and search links with the real head count — live here now, not in step 1. */}
       <StayIdeas plan={plan} st={st} save={save} org={org} accom={accom} reloadAccom={loadAccom} head={head} />
@@ -588,13 +610,30 @@ export default function TripBuilder() {
           doCall={(ballot, { closes, keen }) => callBatch({ plan, me, title: calling.title, sections: ballot.sections, keen, closes })}
           onCalled={called} onClose={() => setCalling(null)} />
       )}
-      {open && (
-        <CourseSheet id={open.id} day={open.day} course={courseMap[open.id]} booking={booking[open.id]} research={research[open.id]} history={history(open.id)} org={org} aiOn={aiOn}
-          isOption={open.day?.options?.includes(open.id) || days.find((d) => d.index === open.day?.index)?.options.includes(open.id)}
-          drive={open.day && courseMap[open.id] && stays.length ? TB.legDrive(open.day.leg, courseMap[open.id], { origin, stays }).text : null}
-          onToggle={open.day && org ? () => { toggleOption(days.find((d) => d.index === open.day.index), courseMap[open.id]); setOpen(null); } : null}
-          onClose={() => setOpen(null)} onSaved={loadBooking} />
-      )}
+      {open && (() => {
+        // From a day's row: that day. From the map or a summary card: the day being built.
+        const oday = days.find((d) => d.index === (open.day || focusDay)?.index) || focusDay;
+        const isOption = oday.options.includes(open.id);
+        const dayName = oday.name.replace(/ —.*/, '');
+        return (
+          <CourseSheet id={open.id} course={courseMap[open.id]} booking={booking[open.id]} research={research[open.id] || hotResearch[open.id]} social={social[open.id]}
+            history={history(open.id)} org={org} aiOn={aiOn}
+            drive={courseMap[open.id] && stays.length ? TB.legDrive(oday.leg, courseMap[open.id], { origin, stays }).text : null}
+            toggle={org && current !== 'area' ? { label: isOption ? `Remove from ${dayName}` : `Add to ${dayName}`, onClick: () => { toggleOption(oday, courseMap[open.id]); setOpen(null); } } : null}
+            onClose={() => setOpen(null)} onSaved={loadBooking} />
+        );
+      })()}
+      {staySheet && (() => {
+        const s = [...mapStays, ...stayChoices].find((x) => (x.key || x.name) === staySheet);
+        if (!s) return null;
+        const on = stays.some((x) => x.key === s.key);
+        return (
+          <StaySheet stay={{ ...s, on }} courses={mapCourses} ideas={accom.filter((a) => !a.area || a.area === st.region)} people={need.people || 0} stayMax={st.stayMax}
+            toggle={org && st.region ? { label: on ? `Don’t stay at ${s.name}` : `Stay at ${s.name}`, onClick: () => { toggleStay(s); setStaySheet(null); } } : null}
+            onCourse={(id) => { setStaySheet(null); setOpen({ id, day: null }); }} onClose={() => setStaySheet(null)} />
+        );
+      })()}
+      <RowTip anchor={pi.rowAnchor} tip={pi.rowAnchor ? tipForKey(pi.hot.hot) : null} passive={pi.hot.via === 'hover'} onMore={() => pi.open(pi.hot.hot)} onEnter={pi.hot.hold} onLeave={pi.hot.release} />
     </div>
   );
 }
@@ -604,7 +643,7 @@ function VoteLink({ planId, title }) {
 }
 
 // ---------------------------------------------------------------- one day: its options and suggestions
-function DayCard({ d, active, onFocus, dates, cands, courseMap, info, org, booking, history, votes, onToggle, onOpen, research = {} }) {
+function DayCard({ d, active, onFocus, dates, cands, courseMap, info, org, booking, history, votes, onToggle, onOpen, research = {}, pi }) {
   return (
     <div className="card" data-testid="tb-day" data-leg={d.leg} style={{ overflow: 'hidden', borderColor: active ? 'var(--navy)' : undefined }}>
       <button type="button" onClick={onFocus} className="row between" style={{ width: '100%', padding: '10px 12px', background: active ? 'var(--gold-soft)' : 'none', border: 0, textAlign: 'left', color: 'inherit', font: 'inherit' }}>
@@ -616,9 +655,9 @@ function DayCard({ d, active, onFocus, dates, cands, courseMap, info, org, booki
         if (!c) return null;
         const b = booking[id];
         return (
-          <div key={id} className="tb-course" data-testid="tb-option">
+          <div key={id} className={`tb-course${pi?.isHot(`c:${id}`) ? ' pm-row-hot' : ''}`} data-testid="tb-option" {...(pi ? pi.row(`c:${id}`) : {})}>
             <div style={{ minWidth: 0 }}>
-              <button type="button" className="name" onClick={() => onOpen(id)}>{c.name}</button>
+              <button type="button" className="name" onClick={(e) => (pi ? pi.tapRow(`c:${id}`, e.currentTarget.closest('[data-place]'), () => onOpen(id)) : onOpen(id))}>{c.name}</button>
               {votes[id] > 0 && <span className="tb-chip-pts">{votes[id]} pts</span>}
               <div className="small" data-testid="tb-option-drive">{info[`${d.index}:${id}`] || ''}</div>
               <div className="small muted" data-testid="tb-known">{TB.shortKnown(c, history(id))}{b?.phone ? ` · 📞 ${b.phone}` : b?.booking_url ? ' · books online' : ''}{b?.features?.length ? ` · ${b.features.slice(0, 3).join(', ')}` : ''}</div>
@@ -633,7 +672,7 @@ function DayCard({ d, active, onFocus, dates, cands, courseMap, info, org, booki
           <div className="small muted" style={{ marginBottom: 6 }}>{d.leg === 'stay' ? 'Suggestions near where you stay' : d.leg === 'way' ? 'Suggestions on the way there' : 'Suggestions on the way home'} — tap to add (or tap a pin):</div>
           <div className="tb-chips" data-testid="tb-suggestions">
             {cands.filter((c) => !d.options.includes(c.course.id)).slice(0, 6).map((c) => (
-              <button key={c.course.id} type="button" className="chip" onClick={() => onToggle(c.course)} title={c.why.join(', ')}>
+              <button key={c.course.id} type="button" className={`chip${pi?.isHot(`c:${c.course.id}`) ? ' pm-row-hot' : ''}`} {...(pi ? pi.row(`c:${c.course.id}`) : {})} onClick={() => { pi?.hot.clear(); onToggle(c.course); }} title={c.why.join(', ')}>
                 + {c.course.name} <span className="small muted">· {c.drive.text}</span>
               </button>
             ))}
@@ -665,116 +704,3 @@ function JobOwner({ job, org, reload }) {
     </label>
   );
 }
-
-// ---------------------------------------------------------------- one course: what we know, booking info, look it up
-function CourseSheet({ id, day, course, booking, research, history, org, aiOn, isOption, drive, onToggle, onClose, onSaved }) {
-  const { status } = useSession();
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(null);
-  const [warning, setWarning] = useState('');
-  const [busy, run] = useRun();
-  const [ratePlan, setRatePlan] = useState(null);
-  const [myRating, setMyRating] = useState(null);
-  useEffect(() => {
-    const tripId = history.last?.id;
-    if (!tripId) return;
-    supabase.from('plans').select('id').eq('trip_id', tripId).maybeSingle().then(({ data }) => setRatePlan(data?.id || null), () => {});
-  }, [history.last?.id]);
-  if (!course) return null;
-  const facts = course.facts || {};
-  const lookUp = () => run(async () => {
-    const { data, error } = await supabase.functions.invoke('ai-helper', { body: { mode: 'course_lookup', course_id: id, group_id: currentGroup() || undefined } });
-    if (error) throw new Error('Couldn’t reach the AI helper — try again');
-    if (data?.error) { setWarning(data.error); setDraft(null); return; }
-    setDraft({ ...(booking || {}), ...data.draft, source: 'ai' });
-    setWarning(data.warning || '');
-    setEditing(true);
-  });
-  const rate = (n) => run(async () => {
-    await must(supabase.from('course_ratings').upsert({ plan_id: ratePlan, course_id: id, player_id: status.player_id, rating: n }, { onConflict: 'plan_id,course_id,player_id' }));
-    setMyRating(n);
-  }, 'Thanks — saved for the group');
-  const b = booking || {};
-  return (
-    <Sheet title={course.name} onClose={onClose}>
-      <div className="stack" data-testid="tb-course">
-        <div className="small muted">{[course.area, drive].filter(Boolean).join(' · ')}</div>
-        <div className="card pad stack" style={{ gap: 4 }}>
-          <strong data-testid="tb-course-known">{TB.shortKnown(course, history)}</strong>
-          {history.text && <span className="small">{history.text}</span>}
-          {history.trips.slice(1, 4).map((t) => <span key={t.id || t.name} className="small muted">Also: {t.year} {t.name}{t.trophies[0] ? ` · ${t.trophies[0]}` : ''}</span>)}
-          {course.mine_avg != null && <span className="small">Your group: ★{Number(course.mine_avg).toFixed(1)}</span>}
-          {course.others_avg != null && <span className="small muted">Other groups: ★{Number(course.others_avg).toFixed(1)} ({course.others_n} group{Number(course.others_n) === 1 ? '' : 's'})</span>}
-          {ratePlan && (
-            <div className="row" style={{ gap: 2 }}>
-              <span className="small">Rate it:</span>
-              {[1, 2, 3, 4, 5].map((n) => <button key={n} type="button" className="btn ghost sm" aria-label={`${n} out of 5`} onClick={() => rate(n)} style={{ minWidth: 40, color: myRating && n <= myRating ? 'var(--gold)' : '#B9C2CC' }}>★</button>)}
-            </div>
-          )}
-        </div>
-        <span className="label">How to book</span>
-        <div className="card pad stack" style={{ gap: 4 }} data-testid="tb-booking">
-          {[['Visitors', b.visitor_times || facts.visitor_times?.value], ['Members only', b.member_times || facts.member_times?.value],
-            ['Book by', b.booking_method], ['Phone', b.phone], ['Email', b.email], ['Largest group', b.max_group || facts.max_group?.value], ['Most tee times', b.max_tee_times], ['Notes', b.notes]]
-            .filter(([, v]) => v).map(([k, v]) => <div key={k} className="row between small" style={{ gap: 8 }}><span style={{ fontWeight: 600 }}>{k}</span><span style={{ textAlign: 'right' }}>{String(v)}</span></div>)}
-          {b.booking_url && <a className="small" href={b.booking_url} target="_blank" rel="noopener noreferrer">Book online ↗</a>}
-          {b.features?.length > 0 && <div className="tb-chips">{b.features.map((f) => <span key={f} className="chip" style={{ minHeight: 28 }}>{f}</span>)}</div>}
-          {!b.course_id && !facts.visitor_times && <span className="small muted">{research ? 'Nothing added by a group yet — the research is below.' : 'Nothing yet — shared by every group once someone adds it.'}</span>}
-        </div>
-        {research && <AboutForGroups r={research} />}
-        {warning && <div className="small" style={{ fontWeight: 700, color: '#7A5A00' }} data-testid="tb-ai-warning">{warning}</div>}
-        {org && !editing && (
-          <div className="row" style={{ gap: 8 }}>
-            <button type="button" className="btn ghost grow" onClick={() => { setDraft({ ...b }); setEditing(true); }}>✏️ Add or correct</button>
-            {aiOn && <button type="button" className="btn ghost grow" disabled={busy} onClick={lookUp}>✨ Look it up</button>}
-          </div>
-        )}
-        {org && editing && <BookingForm id={id} start={draft || b} onDone={() => { setEditing(false); setWarning(''); onSaved(); }} />}
-        {onToggle && <button type="button" className="btn gold block" onClick={onToggle}>{isOption ? `Remove from ${day.name.replace(/ —.*/, '')}` : `Add to ${day.name.replace(/ —.*/, '')}`}</button>}
-      </div>
-    </Sheet>
-  );
-}
-
-function BookingForm({ id, start, onDone }) {
-  const [v, setV] = useState({
-    visitor_times: start.visitor_times || '', member_times: start.member_times || '', booking_method: start.booking_method || 'phone',
-    phone: start.phone || '', booking_url: start.booking_url || '', email: start.email || '', max_group: start.max_group ?? '', max_tee_times: start.max_tee_times ?? '',
-    features: start.features || [], notes: start.notes || '', source: start.source === 'ai' ? 'ai' : 'organiser',
-  });
-  const [busy, run] = useRun();
-  const set = (k) => (e) => setV({ ...v, [k]: e.target.value });
-  const saveIt = () => run(async () => {
-    const rowv = {
-      visitor_times: v.visitor_times.trim() || null, member_times: v.member_times.trim() || null, booking_method: v.booking_method || null,
-      phone: v.phone.trim() || null, booking_url: v.booking_url.trim() || null, email: v.email.trim() || null,
-      max_group: v.max_group === '' ? null : Number(v.max_group), max_tee_times: v.max_tee_times === '' ? null : Number(v.max_tee_times),
-      features: v.features, notes: v.notes.trim() || null, source: v.source,
-    };
-    if (rowv.booking_url && !/^https:\/\//i.test(rowv.booking_url)) throw new Error('The booking link needs to start with https://');
-    const { data: had } = await supabase.from('course_booking_info').select('course_id').eq('course_id', id).maybeSingle();
-    if (had) await must(supabase.from('course_booking_info').update(rowv).eq('course_id', id));
-    else await must(supabase.from('course_booking_info').insert({ course_id: id, ...rowv }));
-    onDone();
-  }, 'Saved for every group');
-  return (
-    <div className="card pad stack" data-testid="tb-booking-form">
-      <label className="field"><span>Visitor / social times</span><input className="input" value={v.visitor_times} onChange={set('visitor_times')} placeholder="e.g. Sat 7:00-12:00; Sun 9:00-13:00" aria-label="Visitor times" /></label>
-      <label className="field"><span>Members only</span><input className="input" value={v.member_times} onChange={set('member_times')} placeholder="e.g. Sat 6:30-9:00" aria-label="Member times" /></label>
-      <Seg light options={TB.BOOKING_METHODS} value={v.booking_method} onChange={(m) => setV({ ...v, booking_method: m })} />
-      <label className="field"><span>Phone</span><input className="input" inputMode="tel" value={v.phone} onChange={set('phone')} aria-label="Phone" /></label>
-      <label className="field"><span>Online booking link</span><input className="input" value={v.booking_url} onChange={set('booking_url')} placeholder="https://" aria-label="Booking link" /></label>
-      <label className="field"><span>Email</span><input className="input" value={v.email} onChange={set('email')} aria-label="Email" /></label>
-      <div className="row" style={{ gap: 8 }}>
-        <label className="field grow"><span>Largest group</span><input className="input" type="number" min="1" max="400" value={v.max_group} onChange={set('max_group')} aria-label="Largest group" /></label>
-        <label className="field grow"><span>Most tee times</span><input className="input" type="number" min="1" max="100" value={v.max_tee_times} onChange={set('max_tee_times')} aria-label="Most tee times" /></label>
-      </div>
-      <div className="tb-chips">{TB.FEATURES.map((f) => (
-        <button key={f} type="button" className="chip" aria-pressed={v.features.includes(f)} onClick={() => setV({ ...v, features: v.features.includes(f) ? v.features.filter((x) => x !== f) : [...v.features, f] })}>{f}</button>
-      ))}</div>
-      <label className="field"><span>Notes</span><input className="input" value={v.notes} maxLength={300} onChange={set('notes')} placeholder="e.g. Book 6 weeks ahead for groups" aria-label="Notes" /></label>
-      <button type="button" className="btn" disabled={busy} onClick={saveIt}>Save (shared with every group)</button>
-    </div>
-  );
-}
-

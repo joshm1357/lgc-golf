@@ -249,3 +249,25 @@ export function searchDestinations(text, { isAdmin = false, featureOn = () => tr
   });
   return scored.sort((a, b) => b.score - a.score || a.order - b.order).slice(0, limit).map(({ key, label, path }) => ({ key, label, path }));
 }
+
+// ------------------------------------------------------------------ Caddie says hello (ov22, Josh 23 Oct)
+// "When you open for the first time, a small overlay shows a message from Caddie: Hi, I'm Caddie. Ask me anything,
+// here to help." Once per device: after they've joined and picked a name, never on the join / sign-in screens, never
+// over another pop-up (the notifications sheet waits its turn first). Gone for good after either button.
+export const HELLO_KEY = 'tgt-caddie-hello';
+export const HELLO_TEXT = 'Hi, I’m Caddie. Ask me anything about the group, the rules or the next trip — or say “plan a trip”. I’m here to help.';
+const local = () => { try { return typeof localStorage === 'undefined' ? null : localStorage; } catch { return null; } };
+
+/** Has this device had the hello? No storage at all (blocked) → treat as seen, so it never nags every visit. */
+export function helloSeen(store = local()) {
+  try { return store ? !!store.getItem(HELLO_KEY) : true; } catch { return true; }
+}
+export function markHelloSeen(store = local(), now = Date.now()) {
+  try { store?.setItem(HELLO_KEY, String(now)); } catch { /* fine: it may say hello once more */ }
+}
+/** Say hello now? Only on a normal screen, with the Caddie button showing and nothing else popped up. */
+export function shouldSayHello({ seen = false, hidden = false, viewing = false, caddieOpen = false, otherPopUp = false } = {}) {
+  return !seen && !hidden && !viewing && !caddieOpen && !otherPopUp;
+}
+/** "plan a trip" typed into Ask → the ✨ Plan a trip mode. */
+export const isPlanATrip = (text) => /^\s*(let'?s\s+|can you\s+|help me\s+)?plan (a|our|the next) trip\s*[.!?]?\s*$/i.test(String(text || ''));

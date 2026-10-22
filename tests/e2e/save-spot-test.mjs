@@ -133,7 +133,7 @@ async function phone(S, { session: sess = null, notifyAsked = false, save = null
   await ctx.addInitScript(([cfg]) => {
     if (sessionStorage.getItem('seeded')) return;
     sessionStorage.setItem('seeded', '1');
-    localStorage.setItem('tgt-whats-new', 'beta-1');
+    localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */
     if (cfg.notifyAsked) localStorage.setItem('tgt-notify-prompt', String(Date.now()));
     if (cfg.sess) localStorage.setItem('lgc-auth', cfg.sess);
     if (cfg.save) localStorage.setItem('tgt-save-spot', JSON.stringify(cfg.save));

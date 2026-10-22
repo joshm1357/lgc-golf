@@ -262,7 +262,7 @@ function StartSheet({ planId, start, count, onClose, onSaved }) {
       <div className="stack">
         <span className="small muted">An area people leave from — a suburb or town, never an address. Pick it from the list, or tap the map.</span>
         <PlaceSearch initial={v.label} onPick={(p) => setV((x) => ({ ...x, label: p.label || x.label, lat: p.lat, lng: p.lng }))} />
-        <TripMap className="tf-mini" starts={v.lat != null ? [{ label: v.label || 'Here', lat: v.lat, lng: v.lng, count: v.count }] : []}
+        <TripMap className="tf-mini" labels={false} starts={v.lat != null ? [{ label: v.label || 'Here', lat: v.lat, lng: v.lng, count: v.count }] : []}
           frame={v.lat != null ? [{ lat: v.lat, lng: v.lng }] : [{ lat: -33.87, lng: 151.21 }]} onTap={(p) => setV((x) => ({ ...x, lat: p.lat, lng: p.lng }))} />
         <label className="field"><span>Name it</span><input className="input" value={v.label} maxLength={60} onChange={(e) => setV({ ...v, label: e.target.value.replace(/[0-9]/g, '') })} placeholder="e.g. Inner West" /></label>
         <div className="row" style={{ gap: 8 }}>

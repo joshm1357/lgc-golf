@@ -122,7 +122,7 @@ async function phone({ signedIn = false, member = false, player = null, notifyAs
       const t = `${b({ alg: 'HS256', typ: 'JWT' })}.${b({ sub: uid, exp, role: 'authenticated' })}.x`;
       localStorage.setItem('lgc-auth', JSON.stringify({ access_token: t, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated' } }));
     }
-    localStorage.setItem('tgt-whats-new', 'beta-1');
+    localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */
     if (cfg.notifyAsked) localStorage.setItem('tgt-notify-prompt', String(Date.now()));
     // A fake phone that hasn't turned notifications on yet.
     const ps = JSON.parse(sessionStorage.getItem('fake-push') || 'null') || { permission: 'default', sub: null };

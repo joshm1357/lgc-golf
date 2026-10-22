@@ -1,0 +1,69 @@
+/* The planning maps' tools (ov22) — components/PlanMapTools.jsx. */
+
+/* "Scroll to zoom" hint, middle of the map, never in the way of a click. */
+.pm-hint {
+  position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 1000; pointer-events: none;
+  background: rgba(21, 32, 46, .86); color: #fff; padding: 8px 14px; border-radius: 999px; font-size: 13px; font-weight: 700;
+  white-space: nowrap; max-width: calc(100% - 24px); overflow: hidden; text-overflow: ellipsis;
+}
+.leaflet-container.pm-wheel-on { outline: 2px solid var(--gold); outline-offset: -2px; }
+
+/* Club names switch: small, top-right of the map. */
+/* isolation: the map's own layers (Leaflet uses z-index 400–1000) stay inside it, under sheets and pop-ups. */
+.pm-wrap { position: relative; isolation: isolate; }
+.pm-names {
+  position: absolute; top: 10px; right: 10px; z-index: 1000; display: inline-flex; align-items: center; gap: 6px;
+  min-height: 34px; padding: 4px 10px 4px 6px; border-radius: 999px; border: 1px solid rgba(21, 32, 46, .25);
+  background: rgba(255, 255, 255, .94); color: var(--navy); font-weight: 700; font-size: 12px; box-shadow: 0 1px 4px rgba(0, 0, 0, .3);
+}
+.pm-switch { position: relative; width: 26px; height: 16px; border-radius: 999px; background: #B9C2CC; transition: background .15s; flex: none; }
+.pm-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; transition: left .15s; }
+.pm-names.on .pm-switch { background: var(--court, #0E9F8E); }
+.pm-names.on .pm-switch::after { left: 12px; }
+
+/* A course's name next to its pin. */
+.pm-label-icon { pointer-events: none !important; }
+.pm-label {
+  display: inline-block; white-space: nowrap; padding: 1px 6px; border-radius: 6px; font-size: 11px; font-weight: 800;
+  color: #15202E; background: rgba(255, 255, 255, .88); box-shadow: 0 1px 3px rgba(0, 0, 0, .35); line-height: 16px;
+}
+.pm-label.hot { background: var(--gold); }
+
+/* The course or place being pointed at: the pin grows and bounces once, a ring pulses. */
+path.pm-hot { transform-box: fill-box; transform-origin: center; animation: pm-bounce .5s ease-out 1; }
+path.pm-ring { transform-box: fill-box; transform-origin: center; animation: pm-ring 1.2s ease-out infinite; pointer-events: none; }
+@keyframes pm-bounce { 0% { transform: scale(1); } 35% { transform: scale(1.35) translateY(-3px); } 65% { transform: scale(.95); } 100% { transform: scale(1); } }
+@keyframes pm-ring { 0% { opacity: .9; transform: scale(.7); } 100% { opacity: 0; transform: scale(1.4); } }
+.tb-stay.hot { outline: 3px solid var(--gold); outline-offset: 1px; }
+@media (prefers-reduced-motion: reduce) {
+  path.pm-hot, path.pm-ring { animation: none; }
+}
+
+/* The area start's list rows: a tick box (its own 44px target) and the name, which opens the summary / details. */
+.as-tick { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; flex: none; cursor: pointer; }
+.as-tick input { width: 22px; height: 22px; margin: 0; }
+.as-name { background: none; border: 0; padding: 4px 0; font: inherit; font-weight: 600; color: inherit; text-align: left; cursor: pointer; text-decoration: underline dotted rgba(21, 32, 46, .35); text-underline-offset: 3px; }
+[data-place] { border-radius: 8px; transition: background .12s; }
+
+/* A list row whose pin is lit up (or that's being pointed at). */
+[data-place].pm-row-hot { background: var(--gold-soft); box-shadow: inset 3px 0 0 var(--gold); }
+
+/* The summary card (on a pin, or beside a list row). */
+.leaflet-tooltip.pm-tip { padding: 0; border: 0; background: transparent; box-shadow: none; opacity: 1 !important; }
+.leaflet-tooltip.pm-tip::before { display: none; }
+.pm-tip-card {
+  display: flex; flex-direction: column; gap: 3px; width: max-content; max-width: 260px; padding: 10px 12px;
+  background: #fff; color: var(--text, #15202E); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(21, 32, 46, .25); white-space: normal; font-size: 13px; line-height: 1.35; text-align: left;
+}
+.pm-tip-card strong { font-size: 14px; }
+.pm-tip-line { color: var(--text, #15202E); }
+.pm-tip-more {
+  align-self: flex-start; margin-top: 4px; min-height: 36px; padding: 4px 12px; border-radius: 999px;
+  border: 1px solid var(--navy); background: var(--navy); color: #fff; font-weight: 700; font-size: 13px; cursor: pointer;
+}
+.pm-row-tip { position: fixed; z-index: 45; width: min(280px, calc(100vw - 24px)); }
+/* With a mouse, the card beside a row never gets in the way of moving down the list (a click opens everything). */
+.pm-row-tip.passive { pointer-events: none; }
+.pm-tip-hint { color: var(--muted, #5B6675); font-size: 12px; margin-top: 2px; }
+.pm-row-tip .pm-tip-card { max-width: none; width: 100%; }

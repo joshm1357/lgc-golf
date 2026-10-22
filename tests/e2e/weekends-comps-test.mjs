@@ -164,7 +164,7 @@ await ctx.addInitScript(([uid]) => {
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
   if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated' } }));
-  localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-notify-prompt', String(Date.now()));
+  localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); localStorage.setItem('tgt-notify-prompt', String(Date.now()));
 }, ['99999999-9999-4999-8999-999999999999']);
 const page = await ctx.newPage();
 page.on('pageerror', (e) => fails.push(`page error: ${e}`));
@@ -323,10 +323,10 @@ check(await page.getByText('Build the trip', { exact: true }).count() === 0, 'th
 await card.getByTestId('vote-detail-area').nth(1).getByRole('button').first().click(); await wait(400);
 const before = db.plan_votes.length;
 await card.getByTestId('vote-detail-section').first().getByTestId('option-details').first().click(); await wait(600);
-check(await page.getByTestId('option-details-sheet').isVisible() && await page.getByTestId('about-groups').count() === 1, 'ⓘ Details opens the course sheet (research for groups)');
+check(await page.getByTestId('tb-course').isVisible() && await page.getByTestId('sheet-toggle').count() === 0, 'ⓘ Details opens the same course sheet as the planning maps (ov22), read-only');
 check(db.plan_votes.length === before, 'opening details didn’t cast a vote');
 await both('flow-06a-option-details-sheet');
-await page.getByRole('button', { name: 'Back to the vote' }).click(); await wait(300);
+await page.keyboard.press('Escape'); await wait(400);
 // Answer only the main questions → answered.
 await card.getByTestId('vote-batch-section').nth(0).getByRole('button', { name: '⭐ Prefer' }).nth(1).click(); await wait(500);
 const wkSection = card.getByTestId('vote-batch-section').nth(1);

@@ -12,6 +12,7 @@ import { supabase } from '../lib/supabase.js';
 import { useRealtime } from '../lib/store.jsx';
 import { Sheet } from './ui.jsx';
 import { AboutForGroups } from './CourseResearch.jsx';
+import { CourseSheet, StaySheet } from './PlaceSheets.jsx';
 
 /** What an option is, from its key → { kind: 'course' | 'area' | 'stay' | 'weekend' | 'other', id?, name?, area? } */
 export function optionTarget(key) {
@@ -63,9 +64,17 @@ export function DetailsButton({ onClick, label }) {
   );
 }
 
-/** The sheet (one place to swap for the maps' course sheet later). */
-export function OptionDetailsSheet({ option, detail, onClose }) {
+/** The sheet: the same course / place-to-stay sheets as the planning maps (ov22 PlaceSheets) — one sheet everywhere.
+ *  Read-only here (no "on the table" button): voting is on the card. Areas get a short summary of their own. */
+export function OptionDetailsSheet({ option, detail, onClose, st = null }) {
   if (!option || !detail) return null;
+  const known = Object.values(st?.courses || {});
+  if (detail.kind === 'course' && detail.course) {
+    return <CourseSheet id={detail.id} course={detail.course} org={false} aiOn={false} onClose={onClose} />;
+  }
+  if (detail.kind === 'stay' && detail.stay?.lat != null) {
+    return <StaySheet stay={detail.stay} courses={known} stayMax={st?.stayMax} onClose={onClose} />;
+  }
   return (
     <Sheet title={option.label} onClose={onClose}>
       <div className="stack" style={{ gap: 8 }} data-testid="option-details-sheet">

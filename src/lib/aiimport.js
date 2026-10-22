@@ -186,11 +186,14 @@ export function buildReview(proposal, group = {}) {
     }, board));
   });
   (p.handicaps || []).forEach((x, i) => {
-    const hit = findPlayer(x.player, null, players);
+    // A likely player ("Josh Moran" → Joshua Moran) counts for "already there"; who it's saved on follows the
+    // organiser's answer in the players section (playerAliases) or a certain match.
+    const m = matchPlayer(x.player, null, players);
+    const hit = m?.player || null;
     const already = !!hit && (group.handicaps || []).some((h) => h.player_id === hit.id && h.date === x.date && Number(h.handicap) === Number(x.handicap));
     items.push({
       id: `hc${i}`, section: 'handicaps', data: { player: x.player, date: x.date, handicap: x.handicap },
-      match: already ? 'already in their history' : hit ? `${hit.name}’s history` : 'a new player’s history',
+      match: already ? 'already in their history' : hit ? `${hit.name}’s history${m.sure ? '' : '?'}` : 'a new player’s history',
       existingId: hit?.id || null, already, ticked: !already && !x.guess, guess: !!x.guess,
     });
   });

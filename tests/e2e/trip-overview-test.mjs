@@ -22,6 +22,11 @@ const PAST = 'eeeeeeee-0000-4000-8000-000000000004';
 const NEXT = 'eeeeeeee-0000-4000-8000-000000000002';
 const IDEA = 'eeeeeeee-0000-4000-8000-000000000003';
 const now = new Date().toISOString();
+// 22 Oct: finished days ago but its trip is still 'active'; and a past trip brought in with only a year.
+const daysAgo = (n) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+const SC_TRIP = 'aaaaaaaa-0000-4000-8000-000000000005';
+const SC_PLAN = 'eeeeeeee-0000-4000-8000-000000000005';
+const YEAR_TRIP = 'aaaaaaaa-0000-4000-8000-000000000006';
 const holes = Array.from({ length: 18 }, (_, i) => ({ n: i + 1, par: 4, si: i + 1 }));
 const card = (round, pid, strokes) => holes.map((h) => ({ round_id: round, subject_id: pid, subject_type: 'player', hole: h.n, strokes, picked_up: false, updated_at: now }));
 const PIX = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==';
@@ -35,6 +40,8 @@ const db = {
   trips: [
     { id: TRIP, name: 'South Coast 2026', start_date: '2026-03-06', end_date: '2026-03-08', status: 'done', created_at: now },
     { id: TRIP2, name: 'Summer Classic', start_date: '2027-01-15', end_date: '2027-01-17', status: 'upcoming', created_at: now },
+    { id: SC_TRIP, name: 'South Coast Trip 2026', start_date: daysAgo(6), end_date: daysAgo(4), status: 'active', created_at: now },
+    { id: YEAR_TRIP, name: 'Hunter Valley 2019', start_date: '2019-01-01', end_date: '2019-01-01', status: 'locked', created_at: now },
   ],
   trophies: [], teams: [], team_players: [], quick_results: [],
   honour_board: [{ id: 'h1000000-0000-4000-8000-000000000001', trip_id: TRIP, trophy_name: 'BD Trophy', winner_names: 'Josh', label: '2026', created_at: now }],
@@ -49,6 +56,7 @@ const db = {
   plans: [
     { id: NEXT, kind: 'trip', name: 'Summer Classic', status: 'confirmed', start_date: '2027-01-15', end_date: '2027-01-17', location_name: 'Port Macquarie', trip_id: TRIP2, proposed: false, rsvp_locked: false, created_by: P1, organiser_id: P1, created_at: now },
     { id: IDEA, kind: 'trip', name: 'Autumn Idea', status: 'planning', proposed: false, rsvp_locked: false, created_by: P2, organiser_id: P2, created_at: now },
+    { id: SC_PLAN, kind: 'trip', name: 'South Coast Trip 2026', status: 'confirmed', start_date: daysAgo(6), end_date: daysAgo(4), location_name: 'Narooma', trip_id: SC_TRIP, proposed: false, rsvp_locked: false, created_by: P1, organiser_id: P1, created_at: now },
     { id: PAST, kind: 'trip', name: 'South Coast 2026', status: 'done', start_date: '2026-03-06', end_date: '2026-03-08', location_name: 'Mollymook', trip_id: TRIP, proposed: false, created_by: P1, created_at: now },
   ],
   plan_polls: [], plan_options: [], plan_votes: [], plan_comments: [],
@@ -180,6 +188,19 @@ await page.getByText('South Coast 2026').first().waitFor({ timeout: 15000 });
 await page.getByText('South Coast 2026').first().click();
 await page.getByText('Done and dusted').waitFor({ timeout: 10000 });
 check(page.url().includes(`/trip/${TRIP}`), 'trip with no plan: opens its overview');
+
+// A trip that finished days ago, its trip still 'active': Done, never On now.
+await page.goto(`${BASE}#/plan/${SC_PLAN}`);
+await page.getByText('South Coast Trip 2026').first().waitFor({ timeout: 10000 });
+await page.waitForTimeout(500);
+check(await page.getByText('Done and dusted').isVisible(), 'finished but still active: says Done');
+check(!/on now/i.test(await page.locator('.page').innerText()), 'finished but still active: no "On now"');
+await page.screenshot({ path: `${SHOTS}/o5-finished-active.png`, fullPage: true });
+// A year-only past trip (from the import): the year, not a made-up 1 January.
+await page.goto(`${BASE}#/trip/${YEAR_TRIP}`);
+await page.getByText('2019 (date unknown)').first().waitFor({ timeout: 10000 });
+check(!/1 Jan/.test(await page.locator('.page').innerText()), 'year-only trip: "2019 (date unknown)", no 1 January');
+await page.screenshot({ path: `${SHOTS}/o6-year-only.png`, fullPage: true });
 
 check(!errors.length, `no page errors (${errors.join(' | ')})`);
 await browser.close();

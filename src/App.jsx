@@ -68,7 +68,14 @@ const Ask = lazyScreen(() => import('./screens/AiHelper.jsx'));
 const AiImport = lazyScreen(() => import('./screens/AiImport.jsx'));
 const Stats = lazyScreen(() => import('./screens/Stats.jsx'));
 const DinnerAwards = lazyScreen(() => import('./screens/DinnerAwards.jsx'));
-const Desk = lazyScreen(() => import('./screens/Desk.jsx')); // Stage 11c: the full desktop (Trip desk, tables, paper cards)
+// Stage 11c's laptop tools, at home where they belong since the Trip desk folded into Trips (22 Oct).
+const DeskForward = lazyScreen(() => import('./screens/Desk.jsx')); // old /desk… links forward to the new homes
+const PlayersTable = lazyScreen(() => import('./screens/DeskTables.jsx'), 'PlayersTable');
+const CoursePaste = lazyScreen(() => import('./screens/DeskTables.jsx'), 'CoursePaste');
+const CardPicker = lazyScreen(() => import('./screens/PaperCard.jsx'), 'CardPicker');
+const PaperCard = lazyScreen(() => import('./screens/PaperCard.jsx'), 'PaperCard');
+const PrintRound = lazyScreen(() => import('./screens/PaperCard.jsx'), 'PrintRound');
+const Present = lazyScreen(() => import('./screens/Present.jsx'), 'Present');
 const TripFinder = lazyScreen(() => import('./screens/TripFinder.jsx'));
 const TripBuilder = lazyScreen(() => import('./screens/TripBuilder.jsx'));
 const Notifications = lazyScreen(() => import('./screens/Notifications.jsx'));
@@ -259,7 +266,14 @@ function Inside() {
         <Route path="/round-ready" element={<RoundReady />} />
         <Route path="/wishes" element={<Wishes />} />
         <Route path="/join/:code" element={<JoinInsideRoute />} />
-        <Route path="/desk/*" element={<Desk />} />
+        <Route path="/group/players" element={<PlayersTable />} />
+        <Route path="/courses/paste" element={<CoursePaste />} />
+        <Route path="/cards" element={<CardPicker />} />
+        <Route path="/round/:roundId/cards" element={<PaperCard />} />
+        <Route path="/round/:roundId/print" element={<PrintRound />} />
+        <Route path="/round/:roundId/present" element={<Present />} />
+        <Route path="/present" element={<Present />} />
+        <Route path="/desk/*" element={<DeskForward />} />
         <Route path="*" element={<Leaderboard />} />
       </Routes>
       </LazyArea>

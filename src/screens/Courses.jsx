@@ -6,6 +6,7 @@ import { Header, Sheet, toast } from '../components/ui.jsx';
 import { roundBoard, courseHoles } from '../lib/board.js';
 import { formatToPar, parTotal } from '../lib/scoring.js';
 import { CourseGuideButton } from '../components/CourseGuideLink.jsx';
+import { TOOL } from '../lib/desk.js';
 
 const TILE = (t) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${t.z}/${t.y}/${t.x}`;
 
@@ -46,9 +47,10 @@ export default function Courses() {
 
   return (
     <div className="page">
-      <Header back title="Courses" sub={`${data.courses.length} course${data.courses.length === 1 ? '' : 's'} played`} />
+      <Header back title="Courses" sub={`${data.courses.length} course${data.courses.length === 1 ? '' : 's'} played`}
+        right={status.is_admin && <Link to={TOOL.coursePaste} className="btn ghost sm" style={{ color: '#fff', background: 'transparent', borderColor: 'rgba(255,255,255,.45)', whiteSpace: 'nowrap' }} data-testid="paste-scorecard">📋 Paste a scorecard</Link>} />
       <div className="section stack">
-        {!data.courses.length && <div className="empty">No courses yet — the admin adds them.</div>}
+        {!data.courses.length && <div className="empty">No courses yet — the admin adds them.{status.is_admin ? ' Paste a scorecard (top right) to add one.' : ''}</div>}
         {data.courses.map((c) => {
           const s = stats[c.id];
           return (
@@ -76,6 +78,7 @@ export default function Courses() {
               </table>
             </div>
             <CourseGuideButton course={open} onClick={() => setOpen(null)} />
+            {status.is_admin && <Link to={`${TOOL.coursePaste}?course=${open.id}`} className="btn ghost block" onClick={() => setOpen(null)}>📋 Paste this course’s card (par and index)</Link>}
             {status.is_admin && <Link to={`/courses/${open.id}/greens`} className="btn gold block" onClick={() => setOpen(null)}>📍 Map the greens for GPS distances</Link>}
             {greensMapped(open.holes) > 0 && (
               <button type="button" className="btn ghost block" disabled={progress != null} onClick={() => saveCourseMap(open, setProgress)}>

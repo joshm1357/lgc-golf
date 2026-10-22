@@ -1,8 +1,9 @@
-// Stage 11c — desk tables: players & handicaps (sort, filter, edit in place, history, paste a list) and course
-// scorecards (paste the Par and Index rows). Every paste is shown as a preview first; nothing saves until "Save".
+// Stage 11c — laptop tables: players & handicaps (Group & invites → Players table, /group/players: sort, filter, edit in
+// place, history, paste a list) and course scorecards (Courses → Paste a scorecard, /courses/paste). Was the Trip desk's.
+// Course scorecards: paste the Par and Index rows. Every paste is shown as a preview first; nothing saves until "Save".
 // The reading of pastes is in lib/paste.js; sorting and filtering in lib/desk.js.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
 import { useData, useSession, useRealtime, playerName } from '../lib/store.jsx';
 import { Avatar, toast } from '../components/ui.jsx';
@@ -11,6 +12,7 @@ import { sortRows, nextSort, filterRows } from '../lib/desk.js';
 import { parsePlayers, parseScorecard } from '../lib/paste.js';
 import { readHandicap } from '../lib/history.js';
 import { DeskNav } from './DeskNav.jsx';
+import './desk.css';
 
 const showHcp = (h) => (h == null ? '–' : Number(h) < 0 ? `+${-Number(h)}` : String(Number(h)));
 const day = (iso) => new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -221,7 +223,8 @@ export function CoursePaste() {
   const data = useData();
   const { status } = useSession();
   const [busy, run] = useRun();
-  const [courseId, setCourseId] = useState(''); // '' = a new course
+  const [params] = useSearchParams();
+  const [courseId, setCourseId] = useState(() => params.get('course') || ''); // '' = a new course (Courses → a course → Paste its card)
   const [name, setName] = useState('');
   const [text, setText] = useState('');
   const course = data.coursesById[courseId] || null;

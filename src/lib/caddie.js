@@ -67,12 +67,15 @@ const TAB_WORDS = {
 /** Full-screen views where the caddie stays out of the way (and score entry, where the keypad needs the room). */
 export function caddieHidden(pathname = '') {
   return /^\/(tv|start|join|c|club|privacy|terms|me|replay|score)(\/|$)/.test(pathname)
+    || /^\/round\/[^/]+\/(present|print)(\/|$)/.test(pathname) || /^\/present(\/|$)/.test(pathname)
     || /^\/desk\/(present|print)(\/|$)/.test(pathname)
     || pathname === '/ask';
 }
 
-/** The caddie is a side panel on a laptop (1024 px and up) and on the desk; a button and a sheet on a phone. */
-export const usesPanel = (pathname = '', width = 0) => width >= 1024 || pathname.startsWith('/desk');
+/** The caddie is a side panel on a laptop (1024 px and up) and on the laptop tools (the players table, pasting a
+ *  scorecard, paper cards — the Trip desk's tools until 22 Oct); a button and a sheet on a phone. */
+export const usesPanel = (pathname = '', width = 0) => width >= 1024
+  || /^\/(desk|cards)(\/|$)/.test(pathname) || /^\/(group\/players|courses\/paste)(\/|$)/.test(pathname) || /^\/round\/[^/]+\/cards(\/|$)/.test(pathname);
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const id = (s) => (UUID.test(String(s || '')) ? String(s).toLowerCase() : undefined);
@@ -112,7 +115,9 @@ export function caddieContext(pathname = '/', search = '', defaults = {}) {
     case 'player': return { screen: 'profile' };
     case 'notifications': return { screen: 'notifications' };
     case 'courses': case 'guide': return { screen: 'courses' };
-    case 'desk': return tidy({ screen: 'desk', plan_id: seg[1] === 'trip' ? id(seg[2]) : undefined });
+    case 'round': return tidy({ screen: 'leaderboard', round_id: id(b) }); // a round's paper cards, Present, Print
+    case 'cards': case 'present': return tidy({ screen: 'leaderboard', round_id: id(defaults.round) });
+    case 'desk': return tidy({ screen: 'desk', plan_id: seg[1] === 'trip' ? id(seg[2]) : undefined }); // old links (they forward)
     case 'more': return { screen: 'more' };
     default: return { screen: 'other' };
   }

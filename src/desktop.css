@@ -42,3 +42,9 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
   .print-h { break-after: avoid; }
   tr { break-inside: avoid; }
 }
+
+/* A round's tools for organisers (components/RoundTools.jsx — paper cards, Present, Print; were on the Trip desk):
+   buttons on a laptop, a ⋯ menu on a phone. */
+.round-tools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: flex-end; }
+.round-tools .rt-wide { display: none; }
+@media (min-width: 1024px) { .round-tools .rt-wide { display: inline-flex; } .round-tools .rt-more { display: none; } }

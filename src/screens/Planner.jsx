@@ -33,6 +33,13 @@ import { NotifyCard } from '../components/NotifyCard.jsx';
 import { PollCard } from '../components/PollCard.jsx';
 import { HowItGoesOut } from '../components/CallVote.jsx';
 import { defaultCloses } from '../lib/callvote.js';
+import { useDesktop } from '../components/Sidebar.jsx';
+import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
+
+// Organise on a laptop, for organisers: the trip's panels down the right (what was the Trip desk), and the costs
+// table on the Kitty tab. Loaded only on a laptop, so phones download nothing new.
+const OrganiseSide = lazyScreen(() => import('./OrganisePanels.jsx'), 'OrganiseSide', { inline: true });
+const CostsPanel = lazyScreen(() => import('./OrganisePanels.jsx'), 'CostsPanel', { inline: true });
 
 export { NotifyCard };
 
@@ -115,6 +122,9 @@ export function PlanDetail() {
   const pd = usePlanData(planId);
   const data = useData();
   const [editing, setEditing] = useState(false);
+  const wide = useDesktop();
+  const [newCostAt, setNewCostAt] = useState(0); // "n" on Organise (laptop): when it was pressed
+  const onNewCost = useCallback(() => setNewCostAt(Date.now()), []);
   // Tabs for switched-off features (Group & invites → Features) aren't shown.
   const on = { planner_tasks: useFeature('planner_tasks'), planner_costs: useFeature('planner_costs'), planner_rooms: useFeature('planner_rooms') };
   const tabs = TABS.filter((t) => !t.feature || on[t.feature]);
@@ -132,9 +142,34 @@ export function PlanDetail() {
   // Open on the most useful tab: vote while a vote is open, otherwise the details.
   const current = tab || (on.planner_tasks && pd.polls.some((p) => p.status === 'open') ? 'vote' : plan.start_date ? 'details' : 'people');
   const sub = [plan.start_date ? `${fmtRange(plan.start_date, plan.end_date)} · ${countdown(plan.start_date)}` : 'Dates TBC', plan.location_name || 'Location TBC'].join(' · ');
+  // Laptop + Organise + one of the trip's organisers: the trip's panels down the right (was the Trip desk, 22 Oct).
+  const desk = wide && view === 'organise' && plan.status !== 'cancelled' && (status.is_admin || (!!status.player_id && plan.organiser_id === status.player_id));
+
+  const organise = (
+      <div className="section stack">
+        {plan.status === 'cancelled' && <div className="err">{plan.proposed ? 'The admin passed on this one.' : 'This one’s been called off.'}</div>}
+        {plan.status !== 'cancelled' && <StageBar pd={pd} />}
+        {plan.proposed && plan.status !== 'cancelled' && <ProposalBanner plan={plan} reload={pd.reload} />}
+        <LockInCard pd={pd} />
+        <TripPlanCards pd={pd} />
+        {on.planner_tasks && <Checklist pd={pd} onGo={setTab} />}
+        <TripSetupCard plan={plan} reload={pd.reload} />
+        <TripExtras pd={pd} />
+        <TripBuilderCard pd={pd} />
+        <TripFinderCard pd={pd} />
+        {current === 'vote' && <VoteTab pd={pd} />}
+        {current === 'chat' && <ChatTab pd={pd} />}
+        {current === 'people' && <PeopleTab pd={pd} />}
+        {current === 'details' && <DetailsTab pd={pd} />}
+        {current === 'jobs' && <TripJobsTab pd={pd} AddSheet={ItemSheet} />}
+        {desk && current === 'kitty' && <LazyArea fallback={null} quiet><CostsPanel pd={pd} focusAt={newCostAt} /></LazyArea>}
+        {current === 'kitty' && <KittyTab pd={pd} />}
+        {current === 'groups' && <GroupsTab pd={pd} />}
+      </div>
+  );
 
   return (
-    <div className="page">
+    <div className={'page' + (desk ? ' org-desk-page' : '')}>
       <Header back="Trips" title={plan.name} sub={sub}
         right={(status.is_admin || (plan.proposed && plan.created_by === status.player_id)) && <button type="button" className="btn ghost sm" style={{ color: '#fff', background: 'transparent', borderColor: 'rgba(255,255,255,.45)' }} onClick={() => setEditing(true)}>Edit</button>}>
         {plan.status !== 'cancelled' && (
@@ -160,27 +195,12 @@ export function PlanDetail() {
           {/* After the trip: rate the course, dinner awards, and "same as last time" belong with the summary. */}
           {stage === 'done' && <div className="stack" style={{ marginTop: 14 }}><TripFinderCard pd={pd} /><TripExtras pd={pd} /></div>}
         </div>
-      ) : (
-      <div className="section stack">
-        {plan.status === 'cancelled' && <div className="err">{plan.proposed ? 'The admin passed on this one.' : 'This one’s been called off.'}</div>}
-        {plan.status !== 'cancelled' && <StageBar pd={pd} />}
-        {plan.proposed && plan.status !== 'cancelled' && <ProposalBanner plan={plan} reload={pd.reload} />}
-        <LockInCard pd={pd} />
-        <TripPlanCards pd={pd} />
-        {on.planner_tasks && <Checklist pd={pd} onGo={setTab} />}
-        <TripSetupCard plan={plan} reload={pd.reload} />
-        <TripExtras pd={pd} />
-        <TripBuilderCard pd={pd} />
-        <TripFinderCard pd={pd} />
-        {current === 'vote' && <VoteTab pd={pd} />}
-        {current === 'chat' && <ChatTab pd={pd} />}
-        {current === 'people' && <PeopleTab pd={pd} />}
-        {current === 'details' && <DetailsTab pd={pd} />}
-        {current === 'jobs' && <TripJobsTab pd={pd} AddSheet={ItemSheet} />}
-        {current === 'kitty' && <KittyTab pd={pd} />}
-        {current === 'groups' && <GroupsTab pd={pd} />}
-      </div>
-      )}
+      ) : desk ? (
+        <div className="org-desk">
+          <div className="org-main">{organise}</div>
+          <LazyArea fallback={null} quiet><OrganiseSide pd={pd} current={current} onTab={setTab} onNewCost={onNewCost} /></LazyArea>
+        </div>
+      ) : organise}
       {editing && <PlanSheet plan={plan} onClose={() => setEditing(false)} onSaved={() => pd.reload()} />}
     </div>
   );

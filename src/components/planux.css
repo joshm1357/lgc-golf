@@ -36,3 +36,20 @@
 @media (min-width: 1280px) {
   .sheet.wide { height: 100vh; }
 }
+
+/* ---------- Organise on a laptop (22 Oct: the Trip desk folded into Trips) ----------
+   For the trip's organisers at 1024 px and up: the Organise tabs on the left, the trip's panels down the right
+   (screens/OrganisePanels.jsx). Phones keep the one column. */
+@media (min-width: 1024px) {
+  .app.with-side > .page.org-desk-page { max-width: 1440px; padding-left: 24px; padding-right: 60px; } /* room for the folded Caddie tab */
+  .org-desk { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 420px); gap: 20px; align-items: start; }
+  .org-desk > .org-main { min-width: 0; }
+  .org-desk > .org-main > .section { padding-left: 0; padding-right: 0; }
+  .org-side { display: flex; flex-direction: column; gap: 12px; padding: 12px 0 16px; min-width: 0; }
+  .org-glance { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--card, #fff); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+  .org-glance .desk-count { font-size: 26px; white-space: nowrap; }
+  .org-glance .desk-switch { flex: 1 1 100%; max-width: none; }
+}
+@media (min-width: 1600px) {
+  .org-desk { grid-template-columns: minmax(0, 1fr) 480px; }
+}

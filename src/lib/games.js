@@ -46,6 +46,85 @@ export function cleanOptions(kind, options = {}) {
   return out;
 }
 
+// ------------------------------------------------------------------ standard options (073)
+// Every standard setting of each game. Any mix of these is still the standard game (a custom game is only for a
+// house twist on top — see customgames.js). col: 'options' = the 055 column (old app versions read it);
+// 'settings' = round_games.settings (073), checked by the database against the same list.
+//   bool: true/false. enum: one of values. money: dollars 0–1000, or null = the game's stake.
+export const STANDARD_OPTIONS = {
+  skins: [
+    { key: 'net', type: 'bool', def: true, col: 'options', on: 'Net (with handicaps)', off: 'Gross' },
+    { key: 'carry', type: 'bool', def: true, col: 'options', on: 'Ties carry over', off: 'No carry-overs' },
+    { key: 'validate', type: 'bool', def: false, col: 'settings', on: 'Validated skins', off: 'No validation',
+      help: 'A skin only counts if its winner at least ties the next hole. If not, it carries on to that hole.' },
+  ],
+  nassau: [
+    { key: 'net', type: 'bool', def: true, col: 'options', on: 'Net (with handicaps)', off: 'Gross' },
+    { key: 'scoring', type: 'enum', values: ['stroke', 'stableford'], def: 'stroke', col: 'options', labels: { stroke: 'Strokes', stableford: 'Stableford points' } },
+    { key: 'front', type: 'money', def: null, col: 'settings', label: 'Front 9 bet ($)', help: 'Blank = the stake' },
+    { key: 'back', type: 'money', def: null, col: 'settings', label: 'Back 9 bet ($)', help: 'Blank = the stake' },
+    { key: 'total', type: 'money', def: null, col: 'settings', label: 'The 18 bet ($)', help: 'Blank = the stake' },
+    { key: 'press', type: 'enum', values: [0, 2, 3], def: 0, col: 'settings', labels: { 0: 'No presses', 2: 'Auto-press at 2', 3: 'Auto-press at 3' },
+      help: 'When the leader of a nine gets 2 (or 3) clear, a new bet starts on the next hole to the end of that nine. Up to 2 presses a nine.' },
+  ],
+  stableford_pot: [
+    { key: 'net', type: 'bool', def: true, col: 'settings', on: 'Net points', off: 'Gross points' },
+  ],
+  birdie_pool: [
+    { key: 'net', type: 'bool', def: true, col: 'options', on: 'Net (with handicaps)', off: 'Gross' },
+    { key: 'eagle_double', type: 'bool', def: false, col: 'settings', on: 'Eagles count double', off: 'Eagles count once' },
+  ],
+  eclectic: [
+    { key: 'net', type: 'bool', def: true, col: 'options', on: 'Net (with handicaps)', off: 'Gross' },
+  ],
+};
+
+function cleanOne(spec, v) {
+  if (spec.type === 'bool') return typeof v === 'boolean' ? v : spec.def;
+  if (spec.type === 'enum') return spec.values.includes(v) ? v : spec.def;
+  if (spec.type === 'money') {
+    if (v == null || v === '') return null;
+    const n = Number(String(v).replace(/[$,\s]/g, ''));
+    return Number.isFinite(n) && n >= 0 && n <= 1000 ? Math.round(n * 100) / 100 : spec.def;
+  }
+  return spec.def;
+}
+
+/** Every standard option of a game, defaults filled in, from any mix of sources (later ones win). */
+export function fullOptions(kind, ...sources) {
+  const merged = Object.assign({}, ...sources.map((x) => x || {}));
+  const out = {};
+  for (const spec of STANDARD_OPTIONS[kind] || []) out[spec.key] = cleanOne(spec, merged[spec.key]);
+  return out;
+}
+
+/** A round_games row's full options (the 055 options plus the 073 settings). */
+export const gameOptions = (game) => fullOptions(game?.kind, game?.options, game?.settings);
+
+/** Split full options into the two columns: { options (055 check), settings (073 check) }. */
+export function splitOptions(kind, full) {
+  const o = fullOptions(kind, full);
+  const options = {};
+  const settings = {};
+  for (const spec of STANDARD_OPTIONS[kind] || []) (spec.col === 'options' ? options : settings)[spec.key] = o[spec.key];
+  return { options, settings };
+}
+
+/** Problems with a round_games.settings object for a kind (mirrors the database check in 073). [] = fine. */
+export function settingsProblems(kind, settings = {}) {
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return ['Settings must be a set of options'];
+  const specs = Object.fromEntries((STANDARD_OPTIONS[kind] || []).filter((s) => s.col === 'settings').map((s) => [s.key, s]));
+  const out = [];
+  for (const [k, v] of Object.entries(settings)) {
+    const spec = specs[k];
+    if (!spec) { out.push(`${k} isn’t an option for this game`); continue; }
+    if (spec.type === 'bool' && typeof v !== 'boolean') out.push(`${k} is yes or no`);
+    if (spec.type === 'enum' && !spec.values.includes(v)) out.push(`${k} isn’t one of the choices`);
+    if (spec.type === 'money' && v != null && !(typeof v === 'number' && v >= 0 && v <= 1000)) out.push(`${k} is dollars, up to $1000`);
+  }
+  return out;
+}
+
 /** One-tap presets for the Games card. */
 export const PRESETS = [
   { key: 'skins', kind: 'skins', stake: 5, options: { net: true, carry: true } },
@@ -55,16 +134,23 @@ export const PRESETS = [
   { key: 'eclectic', kind: 'eclectic', stake: 20, options: { net: true } },
 ];
 
-/** "Skins $5 (net, carry-overs)" — a game's one-line label. */
+/** "Skins $5 (net, carry-overs)" — a game's one-line label. A custom game shows its own name (game.name). */
 export function gameLabel(game) {
-  const o = cleanOptions(game.kind, game.options);
+  const o = fullOptions(game.kind, game.options, game.settings);
   const bits = [];
-  if ('net' in o && game.kind !== 'stableford_pot') bits.push(o.net ? 'net' : 'gross');
+  if ('net' in o && (game.kind !== 'stableford_pot' || o.net === false)) bits.push(o.net ? 'net' : 'gross');
   if (game.kind === 'skins') bits.push(o.carry ? 'carry-overs' : 'no carry-overs');
+  if (game.kind === 'skins' && o.validate) bits.push('validated');
   if (game.kind === 'nassau' && o.scoring === 'stableford') bits.push('Stableford points');
+  if (game.kind === 'nassau' && o.press) bits.push(`auto-press at ${o.press}`);
+  if (game.kind === 'birdie_pool' && o.eagle_double) bits.push('eagles double');
   if (game.kind === 'eclectic') bits.push('for the trip');
-  const money = formatMoney(toCents(game.stake));
-  return `${GAME_INFO[game.kind]?.name || game.kind} ${money}${bits.length ? ` (${bits.join(', ')})` : ''}`;
+  let money = formatMoney(toCents(game.stake));
+  if (game.kind === 'nassau' && (o.front != null || o.back != null || o.total != null)) {
+    const v = (x) => formatMoney(toCents(x != null ? x : game.stake));
+    money = `${v(o.front)}/${v(o.back)}/${v(o.total)}`;
+  }
+  return `${game.name || GAME_INFO[game.kind]?.name || game.kind} ${money}${bits.length ? ` (${bits.join(', ')})` : ''}`;
 }
 
 /** Which games suit a round's format. Ambrose is played as teams: skins and Nassau only. */
@@ -211,14 +297,23 @@ const sortHoles = (holes) => [...(holes || [])].sort((a, b) => a.n - b.n);
  * Returns { holes: [{ n, status: 'won'|'tied'|'pending'|'waiting', winner, value, low, scores }], won: { id: skins },
  *   pot (skins carried past the last hole, still in the pot), final, money: { id: cents } }.
  * Money: each skin won collects `stake` from every other player (so a 3-skin hole is 3 × stake from each).
+ * Validated skins (option): a skin won on a hole only counts once its winner at least ties the next hole (the last
+ * hole needs no validation). Not validated: the hole shows 'unvalidated' and its skins carry on to that next hole
+ * (or die, with carry-overs off). A hole waiting on validation shows 'won' with validating: true.
  */
 export function skins({ holes, subjects, scores, options, stakeCents = 0, locked = false }) {
-  const o = cleanOptions('skins', options);
-  const out = { holes: [], won: {}, pot: 0, final: false, money: {}, carry: o.carry };
+  const o = fullOptions('skins', options);
+  const out = { holes: [], won: {}, pot: 0, final: false, money: {}, carry: o.carry, validate: o.validate };
   if (subjects.length < 2) return out;
+  const award = (w, value) => {
+    out.won[w] = (out.won[w] || 0) + value;
+    for (const s of subjects) addTo(out.money, s.id, s.id === w ? value * stakeCents * (subjects.length - 1) : -value * stakeCents);
+  };
+  const sorted = sortHoles(holes);
   let carry = 0;
   let blocked = false;
-  for (const h of sortHoles(holes)) {
+  let pend = null; // { entry, w, value } — a skin waiting on the next hole to validate it
+  for (const [i, h] of sorted.entries()) {
     const vals = subjects.map((s) => {
       const sc = scores?.[s.id]?.[h.n];
       const st = holeState(sc, locked);
@@ -229,20 +324,38 @@ export function skins({ holes, subjects, scores, options, stakeCents = 0, locked
     const low = playing.length ? Math.min(...playing.map((x) => x.v)) : null;
     if (vals.some((x) => x.st === 'none')) {
       out.holes.push({ n: h.n, status: 'pending', winner: null, value: null, low, scores: shown });
-      if (o.carry) blocked = true;
+      if (o.carry || pend) blocked = true;
       continue;
     }
-    const value = 1 + (o.carry ? carry : 0);
     const atLow = playing.filter((x) => x.v === low);
     if (blocked) {
       out.holes.push({ n: h.n, status: 'waiting', winner: atLow.length === 1 ? atLow[0].id : null, value: null, low, scores: shown });
       continue;
     }
+    if (pend) {
+      const wv = vals.find((x) => x.id === pend.w)?.v;
+      if (wv != null && wv === low) {
+        pend.entry.validating = false;
+        award(pend.w, pend.value);
+      } else {
+        pend.entry.status = 'unvalidated';
+        pend.entry.validating = false;
+        if (o.carry) carry += pend.value;
+      }
+      pend = null;
+    }
+    const value = 1 + (o.carry ? carry : 0);
     if (atLow.length === 1) {
       const w = atLow[0].id;
-      out.holes.push({ n: h.n, status: 'won', winner: w, value, low, scores: shown });
-      out.won[w] = (out.won[w] || 0) + value;
-      for (const s of subjects) addTo(out.money, s.id, s.id === w ? value * stakeCents * (subjects.length - 1) : -value * stakeCents);
+      const last = i === sorted.length - 1;
+      const entry = { n: h.n, status: 'won', winner: w, value, low, scores: shown };
+      out.holes.push(entry);
+      if (o.validate && !last) {
+        entry.validating = true;
+        pend = { entry, w, value };
+      } else {
+        award(w, value);
+      }
       carry = 0;
     } else {
       out.holes.push({ n: h.n, status: 'tied', winner: null, value, low, scores: shown });
@@ -250,7 +363,7 @@ export function skins({ holes, subjects, scores, options, stakeCents = 0, locked
     }
   }
   out.pot = blocked ? 0 : carry;
-  out.final = out.holes.length > 0 && out.holes.every((x) => x.status === 'won' || x.status === 'tied');
+  out.final = out.holes.length > 0 && out.holes.every((x) => (x.status === 'won' && !x.validating) || x.status === 'tied' || x.status === 'unvalidated');
   return out;
 }
 
@@ -260,30 +373,37 @@ export function skins({ holes, subjects, scores, options, stakeCents = 0, locked
  * Nassau: three bets — front 9, back 9 and the 18 (a 9-hole course has one bet). Best net (or gross) stroke total
  * wins, or most Stableford points (option). Leaders are compared on holes played so far (to par, or points vs 2 a
  * hole), so groups on different holes compare fairly. A bet is decided once everyone has finished its holes.
- * Everyone puts `stake` into each bet; the winners (ties split) take it.
- * Returns { scoring, bets: [{ key, label, holes, rows: [{ id, value, thru }], leaders, decided }], final, money }.
+ * Everyone puts `stake` into each bet (or that bet's own value: front / back / total); the winners (ties split) take it.
+ * Auto-press (option press = 2 or 3): within a nine (or a 9-hole course's only bet), once everyone has finished a
+ * hole and the leader of the latest bet on that nine is `press` or more clear of everyone else, a new bet (a press,
+ * same value) starts on the next hole and runs to the end of the nine. Up to 2 presses a nine.
+ * Returns { scoring, bets: [{ key, label, holes, rows: [{ id, value, thru }], leaders, decided, press? }], final, money }.
  */
 export function nassau({ holes, subjects, scores, options, stakeCents = 0, locked = false }) {
-  const o = cleanOptions('nassau', options);
+  const o = fullOptions('nassau', options);
   const hs = sortHoles(holes);
   const pts = o.scoring === 'stableford';
+  const stakeOf = (key) => (o[key] != null ? toCents(o[key]) : stakeCents);
   const defs = hs.length > 9
     ? [
-      { key: 'front', label: 'Front 9', holes: hs.filter((h) => h.n <= 9) },
-      { key: 'back', label: 'Back 9', holes: hs.filter((h) => h.n > 9) },
+      { key: 'front', label: 'Front 9', holes: hs.filter((h) => h.n <= 9), nine: true },
+      { key: 'back', label: 'Back 9', holes: hs.filter((h) => h.n > 9), nine: true },
       { key: 'total', label: 'The 18', holes: hs },
     ]
-    : [{ key: 'total', label: `All ${hs.length}`, holes: hs }];
+    : [{ key: 'total', label: `All ${hs.length}`, holes: hs, nine: true }];
   const ids = subjects.map((s) => s.id);
-  const bets = defs.map((d) => {
+  const holeVal = (s, h) => {
+    const v = pts ? pointsValue(h, scores?.[s.id]?.[h.n], s.hcp, o.net, locked) : strokeValue(h, scores?.[s.id]?.[h.n], s.hcp, o.net, locked);
+    return v == null ? null : pts ? v - 2 : v - h.par; // to par / vs expected
+  };
+  const betOn = (d) => {
     const rows = subjects.map((s) => {
       let value = 0;
       let thru = 0;
       for (const h of d.holes) {
-        const sc = scores?.[s.id]?.[h.n];
-        const v = pts ? pointsValue(h, sc, s.hcp, o.net, locked) : strokeValue(h, sc, s.hcp, o.net, locked);
+        const v = holeVal(s, h);
         if (v == null) continue;
-        value += pts ? v - 2 : v - h.par; // to par / vs expected
+        value += v;
         thru += 1;
       }
       return { id: s.id, value, thru };
@@ -292,16 +412,38 @@ export function nassau({ holes, subjects, scores, options, stakeCents = 0, locke
     const best = started.length ? (pts ? Math.max(...started.map((r) => r.value)) : Math.min(...started.map((r) => r.value))) : null;
     const leaders = best == null ? [] : started.filter((r) => r.value === best).map((r) => r.id);
     const decided = subjects.length >= 2 && d.holes.length > 0 && rows.every((r) => r.thru === d.holes.length);
-    return { key: d.key, label: d.label, holes: d.holes.map((h) => h.n), rows, leaders, decided };
-  });
-  const money = sumMoney(bets.filter((b) => b.decided).map((b) => potMoney(ids, b.leaders, stakeCents)));
-  return { scoring: pts ? 'stableford' : 'stroke', net: o.net, bets, final: bets.every((b) => b.decided), money };
+    return { key: d.key, label: d.label, holes: d.holes.map((h) => h.n), rows, leaders, decided, stake: d.stake, ...(d.press ? { press: d.press } : {}) };
+  };
+  const bets = [];
+  for (const d of defs) {
+    const stake = stakeOf(d.key);
+    bets.push(betOn({ ...d, stake }));
+    if (!o.press || !d.nine || subjects.length < 2) continue;
+    // Presses: walk the nine's holes everyone has finished, in order.
+    let cur = d.holes;
+    let presses = 0;
+    for (let i = 0; i < d.holes.length - 1 && presses < 2; i += 1) {
+      const h = d.holes[i];
+      if (subjects.some((s) => holeVal(s, h) == null)) break;
+      const upTo = cur.filter((x) => x.n <= h.n);
+      if (!upTo.length) continue;
+      const totals = subjects.map((s) => upTo.reduce((a, x) => a + holeVal(s, x), 0)).sort((a, b) => (pts ? b - a : a - b));
+      if (Math.abs(totals[0] - totals[1]) >= o.press) {
+        presses += 1;
+        cur = d.holes.slice(i + 1);
+        bets.push(betOn({ key: `${d.key}_press${presses}`, label: `${d.label} press (from ${cur[0].n})`, holes: cur, stake, press: presses }));
+      }
+    }
+  }
+  const money = sumMoney(bets.filter((b) => b.decided).map((b) => potMoney(ids, b.leaders, b.stake)));
+  return { scoring: pts ? 'stableford' : 'stroke', net: o.net, press: o.press, bets, final: bets.every((b) => b.decided), money };
 }
 
 // ------------------------------------------------------------------ Stableford pot
 
-/** Most Stableford points for the round takes the pot (stake from each player); ties split. */
-export function stablefordPot({ holes, subjects, scores, stakeCents = 0, locked = false, quick = {} }) {
+/** Most Stableford points for the round takes the pot (stake from each player); ties split. Net unless net: false. */
+export function stablefordPot({ holes, subjects, scores, options, stakeCents = 0, locked = false, quick = {} }) {
+  const net = fullOptions('stableford_pot', options).net;
   const hs = sortHoles(holes);
   const rows = subjects.map((s) => {
     // Typed in from a paper card (points only, no hole scores): their card's points count as a full round.
@@ -312,7 +454,7 @@ export function stablefordPot({ holes, subjects, scores, stakeCents = 0, locked 
     let points = 0;
     let thru = 0;
     for (const h of hs) {
-      const v = pointsValue(h, scores?.[s.id]?.[h.n], s.hcp, true, locked);
+      const v = pointsValue(h, scores?.[s.id]?.[h.n], s.hcp, net, locked);
       if (v == null) continue;
       points += v;
       thru += 1;
@@ -331,14 +473,17 @@ export function stablefordPot({ holes, subjects, scores, stakeCents = 0, locked 
 /**
  * Birdie pool: everyone puts in `stake`; each birdie or better (net or gross) takes one equal share of the pool.
  * Pick-ups never count. Paid out once everyone has finished; no birdies = everyone keeps their money.
+ * Eagles count double (option): an eagle or better takes two shares.
  */
 export function birdiePool({ holes, subjects, scores, options, stakeCents = 0, locked = false }) {
-  const o = cleanOptions('birdie_pool', options);
+  const o = fullOptions('birdie_pool', options);
   const hs = sortHoles(holes);
   const birdies = {};
+  const eagles = {};
   let finished = true;
   for (const s of subjects) {
     birdies[s.id] = [];
+    eagles[s.id] = [];
     for (const h of hs) {
       const sc = scores?.[s.id]?.[h.n];
       const st = holeState(sc, locked);
@@ -346,9 +491,11 @@ export function birdiePool({ holes, subjects, scores, options, stakeCents = 0, l
       if (st !== 'played') continue;
       const v = sc.strokes - (o.net ? strokesReceived(s.hcp, h.si) : 0);
       if (v <= h.par - 1) birdies[s.id].push(h.n);
+      if (o.eagle_double && v <= h.par - 2) eagles[s.id].push(h.n);
     }
   }
-  const shares = Object.values(birdies).reduce((a, b) => a + b.length, 0);
+  const sharesOf = (id) => birdies[id].length + eagles[id].length;
+  const shares = Object.keys(birdies).reduce((a, id) => a + sharesOf(id), 0);
   const pool = stakeCents * subjects.length;
   const final = subjects.length >= 2 && hs.length > 0 && finished;
   const money = {};
@@ -356,9 +503,9 @@ export function birdiePool({ holes, subjects, scores, options, stakeCents = 0, l
     for (const s of subjects) addTo(money, s.id, -stakeCents);
     const parts = splitCents(pool, shares);
     let i = 0;
-    for (const id of Object.keys(birdies).sort()) for (const _ of birdies[id]) addTo(money, id, parts[i++]); // eslint-disable-line no-unused-vars
+    for (const id of Object.keys(birdies).sort()) for (let k = 0; k < sharesOf(id); k += 1) addTo(money, id, parts[i++]);
   }
-  return { birdies, shares, pool, perShare: shares ? Math.floor(pool / shares) : 0, final, money };
+  return { birdies, eagles, shares, pool, perShare: shares ? Math.floor(pool / shares) : 0, final, money };
 }
 
 // ------------------------------------------------------------------ eclectic (trip-long)
@@ -422,7 +569,7 @@ export function playGame(game, ctx) {
       scores: ctx.scoresIdx?.[r.id] || {},
       locked: r.status === 'locked',
     }));
-    const result = eclectic({ rounds: rs, options: game.options, stakeCents });
+    const result = eclectic({ rounds: rs, options: gameOptions(game), stakeCents });
     const subjects = result.rows.map((r) => ({ id: r.id, name: r.name, members: [r.id] }));
     return { game, kind: game.kind, subjects, result, money: result.money, final: result.final, rounds: tripRounds.length };
   }
@@ -433,7 +580,7 @@ export function playGame(game, ctx) {
   const isQuick = (s) => quick[s.id] != null && !Object.keys(sc[s.id] || {}).length;
   const subjects = game.kind === 'stableford_pot' ? all : all.filter((s) => !isQuick(s));
   const leftOut = all.filter(isQuick).map((s) => s.name);
-  const args = { holes: ctx.course?.holes || [], subjects, scores: sc, options: game.options, stakeCents, locked, quick };
+  const args = { holes: ctx.course?.holes || [], subjects, scores: sc, options: gameOptions(game), stakeCents, locked, quick };
   const result = game.kind === 'skins' ? skins(args)
     : game.kind === 'nassau' ? nassau(args)
       : game.kind === 'stableford_pot' ? stablefordPot(args)

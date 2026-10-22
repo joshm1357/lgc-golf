@@ -11,8 +11,12 @@ import { useRun, must } from '../lib/run.js';
 import { formatToPar } from '../lib/scoring.js';
 import {
   GAME_INFO, PRESETS, PICKUP_RULES, AMBROSE_NOTE, cleanOptions, gameLabel, gameSuits, playGame, moneyTally,
-  formatMoney, toCents,
+  formatMoney, toCents, gameOptions, splitOptions, STANDARD_OPTIONS,
 } from '../lib/games.js';
+import { withCustom, roundGameFromCustom, copyFrom } from '../lib/customgames.js';
+import { useCustomGames, CustomGamesCard, OptionControls, CustomGameSheet } from '../components/CustomGames.jsx';
+
+const byId = (list) => Object.fromEntries(list.map((c) => [c.id, c]));
 
 /** Everything playGame needs for one round. */
 function gameCtx(data, round, scoresIdx) {
@@ -28,7 +32,9 @@ function gameCtx(data, round, scoresIdx) {
 export default function Games() {
   const data = useData();
   const [params, setParams] = useSearchParams();
-  const [games] = useRoundGames();
+  const [rawGames] = useRoundGames();
+  const [customs] = useCustomGames();
+  const games = useMemo(() => rawGames.map((g) => withCustom(g, byId(customs))), [rawGames, customs]);
   const [view, setView] = useState('round');
   const withGames = data.rounds.filter((r) => games.some((g) => g.round_id === r.id));
   const asked = data.rounds.find((r) => r.id === params.get('r'));
@@ -65,6 +71,7 @@ export default function Games() {
         <div className="empty">
           No games on {round ? 'this round' : 'any round'} yet.
           <div className="small" style={{ marginTop: 6 }}>An organiser adds them in Admin → Rounds (or Set up your trip → Extras): one tap for skins, Nassau, a Stableford pot, a birdie pool or an eclectic.</div>
+          <div className="section" style={{ textAlign: 'left' }}><CustomGamesCard /></div>
         </div>
       ) : (
         <div className="section stack">
@@ -81,6 +88,7 @@ export default function Games() {
           </div>
           {round.format === 'ambrose' && <p className="note" style={{ margin: 0 }}>{AMBROSE_NOTE}</p>}
           <p className="note" style={{ margin: 0 }}><strong>Pick-ups:</strong> {PICKUP_RULES}</p>
+          <CustomGamesCard />
         </div>
       )}
     </div>
@@ -138,6 +146,7 @@ function GameCard({ played, round }) {
         <span className="small" style={{ fontWeight: 700, color: skipped ? 'var(--muted)' : final ? 'var(--up)' : 'var(--gold)' }}>{skipped ? 'Not on' : final ? 'Final ✓' : round.status === 'live' ? 'Live' : 'Not started'}</span>
       </div>
       <div className="small muted">{info.blurb} {stakeWords(game)}</div>
+      {game.house_rules && <div className="small" style={{ whiteSpace: 'pre-wrap' }} data-testid="house-rules"><strong>House rules ({game.base_name}, our way):</strong> {game.house_rules}</div>}
       {played.note && <div className="small muted">{played.note}</div>}
       {skipped ? <div className="small muted">{skipped}.</div>
         : kind === 'skins' ? <SkinsView result={result} subjects={subjects} />
@@ -171,7 +180,8 @@ function SkinsView({ result, subjects }) {
           <div key={h.n} data-testid={`skin-${h.n}`} style={{ border: '1px solid var(--line)', borderRadius: 10, padding: '6px 8px', background: h.status === 'won' ? 'var(--gold-soft)' : '#fff', minHeight: 48 }}>
             <div className="label" style={{ fontSize: 11 }}>Hole {h.n}{h.value > 1 ? ` · ${h.value} skins` : ''}</div>
             <div className="small ellipsis" style={{ fontWeight: h.status === 'won' ? 700 : 400 }}>
-              {h.status === 'won' ? name(h.winner, subjects)
+              {h.status === 'won' ? `${name(h.winner, subjects)}${h.validating ? ' (needs to tie the next)' : ''}`
+                : h.status === 'unvalidated' ? `${name(h.winner, subjects)} — not validated, carries`
                 : h.status === 'tied' ? (!result.carry ? 'Tie — no skin' : result.holes.some((x) => x.n > h.n) ? 'Tie — carries' : 'In the pot')
                   : h.status === 'waiting' ? 'Waiting on earlier hole' : '–'}
             </div>
@@ -251,11 +261,20 @@ export function RoundGames({ round }) {
   const on = useFeature('games');
   const data = useData();
   const { status } = useSession();
-  const [games, reload] = useRoundGames();
+  const [rawGames, reload] = useRoundGames();
+  const [customs] = useCustomGames();
   const [busy, run] = useRun();
   const [editing, setEditing] = useState(null);
+  const [copying, setCopying] = useState(null);
   if (!on || !round) return null;
+  const customById = byId(customs);
+  const games = rawGames.map((g) => withCustom(g, customById));
   const mine = games.filter((g) => g.round_id === round.id);
+  const customOffer = customs.filter((c) => !c.retired && gameSuits(c.base_type, round.format) && !mine.some((g) => g.custom_game_id === c.id));
+  const addCustom = (c) => run(async () => {
+    await must(supabase.from('round_games').insert({ ...roundGameFromCustom(c, round.id), created_by: status.player_id || null }));
+    await reload();
+  }, `${c.name} added`);
   // An eclectic runs all trip on one course: offer it only once per trip and course.
   const eclecticElsewhere = games.find((g) => g.kind === 'eclectic' && g.round_id !== round.id
     && data.rounds.some((r) => r.id === g.round_id && r.trip_id === round.trip_id && r.course_id === round.course_id));
@@ -274,13 +293,25 @@ export function RoundGames({ round }) {
       {mine.map((g) => (
         <div key={g.id} className="card pad stack" style={{ gap: 6 }}>
           <div className="row" style={{ gap: 8 }}>
-            <div className="grow"><strong>{GAME_INFO[g.kind]?.emoji} {gameLabel(g)}</strong><div className="small muted">{GAME_INFO[g.kind]?.blurb}</div></div>
+            <div className="grow"><strong>{GAME_INFO[g.kind]?.emoji} {gameLabel(g)}</strong><div className="small muted">{g.house_rules ? `House rules: ${g.house_rules}` : GAME_INFO[g.kind]?.blurb}</div></div>
             <button type="button" className="btn ghost sm" onClick={() => setEditing(editing === g.id ? null : g.id)}>{editing === g.id ? 'Close' : 'Change'}</button>
           </div>
           {!gameSuits(g.kind, round.format) && <div className="small muted">Not played in Ambrose rounds.</div>}
-          {editing === g.id && <GameEditor game={g} busy={busy} run={run} onSaved={async () => { await reload(); setEditing(null); }} onRemove={() => remove(g)} />}
+          {editing === g.id && <GameEditor game={g} busy={busy} run={run} onSaved={async () => { await reload(); setEditing(null); }} onRemove={() => remove(g)}
+            onCopy={g.custom_game_id ? null : () => setCopying(copyFrom(g.kind, g))} />}
         </div>
       ))}
+      {customOffer.length > 0 && (
+        <div className="stack" style={{ gap: 6 }}>
+          <span className="small muted">Your own games:</span>
+          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+            {customOffer.map((c) => (
+              <button key={c.id} type="button" className="chip" disabled={busy} onClick={() => addCustom(c)} title={c.rules_text}>+ {gameLabel({ ...roundGameFromCustom(c, round.id), name: c.name })}</button>
+            ))}
+          </div>
+        </div>
+      )}
+      {copying && <CustomGameSheet start={copying} onClose={() => setCopying(null)} />}
       {offer.length > 0 && (
         <div className="stack" style={{ gap: 6 }}>
           <span className="small muted">{mine.length ? 'Add another — one tap:' : 'One tap to add (change the stake after):'}</span>
@@ -297,34 +328,31 @@ export function RoundGames({ round }) {
   );
 }
 
-function GameEditor({ game, busy, run, onSaved, onRemove }) {
-  const o0 = cleanOptions(game.kind, game.options);
+// Every standard option of the game (073): any mix is still the standard game. "Copy and change" is for a house rule.
+function GameEditor({ game, busy, run, onSaved, onRemove, onCopy }) {
   const [stake, setStake] = useState(String(Number(game.stake)));
-  const [opts, setOpts] = useState(o0);
+  const [opts, setOpts] = useState(() => gameOptions(game));
   const cents = toCents(stake);
   const bad = !/^\$?\s*\d+(\.\d{1,2})?$/.test(stake.trim()) || cents > 100000;
+  const moneyBad = (STANDARD_OPTIONS[game.kind] || []).some((s) => s.type === 'money' && opts[s.key] != null && !/^\$?\s*\d+(\.\d{1,2})?$/.test(String(opts[s.key]).trim()));
   const save = () => run(async () => {
-    await must(supabase.from('round_games').update({ stake: cents / 100, options: opts }).eq('id', game.id));
+    const { options, settings } = splitOptions(game.kind, opts);
+    const hasSettings = (STANDARD_OPTIONS[game.kind] || []).some((s) => s.col === 'settings');
+    await must(supabase.from('round_games').update({ stake: cents / 100, options, ...(hasSettings ? { settings } : {}) }).eq('id', game.id));
     await onSaved();
   }, 'Game saved');
-  const Toggle = ({ k, a, b }) => (
-    <div className="seg" role="group" aria-label={k}>
-      <button type="button" aria-pressed={opts[k] === a.v} onClick={() => setOpts({ ...opts, [k]: a.v })}>{a.label}</button>
-      <button type="button" aria-pressed={opts[k] === b.v} onClick={() => setOpts({ ...opts, [k]: b.v })}>{b.label}</button>
-    </div>
-  );
   return (
     <div className="stack" style={{ gap: 8 }}>
       <label className="field"><span>Stake — {GAME_INFO[game.kind].per} ($)</span>
         <input className="input" inputMode="decimal" value={stake} onChange={(e) => setStake(e.target.value)} style={{ maxWidth: 140 }} />
       </label>
       {stake.trim() !== '' && bad && <span className="small err" style={{ margin: 0 }}>Dollars and cents, up to $1000 — e.g. 5 or 2.50</span>}
-      {'net' in opts && <Toggle k="net" a={{ v: true, label: 'Net (with handicaps)' }} b={{ v: false, label: 'Gross' }} />}
-      {game.kind === 'skins' && <Toggle k="carry" a={{ v: true, label: 'Ties carry over' }} b={{ v: false, label: 'No carry-overs' }} />}
-      {game.kind === 'nassau' && <Toggle k="scoring" a={{ v: 'stroke', label: 'Strokes' }} b={{ v: 'stableford', label: 'Stableford points' }} />}
-      <div className="row" style={{ gap: 8 }}>
-        <button type="button" className="btn sm gold" disabled={busy || bad} onClick={save}>Save</button>
+      <OptionControls kind={game.kind} value={opts} onChange={setOpts} />
+      {moneyBad && <span className="small err" style={{ margin: 0 }}>Bet values are dollars and cents, up to $1000 — or blank for the stake</span>}
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+        <button type="button" className="btn sm gold" disabled={busy || bad || moneyBad} onClick={save}>Save</button>
         <button type="button" className="btn sm ghost" disabled={busy} onClick={onRemove}>Take this game off</button>
+        {onCopy && <button type="button" className="btn sm ghost" onClick={onCopy}>Copy and change (house rules)</button>}
       </div>
     </div>
   );

@@ -9,6 +9,7 @@ import { useRun, must } from '../lib/run.js';
 import { HOW, compsForRound, sortOwnEntries, beats, parseHoles } from '../lib/sidecomps.js';
 import { compKind, wonText } from '../lib/sidecomplib.js';
 import { CompLibrary, TallyComp, AutoComp } from './SideCompLibrary.jsx';
+import { ConditionsLine, ConditionsButton, BuiltinConditionsAdmin } from '../components/CompConditions.jsx';
 
 /** The group's own side comps, live. */
 export function useOwnDefs() {
@@ -76,6 +77,7 @@ function MeasuredComp({ round, comp, playerIds }) {
         </div>
       )}
       <div className="section stack">
+        <ConditionsLine comp={comp} />
         {leader ? (
           <div className="card pad row" style={{ background: 'var(--gold-soft)', borderColor: 'var(--gold)', gap: 12 }}>
             {leader.photo_url ? <img src={leader.photo_url} alt="" style={{ width: 76, height: 76, borderRadius: 12, objectFit: 'cover' }} /> : <Avatar player={data.playersById[leader.player_id]} size={64} />}
@@ -146,6 +148,7 @@ function OwnEntryForm({ round, comp, hole, leader, playerIds, onClose, onSaved }
   return (
     <Sheet title={`${comp.name}${hole ? ` · hole ${hole}` : ''}`} onClose={onClose}>
       <div className="stack">
+        <ConditionsLine comp={comp} />
         <label className="field"><span>Player</span>
           <select className="select" value={playerId} onChange={(e) => setPlayerId(e.target.value)}>
             {options.map((p) => <option key={p.id} value={p.id}>{playerName(p)}{p.id === me ? ' (me)' : ''}</option>)}
@@ -186,10 +189,12 @@ export function OwnCompsAdmin({ trip } = {}) {
   return (
     <div className="stack" style={{ gap: 10 }}>
       <div className="small muted">Closest to pin and longest drive are always there. Add more from the list — greenies, sandies, most birdies, the snake… — or make your own.</div>
+      <BuiltinConditionsAdmin />
       <CompLibrary defs={defs} reload={reload} trip={trip} />
       {live.map((d) => (
         <div key={d.id} className="row" style={{ gap: 8 }}>
-          <div className="grow"><strong>{d.emoji} {d.name}</strong><div className="small muted">{wonText(d)}</div></div>
+          <div className="grow"><strong>{d.emoji} {d.name}</strong><div className="small muted">{wonText(d)}</div><ConditionsLine comp={d} style={{ marginTop: 4 }} /></div>
+          <ConditionsButton comp={d} name={d.name} onSaved={reload} />
           <button type="button" className="btn ghost sm" disabled={busy} onClick={() => run(async () => { await must(supabase.from('side_comp_defs').update({ retired: true }).eq('id', d.id)); await reload(); }, 'Side comp put away (its winners stay)')}>Put away</button>
         </div>
       ))}

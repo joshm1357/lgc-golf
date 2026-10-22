@@ -48,7 +48,7 @@ export async function signInWithEmail(email) {
   const { error } = await supabase.auth.signInWithOtp({ email: email.trim(), options: { emailRedirectTo: back(), shouldCreateUser: true } });
   if (error) {
     if (/rate limit|too many|security purposes/i.test(error.message || '')) throw new Error('Too many codes asked for — wait a minute and try again.');
-    if (/signups not allowed|signup.*disabled/i.test(error.message || '')) throw new Error('New accounts are switched off at the moment. Join with a PIN or invite link instead.');
+    if (/signups not allowed|signup.*disabled/i.test(error.message || '')) throw new Error('New accounts are switched off at the moment. Open your group’s link instead.');
     throw error;
   }
 }

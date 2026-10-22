@@ -10,7 +10,7 @@ function memStore() {
 }
 
 describe('frontDoor', () => {
-  it('sign-in switched off: exactly as before (PIN screen, or straight in)', () => {
+  it('sign-in switched off: the link-first screen, or straight in', () => {
     expect(frontDoor({ signInOn: false, status: null })).toBe('join');
     expect(frontDoor({ signInOn: false, status: { is_member: false, signed_in: true, groups: [] } })).toBe('join');
     expect(frontDoor({ signInOn: false, status: { is_member: true, signed_in: true, groups: [G1, G2] }, fresh: true })).toBe('inside');

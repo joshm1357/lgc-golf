@@ -48,3 +48,39 @@ export function linkScreen(info, signedIn) {
   if (info.state === 'replaced') return 'replaced';
   return signedIn ? 'confirm' : 'sign-in';
 }
+
+// ------------------------------------------------------------------ Links, not PINs (083)
+// With sign-in switched off (the live app), a personal link opens the app on a phone as that player straight away
+// — no name to pick. It's how someone gets back in on a new phone.
+
+/** The message for a phone link (sign-in off). */
+export function phoneMessage(name, groupName, link, role = 'player') {
+  const who = String(name || '').trim() || 'mate';
+  const group = String(groupName || '').trim() || 'the group';
+  const organiser = role === 'organiser' ? ` It also makes you an organiser of ${group}, so keep it to yourself.` : '';
+  return `G'day ${who}, here's your own link for ${group} on The Golf Trip. Open it on your phone and you're straight in as you — no name to pick. It's just for you, so please don't share it (it works once and lasts 14 days).${organiser} ${link}`;
+}
+
+/** One player's line on the organiser's Personal links card when sign-in is off. */
+export function phoneLine(row, now = Date.now()) {
+  if (row?.link_waiting) {
+    const until = row.link_expires ? new Date(row.link_expires) : null;
+    const left = until ? Math.ceil((until.getTime() - now) / 86_400_000) : null;
+    return { word: left != null && left > 0 ? `Link sent · works for ${left} more day${left === 1 ? '' : 's'}` : 'Link sent', done: false, waiting: true };
+  }
+  const phones = Number(row?.phones || 0) + (row?.signed_in ? 1 : 0);
+  return { word: phones > 0 ? `On the app (${phones} phone${phones === 1 ? '' : 's'})` : 'Not on the app yet', done: false };
+}
+
+/** The message for "Copy my link" (your own link, to open the app as you on another phone). */
+export function myLinkMessage(link) {
+  return `My link for The Golf Trip — open it on the other phone and it's straight in as me. Works once, for 14 days: ${link}`;
+}
+
+/** What the personal-link screen does on a phone with sign-in off: 'use' | 'in' (already in) | 'used' | 'expired' | 'replaced' | 'bad'. */
+export function phoneScreen(info, inGroup = false) {
+  if (!info) return 'bad';
+  if (info.state === 'ok') return 'use';
+  if (inGroup) return 'in';
+  return ['used', 'expired', 'replaced'].includes(info.state) ? info.state : 'bad';
+}

@@ -6,14 +6,15 @@
 
 const FRESH_KEY = 'tgt-fresh-sign-in';
 const RETURN_KEY = 'tgt-return-to';
-// An app address, optionally with a plain query ("#/join/CODE?vote=<id>" — the vote link, 080). Nothing else.
-const SAFE_HASH = /^#\/[A-Za-z0-9/_-]*(\?[A-Za-z0-9=&_-]*)?$/;
+// An app address, optionally with a plain query ("#/join/CODE?to=%2Fplan%2F…" — a shared link, 083; or the older
+// "?vote=<id>", 080). Nothing else (no "//", no other site).
+const SAFE_HASH = /^#\/(?!\/)[A-Za-z0-9/_.~-]*(\?[A-Za-z0-9=&_.~%-]*)?$/;
 const FRESH_FOR_MS = 15 * 60 * 1000; // a sign-in left half-done (e.g. Google cancelled) stops counting after 15 minutes
 
 /**
  * Which screen the Gate shows.
- *  - 'join'        the PIN / invite screen exactly as before (sign-in not switched on in this build)
- *  - 'home'        the new front door: sign in first, PIN or invite folded away underneath
+ *  - 'join'        the link-first screen: "Open the link from your group chat" (sign-in not switched on in this build)
+ *  - 'home'        the new front door: sign in first, or open your group's link
  *  - 'your-groups' the list of groups you're in (or "You're not in a group yet")
  *  - 'inside'      straight into the current group
  */

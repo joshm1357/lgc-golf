@@ -5,7 +5,8 @@ import { supabase } from '../lib/supabase.js';
 import { useData, useSession, playerName } from '../lib/store.jsx';
 import { Header, Avatar, Loading, toast } from '../components/ui.jsx';
 import { setCurrentGroup } from '../lib/group.js';
-import { inviteLink, inviteCode, ROLE_LABEL, ROLE_HELP } from '../lib/invite.js';
+import { inviteLink, ROLE_LABEL, ROLE_HELP } from '../lib/invite.js';
+import { readLink } from '../lib/links.js';
 import { SIGN_IN, linkProvider, linkEmail } from '../lib/auth.js';
 import { shareText } from '../lib/push.js';
 import { FEATURES, featureOn, children } from '../lib/features.js';
@@ -13,7 +14,7 @@ import { FONTS, DEFAULT_LOOK, LGC_LOOK, lookProblems, themeVars, applyLook } fro
 import { uploadPhoto } from '../lib/images.js';
 import { GroupCrest } from '../components/Logo.jsx';
 import { useRun, must } from '../lib/run.js';
-import { personalLink, personalMessage, signInLine } from '../lib/personal.js';
+import { personalLink, personalMessage, signInLine, phoneMessage, phoneLine } from '../lib/personal.js';
 import { NEW_GROUPS } from '../lib/beta.js';
 import ForgetJokes from '../components/ForgetJokes.jsx';
 import { GovernanceLink } from './Cases.jsx';
@@ -29,17 +30,16 @@ export default function Group() {
         <SignInCard />
         {status.is_admin && <InviteCard role="player" />}
         {status.is_admin && <InviteCard role="guest" />}
-        {status.is_admin && SIGN_IN.length > 0 && <PersonalLinksCard />}
+        {status.is_admin && <PersonalLinksCard />}
         {status.is_admin && <Members />}
         {status.is_admin && <GroupVoteEmailCard />}
         {status.is_admin && <LookCard />}
         {status.is_admin && <FeaturesCard />}
-        {status.is_admin && status.legacy && <AdminPinCard />}
         {status.is_admin && <ForgetJokes />}
         <GovernanceLink />
         <JoinAnother />
         <YourData />
-        {!status.is_admin && <div className="small muted">You’re a {ROLE_LABEL[status.role] || 'member'} here — {ROLE_HELP[status.role] || ''} Ask an organiser for an invite link to bring someone in.</div>}
+        {!status.is_admin && <div className="small muted">You’re a {ROLE_LABEL[status.role] || 'member'} here — {ROLE_HELP[status.role] || ''} Any link you share from the app (a recap, a vote, a trip) lets someone new join and land on it.</div>}
       </div>
     </div>
   );
@@ -202,11 +202,13 @@ function Members() {
 }
 
 /**
- * Personal links (organisers, once sign-in is switched on): send each player their own link. They sign in and that
- * sign-in is connected to their player, with all their history. Server side: migration 046.
+ * Personal links (organisers): send each player their own link. Sign-in on: they sign in and that sign-in is
+ * connected to their player, with all their history (046). Sign-in off: the link opens the app as them on that phone
+ * (083) — how someone gets back in on a new phone.
  */
 function PersonalLinksCard() {
   const { status } = useSession();
+  const signInOn = SIGN_IN.length > 0;
   const data = useData();
   const [rows, setRows] = useState(null);
   const [hidden, setHidden] = useState(false);
@@ -226,7 +228,7 @@ function PersonalLinksCard() {
   const send = (p) => run(async () => {
     const code = await must(supabase.rpc('create_player_link', { p_player: p.id }));
     const link = personalLink(code);
-    const r = await shareText(personalMessage(playerName(p), status.group_name, link, rows?.[p.id]?.role), `${playerName(p)}'s link`);
+    const r = await shareText((signInOn ? personalMessage : phoneMessage)(playerName(p), status.group_name, link, rows?.[p.id]?.role), `${playerName(p)}'s link`);
     await load();
     if (r === 'copied') toast(`${playerName(p)}'s link copied — paste it in a message to them`);
     else if (r === 'failed') { window.prompt(`Copy ${playerName(p)}'s link and send it to them:`, link); }
@@ -235,11 +237,13 @@ function PersonalLinksCard() {
     <div className="card">
       <div style={{ padding: '12px 14px 4px' }}>
         <strong>🔗 Personal links</strong>
-        <div className="small muted">Send each player their own link. They sign in, and they keep their name, scores and history on any phone. Each link works once and lasts 14 days.</div>
-        {rows && <div className="small" style={{ marginTop: 6, fontWeight: 700 }}>{done} of {players.length} signed in</div>}
+        <div className="small muted">{signInOn
+          ? 'Send each player their own link. They sign in, and they keep their name, scores and history on any phone. Each link works once and lasts 14 days.'
+          : 'Send a player their own link to get them in on a new phone — it opens the app as them, no name to pick. Each link works once and lasts 14 days.'}</div>
+        {rows && signInOn && <div className="small" style={{ marginTop: 6, fontWeight: 700 }}>{done} of {players.length} signed in</div>}
       </div>
       {!rows ? <Loading /> : players.map((p) => {
-        const line = signInLine(rows[p.id]);
+        const line = signInOn ? signInLine(rows[p.id]) : phoneLine(rows[p.id]);
         return (
           <div key={p.id} className="row" style={{ gap: 10, padding: '10px 14px', borderTop: '1px solid var(--line-soft)', alignItems: 'center' }}>
             <Avatar player={p} size={34} />
@@ -260,28 +264,13 @@ function PersonalLinksCard() {
   );
 }
 
-/** L.G.C's old admin PIN: an organiser switches it off once everyone who should be an organiser is one. */
-function AdminPinCard() {
-  const [busy, run] = useRun();
-  const [off, setOff] = useState(false);
-  if (off) return <div className="small muted">🔑 The admin PIN is off. New organisers are made here.</div>;
-  return (
-    <div className="card pad stack" style={{ gap: 6 }}>
-      <strong>🔑 Admin PIN</strong>
-      <span className="small muted">Anyone with L.G.C’s admin PIN can make themselves an organiser. Once your organisers are set up here, switch it off.</span>
-      <button type="button" className="btn ghost sm" disabled={busy} onClick={() => {
-        if (window.confirm('Switch the admin PIN off? Organisers are then only made here. (An organiser can set a new PIN in Admin → Change PINs.)')) run(async () => { await must(supabase.rpc('turn_off_admin_pin')); setOff(true); }, 'Admin PIN off');
-      }}>Switch the admin PIN off</button>
-    </div>
-  );
-}
-
 /** Join another group by pasting its invite link (iPhone Home Screen apps can't open links from chats). */
 function JoinAnother() {
   const [text, setText] = useState('');
-  const code = inviteCode(text);
+  const l = readLink(text);
+  const code = l && l.kind !== 'page' ? l.hash : null;
   return (
-    <form className="card pad stack" style={{ gap: 6 }} onSubmit={(e) => { e.preventDefault(); if (code) window.location.hash = `#/join/${code}`; }}>
+    <form className="card pad stack" style={{ gap: 6 }} onSubmit={(e) => { e.preventDefault(); if (code) window.location.hash = code; }}>
       <strong>➕ Join another group</strong>
       <span className="small muted">Paste the invite link someone sent you.</span>
       <div className="row" style={{ gap: 6 }}>

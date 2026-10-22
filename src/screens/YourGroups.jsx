@@ -8,7 +8,7 @@ import { setCurrentGroup } from '../lib/group.js';
 import { groupRows, groupLook, clearFreshSignIn } from '../lib/home.js';
 import { GroupCrest, GolfTripCrest } from '../components/Logo.jsx';
 import { Header } from '../components/ui.jsx';
-import { PinForm } from './Join.jsx';
+import { LinkForm } from './Join.jsx';
 import { paintLook, DEFAULT_LOOK } from '../lib/theme.js';
 import { SIGN_IN } from '../lib/auth.js';
 import { NEW_GROUPS } from '../lib/beta.js';
@@ -63,7 +63,7 @@ export default function YourGroups() {
       {!none && <GroupList rows={rows} status={status} onPick={(g) => openGroup(g.id)} />}
       {none && NEW_GROUPS && <a href="#/start" className="btn gold block" style={{ maxWidth: 340 }}>Start a new group</a>}
       {showPin
-        ? <PinForm autoFocus linkFirst onInvite={(c) => { window.location.hash = `#/join/${c}`; }} />
+        ? <LinkForm autoFocus />
         : <button type="button" className="btn ghost block" style={ghost} onClick={() => setShowPin(true)}>{none ? 'Join with an invite link' : 'Join another with an invite link'}</button>}
       {none && <div className="small" style={{ color: 'var(--on-navy-muted)', textAlign: 'center', maxWidth: 340 }}>Played before without signing in? Ask your organiser for your personal link. It brings your scores and history with you.</div>}
       {!none && NEW_GROUPS && <a href="#/start" className="btn ghost block" style={{ ...ghost, borderColor: 'transparent', textDecoration: 'underline' }}>Start a new group</a>}
@@ -91,14 +91,13 @@ export function YourGroupsInside() {
         {NEW_GROUPS && <a href="#/start" className="btn block">Start a new group</a>}
         {showPin
           ? (
-            // The PIN box is styled for the navy front door; give it a navy panel here too.
+            // The link box is styled for the navy front door; give it a navy panel here too.
             <div style={{ background: 'var(--navy)', color: '#fff', borderRadius: 14, padding: 16, display: 'flex', justifyContent: 'center' }}>
-              <PinForm autoFocus linkFirst={SIGN_IN.length > 0} onJoined={(id) => openGroup(typeof id === 'string' ? id : status?.group_id)}
-                onInvite={(c) => { window.location.hash = `#/join/${c}`; }} />
+              <LinkForm autoFocus />
             </div>
           )
-          : <button type="button" className="btn ghost block" onClick={() => setShowPin(true)}>{SIGN_IN.length > 0 ? 'Join another with an invite link' : 'Join another with a PIN or invite link'}</button>}
-        {!status?.signed_in && <p className="note">To keep your groups on a new phone, add a sign-in in <Link to="/group">Group & invites</Link>.</p>}
+          : <button type="button" className="btn ghost block" onClick={() => setShowPin(true)}>Join another with its link</button>}
+        {!status?.signed_in && <p className="note">On a new phone? Open your personal link there (your profile → Copy my link){SIGN_IN.length > 0 ? <>, or add a sign-in in <Link to="/group">Group & invites</Link></> : null}.</p>}
       </div>
     </div>
   );

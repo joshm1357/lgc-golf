@@ -96,7 +96,7 @@ describe('Call the vote', () => {
   });
   it('the share link goes through the invite, then lands on the vote', () => {
     const link = CV.voteShareLink({ base: 'https://app/', code: 'ABCDEFGH2345', planId: PLAN });
-    expect(link).toBe(`https://app/#/join/ABCDEFGH2345?vote=${PLAN}`);
+    expect(link).toBe(`https://app/#/join/ABCDEFGH2345?to=%2Fplan%2F${PLAN}%3Ftab%3Dvote`); // one scheme (083)
     expect(CV.voteShareLink({ base: 'https://app/', planId: PLAN })).toBe(`https://app/#/plan/${PLAN}?tab=vote`);
     expect(CV.voteTarget(`#/join/ABCDEFGH2345?vote=${PLAN}`)).toBe(`#/plan/${PLAN}?tab=vote`);
     expect(CV.voteTarget('#/join/ABCDEFGH2345?vote=<script>')).toBe(null);

@@ -1,11 +1,10 @@
 // Public "how it works" page for the lads — no sign-in needed. Open with ?guide
-import React, { useState } from 'react';
+import React from 'react';
 import { Crest } from '../components/Logo.jsx';
 import { PuttBuddiesBadge } from '../components/TrophyArt.jsx';
 import { Icon } from '../components/ui.jsx';
 
 const APP = './';
-const PIN = '7851';
 
 const GROUPS = [
   { label: 'Group 1', teams: [['Fred & Paul', 15], ['Mark & Al', 11]] },
@@ -35,7 +34,6 @@ function Feature({ icon, title, children }) {
 }
 
 export default function Guide() {
-  const [copied, setCopied] = useState(false);
   return (
     <div className="app" style={{ paddingBottom: 30 }}>
       <header className="hdr" style={{ alignItems: 'center', textAlign: 'center', paddingBottom: 20 }}>
@@ -44,16 +42,13 @@ export default function Guide() {
         <div className="hdr-sub">Shoalhaven Heads · South Coast Trip 2026 · playing for <strong style={{ color: 'var(--gold)' }}>Putt Buddies</strong></div>
         <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10, marginTop: 6 }}>
           <a href={APP} className="btn gold block" style={{ minHeight: 56, fontSize: 18 }}>Open the app</a>
-          <button type="button" className="btn block" style={{ background: 'var(--navy-2)' }} onClick={() => { try { navigator.clipboard.writeText(PIN); setCopied(true); } catch { /* ignore */ } }}>
-            Group PIN: <span className="num" style={{ fontSize: 24, letterSpacing: '.2em', marginLeft: 6 }}>{PIN}</span>
-            <span className="small" style={{ marginLeft: 8, opacity: 0.8 }}>{copied ? 'copied ✓' : 'tap to copy'}</span>
-          </button>
+          <div className="small" style={{ opacity: 0.85 }}>First time? Open the invite link from the group chat.</div>
         </div>
       </header>
 
       <div className="section stack">
         <span className="label">Get set up (1 minute)</span>
-        <Step n="1" title="Open the app and enter the PIN">Tap <strong>Open the app</strong> above, enter <strong>{PIN}</strong>.</Step>
+        <Step n="1" title="Open the link from the group chat">Tap the invite link Josh posted in the group chat. It opens the app — no PIN, no account.</Step>
         <Step n="2" title="Tap your name">Pick yourself from the list, take a selfie (it's your face on the leaderboard), done. Not on the list? Tap "I'm not on the list" and Josh approves you.</Step>
         <Step n="3" title="Put it on your home screen">
           <strong>iPhone:</strong> in Safari tap Share <span aria-hidden="true">⎋</span> → <em>Add to Home Screen</em>.<br />
@@ -108,7 +103,7 @@ export default function Guide() {
 
       <div className="section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, paddingTop: 20 }}>
         <PuttBuddiesBadge size={130} />
-        <a href={APP} className="btn gold block" style={{ minHeight: 56, fontSize: 18 }}>Open the app — PIN {PIN}</a>
+        <a href={APP} className="btn gold block" style={{ minHeight: 56, fontSize: 18 }}>Open the app</a>
       </div>
     </div>
   );

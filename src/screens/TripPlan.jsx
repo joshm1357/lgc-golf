@@ -116,7 +116,20 @@ export function NextStepCard({ pd, stage, onTab, onView }) {
     if (a.type === 'pay') { setSheet({ kind: 'pay' }); return; }
     if (a.type === 'deposits') { setSheet({ kind: 'deposits' }); return; }
     if (a.type === 'trip_plan') { setSheet({ kind: 'budget' }); return; }
-    if (a.type === 'lock' || a.type === 'builder') { onView('organise'); return; }
+    if (a.type === 'builder') { onView('organise'); return; }
+    if (a.type === 'lock') {
+      const openVotes = pd.polls.filter((p) => p.status === 'open').length;
+      if (openVotes && !window.confirm(`${openVotes} vote${openVotes === 1 ? ' is' : 's are'} still open. Lock it in anyway?`)) return;
+      run(async () => {
+        // Same as the Lock it in card: lock, tell the feed and everyone, then make the to-do list.
+        await must(supabase.from('plans').update({ status: 'confirmed' }).eq('id', plan.id));
+        await supabase.from('posts').insert({ kind: 'user', player_id: status.player_id, body: `🔒 ${plan.name} is locked in: ${fmtRange(plan.start_date, plan.end_date)}${plan.location_name ? ` at ${plan.location_name}` : ''}. Say if you’re in.`, link: `/plan/${plan.id}` });
+        await notify('trip_locked', { plan_id: plan.id });
+        await makeTripJobs({ ...pd, plan: { ...plan, status: 'confirmed' } }, status).catch(() => 0);
+        pd.reload();
+      }, 'Locked in — the to-do list is ready');
+      return;
+    }
     if (a.type === 'go') { nav(a.to); return; }
     if (a.type === 'make_jobs') {
       run(async () => { const n = await makeTripJobs(pd, status); pd.reload(); return n; })

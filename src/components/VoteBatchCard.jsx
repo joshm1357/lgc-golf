@@ -58,7 +58,7 @@ export function VoteBatchCard({ batch, pd }) {
         {polls.map((p, i) => (
           <div key={p.id} data-testid="vote-batch-section">
             <div className="small muted" style={{ fontWeight: 800, margin: '0 4px 4px' }}>{i + 1} of {sections}</div>
-            <PollCard poll={p} pd={pd} />
+            <PollCard poll={p} pd={pd} inCard />
           </div>
         ))}
         {batch.keen && (

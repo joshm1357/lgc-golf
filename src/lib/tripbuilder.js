@@ -221,9 +221,10 @@ export function fitsLeg(leg, drive, { stayMax = DEFAULT_STAY_MAX, detourMax = DE
  * The group's history on a library course: rounds on the group's copies of it, by trip, newest first.
  * → { count, trips: [{ name, year, date, trophies: ['BD won by Kurt'] }], last, recentYears, text }
  */
-export function playedHistory(libraryId, { courses = [], rounds = [], trips = [], honour = [] } = {}) {
+export function playedHistory(libraryId, { courses = [], rounds = [], trips = [], honour = [], today = isoOf(new Date()) } = {}) {
   const mine = new Set(courses.filter((c) => c.library_id === libraryId).map((c) => c.id));
-  const played = rounds.filter((r) => mine.has(r.course_id));
+  // Only rounds actually played: before today, and not still being set up (a trip just built isn't "played").
+  const played = rounds.filter((r) => mine.has(r.course_id) && r.status !== 'setup' && String(r.play_date || '9999') < today);
   const byTrip = new Map();
   for (const r of played) {
     const t = trips.find((x) => x.id === r.trip_id);

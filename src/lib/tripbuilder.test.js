@@ -127,6 +127,9 @@ describe('what we know about a course', () => {
     expect(h.last).toMatchObject({ name: 'South Coast trip', year: 2025, trophies: ['BD won by Kurt'] });
     expect(h.text).toBe('Played 2025 South Coast trip · 2 trips · BD won by Kurt');
     expect(playedHistory('sh', history)).toMatchObject({ count: 0, text: null });
+    // A round just set up for a coming trip isn't "played".
+    const coming = { ...history, rounds: [...history.rounds, { id: 'r3', trip_id: 't3', course_id: 'own-ng', play_date: '2099-03-14', status: 'setup' }] };
+    expect(playedHistory('ng', coming).count).toBe(2);
   });
   it('short line on a pin', () => {
     expect(shortKnown({ mine_avg: 4.5 }, { count: 1, last: { year: 2023 } })).toBe('Played 2023 · ★4.5');

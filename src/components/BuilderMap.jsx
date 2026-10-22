@@ -36,7 +36,8 @@ const stayIcon = (name, on) => L.divIcon({
  * origin:  { lat, lng, label } | null
  */
 export default function BuilderMap({ courses = [], stays = [], origin = null, onCourse, onStay, onTap, frame, className = 'tb-map' }) {
-  const pts = frame?.length ? frame : [...stays.filter((s) => s.on), ...courses.filter((c) => c.on)].filter((p) => p && p.lat != null);
+  // Frame the places to stay you can pick from, and the courses chosen for the day being built.
+  const pts = frame?.length ? frame : [...stays, ...courses.filter((c) => c.on)].filter((p) => p && p.lat != null);
   const fallback = pts.length ? pts : [...stays, ...courses].filter((p) => p && p.lat != null).slice(0, 30);
   const centre = fallback[0] ? [fallback[0].lat, fallback[0].lng] : [-33.87, 151.21];
   return (

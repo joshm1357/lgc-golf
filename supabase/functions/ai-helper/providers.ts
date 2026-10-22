@@ -139,7 +139,11 @@ function anthropicImage(url: string) {
 /** Is this OpenRouter (it takes a few extra request fields)? */
 export const isOpenRouter = (cfg: AiConfig) => cfg.provider !== 'anthropic' && /openrouter\.ai/i.test(cfg.baseUrl || '');
 
-export function requestBody(cfg: AiConfig, o: { system: string; tools: ToolDef[]; messages: Msg[]; maxTokens: number }) {
+/** `force` (ov16): the name of the one tool the model must call this time (the helper's last round, so it always
+ *  answers instead of running out). Anthropic: tool_choice names it. OpenAI-style hosts: only that tool is offered
+ *  (a named tool_choice isn't supported everywhere, e.g. some thinking models refuse it). */
+export function requestBody(cfg: AiConfig, o: { system: string; tools: ToolDef[]; messages: Msg[]; maxTokens: number; force?: string }) {
+  const forced = o.force && o.tools.some((t) => t.name === o.force) ? o.force : null;
   if (cfg.provider === 'anthropic') {
     const messages = o.messages.map((m) => {
       if (m.role === 'user') return { role: 'user', content: m.images?.length ? [...m.images.map(anthropicImage), { type: 'text', text: m.text }] : m.text };
@@ -152,7 +156,7 @@ export function requestBody(cfg: AiConfig, o: { system: string; tools: ToolDef[]
       }
       return { role: 'user', content: m.results.map((r) => ({ type: 'tool_result', tool_use_id: r.id, content: r.content, ...(r.is_error ? { is_error: true } : {}) })) };
     });
-    return { model: cfg.model, max_tokens: o.maxTokens, system: o.system, tools: o.tools, messages };
+    return { model: cfg.model, max_tokens: o.maxTokens, system: o.system, tools: o.tools, messages, ...(forced ? { tool_choice: { type: 'tool', name: forced } } : {}) };
   }
   const messages: Any[] = [{ role: 'system', content: o.system }];
   for (const m of o.messages) {
@@ -168,7 +172,7 @@ export function requestBody(cfg: AiConfig, o: { system: string; tools: ToolDef[]
   }
   return {
     model: cfg.model, max_tokens: o.maxTokens, messages,
-    tools: o.tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } })),
+    tools: (forced ? o.tools.filter((t) => t.name === forced) : o.tools).map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } })),
     tool_choice: 'auto',
     // OpenRouter: "thinking" models (e.g. Kimi K2.6) can spend the whole token budget thinking and send back no answer.
     // Medium thinking (Josh, 22 Oct: quality over cost for now), kept out of the reply. Only sent to OpenRouter (other OpenAI-style hosts may refuse it).
@@ -232,7 +236,7 @@ export function httpFailure(status: number): { code: string; message: string } {
 }
 
 /** Call the model once. Never throws. */
-export async function callModel(cfg: AiConfig, o: { system: string; tools: ToolDef[]; messages: Msg[]; maxTokens: number }, fetchFn: typeof fetch, timeoutMs: number): Promise<CallResult> {
+export async function callModel(cfg: AiConfig, o: { system: string; tools: ToolDef[]; messages: Msg[]; maxTokens: number; force?: string }, fetchFn: typeof fetch, timeoutMs: number): Promise<CallResult> {
   const body = JSON.stringify(requestBody(cfg, o));
   let res: Response;
   try {

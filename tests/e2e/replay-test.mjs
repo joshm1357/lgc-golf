@@ -49,7 +49,7 @@ const db = {
   posts: [{ id: 'po1', round_id: R1, kind: 'user', player_id: D, body: 'Lost three balls in the dam', photo_url: null, created_at: t(5) }],
   in_jokes: [{ id: 'j1', text: 'Bo still owes everyone for the cab.', player_id: B, moment: 'win' }],
   plans: [], plan_rsvps: [], plan_groups: [], plan_group_members: [], tribunal_cases: [], tribunal_votes: [], rules: [],
-  group_features: [{ group_id: GROUP, feature_key: 'in_jokes', enabled: true }],
+  group_features: [{ group_id: GROUP, feature_key: 'in_jokes', enabled: true }, { group_id: GROUP, feature_key: 'commentary', enabled: true }, { group_id: GROUP, feature_key: 'awards', enabled: true }],
 };
 const eqOf = (params, k) => { const v = params.get(k); return v && v.startsWith('eq.') ? v.slice(3) : null; };
 function filterRows(rows, params) {

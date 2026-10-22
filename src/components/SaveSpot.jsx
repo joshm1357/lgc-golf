@@ -66,7 +66,7 @@ function SaveSpotSheet({ onClose, onDone, done }) {
     <Sheet title={done ? 'Your spot is saved' : '🔐 Save your spot'} onClose={onClose}>
       {done ? <DoneNote onClose={onClose} /> : (
         <div className="stack" style={{ gap: 14 }}>
-          <div className="small muted" style={{ margin: 0 }}>Sign in once so the app knows it’s you on any phone or laptop. No more links to find.</div>
+          <div className="small muted" style={{ margin: 0 }}>Connect Google or email so you can sign in on your laptop (or a new phone). Same account, same name, same scores.</div>
           <SaveSpotPanel onDone={onDone} />
           <button type="button" className="btn ghost block" onClick={onClose}>Not now</button>
         </div>
@@ -129,7 +129,7 @@ export function SaveSpotBanner() {
         <span style={{ fontSize: 24 }} aria-hidden="true">🔐</span>
         <span className="grow" style={{ minWidth: 0 }}>
           <strong>Save your spot</strong>
-          <div className="small muted">Sign in once so the app knows it’s you on any phone.</div>
+          <div className="small muted">Connect Google or email so you can sign in on your laptop.</div>
         </span>
         <button type="button" className="btn gold sm" style={{ minHeight: 44, flex: 'none' }} onClick={() => setOpen(true)}>Save</button>
         <button type="button" className="btn ghost sm" style={{ minHeight: 44, minWidth: 44, flex: 'none' }} onClick={close} aria-label="Close the Save your spot reminder">✕</button>

@@ -164,9 +164,10 @@ const tapSize = async (locator, label) => {
 };
 const state = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('tgt-save-spot') || '{}'));
 
-/** Join from the link (landing on #/courses), pick Kurt, then the notifications pop-up. */
+/** Join from the link (landing on #/courses) the phone-only way ("Just this phone for now", ov13), pick Kurt. */
 async function joinAsKurt(page, base) {
   await page.goto(`${base}#/join/${INVITE}?to=%2Fcourses`);
+  await page.getByTestId('just-this-phone').click({ timeout: 15000 });
   await page.getByRole('button', { name: 'Join', exact: true }).click({ timeout: 15000 });
   await page.getByText('Who are you?').waitFor({ timeout: 10000 });
   await page.getByRole('button', { name: /Kurt/ }).first().click();
@@ -188,7 +189,7 @@ async function joinAsKurt(page, base) {
   await notif.getByRole('button', { name: 'Not now' }).click();
   check(await saveSheet(page).waitFor({ timeout: 8000 }).then(() => true, () => false), 'then Save your spot, once');
   const txt = await saveSheet(page).innerText();
-  check(/Sign in once so the app knows it’s you on any phone or laptop/.test(txt), 'it says why, in plain words');
+  check(/Connect Google or email so you can sign in on your laptop/.test(txt), 'it says why, in plain words (ov13 wording)');
   check(await saveSheet(page).getByRole('button', { name: /Continue with Google/ }).isVisible(), 'Continue with Google');
   check(await saveSheet(page).getByRole('button', { name: /Use my email/ }).isVisible(), 'Use my email');
   check(await saveSheet(page).getByRole('button', { name: 'Not now' }).isVisible(), 'Not now');

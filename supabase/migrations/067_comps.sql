@@ -168,8 +168,7 @@ begin
   select p.group_id, p.trip_id,
          case when length(btrim(t.name)) >= 2 then left(btrim(t.name), 60) else 'The Cup' end,
          'cup',
-         coalesce((select array_agg(distinct m.round_id) from public.cup_matches m join public.rounds r on r.id = m.round_id
-                    where m.group_id = p.group_id and r.trip_id = p.trip_id), '{}'),
+         '{}'::uuid[],  -- every round of the trip (a Cup's later sessions count as their matches are added; release review)
          case when t.cup_points is not null then jsonb_build_object('points', t.cup_points) else '{}'::jsonb end,
          0
   from pick p join public.trips t on t.id = p.trip_id

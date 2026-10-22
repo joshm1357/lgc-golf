@@ -90,6 +90,8 @@ function Watch({ rounds, today }) {
     for (const m of computed) {
       const was = have.get(m.key);
       if (!was) {
+        // Trophy and Cup results are recorded by an organiser's phone only (072b, release review).
+        if (!status.is_admin && (m.kind === 'trophy' || m.kind === 'cup')) continue;
         if (tried.current.has(m.key)) continue;
         tried.current.add(m.key);
         supabase.from('award_moments').upsert(m, { onConflict: 'group_id,key', ignoreDuplicates: true })

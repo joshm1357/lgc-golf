@@ -79,7 +79,8 @@ export default function Cup() {
   const rounds = useMemo(() => data.rounds.filter((r) => matches.some((m) => m.round_id === r.id)), [data.rounds, matches]);
   const totals = cupTotals(matches);
   // The whole cup's points (set by the organiser, e.g. 28), so "to win" is right before every day's matches exist.
-  const cupPoints = Number(cupComp?.settings?.points) || Number(data.currentTrip?.cup_points) || totals.total;
+  // The trip's own points first while both exist: an older phone only updates trips.cup_points (release review).
+  const cupPoints = Number(data.currentTrip?.cup_points) || Number(cupComp?.settings?.points) || totals.total;
   const n = sideNames(sides);
   const [A, B] = sides;
 
@@ -289,7 +290,7 @@ function CupPoints({ cupComp }) {
   const data = useData();
   const trip = data.currentTrip;
   const [busy, run] = useRun();
-  const saved = cupComp?.settings?.points ?? trip?.cup_points;
+  const saved = trip?.cup_points ?? cupComp?.settings?.points;
   const [val, setVal] = useState(saved != null ? String(Number(saved)) : '');
   if (!trip) return null;
   const changed = val !== (saved != null ? String(Number(saved)) : '');

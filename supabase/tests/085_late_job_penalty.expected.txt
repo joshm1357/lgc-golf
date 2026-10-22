@@ -1,0 +1,51 @@
+Run on staging (ttkaojaqhckiwpgrpxkh) after 085, 22 Oct 2026. Everything rolled back. One line per result:
+new group J has the rule = Late organising job · 0 strokes · 5 days · fines · active
+J rule numbers = 0/5
+seeding again adds nothing =  1
+every group has exactly one = 0 without
+X = 0: late jobs in J = 0
+player changes the rule = refused
+player's own rule made a standard one = no / none
+player reads the rule = 1
+player reads K's rule = 0
+guest changes the rule = refused
+organiser sets 2 strokes = 2/5 · 2 strokes · 5 days
+the wording follows = true
+a new version recorded = 1:added,2:changed
+organiser sets 11 strokes = refused
+organiser clears the standard key = refused
+organiser deletes it = refused
+late jobs in J = Book the bus 7d +2, Buy the wine 9d +2, Next trip job 8d +2, Organiser job 8d +2
+owner moves a late job's due = true (unchanged)
+owner moves an on-time job's due = true (moved)
+player waives = refused
+other group's organiser waives = refused
+organiser waives wine (before the round) = {"status": "waived", "applied": false}
+organiser writes an adjustment directly = refused
+organiser writes a waiver directly = refused
+tick: told = 4
+tick again: told = 0
+told about = Book the bus, Next trip job, Organiser job
+round 1 adjustments = J One Late job: Book the bus (+2) = 2
+run it again = 0
+stop and restart: adjustments = 1
+round 2 adjustments = 0
+all J adjustments = 1
+K adjustments before its round = 0
+K round = Late job: K job (+3) = 3
+next trip job applied yet = 0
+next trip round = Late job: Next trip job (+2)
+j2 sees J adjustments = 2
+j2 sees J waivers / notices = 4
+K organiser sees = 1 adjustments, all K: true
+organiser waives the bus (after) = {"status": "waived", "applied": true}
+bus penalty = true waived by J Organiser
+disputes raised = rule:2, setting:2
+apply verdict: strokes = {"new": 1, "old": 2, "status": "applied"}
+rule after verdict = 1/5 · 1 stroke · 5 days
+apply verdict: penalty = {"new": 0, "old": 2, "status": "applied"}
+penalty after verdict = Late job: Next trip job (+0) = 0
+apply it twice = refused
+late now (on) = 3
+late with planner jobs off = 0
+late with the rule retired = 0

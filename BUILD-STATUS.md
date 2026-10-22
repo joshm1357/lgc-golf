@@ -1016,3 +1016,18 @@ screen, "Viewing as Mike · read only", and Stop.
   `supabase/functions/notify/index.ts`, `docs/SIGN-IN-SETUP.md`, `tests/e2e/save-spot-test.mjs`.
 - **Tested:** Vitest 1145 (savespot 27 new); e2e `save-spot-test.mjs` 89 checks; signin-home 71, links 24, stage2 19,
   beta 46, phone 17, notify-prompt 31 pass.
+
+## Late organising jobs cost strokes (OV12, 22 Oct 2026) — branch `ov12-late-job-penalty`, migration 085
+- **Rule:** every group has a standard Rulebook rule "Late organising job" (Fines): more than N days overdue on a trip
+  job → X penalty strokes in the next round. Starts at 0 strokes / 5 days (listed, does nothing). Organisers change X
+  and N in the rule's Edit sheet (under the group's decision rule); it can be retired but not deleted. Both numbers are
+  RuleTags (disputable); an upheld verdict on either can be applied in one tap.
+- **Server decides:** `private.late_jobs()`; when a round goes live (`zz_late_jobs` trigger on rounds) each late job whose
+  owner plays costs X strokes once (`score_adjustments`, unique per job): "Late job: Book the bus (+2)". The job's own
+  trip first; another round only when that trip has no rounds left to start. Done before the round = nothing.
+  Daily `lgc-late-jobs` cron tells the owner once (notify_queue via `gov_queue`). Organiser waiver:
+  `waive_late_penalty` (recorded in `job_penalties` / on the adjustment). Owners can't move a late job's due date.
+- **Scoring:** `scoring.js penaltyFor / applyPenalty`; Stableford/4BBB −1 point per stroke, Ambrose/stroke play +1 net.
+  Leaderboard tag, scorecard line (RuleTag, disputable) + Penalty row, score entry, Stableford trophy.
+- **Tested:** SQL `supabase/tests/085_late_job_penalty.sql` (50 results, staging); Vitest 1172 (latejobs 27 new);
+  e2e `late-job-test.mjs` 30 checks + trip-plan, stroke, rulebook ×3, dispute, fourball, plan-ux pass.

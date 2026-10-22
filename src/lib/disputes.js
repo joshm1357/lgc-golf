@@ -14,7 +14,8 @@ export const DISPUTABLE = {
   side_comp_defs: ['how', 'unit', 'scoring', 'settings', 'conditions'],
   trophies: ['description'],
   custom_games: ['rules_text', 'settings'],
-  rules: ['value', 'title', 'detail'],
+  rules: ['value', 'title', 'detail', 'late_strokes', 'late_days'],
+  score_adjustments: ['strokes'],
   standard: ['rule'],
 };
 
@@ -23,6 +24,7 @@ export const SOURCE = {
   rounds: 'Round setting', teams: 'Team setting', round_games: 'Game setting', cup_matches: 'Cup match setting',
   trips: 'Trip setting', comps: 'Comp setting', side_comp_defs: 'Side comp setting', trophies: 'Trophy rule',
   custom_games: 'Game rules', rules: 'Rulebook rule', standard: 'Standard rule (built into the app)',
+  score_adjustments: 'Penalty on the scorecard',
 };
 
 /** Is this reference something that can be disputed at all? */
@@ -142,6 +144,10 @@ export const APPLY_SPEC = {
   'side_comp_defs.unit': WORDS(12),
   'trophies.description': WORDS(500),
   'custom_games.rules_text': WORDS(2000),
+  // Late organising jobs (085): the rule's two numbers, and one player's penalty (0 takes it off).
+  'rules.late_strokes': NUM(0, 10, { whole: true, msg: 'Late job strokes: a whole number from 0 to 10' }),
+  'rules.late_days': NUM(0, 60, { whole: true, msg: 'Days late: a whole number from 0 to 60' }),
+  'score_adjustments.strokes': NUM(0, 20, { whole: true, msg: 'Penalty strokes: a whole number from 0 to 20' }),
 };
 export function applySpec(ref) {
   if (!ref || ref.key) return null;
@@ -150,7 +156,8 @@ export function applySpec(ref) {
 
 /** Can this person apply this case's verdict to the setting now? (Organisers; an upheld dispute about a setting; once.) */
 export function canApplyVerdict(c, role) {
-  return !!c && role === 'organiser' && c.kind === 'ruling' && c.subject_kind === 'setting' && c.status === 'passed'
+  const lateNumbers = c?.subject_kind === 'rule' && c?.subject_ref?.table === 'rules' && ['late_strokes', 'late_days'].includes(c?.subject_ref?.field);
+  return !!c && role === 'organiser' && c.kind === 'ruling' && (c.subject_kind === 'setting' || lateNumbers) && c.status === 'passed'
     && !c.setting_applied_at && !!applySpec(c.subject_ref);
 }
 

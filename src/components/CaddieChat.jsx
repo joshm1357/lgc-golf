@@ -60,7 +60,7 @@ function GoList({ items, onGo, label }) {
     <div className="stack" style={{ gap: 6 }}>
       {label && <span className="small muted">{label}</span>}
       {items.map((m) => (
-        <button key={m.key + m.path} type="button" className="btn ghost caddie-go" onClick={() => onGo(m.path)}>
+        <button key={m.key + m.path} type="button" className="btn ghost caddie-go" aria-label={`${m.label} — Go there`} onClick={() => onGo(m.path)}>
           <span className="grow" style={{ textAlign: 'left' }}>{m.label}</span><span aria-hidden="true">Go there →</span>
         </button>
       ))}

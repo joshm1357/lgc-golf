@@ -11,8 +11,13 @@
 // To wire one: import it here and set it, e.g.
 //   import { CompsAndOnTheDay } from './CompsAndOnTheDay.jsx';
 //   export const RUNUP_SLOTS = { compsForTrip: CompsAndOnTheDay, ... };
+import { AwardsRunUp } from './AwardsFines.jsx';
+
+// Wired at the v10 merge. awardVotes stays empty: AwardsRunUp already lists the proposals waiting for a decision.
+const AwardsForTrip = ({ trip }) => <AwardsRunUp trip={trip} title="🏷 Awards & fines" />;
+
 export const RUNUP_SLOTS = {
-  compsForTrip: null,
-  awardsForTrip: null,
+  compsForTrip: null, // set when ov23 merges
+  awardsForTrip: AwardsForTrip,
   awardVotes: null,
 };

@@ -18,7 +18,7 @@ import { buildHistory } from '../lib/stats.js';
 import { useLateJobs } from './LateJobs.jsx';
 import { OverviewVotes } from './OverviewVotes.jsx';
 import { voteWords } from '../lib/governance.js';
-import { RUNUP_SLOTS } from './runupSlots.js';
+import { RUNUP_SLOTS } from './runupSlots.jsx';
 import {
   countdownHeader, runUpSections, myTodos, carsView, joinProblem, roomsView, activityMoney, activityWhen, cleanActivity,
   bringView, bringEmoji, bringAskText, bringAskLink, claimPostText, tippingState, tipResult, tipTally, formGuide, formLine,

@@ -45,6 +45,8 @@ export const GROUP_TABLES = new Set([
   'rule_versions', 'round_rule_versions',
   // Live commentary (migration 071)
   'commentary', 'commentary_settings',
+  // Custom games and closest-to-pin / longest-drive conditions (migration 073)
+  'custom_games', 'side_comp_conditions',
 ]);
 
 let current = (() => {

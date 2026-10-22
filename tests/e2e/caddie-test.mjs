@@ -229,7 +229,9 @@ await ctx.close();
 guest = true; organiser = false;
 {
   const { ctx: g, page: gp } = await newCtx({ width: 375, height: 812 });
-  await gp.goto(`${BASE}#/rules`);
+  await gp.goto(`${BASE}#/rules`);   // redirects into Governance → Rulebook
+  await gp.waitForURL(/governance\/rulebook/, { timeout: 15000 }).catch(() => {});
+  await gp.waitForTimeout(800);
   await gp.getByTestId('caddie').click();
   await gp.getByTestId('caddie-chat').waitFor({ timeout: 15000 });
   check(await visible(gp.getByText(/the AI is for the group’s players/).first()), 'guest: says the AI is for the group’s players');
@@ -246,7 +248,9 @@ guest = false; organiser = true;
 // 7b. v8: the organiser's connector line goes to Players & group → Features, the Claude connector highlighted.
 {
   const { ctx: o, page: op } = await newCtx({ width: 375, height: 812 });
-  await op.goto(`${BASE}#/rules`);
+  await op.goto(`${BASE}#/rules`);   // redirects into Governance → Rulebook
+  await op.waitForURL(/governance\/rulebook/, { timeout: 15000 }).catch(() => {});
+  await op.waitForTimeout(800);
   await op.getByTestId('caddie').click();
   await op.getByTestId('caddie-connector').waitFor({ timeout: 15000 });
   await op.getByTestId('caddie-connector').getByRole('button').click();

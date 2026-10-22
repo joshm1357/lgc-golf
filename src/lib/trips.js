@@ -12,11 +12,21 @@ export const STAGE_LABEL = {
 
 const lastDay = (p) => p.end_date || p.start_date;
 
-/** Which stage a plan is at. `trip` is its trip in the app (or undefined). */
+/** The last day of a plan and its trip in the app (whichever is later), or null if neither has dates. */
+export function lastTripDay(plan, trip) {
+  const a = lastDay(plan) || null;
+  const b = trip ? (trip.end_date || trip.start_date || null) : null;
+  return a && b ? (a > b ? a : b) : a || b;
+}
+
+/** Which stage a plan is at. `trip` is its trip in the app (or undefined). A trip whose last day has gone is done,
+ *  even if nobody has closed its trip in the app yet (22 Oct: South Coast 16–18 Oct still said "On now" on the 22nd). */
 export function tripStage(plan, trip, today = todayISO()) {
   if (plan.status === 'cancelled') return 'cancelled';
   if (plan.status === 'done') return 'done';
   if (plan.status === 'confirmed') {
+    const last = lastTripDay(plan, trip);
+    if (last && last < today) return 'done';
     if (trip?.status === 'active' && (!plan.start_date || plan.start_date <= today)) return 'on';
     if (plan.start_date && plan.start_date <= today && lastDay(plan) >= today) return 'on';
     if (lastDay(plan) && lastDay(plan) < today) return 'done';
@@ -24,6 +34,24 @@ export function tripStage(plan, trip, today = todayISO()) {
   }
   if (lastDay(plan) && lastDay(plan) < today) return 'done';
   return plan.proposed ? 'idea' : 'deciding';
+}
+
+/**
+ * A past trip whose real dates aren't known (brought in from the group's history with just a year). It's saved
+ * locked on 1 January of that year so it sorts by year and never becomes the current trip; this tells the screens
+ * to show "2019 (date unknown)" rather than a made-up 1 January. (A real locked one-day trip on New Year's Day
+ * would read the same — rare enough to accept rather than add a database column the night of a release.)
+ */
+export function isYearOnly(t) {
+  if (!t?.start_date || t.status !== 'locked') return false;
+  return /^\d{4}-01-01$/.test(t.start_date) && (!t.end_date || t.end_date === t.start_date);
+}
+
+/** A trip's dates in words: "Fri 16 – Sun 18 Oct 2026", or "2019 (date unknown)" for a year-only past trip. */
+export function tripWhen(t, fallback = '') {
+  if (!t?.start_date) return fallback;
+  if (isYearOnly(t)) return `${t.start_date.slice(0, 4)} (date unknown)`;
+  return fmtRange(t.start_date, t.end_date);
 }
 
 /**

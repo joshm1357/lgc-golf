@@ -8,6 +8,7 @@
 // Words: a "group" is a golf group (L.G.C is one). The planner's plan_groups / plan_group_members
 // are rooms and cars — not groups — and are never filtered here.
 
+import { clearAsk } from './aihelper.js';
 const KEY = 'lgc-group';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -61,6 +62,7 @@ export function setCurrentGroup(id) {
   const next = id && UUID.test(id) ? id : null;
   if (next === current) return false;
   current = next;
+  clearAsk(); // the Ask conversation belongs to the group (and the person) it was asked in
   try {
     if (next) localStorage.setItem(KEY, next); else localStorage.removeItem(KEY);
   } catch { /* the app still works; it just asks the database again next time */ }

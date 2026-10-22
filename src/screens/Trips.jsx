@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase.js';
 import { useData, useRealtime, useSession, playerName, cacheGet, cacheSet, useFeature } from '../lib/store.jsx';
 import { Header, AvatarStack, Sheet, Loading, toast } from '../components/ui.jsx';
 import { fmtRange, countdown, RSVP_LABEL, todayISO, money } from '../lib/plan.js';
-import { STAGE_LABEL, sortTrips, stillToDecide, suggestionOptions, defaultCloses } from '../lib/trips.js';
+import { STAGE_LABEL, sortTrips, stillToDecide, suggestionOptions, defaultCloses, tripWhen } from '../lib/trips.js';
 import { notify, shareText } from '../lib/push.js';
 import { useRun, must } from '../lib/run.js';
 import { NotifyCard } from '../components/NotifyCard.jsx';
@@ -183,7 +183,7 @@ export function tripsWithoutPlan(trips, plans) {
   const today = todayISO();
   return (trips || []).filter((t) => !linked.has(t.id)).map((t) => ({
     id: `trip-${t.id}`, tripOnly: true, kind: 'trip', name: t.name, start_date: t.start_date, end_date: t.end_date, trip_id: t.id,
-    proposed: false, created_at: t.created_at,
+    proposed: false, created_at: t.created_at, trip_status: t.status,
     status: t.status === 'active' || ((t.end_date || t.start_date) && (t.end_date || t.start_date) >= today) ? 'confirmed' : 'done',
   }));
 }
@@ -199,7 +199,7 @@ function PastCard({ plan, stage, photo, rounds: roundList = [], winners = [] }) 
       </div>
       <div className="grow" style={{ minWidth: 0 }}>
         <div style={{ fontWeight: 800, fontSize: 17 }}>{plan.name}</div>
-        <div className="small muted">{cancelled ? (plan.proposed ? 'Idea passed on' : 'Called off') : [plan.start_date ? fmtRange(plan.start_date, plan.end_date) : null, plan.location_name].filter(Boolean).join(' · ') || 'Done'}</div>
+        <div className="small muted">{cancelled ? (plan.proposed ? 'Idea passed on' : 'Called off') : [plan.start_date ? tripWhen(plan.tripOnly ? { ...plan, status: plan.trip_status } : plan) : null, plan.location_name].filter(Boolean).join(' · ') || 'Done'}</div>
         {!cancelled && rounds > 0 && <div className="small" style={{ fontWeight: 700 }}>{rounds} round{rounds === 1 ? '' : 's'} played</div>}
         {winners.slice(0, 3).map((h) => <div key={h.id} className="small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>🏆 {h.trophy_name}: <strong>{h.winner_names}</strong></div>)}
         {winners.length > 3 && <div className="small muted">+{winners.length - 3} more in the Trophy Room</div>}

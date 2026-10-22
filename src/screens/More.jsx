@@ -34,6 +34,7 @@ export default function More() {
     { to: '/group', icon: Icon.user, label: 'Group & invites', sub: status.is_admin ? 'Invite links, QR code, people and roles' : (status.groups?.length > 1 ? 'Switch group, how you’re signed in' : 'Your group and how you’re signed in') },
     // The admin PIN is L.G.C's only; other groups make organisers in Group & invites.
     status.is_admin && !status.viewing && { to: '/setup', icon: Icon.cog, label: 'Set up your trip', sub: 'Trip, courses, rounds, players, side comps — step by step' },
+    status.is_admin && !status.viewing && { to: '/history', icon: Icon.book, label: '📜 History and import', sub: on.ai_helper ? 'Past winners, handicaps and trips — or ✨ import with AI' : 'Past winners, handicaps and trips' },
     platformAdmin && !status.viewing && wishesItem(Icon.feed),
     ...(status.is_admin || status.legacy !== false ? [{ to: '/admin', icon: Icon.cog, label: status.is_admin ? 'Admin' : "I'm the admin", sub: status.is_admin ? (pending ? `${pending} waiting for approval` : 'Trips, courses, players, rounds') : 'Needs the admin PIN' }] : []),
   ].filter(Boolean);

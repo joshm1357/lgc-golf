@@ -7,6 +7,7 @@ import { pendingScores, onQueueChange, freeCacheSpace } from './offline.js';
 import { currentGroup, setCurrentGroup, GROUP_TABLES } from './group.js';
 import { featureOn } from './features.js';
 import { applyLook, clearLook, DEFAULT_LOOK, LGC_LOOK } from './theme.js';
+import { clearAsk } from './aihelper.js';
 
 // The offline copy of a group's players, rounds, courses… is kept per group.
 const refKey = () => `ref-${currentGroup() || 'x'}`;
@@ -75,6 +76,7 @@ export function SessionProvider({ children }) {
         stopPreview();
         freeCacheSpace(); // the saved offline copies belong to whoever was signed in
         clearLook();
+        clearAsk(); // the Ask conversation from this tab's session
         setCurrentGroup(null);
         refresh();
       }

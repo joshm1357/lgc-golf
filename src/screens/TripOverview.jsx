@@ -12,6 +12,7 @@ import { Header, AvatarStack, Loading } from '../components/ui.jsx';
 import { roundBoard } from '../lib/board.js';
 import { isRoundFinished } from '../lib/replay.js';
 import { fmtRange } from '../lib/plan.js';
+import { isYearOnly, tripWhen } from '../lib/trips.js';
 import { tripDays, tripCourses, roundFormat, roundWinner, countdownWords, whosIn, tripHonours } from '../lib/tripsummary.js';
 import { useTripComps } from '../components/CompsChip.jsx';
 import { WeatherChip } from '../components/Weather.jsx';
@@ -95,7 +96,7 @@ export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage 
         <div className="row between" style={{ gap: 8, alignItems: 'flex-start' }}>
           <div className="grow" style={{ minWidth: 0 }}>
             {/* The plan page's header already shows the dates and place. */}
-            {!plan && <div className="small muted">{[start ? fmtRange(start, end) : 'Dates TBC', place || null].filter(Boolean).join(' · ')}</div>}
+            {!plan && <div className="small muted">{[start ? (isYearOnly(trip) ? tripWhen(trip) : fmtRange(start, end)) : 'Dates TBC', place || null].filter(Boolean).join(' · ')}</div>}
             {!done && plan && <div style={{ fontWeight: 800 }}>{countdown === 'On now' ? '⛳ On now' : '🔒 Locked in'}</div>}
             {done && <div style={{ fontWeight: 800 }}>🏁 Done and dusted</div>}
           </div>
@@ -189,7 +190,7 @@ export default function TripOverviewScreen() {
   if (!trip) return <div className="page"><Header back title="Not found" /><div className="empty">This trip isn’t here any more.</div></div>;
   return (
     <div className="page">
-      <Header back title={trip.name} sub={trip.start_date ? fmtRange(trip.start_date, trip.end_date) : null} />
+      <Header back title={trip.name} sub={tripWhen(trip, null)} />
       <div className="section"><TripOverview trip={trip} /></div>
     </div>
   );

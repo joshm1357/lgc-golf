@@ -27,9 +27,9 @@ export const IMPORT_LIMITS = {
   maxImages: 4,
   maxImageChars: 2_800_000, // one photo as a data URL (~2 MB of JPEG); the app sends ~1600px JPEGs, far smaller
   maxCalls: 3, // model calls per import (one, plus one retry for bad JSON or one nudge)
-  maxTokens: 4096,
-  callTimeoutMs: 50000,
-  totalMs: 60000, // no second call after this long (the function has about 150 s in all)
+  maxTokens: 8192, // room for a long history (Josh, 22 Oct: quality over cost for now)
+  callTimeoutMs: 60000,
+  totalMs: 130000, // the whole import; each call's timeout is cut to fit (the function has about 150 s in all)
   counts: { players: 80, trips: 40, winners: 200, handicaps: 300, rules: 60, unsure: 10 },
 };
 export const NO_PHOTOS = 'This AI model can’t read photos — paste the text instead.';
@@ -47,8 +47,12 @@ Read it all and call propose_import ONCE with everything you found:
 - trips: past golf trips (a name like "Hunter Valley 2019", the year, the place and courses if given, dates as YYYY-MM-DD only if the exact dates are written).
 - winners: who won each trophy each year — trophy name as written (e.g. "BD Trophy", "The Wooden Spoon"), the year, the trip's name if it says, winner names (two names for a pair), and the score exactly as shown (e.g. "42 pts") if there is one.
 - handicaps: a player's handicap on a date or in a year. A plus handicap (+2) is written as -2.
-- rules: the group's own rules, fines and bonuses (title, the wording as written, and its type).
+- rules: the group's own rules, fines and bonuses. Keep the group's own words:
+  * title: a short sentence-case title in their words (e.g. "Gimmes inside the leather", "OB played as a lateral hazard"). Never shorten it so the meaning changes.
+  * wording: the full rule exactly as written, but ONLY if it says more than the title (the penalty, the amount, when it applies). If the title already says it all, leave wording empty. Never repeat the title as the wording.
+  * category (its type) and value (an amount like "$5" or "-1 stroke", if there is one).
 - unsure: up to 5 short notes on things you weren't sure about (a smudged name, a year you guessed, two people who might be the same).
+- guess: if you had to assume or guess anything to make an item (a year you inferred, a name you read as someone else, a winner you weren't sure of), set guess: true on THAT item and say what you assumed in unsure. Items you read plainly have no guess.
 
 Today is ${longDate(today)} (${today}). Years must be 1950 or later and not in the future. Never invent anything: only what's written or shown. Leave a list empty if there's nothing for it. Use names exactly as written (keep nicknames). If there's nothing about golf history at all, call propose_import with empty lists and say so in unsure.
 
@@ -57,15 +61,16 @@ ${GUARD}`;
 
 const obj = (properties: Record<string, unknown>, required: string[] = []) => ({ type: 'object', properties, required, additionalProperties: false });
 const str = (description?: string) => ({ type: 'string', ...(description ? { description } : {}) });
+const guess = { type: 'boolean', description: 'true only if you assumed or guessed something to make this item (say what in unsure)' };
 export const IMPORT_TOOL = {
   name: 'propose_import',
   description: 'Propose what to add from the group\'s history. Nothing is saved: the organiser checks every item first.',
   input_schema: obj({
-    players: { type: 'array', items: obj({ name: str('Full name if known'), nickname: str() }, ['name']) },
-    trips: { type: 'array', items: obj({ name: str('e.g. "Hunter Valley 2019"'), year: { type: 'integer' }, place: str(), courses: { type: 'array', items: { type: 'string' } }, start_date: str('YYYY-MM-DD, only if written'), end_date: str('YYYY-MM-DD, only if written') }, ['name', 'year']) },
-    winners: { type: 'array', items: obj({ trophy: str(), year: { type: 'integer' }, trip: str('The trip\'s name, if it says'), winners: { type: 'array', items: { type: 'string' } }, score: str('As shown, e.g. "42 pts"') }, ['trophy', 'year', 'winners']) },
-    handicaps: { type: 'array', items: obj({ player: str(), date: str('YYYY-MM-DD, or just the year YYYY'), handicap: { type: 'number', description: 'A plus handicap (+2) is -2' } }, ['player', 'date', 'handicap']) },
-    rules: { type: 'array', items: obj({ title: str('A short name, e.g. "Birdie bonus"'), wording: str('As written'), category: { type: 'string', enum: ['format', 'side_comp', 'bonus', 'handicap', 'etiquette', 'fines', 'other'] }, value: str('e.g. "$5", "-1 stroke"') }, ['title']) },
+    players: { type: 'array', items: obj({ name: str('Full name if known'), nickname: str(), guess }, ['name']) },
+    trips: { type: 'array', items: obj({ name: str('e.g. "Hunter Valley 2019"'), year: { type: 'integer' }, place: str(), courses: { type: 'array', items: { type: 'string' } }, start_date: str('YYYY-MM-DD, only if written'), end_date: str('YYYY-MM-DD, only if written'), guess }, ['name', 'year']) },
+    winners: { type: 'array', items: obj({ trophy: str(), year: { type: 'integer' }, trip: str('The trip\'s name, if it says'), winners: { type: 'array', items: { type: 'string' } }, score: str('As shown, e.g. "42 pts"'), guess }, ['trophy', 'year', 'winners']) },
+    handicaps: { type: 'array', items: obj({ player: str(), date: str('YYYY-MM-DD, or just the year YYYY'), handicap: { type: 'number', description: 'A plus handicap (+2) is -2' }, guess }, ['player', 'date', 'handicap']) },
+    rules: { type: 'array', items: obj({ title: str('Short, sentence case, in the group\'s own words, e.g. "Gimmes inside the leather"'), wording: str('The full rule as written, only if it says more than the title; never the title again'), category: { type: 'string', enum: ['format', 'side_comp', 'bonus', 'handicap', 'etiquette', 'fines', 'other'] }, value: str('e.g. "$5", "-1 stroke"'), guess }, ['title']) },
     unsure: { type: 'array', items: { type: 'string' } },
   }, ['players', 'trips', 'winners', 'handicaps', 'rules']),
 };
@@ -109,15 +114,46 @@ export function readDate(v: unknown, today: string): string | null {
   return d;
 }
 
+type Guess = { guess?: true }; // only there when the model said it assumed something for this item
 export type ImportProposal = {
-  players: { name: string; nickname: string | null }[];
-  trips: { name: string; year: number; place: string | null; courses: string[]; start_date: string | null; end_date: string | null }[];
-  winners: { trophy: string; year: number; trip: string | null; winners: string; score: string | null }[];
-  handicaps: { player: string; date: string; handicap: number }[];
-  rules: { title: string; wording: string | null; category: string; value: string | null }[];
+  players: ({ name: string; nickname: string | null } & Guess)[];
+  trips: ({ name: string; year: number; place: string | null; courses: string[]; start_date: string | null; end_date: string | null } & Guess)[];
+  winners: ({ trophy: string; year: number; trip: string | null; winners: string; score: string | null } & Guess)[];
+  handicaps: ({ player: string; date: string; handicap: number } & Guess)[];
+  rules: ({ title: string; wording: string | null; category: string; value: string | null } & Guess)[];
   unsure: string[];
   dropped: number; // items left out because they didn't check out (or there were too many)
 };
+
+/** Letters and digits only, lower case: for "is this the same words?" */
+const ACRONYMS = new Set(['OB', 'NTP', 'CTP', 'LD', 'BD', 'GIR', 'DD', 'PGA', 'HCP', 'GA', 'BBQ', 'NRL', 'AFL', 'TV', 'GPS', 'MC']);
+const bare = (v: unknown) => String(v ?? '').toLowerCase().replace(/[^a-z0-9$%+-]+/g, ' ').trim();
+
+/** A rule's title and wording in the group's own words: the title short and sentence case (an ALL-CAPS title is
+ *  calmed down, acronyms like OB and NTP kept), the wording only when it adds something beyond the title. Nothing
+ *  is shortened: a title too long for the Rulebook keeps its full text as the wording. */
+export function cleanRule(rawTitle: unknown, rawWording: unknown): { title: string; wording: string | null } {
+  const full = String(rawTitle ?? '').replace(/[<>]/g, ' ').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
+  let wording = String(rawWording ?? '').replace(/[<>]/g, ' ').replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, ' ').replace(/[ \t]+/g, ' ').trim().slice(0, 1000);
+  let t = full.replace(/[.:;,\s]+$/, '');
+  const letters = t.replace(/[^A-Za-z]/g, '');
+  if (letters.length > 6 && letters === letters.toUpperCase()) {
+    // "GIMMES INSIDE THE LEATHER" -> "Gimmes inside the leather" (golf's usual short forms stay: OB, NTP, BD …)
+    t = t.split(' ').map((w) => (ACRONYMS.has(w.replace(/[^A-Z]/g, '')) ? w : w.toLowerCase())).join(' ');
+  }
+  t = t.charAt(0).toUpperCase() + t.slice(1);
+  let title = t;
+  if (title.length > 80) {
+    // Too long for a title: a short title from its start, and the whole thing kept as the wording.
+    const cut = title.slice(0, 80);
+    title = (cut.lastIndexOf(' ') > 40 ? cut.slice(0, cut.lastIndexOf(' ')) : cut).replace(/[\s,;:.-]+$/, '');
+    if (!bare(wording).includes(bare(full))) wording = wording ? `${full}\n${wording}` : full;
+  }
+  // The wording only when it adds something: not the title again (any case or punctuation), not a part of it.
+  const bw = bare(wording);
+  if (!bw || bw === bare(title) || bare(title).includes(bw)) wording = '';
+  return { title, wording: wording.slice(0, 1000) || null };
+}
 
 /** Never trusts the model: every field cut to size, bad items dropped (and counted), duplicates removed. */
 export function validateImport(raw: Any, today: string): ImportProposal {
@@ -138,11 +174,13 @@ export function validateImport(raw: Any, today: string): ImportProposal {
     return out;
   };
   const r = raw && typeof raw === 'object' ? raw : {};
+  // The model's "I assumed this" flag: only a real true counts.
+  const g = <T extends object>(x: Any, t: T | null): (T & Guess) | null => (t && x?.guess === true ? { ...t, guess: true as const } : (t as (T & Guess) | null));
   const players = take(arr(r.players), C.players, (p) => {
     const name = clean(p.name, 60);
     const nickname = clean(p.nickname, 30) || null;
-    if (name.length < 2) return nickname && nickname.length >= 2 ? { name: nickname, nickname: null } : null;
-    return { name, nickname: nickname && nickname.toLowerCase() !== name.toLowerCase() ? nickname : null };
+    if (name.length < 2) return g(p, nickname && nickname.length >= 2 ? { name: nickname, nickname: null } : null);
+    return g(p, { name, nickname: nickname && nickname.toLowerCase() !== name.toLowerCase() ? nickname : null });
   }, (p) => key(p.name));
   const trips = take(arr(r.trips), C.trips, (t) => {
     const start = isoDate(t.start_date);
@@ -153,7 +191,7 @@ export function validateImport(raw: Any, today: string): ImportProposal {
     const s = start && start <= today && Number(start.slice(0, 4)) === year ? start : null;
     const e0 = isoDate(t.end_date);
     const e = s && e0 && e0 >= s && e0 <= today ? e0 : null;
-    return { name, year, place: clean(t.place, 60) || null, courses: arr(t.courses).map((c) => clean(c, 60)).filter((c) => c.length > 1).slice(0, 6), start_date: s, end_date: e || s };
+    return g(t, { name, year, place: clean(t.place, 60) || null, courses: arr(t.courses).map((c) => clean(c, 60)).filter((c) => c.length > 1).slice(0, 6), start_date: s, end_date: e || s });
   }, (t) => key(t.name, t.year));
   const winners = take(arr(r.winners), C.winners, (w) => {
     const trophy = clean(w.trophy, 60);
@@ -161,21 +199,20 @@ export function validateImport(raw: Any, today: string): ImportProposal {
     const names = (Array.isArray(w.winners) ? w.winners : String(w.winners ?? '').split(/\s*(?:&|,|\band\b|\+|\/)\s*/i))
       .map((n: unknown) => clean(n, 40)).filter((n: string) => n.length > 0).slice(0, 6);
     if (trophy.length < 2 || !year || !names.length) return null;
-    return { trophy, year, trip: clean(w.trip, 60) || null, winners: names.join(' & ').slice(0, 200), score: clean(w.score, 30) || null };
+    return g(w, { trophy, year, trip: clean(w.trip, 60) || null, winners: names.join(' & ').slice(0, 200), score: clean(w.score, 30) || null });
   }, (w) => key(w.trophy, w.year, w.winners));
   const handicaps = take(arr(r.handicaps), C.handicaps, (h) => {
     const player = clean(h.player, 60);
     const date = readDate(h.date ?? h.year, today);
     const handicap = readHcp(h.handicap);
     if (player.length < 2 || !date || handicap == null) return null;
-    return { player, date, handicap };
+    return g(h, { player, date, handicap });
   }, (h) => key(h.player, h.date, h.handicap));
   const rules = take(arr(r.rules), C.rules, (x) => {
-    const title = clean(x.title, 80);
+    const { title, wording } = cleanRule(x.title, x.wording ?? x.detail);
     if (title.length < 2) return null;
-    const wording = String(x.wording ?? x.detail ?? '').replace(/[<>]/g, ' ').replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, ' ').replace(/[ \t]+/g, ' ').trim().slice(0, 1000) || null;
     const category = CATS.includes(String(x.category)) ? String(x.category) : 'other';
-    return { title, wording, category, value: clean(x.value, 40) || null };
+    return g(x, { title, wording, category, value: clean(x.value, 40) || null });
   }, (x) => key(x.title));
   const unsure = arr(r.unsure).map((u) => clean(u, 200)).filter((u) => u.length > 2).slice(0, C.unsure);
   return { players, trips, winners, handicaps, rules, unsure, dropped };
@@ -227,7 +264,8 @@ export async function runImport(o: { ai: AiConfig; fetchFn: typeof fetch; system
   let retried = false;
   const t0 = Date.now();
   for (let i = 0; i < IMPORT_LIMITS.maxCalls; i++) {
-    const r = await callModel(o.ai, { system: o.system, tools: [IMPORT_TOOL], messages, maxTokens: IMPORT_LIMITS.maxTokens }, o.fetchFn, o.timeoutMs ?? IMPORT_LIMITS.callTimeoutMs);
+    const left = IMPORT_LIMITS.totalMs - (Date.now() - t0);
+    const r = await callModel(o.ai, { system: o.system, tools: [IMPORT_TOOL], messages, maxTokens: IMPORT_LIMITS.maxTokens }, o.fetchFn, Math.min(o.timeoutMs ?? IMPORT_LIMITS.callTimeoutMs, Math.max(5000, left)));
     if (!r.ok) {
       // A model that can't see usually refuses the whole request (400 / "model not found for images").
       if (o.images.length && (r.code === 'provider_refused' || r.code === 'provider_model')) return { kind: 'error', code: 'no_vision', message: NO_PHOTOS, usage };
@@ -244,7 +282,7 @@ export async function runImport(o: { ai: AiConfig; fetchFn: typeof fetch; system
       if (!calls.length && words) return { kind: 'text', text: words.slice(0, 600), usage };
       break;
     }
-    if (Date.now() - t0 > IMPORT_LIMITS.totalMs) return { kind: 'error', code: 'timeout', message: 'That took too long — try a shorter paste or fewer photos.', usage };
+    if (IMPORT_LIMITS.totalMs - (Date.now() - t0) < 10000) return { kind: 'error', code: 'timeout', message: 'That took too long — try a shorter paste or fewer photos.', usage };
     retried = true;
     messages.push({ role: 'assistant', text: r.reply.text, calls });
     if (calls.length) {
@@ -326,7 +364,8 @@ export async function importRequest(body: Any, d: ImportDeps): Promise<Record<st
     });
   }
   const remaining = { month: Math.max(0, cap.remaining.month - 1), today: Math.max(0, cap.remaining.today - 1) };
-  if (result.kind === 'error') return { error: result.message, remaining, log_id: logId };
+  // A failed import doesn't count (index.ts usage()), so the count stays as it was; `code` lets the app retry once.
+  if (result.kind === 'error') return { error: result.message, code: result.code, remaining: cap.remaining, log_id: logId };
   if (result.kind === 'text') return { message: result.text, remaining, log_id: logId };
   return { import: result.value, found: importCount(result.value), remaining, log_id: logId };
 }

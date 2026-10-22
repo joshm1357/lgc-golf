@@ -8,7 +8,7 @@
 //   AI_BASE_URL   e.g. https://api.moonshot.ai/v1 or https://openrouter.ai/api/v1 (Anthropic: optional)
 //   AI_API_KEY    the provider's key (Anthropic: ANTHROPIC_API_KEY also works)
 //   AI_MODEL      the provider's model id — check your provider's model list; it must support tools.
-//   AI_GROUP_MONTHLY_CAP (default 60), AI_PERSON_DAILY_CAP (default 10)
+//   AI_GROUP_MONTHLY_CAP (default 2000), AI_PERSON_DAILY_CAP (default 100)
 //
 // Inside the helper, a conversation is kept in one plain shape (Msg) and translated to each provider's own format
 // just before the call. Cheap models are sloppier than big ones, so replies are read forgivingly: tool arguments
@@ -26,7 +26,7 @@ export type AiConfig = {
   model: string;
   caps: { groupPerMonth: number; personPerDay: number };
 };
-export const DEFAULT_CAPS = { groupPerMonth: 60, personPerDay: 10 };
+export const DEFAULT_CAPS = { groupPerMonth: 2000, personPerDay: 100 };
 export const ANTHROPIC_BASE = 'https://api.anthropic.com/v1';
 
 export type ToolDef = { name: string; description: string; input_schema: Any };
@@ -171,8 +171,8 @@ export function requestBody(cfg: AiConfig, o: { system: string; tools: ToolDef[]
     tools: o.tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } })),
     tool_choice: 'auto',
     // OpenRouter: "thinking" models (e.g. Kimi K2.6) can spend the whole token budget thinking and send back no answer.
-    // Keep thinking short and out of the reply. Only sent to OpenRouter (other OpenAI-style hosts may refuse it).
-    ...(isOpenRouter(cfg) ? { reasoning: { effort: 'low', exclude: true } } : {}),
+    // Medium thinking (Josh, 22 Oct: quality over cost for now), kept out of the reply. Only sent to OpenRouter (other OpenAI-style hosts may refuse it).
+    ...(isOpenRouter(cfg) ? { reasoning: { effort: 'medium', exclude: true } } : {}),
   };
 }
 

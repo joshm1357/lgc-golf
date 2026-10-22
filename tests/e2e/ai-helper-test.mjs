@@ -78,6 +78,8 @@ async function fakeHelper(route) {
     db.trips.push({ id, group_id: GROUP, name: body.plan.trip.name, start_date: body.plan.trip.start_date, end_date: body.plan.trip.end_date, status: 'active', created_at: now });
     return json({ done: true, trip_id: id, made: ['the trip “Hunter Valley 2026”', 'Kurri Kurri Golf Club', 'Thursday — Kurri Kurri'] });
   }
+  // 22 Oct: the AI company busy once → the app tries again by itself (a failed go isn't counted).
+  if (body.mode === 'history' && body.text === 'Who has the most birdies?' && !calls.some((c, i) => i < calls.length - 1 && c.body.text === body.text)) return json({ error: 'The AI helper is busy right now — try again in a minute.', code: 'provider_busy', remaining: left });
   if (body.mode === 'history') { left = { month: left.month - 1, today: left.today - 1 }; return json({ answer: 'Bluey’s 44 points at Kurri on Hunter 2024 is the best Stableford round.', remaining: left }); }
   return json({ error: 'Unknown request.' });
 }
@@ -143,6 +145,20 @@ check(true, 'a history answer shows');
 check(calls.at(-1).body.mode === 'history' && calls.at(-1).body.text === 'Best Stableford round ever?', 'history call sends the question');
 check(await page.getByText('54 questions left this month for the group · 6 for you today').isVisible(), 'questions left shows on Ask');
 await page.screenshot({ path: `${SHOTS}/3-ask.png`, fullPage: true });
+// The conversation is still there after leaving the page (kept for the session).
+await page.goto(`${BASE}#/more`);
+await page.getByText('Group & invites').waitFor({ timeout: 10000 });
+check(await page.getByText('📜 History and import').isVisible(), 'More has "📜 History and import" for organisers');
+await page.goto(`${BASE}#/ask`);
+await page.getByText(/Bluey’s 44 points at Kurri/).waitFor({ timeout: 10000 });
+check(await page.getByText('Best Stableford round ever?').last().isVisible(), 'back on Ask: the earlier question and answer are still there');
+// Busy once: retried by itself, the answer shows, no error.
+const n0 = calls.length;
+await page.getByLabel('Your question').fill('Who has the most birdies?');
+await page.getByRole('button', { name: 'Ask', exact: true }).click();
+await page.getByText('Who has the most birdies?').waitFor({ timeout: 10000 });
+await page.waitForTimeout(800);
+check(calls.length - n0 === 2 && !(await page.getByText(/busy right now/).isVisible().catch(() => false)), 'busy once: one automatic retry, then the answer (no error shown)');
 
 // 5. A player can ask too.
 organiser = false;

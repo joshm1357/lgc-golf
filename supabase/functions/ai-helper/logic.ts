@@ -2,9 +2,9 @@
 // (logic.test.ts). index.ts wires these to Supabase and to the AI provider (providers.ts).
 //
 // What's here:
-//   * the limits and the cap maths (by default 60 a group a month, 10 a person a day, Sydney calendar);
+//   * the limits and the cap maths (by default 2000 a group a month, 100 a person a day, Sydney calendar);
 //   * the system prompts and the fixed list of tools for each mode (setup, ask, plan — plan.ts, live — live.ts);
-//   * the tool loop (calls the model through providers.ts and an injected fetch, at most 6 model calls), forgiving
+//   * the tool loop (calls the model through providers.ts and an injected fetch, at most 8 model calls), forgiving
 //     of cheap models: bad JSON gets one more go, an answer in words instead of the plan gets one nudge;
 //   * checking a setup plan (dates, formats, holes 1–18, courses that really exist) and applying it;
 //   * shaping the group's history into small summaries (round winners, records) for the model.
@@ -30,13 +30,15 @@ const { stablefordStatus, strokeStatus, ambroseStatus, fourballStatus, rankRows 
 const { roundName, dayLabel, tripDays }: Any = setupJs;
 
 export const LIMITS = {
-  groupPerMonth: 60,
-  personPerDay: 10,
-  maxToolRounds: 6,
-  maxTokens: 2048,
-  planMaxTokens: 4096,
-  callTimeoutMs: 25000,
-  totalMs: 55000,
+  // Josh, 22 Oct: "don't be too efficient with the tokens" while we find out if people like it — answer quality and
+  // reliability first. Caps are overridable by AI_GROUP_MONTHLY_CAP / AI_PERSON_DAILY_CAP.
+  groupPerMonth: 2000,
+  personPerDay: 100,
+  maxToolRounds: 8,
+  maxTokens: 4096,
+  planMaxTokens: 8192,
+  callTimeoutMs: 60000,
+  totalMs: 130000, // the whole request (each call's timeout is cut to fit), under the edge function's ~150 s
 };
 export const NOT_ON_YET = 'The AI helper isn’t switched on yet';
 
@@ -443,7 +445,7 @@ export function tripsList(ix: Ix) {
   const roundsBy = by(ix.h.rounds, (r) => r.trip_id);
   return [...ix.h.trips]
     .sort((a, b) => String(b.start_date || '').localeCompare(String(a.start_date || '')))
-    .slice(0, 40)
+    .slice(0, 80)
     .map((t) => ({ id: t.id, name: clean(t.name, 60), start_date: t.start_date || null, end_date: t.end_date || null, rounds: (roundsBy[t.id] || []).length }));
 }
 
@@ -459,11 +461,11 @@ export function tripResults(ix: Ix, q: unknown) {
   const t = findTrip(ix, q);
   if (!t) return { error: 'No trip by that name. Use list_trips to see them.' };
   const rounds = ix.h.rounds.filter((r) => r.trip_id === t.id).sort((a, b) => String(a.play_date || '').localeCompare(String(b.play_date || '')));
-  return { trip: clean(t.name, 60), start_date: t.start_date || null, end_date: t.end_date || null, rounds: rounds.slice(0, 12).map((r) => roundSummary(r, ix)) };
+  return { trip: clean(t.name, 60), start_date: t.start_date || null, end_date: t.end_date || null, rounds: rounds.slice(0, 30).map((r) => roundSummary(r, ix)) };
 }
 
 export function honourBoard(ix: Ix) {
-  const rows = [...ix.h.honour_board].sort((a, b) => Number(b.sort_key || 0) - Number(a.sort_key || 0)).slice(0, 120);
+  const rows = [...ix.h.honour_board].sort((a, b) => Number(b.sort_key || 0) - Number(a.sort_key || 0)).slice(0, 300);
   const out: Record<string, { label: string; winners: string }[]> = {};
   for (const r of rows) (out[clean(r.trophy_name, 50)] ||= []).push({ label: clean(r.label, 30), winners: clean(r.winner_names, 80) });
   return Object.entries(out).map(([trophy, entries]) => ({ trophy, entries }));
@@ -492,11 +494,11 @@ export function records(ix: Ix) {
     const names = ids.length ? ids.map((id) => pname(ix.players[id])) : String(hb.winner_names || '').split(/\s*(?:,|&|\band\b|\+)\s*/i).map((s) => clean(s, 40)).filter(Boolean);
     for (const n of names) titles[n] = (titles[n] || 0) + 1;
   }
-  const top = (m: Record<string, number>, name: (k: string) => string) => Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, n]) => ({ name: name(k), count: n }));
+  const top = (m: Record<string, number>, name: (k: string) => string) => Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k, n]) => ({ name: name(k), count: n }));
   return {
     finished_rounds: finished.length,
-    best_stableford_rounds: stableford.slice(0, 5),
-    best_stroke_play_rounds: stroke.slice(0, 3),
+    best_stableford_rounds: stableford.slice(0, 10),
+    best_stroke_play_rounds: stroke.slice(0, 5),
     most_round_wins: top(wins, (id) => pname(ix.players[id])),
     most_honour_board_titles: top(titles, (n) => n),
   };
@@ -517,7 +519,7 @@ export function handicapHistory(ix: Ix, q: unknown) {
 }
 
 export function playersList(ix: Ix) {
-  return ix.h.players.filter((p) => p.approved !== false).slice(0, 60).map((p) => ({ name: clean(p.name, 40), nickname: p.nickname ? clean(p.nickname, 30) : null, handicap: Number(p.handicap) }));
+  return ix.h.players.filter((p) => p.approved !== false).slice(0, 120).map((p) => ({ name: clean(p.name, 40), nickname: p.nickname ? clean(p.nickname, 30) : null, handicap: Number(p.handicap) }));
 }
 
 /** Run one history tool on the loaded history. */
@@ -579,13 +581,15 @@ export async function runLoop(o: {
   let badJson = 0;
   for (let round = 0; round < maxRounds; round++) {
     if (o.deadline && now() > o.deadline) return { kind: 'error', code: 'timeout', message: 'The helper took too long — try again with a shorter request.', usage };
-    const r = await callModel(o.ai, { system: o.system, tools: o.tools, messages, maxTokens: o.maxTokens ?? LIMITS.maxTokens }, o.fetchFn, o.timeoutMs ?? LIMITS.callTimeoutMs);
+    const per = o.timeoutMs ?? LIMITS.callTimeoutMs;
+    const timeout = o.deadline ? Math.max(5000, Math.min(per, o.deadline - now())) : per; // never past the deadline
+    const r = await callModel(o.ai, { system: o.system, tools: o.tools, messages, maxTokens: o.maxTokens ?? LIMITS.maxTokens }, o.fetchFn, timeout);
     if (!r.ok) return { kind: 'error', code: r.code, message: r.message, usage };
     usage.input_tokens += r.reply.usage.input_tokens;
     usage.output_tokens += r.reply.usage.output_tokens;
     if (r.reply.usage.estimated) usage.estimated = true;
     const { calls } = r.reply;
-    const text = r.reply.text.trim().slice(0, 1500);
+    const text = r.reply.text.trim().slice(0, 3000);
     messages.push({ role: 'assistant', text: r.reply.text, calls });
     if (!calls.length) {
       if (o.stopTool && !nudged && !(text && asksBack(text))) {
@@ -758,7 +762,9 @@ export async function helperRequest(body: Any, d: Deps): Promise<Record<string, 
   }
   const remaining = afterOne(cap.remaining);
   const log_id = logId;
-  if (result.kind === 'error') return { error: result.message, remaining, log_id };
+  // A failed answer doesn't count (index.ts usage()), so the count stays as it was. `code` lets the app retry once
+  // by itself when it's worth it (busy, odd reply, too slow).
+  if (result.kind === 'error') return { error: result.message, code: result.code, remaining: cap.remaining, log_id };
   if (mode === 'setup') {
     if (result.kind === 'stop') return { plan: result.value, summary: planSummary(result.value), remaining, log_id };
     return { message: result.text, remaining, log_id }; // the helper needs to ask something

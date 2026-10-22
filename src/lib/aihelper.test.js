@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canSend, remainingLabel, readReply, nextRating, askExamples, askTitle, MAX_TEXT, SETUP_EXAMPLE, PLAN_EXAMPLE } from './aihelper.js';
+import { canSend, remainingLabel, readReply, nextRating, askExamples, askTitle, MAX_TEXT, SETUP_EXAMPLE, PLAN_EXAMPLE, RETRY_CODES, shouldRetry, withRetry, loadAsk, saveAsk, clearAsk, ASK_KEEP, ASK_PREFIX } from './aihelper.js';
 
 describe('canSend', () => {
   it('needs a few characters and not too many', () => {
@@ -61,5 +61,64 @@ describe('v2: plans, ratings, where Ask was opened from', () => {
     expect(askTitle('round').title).toBe('Ask about this round');
     expect(askTitle(null).title).toBe('Ask');
     expect(canSend(PLAN_EXAMPLE)).toBe(true);
+  });
+});
+
+// ------------------------------------------------------------------ 22 Oct: one automatic retry, Ask kept for the session
+describe('one automatic retry', () => {
+  const err = (code) => ({ kind: 'error', text: 'x', code });
+  it('carries the function’s error code', () => {
+    expect(readReply({ error: 'busy', code: 'provider_busy' })).toMatchObject({ kind: 'error', code: 'provider_busy' });
+    expect(readReply({ error: 'off', off: true }).code).toBe(undefined);
+  });
+  it('retries once on busy / odd reply / too slow — never on "Do it" / "Create it" or other errors', () => {
+    for (const c of RETRY_CODES) expect(shouldRetry(err(c), { mode: 'history' })).toBe(true);
+    expect(shouldRetry(err('provider_busy'), { mode: 'apply' })).toBe(false);
+    expect(shouldRetry(err('provider_busy'), { mode: 'plan_apply' })).toBe(false);
+    expect(shouldRetry(err('provider_key'), { mode: 'plan' })).toBe(false);
+    expect(shouldRetry({ kind: 'answer', text: 'ok' }, { mode: 'ask' })).toBe(false);
+  });
+  it('makes at most one extra call', async () => {
+    let n = 0;
+    const always = async () => { n++; return err('timeout'); };
+    expect(await withRetry(always, { mode: 'import' })).toMatchObject({ code: 'timeout' });
+    expect(n).toBe(2);
+    n = 0;
+    const second = async () => (++n === 1 ? err('odd_reply') : { kind: 'answer', text: 'Bluey' });
+    expect(await withRetry(second, { mode: 'ask' })).toEqual({ kind: 'answer', text: 'Bluey' });
+    n = 0;
+    await withRetry(async () => { n++; return { kind: 'answer', text: 'fine' }; }, { mode: 'ask' });
+    expect(n).toBe(1);
+  });
+});
+
+describe('the Ask conversation, kept for the session', () => {
+  const mem = () => {
+    const m = new Map();
+    return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k), key: (i) => [...m.keys()][i] ?? null, get length() { return m.size; }, m };
+  };
+  it('per group, the last 20, only what’s shown', () => {
+    const s = mem();
+    const thread = Array.from({ length: 25 }, (_, i) => ({ q: `Q${i}`, reply: { kind: 'answer', text: `A${i}`, logId: i, remaining: { month: 1 } } }));
+    saveAsk('g1', thread, s);
+    const back = loadAsk('g1', s);
+    expect(back.length).toBe(ASK_KEEP);
+    expect(back[0]).toEqual({ q: 'Q0', reply: { kind: 'answer', text: 'A0', logId: 0 } });
+    expect(loadAsk('g2', s)).toEqual([]);
+    expect(loadAsk(null, s)).toEqual([]);
+  });
+  it('cleared on sign-out / group switch; never throws', () => {
+    const s = mem();
+    saveAsk('g1', [{ q: 'Q', reply: { kind: 'answer', text: 'A' } }], s);
+    saveAsk('g2', [{ q: 'Q', reply: { kind: 'answer', text: 'A' } }], s);
+    s.setItem('other', 'keep');
+    clearAsk(s);
+    expect([loadAsk('g1', s), loadAsk('g2', s), s.getItem('other')]).toEqual([[], [], 'keep']);
+    const broken = { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('full'); }, removeItem: () => {}, key: () => null, length: 0 };
+    expect(loadAsk('g1', broken)).toEqual([]);
+    expect(() => saveAsk('g1', [{ q: 'Q', reply: { kind: 'answer', text: 'A' } }], broken)).not.toThrow();
+    const junk = mem();
+    junk.setItem(`${ASK_PREFIX}g1`, '{not json');
+    expect(loadAsk('g1', junk)).toEqual([]);
   });
 });

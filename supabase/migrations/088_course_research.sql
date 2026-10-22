@@ -143,6 +143,32 @@ begin
 end $$;
 revoke all on function private.match_course_research(text[], text, text[]) from public, anon, authenticated;
 
+-- The last thing tried before adding a course: the same words in another order or spelling ("Sands Torquay" / "Torquay
+-- Sands", "St Andrews Beach" / "Saint Andrews Beach", "Mt Broughton" / "Mount Broughton", "Canterbury Golf Club" /
+-- "Canterbury Public Golf Course"), within 40 km of the row's town. Same as looseKey() in scripts/research/parse.js.
+create or replace function private.loose_key(p_name text) returns text language sql immutable set search_path = '' as $$
+  select coalesce(string_agg(w, '' order by w collate "C"), '') from regexp_split_to_table(
+    regexp_replace(regexp_replace(replace(regexp_replace(lower(coalesce(p_name, '')), '\([^)]*\)', ' ', 'g'), '&', ' and '),
+      '\msaint\M', 'st', 'g'), '\mmount\M', 'mt', 'g'), '[^a-z0-9]+') w
+  where w <> '' and w not in ('golf', 'country', 'club', 'course', 'links', 'gc', 'cc', 'inc', 'ltd', 'the', 'and', 'of', 'resort',
+    'sporting', 'recreation', 'reserve', 'public', 'leisure', 'driving', 'range', 'at', 'formerly');
+$$;
+create or replace function private.match_course_loose(p_name text, p_state text, p_towns text[], out o_id uuid, out o_match text)
+language plpgsql stable security definer set search_path = '' as $$
+declare v_key text := private.loose_key(p_name); v_lat double precision; v_lng double precision;
+begin
+  if length(v_key) < 3 then return; end if;
+  select avg(l.lat), avg(l.lng) into v_lat, v_lng from public.course_library l
+   where l.lat is not null and private.area_state(l.area) = p_state and private.area_town(l.area) = any (p_towns);
+  select l.id into o_id from public.course_library l
+   where not l.hidden and private.area_state(l.area) = p_state and private.loose_key(l.name) = v_key
+     and (l.name !~* 'driving range' or l.name ~* '\m(golf course|golf club|country club)\M')
+     and coalesce(private.km(l.lat, l.lng, v_lat, v_lng), 0) < 40
+   order by private.km(l.lat, l.lng, v_lat, v_lng) nulls last, l.name, l.id limit 1;
+  if o_id is not null then o_match := 'near'; end if;
+end $$;
+revoke all on function private.loose_key(text), private.match_course_loose(text, text, text[]) from public, anon, authenticated;
+
 -- ------------------------------------------------------------------ The import (platform admin or service role)
 -- p_rows: the rows from scripts/import-course-research.mjs — a list of objects, or the compact form
 --   { "c": [column names], "r": [[values] …] } where a column "d.<name>" goes into details.
@@ -210,6 +236,9 @@ begin
         from (select t from jsonb_array_elements(case when jsonb_typeof(x -> 'match_towns') = 'array' then x -> 'match_towns' else '[]'::jsonb end) t limit 6) q;
       if cardinality(v_mtowns) = 0 and length(private.town_key(v_town)) >= 3 then v_mtowns := array[private.town_key(v_town)]; end if;
       select o_id, o_match into v_lib, v_match from private.match_course_research(v_mkeys, v_state, v_mtowns);
+      if v_lib is null then
+        select o_id, o_match into v_lib, v_match from private.match_course_loose(v_name, v_state, v_mtowns);
+      end if;
       if v_lib is null and coalesce(v_access, '') <> 'closed' and cardinality(v_mkeys) > 0 and v_name !~* '\mnote only\M' then
         -- Not in the library: add it as a listing (no holes, no map position). Its name without a "?", its area the
         -- first town named (no brackets, no street numbers) and the state, e.g. "Lismore NSW".

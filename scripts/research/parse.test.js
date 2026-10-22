@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   parseCsv, courseKey, importKey, matchKeys, townKeys, parseFee, parseDriveHours, parseHoles, parsePar, parseCartRequired,
   parseGoodForGroups, parseAccessType, parseChecked, urlsIn, toPayloadRow, toPayloadRows, matchCourse, splitArea, parseGuide, guideStates,
+  looseKey,
 } from './parse.js';
 
 describe('CSV', () => {
@@ -135,6 +136,11 @@ describe('matching to the library', () => {
     { id: 'e', name: 'Dural Golf Driving Range', area: 'Dural NSW', lat: -33.68, lng: 151.03 },
     { id: 'f', name: 'Kiama Golf Club', area: 'Kiama Downs NSW', lat: -34.63, lng: 150.85 },
     { id: 'g', name: 'Bowral Golf Club', area: 'Bowral VIC', lat: -37, lng: 145 },
+    { id: 'h', name: 'Torquay Sands Golf Club', area: 'Torquay VIC', lat: -38.32, lng: 144.31 },
+    { id: 'i', name: 'Saint Andrews Beach Golf Club', area: 'Fingal VIC', lat: -38.41, lng: 144.85 },
+    { id: 'j', name: 'Mount Broughton Golf and Country Club', area: 'Moss Vale NSW', lat: -34.55, lng: 150.37 },
+    { id: 'k', name: 'The Ridge Golf Course & Driving Range', area: 'Barden Ridge NSW', lat: -34.03, lng: 151.0 },
+    { id: 'l', name: 'Sands Golf Club', area: 'Perth WA', lat: -32, lng: 115.9 },
   ];
   const m = (name, town, state = 'NSW', access_type = 'public') => matchCourse({ name, town, state, access_type }, lib);
   it('exact: same name, state and town', () => expect(m('Bowral GC', 'Bowral')).toEqual({ match: 'exact', id: 'a' }));
@@ -145,6 +151,17 @@ describe('matching to the library', () => {
   it('state matters', () => expect(m('Bowral Golf Club', 'Bowral', 'VIC')).toEqual({ match: 'exact', id: 'g' }));
   it('closed and not in the library → unmatched (not added)', () => expect(m('Gone Golf Club', 'Nowhere', 'NSW', 'closed')).toEqual({ match: 'unmatched', id: null }));
   it('a note-only row is not added', () => expect(m('Gibraltar 9-hole course (Bowral) - note only', 'Bowral')).toEqual({ match: 'unmatched', id: null }));
+  it('loose: words in another order', () => expect(m('Sands Torquay Golf Club', 'Torquay (2 Sands Boulevard)', 'VIC')).toEqual({ match: 'near', id: 'h' }));
+  it('loose: St / Saint and Mt / Mount', () => {
+    expect(m('St Andrews Beach Golf Course', 'Fingal', 'VIC')).toEqual({ match: 'near', id: 'i' });
+    expect(m('Mt Broughton Golf & Country Club', 'Sutton Forest (Moss Vale)')).toEqual({ match: 'near', id: 'j' });
+  });
+  it('loose: a course that also has a range counts', () => expect(m('The Ridge Golf Course', 'Lucas Heights?')).toEqual({ match: 'near', id: 'k' }));
+  it('looseKey', () => {
+    expect(looseKey('Sands Torquay Golf Club')).toBe(looseKey('Torquay Sands Golf Club'));
+    expect(looseKey('Canterbury Public Golf Course')).toBe('canterbury');
+    expect(looseKey('Gladstone Golf Club (Yaralla Golf Course)')).toBe('gladstone');
+  });
   it('splits areas', () => expect(splitArea('Kiama Downs NSW')).toEqual({ town: 'kiamadowns', state: 'NSW' }));
 });
 

@@ -17,12 +17,13 @@ insert into auth.users (id, instance_id, aud, role, is_anonymous, email) values
   ('00000000-0000-4000-8000-0000000c8a01', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', false, 'research-admin@example.com'),
   ('00000000-0000-4000-8000-0000000c8a02', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', false, 'research-player@example.com');
 insert into public.platform_admins (user_id) values ('00000000-0000-4000-8000-0000000c8a01');
--- Two library courses to match against: one in its own town, one listed under the suburb next door.
+-- Three library courses to match against: one in its own town, one listed under the suburb next door, one spelt differently.
 insert into public.course_library (id, slug, name, area, lat, lng, holes) values
   ('00000000-0000-4000-8000-0000000c8b01', 'zzqtestville-golf-club', 'Zzqtestville Golf Club', 'Zzqtestville NSW', -30.5, 151.5, '[]'),
-  ('00000000-0000-4000-8000-0000000c8b02', 'zzqotherplace-gc', 'Zzqotherplace GC', 'Zzqfarfield NSW', -30.6, 151.6, '[]');
+  ('00000000-0000-4000-8000-0000000c8b02', 'zzqotherplace-gc', 'Zzqotherplace GC', 'Zzqfarfield NSW', -30.6, 151.6, '[]'),
+  ('00000000-0000-4000-8000-0000000c8b03', 'zzqloosey-sands', 'Saint Zzqloosey Sands Golf Club', 'Zzqloose NSW', -30.7, 151.7, '[]');
 
--- The file (compact form): exact, near (another town), new, closed.
+-- The file (compact form): exact, near (another town), loose (other spelling and word order), new, closed.
 create temp table t_payload (v jsonb, guides jsonb, guides2 jsonb);
 grant all on t_payload to authenticated, anon, service_role;
 insert into t_payload values (
@@ -30,6 +31,7 @@ insert into t_payload values (
     "r":[["zzqtestville|NSW",["zzqtestville"],["zzqtestville"],"Zzqtestville Golf Club","Zzqtestville","NSW","Zzq Region",55,"public",4,["https://example.com/a"],"2026-10-01","Visitors welcome 7 days"],
          ["zzqotherplace|NSW",["zzqotherplace"],["zzqnearby"],"Zzqotherplace Golf Club","Zzqnearby","NSW","Zzq Region",70,"semi_private",3,[],"2026-10-01","After 11:30 Saturdays"],
          ["zzqbrandnew|NSW",["zzqbrandnew"],["zzqnowhere"],"Zzqbrandnew Links?","Zzqnowhere (12 Some St)","NSW","Zzq Region",null,"public"],
+         ["zzqloosey|NSW",["stsandszzqloosey"],["zzqloose"],"St Sands Zzqloosey Golf Course","Zzqloose","NSW","Zzq Region",null,"public"],
          ["zzqgone|NSW",["zzqgone"],["zzqnowhere"],"Zzqgone Golf Club","Zzqnowhere","NSW","Zzq Region",null,"closed"]]}',
   '[{"key":"zzq-access-types","kind":"general","title":"How to read access","body":"public: anyone can book."},
     {"key":"zzq-region","kind":"region","title":"NSW: Zzq Region","state":"NSW","regions":["Zzq Region"],"body":"Book after 11:30 on Saturdays."}]',
@@ -59,6 +61,8 @@ insert into t_results (label, result)
   select 'exact → its library course', (library_id = '00000000-0000-4000-8000-0000000c8b01')::text || ' / ' || match from public.course_research where import_key = 'zzqtestville|NSW';
 insert into t_results (label, result)
   select 'near → the one next door', (library_id = '00000000-0000-4000-8000-0000000c8b02')::text || ' / ' || match from public.course_research where import_key = 'zzqotherplace|NSW';
+insert into t_results (label, result)
+  select 'loose (St/Saint, word order) → its library course', (library_id = '00000000-0000-4000-8000-0000000c8b03')::text || ' / ' || match from public.course_research where import_key = 'zzqloosey|NSW';
 insert into t_results (label, result)
   select 'closed → no library course', coalesce(library_id::text, 'none') || ' / ' || match from public.course_research where import_key = 'zzqgone|NSW';
 insert into t_results (label, result)

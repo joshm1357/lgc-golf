@@ -52,6 +52,18 @@ export function courseKey(name) {
     .replace(/\b(golf|country|club|course|links|gc|cc|inc|ltd|the|and|of|resort|sporting|recreation|reserve)\b/g, '')
     .replace(/[^a-z0-9]+/g, '');
 }
+const LOOSE_DROP = new Set(['golf', 'country', 'club', 'course', 'links', 'gc', 'cc', 'inc', 'ltd', 'the', 'and', 'of', 'resort',
+  'sporting', 'recreation', 'reserve', 'public', 'leisure', 'driving', 'range', 'at', 'formerly']);
+/**
+ * A looser key, the last thing tried before adding a course: brackets dropped, "Saint" → st, "Mount" → mt, a few more
+ * words dropped ("public", "driving range"), and the words sorted — so "Sands Torquay Golf Club" and "Torquay Sands Golf
+ * Club" both give "sandstorquay". The same as the database's private.loose_key.
+ */
+export function looseKey(name) {
+  return String(name || '').toLowerCase().replace(/\([^)]*\)/g, ' ').replace(/&/g, ' and ')
+    .replace(/\bsaint\b/g, 'st').replace(/\bmount\b/g, 'mt')
+    .split(/[^a-z0-9]+/).filter((w) => w && !LOOSE_DROP.has(w)).sort().join('');
+}
 /** A town or area, for comparing: lower case, letters and numbers only. */
 export const townKey = (t) => String(t || '').toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, '');
 
@@ -305,6 +317,16 @@ export function matchCourse(row, library) {
     return k.length >= 5 && keys.some((key) => key.length >= 5 && (k.includes(key) || key.includes(k))) && townMatches(towns, l);
   }).sort((a, b) => courseKey(a.name).length - courseKey(b.name).length || byName(a, b));
   if (part.length) return { match: 'near', id: part[0].id };
+  // The same words in another order or spelling: "Sands Torquay" / "Torquay Sands", "St Andrews Beach" / "Saint Andrews
+  // Beach", "Mt Broughton" / "Mount Broughton", "Canterbury" / "Canterbury Public" — within 40 km of the row's town.
+  // A course that also has a range ("The Ridge Golf Course & Driving Range") counts; a range on its own still doesn't.
+  const lk = looseKey(row.name);
+  if (lk.length >= 3) {
+    const loose = library.filter((l) => !l.hidden && splitArea(l.area).state === row.state && looseKey(l.name) === lk
+      && (!/driving range/i.test(l.name) || /\b(golf course|golf club|country club)\b/i.test(l.name)) && (km(mid, l) ?? 0) < 40)
+      .sort((a, b) => (km(mid, a) ?? 1e9) - (km(mid, b) ?? 1e9) || byName(a, b));
+    if (loose.length) return { match: 'near', id: loose[0].id };
+  }
   // A closed course, or a row that's only a note ("Gibraltar 9-hole course (Bowral) - note only"), isn't added.
   return closed || /\bnote only\b/i.test(row.name) ? { match: 'unmatched', id: null } : { match: 'new', id: null };
 }

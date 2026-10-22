@@ -61,7 +61,7 @@ export default function Trips() {
 
   if (!rows) return <div className="page"><Header logo title="Trips" /><Loading /></div>;
   const rsvpsOf = (id) => rows.rsvps.filter((r) => r.plan_id === id);
-  const { now, later, ideas, past } = sorted;
+  const { now, later, planning, suggested, past } = sorted;
 
   return (
     <div className="page">
@@ -72,12 +72,22 @@ export default function Trips() {
         {rows.failed && <div className="err">Couldn’t load the trips — check your signal and open Trips again.</div>}
 
         {now ? <NowCard plan={now.plan} stage={now.stage} rsvps={rsvpsOf(now.plan.id)} me={status.player_id} />
-          : <div className="empty">Nothing locked in yet. Suggest a trip below and let everyone vote on when and where.</div>}
+          : !planning.length && <div className="empty">Nothing locked in yet. Suggest a trip below and let everyone vote on when and where.</div>}
         {later.map((x) => <TripCard key={x.plan.id} plan={x.plan} stage={x.stage} rsvps={rsvpsOf(x.plan.id)} me={status.player_id} />)}
 
+        {planning.length > 0 && (
+          <div className="stack" data-testid="trips-being-planned">
+            <span className="label" style={{ marginTop: 6 }}>Being planned</span>
+            {planning.map((x) => (
+              <TripCard key={x.plan.id} plan={x.plan} stage={x.stage} rsvps={rsvpsOf(x.plan.id)} me={status.player_id}
+                decide={stillToDecide(x.plan, rows.polls, rows.options, today)} organiser={data.playersById[x.plan.organiser_id]} />
+            ))}
+          </div>
+        )}
+
         <span className="label" style={{ marginTop: 6 }}>{votesOn ? 'Ideas and voting' : 'Ideas'}</span>
-        {ideas.length === 0 && <div className="small muted">No ideas on the go.</div>}
-        {ideas.map((x) => (
+        {suggested.length === 0 && <div className="small muted">No ideas on the go.</div>}
+        {suggested.map((x) => (
           <TripCard key={x.plan.id} plan={x.plan} stage={x.stage} rsvps={rsvpsOf(x.plan.id)} me={status.player_id}
             decide={stillToDecide(x.plan, rows.polls, rows.options, today)} suggestedBy={data.playersById[x.plan.organiser_id || x.plan.created_by]} />
         ))}
@@ -150,7 +160,7 @@ function NowCard({ plan, stage, rsvps, me }) {
   );
 }
 
-function TripCard({ plan, stage, rsvps, me, decide, suggestedBy }) {
+function TripCard({ plan, stage, rsvps, me, decide, suggestedBy, organiser }) {
   const data = useData();
   const ins = rsvps.filter((r) => r.status === 'in');
   const mine = rsvps.find((r) => r.player_id === me);
@@ -158,7 +168,7 @@ function TripCard({ plan, stage, rsvps, me, decide, suggestedBy }) {
     <Link to={plan.tripOnly ? `/trip/${plan.trip_id}` : `/plan/${plan.id}`} className="card pad stack" style={{ gap: 6, textDecoration: 'none', color: 'inherit' }}>
       <div className="row between" style={{ alignItems: 'flex-start', gap: 8 }}>
         <div>
-          <div className="small muted" style={{ fontWeight: 700 }}>{STAGE_LABEL[stage]} · {plan.kind === 'round' ? 'One-day round' : 'Trip'}{suggestedBy && stage === 'idea' ? ` · from ${playerName(suggestedBy)}` : ''}</div>
+          <div className="small muted" style={{ fontWeight: 700 }}>{STAGE_LABEL[stage]} · {plan.kind === 'round' ? 'One-day round' : 'Trip'}{suggestedBy && stage === 'idea' ? ` · from ${playerName(suggestedBy)}` : ''}{organiser && stage === 'deciding' ? ` · organiser ${playerName(organiser)}` : ''}</div>
           <div style={{ fontSize: 19, fontWeight: 800 }}>{plan.name}</div>
         </div>
         {plan.start_date && <Chip>{countdown(plan.start_date)}</Chip>}

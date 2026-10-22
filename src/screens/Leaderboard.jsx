@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { useData, useScores, useSession, useSideEntries, useFeature, playerName } from '../lib/store.jsx';
-import { roundBoard, headlines, compBonuses, isNetFormat, isTeamFormat } from '../lib/board.js';
+import { useData, useScores, useSession, useSideEntriesState, useFeature, playerName } from '../lib/store.jsx';
+import { readyBoard, headlines, isNetFormat, isTeamFormat } from '../lib/board.js';
 import { formatToPar, strokesReceived, stablefordPoints, strokeHoleNet } from '../lib/scoring.js';
 import { Header, Seg, AvatarStack, Icon, Sheet, Loading, toast } from '../components/ui.jsx';
 import { supabase, friendlyError } from '../lib/supabase.js';
@@ -63,18 +63,16 @@ export default function Leaderboard() {
   const sideCompsOn = useFeature('side_comps');
   const tvOn = useFeature('clubhouse_tv');
   const scores = useScores(round?.id);
-  const sideEntries = useSideEntries(round?.id);
+  const side = useSideEntriesState(round?.id);
   const adjustments = useRoundAdjustments(round?.id);
 
-  const board = useMemo(() => {
-    if (!round) return null;
-    return roundBoard({
-      round, course: data.coursesById[round.course_id], teams: data.teamsByRound[round.id] || [],
-      roundPlayers: data.roundPlayers[round.id] || [], playersById: data.playersById,
-      scoresIdx: scores.index, quickResults: data.quick_results,
-      bonuses: compBonuses(round, data.teamsByRound[round.id] || [], sideEntries), adjustments,
-    });
-  }, [round, data, scores.index, sideEntries, adjustments]);
+  // Null until everything the total needs is here (side comp bonus strokes included), so it never flickers.
+  const board = useMemo(() => readyBoard({
+    round, course: round && data.coursesById[round.course_id], teams: (round && data.teamsByRound[round.id]) || [],
+    roundPlayers: (round && data.roundPlayers[round.id]) || [], playersById: data.playersById,
+    scoresIdx: scores.index, quickResults: data.quick_results, adjustments,
+    sideEntries: side.rows, sideLoaded: side.loaded,
+  }), [round, data, scores.index, side, adjustments]);
 
   // "Since you last looked": ranks stored on this phone at the last visit.
   const storeKey = round ? `lgc-ranks-${round.id}` : null;
@@ -117,6 +115,15 @@ export default function Leaderboard() {
         ) : (
           <div className="empty">Nothing to show yet. The organiser is setting things up.</div>
         )}
+      </div>
+    );
+  }
+
+  if (!board) {
+    return (
+      <div className="page">
+        <Header logo title={trip?.name || 'Leaderboard'} sub={round.name} />
+        <div data-testid="board-loading"><Loading /></div>
       </div>
     );
   }

@@ -86,13 +86,14 @@ function filterRows(rows, params) {
   });
 }
 
+const me = { admin: true, player: P1 };
 async function fakeSupabase(route) {
   const req = route.request();
   const url = new URL(req.url());
   const method = req.method();
   const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*', 'content-range': '0-0/*' }, body: JSON.stringify(body) });
   if (method === 'OPTIONS') return json({});
-  if (url.pathname.startsWith('/rest/v1/rpc/my_status')) return json({ is_member: true, is_admin: true, player_id: P1, group_name: 'L.G.C', group_id: GROUP, role: 'organiser', groups: [{ id: GROUP, name: 'L.G.C', slug: 'lgc', role: 'organiser' }] });
+  if (url.pathname.startsWith('/rest/v1/rpc/my_status')) return json({ is_member: true, is_admin: me.admin, player_id: me.player, group_name: 'L.G.C', group_id: GROUP, role: me.admin ? 'organiser' : 'player', groups: [{ id: GROUP, name: 'L.G.C', slug: 'lgc', role: me.admin ? 'organiser' : 'player' }] });
   if (url.pathname.startsWith('/rest/v1/rpc/')) { writes.push({ method: 'RPC', table: url.pathname.split('/').pop(), body: req.postData() ? JSON.parse(req.postData()) : null }); return json(url.pathname.endsWith('start_trip_votes') ? 2 : null); }
   if (url.pathname.startsWith('/rest/v1/')) {
     const table = url.pathname.split('/')[3];
@@ -225,6 +226,36 @@ await page.getByText('The admin or the trip’s organiser').click();
 await page.waitForTimeout(600);
 check(writes.some((w) => w.method === 'RPC' && w.table === 'set_vote_decider' && w.body.p_value === 'admin_or_organiser'), 'admin can let organisers pick winners');
 await page.screenshot({ path: `${SHOTS}/t6-admin.png` });
+
+// 7. v8 fix (23 Oct 2026): live L.G.C's "March" — a trip being planned with no dates — must show on Trips,
+// for the organiser and for members. Exactly the live shape: kind trip, status planning, proposed false, no dates,
+// location_name "Blue mountains", organiser set, trip_id null; plus the past South Coast trip.
+{
+  const MARCH = '17f1ac42-4b37-43ff-96e5-d67890e2c663';
+  db.plans = [
+    { id: MARCH, kind: 'trip', name: 'March', status: 'planning', proposed: false, start_date: null, end_date: null, location_name: 'Blue mountains',
+      organiser_id: P2, created_by: P1, trip_id: null, rsvp_locked: false, created_at: now },
+    db.plans.find((p) => p.id === SC_PLAN),
+  ];
+  db.plan_polls = []; db.plan_options = [];
+  for (const who of [{ admin: true, player: P1, label: 'organiser' }, { admin: false, player: P3, label: 'member' }]) {
+    Object.assign(me, who);
+    await page.goto(`${BASE}#/`);
+    await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (k.startsWith('lgc-cache-')) localStorage.removeItem(k); });
+    await page.goto(`${BASE}#/plan`);
+    await page.reload();
+    await page.getByText('Past trips').waitFor({ timeout: 15000 });
+    await page.waitForTimeout(500);
+    const section = page.getByTestId('trips-being-planned');
+    check(await section.isVisible(), `${who.label}: a "Being planned" section shows`);
+    const txt = await section.innerText().catch(() => '');
+    check(/March/.test(txt) && /Blue mountains/.test(txt) && /When: to be voted on/.test(txt), `${who.label}: March (no dates, Blue mountains) is listed under Being planned`);
+    check(/organiser Mike/.test(txt), `${who.label}: its organiser is named`);
+    check(!(await page.getByText('Nothing locked in yet').isVisible()), `${who.label}: no "Nothing locked in yet" while a trip is being planned`);
+    check(await page.getByText('South Coast Trip 2026').isVisible(), `${who.label}: the past South Coast trip still shows`);
+    if (who.admin) await page.screenshot({ path: `${SHOTS}/t7-being-planned.png`, fullPage: true });
+  }
+}
 
 check(errors.length === 0, `no page errors (${errors.join(' | ')})`);
 await browser.close();

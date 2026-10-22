@@ -59,6 +59,7 @@ export function tripWhen(t, fallback = '') {
  *   now   — the trip that's on, else the next locked-in one (the big card)
  *   later — other locked-in trips still to come
  *   ideas — ideas and trips still being decided (soonest / newest first)
+ *   planning / suggested — `ideas` split: started by an organiser (status planning, not proposed) / suggestions
  *   past  — done and called off, newest first
  */
 export function sortTrips(plans, trips = [], today = todayISO()) {
@@ -78,7 +79,11 @@ export function sortTrips(plans, trips = [], today = todayISO()) {
   });
   const past = withStage.filter((x) => x.stage === 'done' || x.stage === 'cancelled')
     .sort((a, b) => String(lastDay(b.plan) || b.plan.created_at || '').localeCompare(String(lastDay(a.plan) || a.plan.created_at || '')));
-  return { now, later, ideas, past };
+  // v8 fix: the Trips tab shows trips an organiser has started ("Being planned", dates or not) apart from
+  // suggestions still waiting on the group ("Ideas"). `ideas` keeps both, for older callers.
+  const planning = ideas.filter((x) => x.stage === 'deciding');
+  const suggested = ideas.filter((x) => x.stage === 'idea');
+  return { now, later, ideas, planning, suggested, past };
 }
 
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];

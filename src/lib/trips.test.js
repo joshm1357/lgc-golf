@@ -46,6 +46,20 @@ describe('sortTrips', () => {
   it('nothing locked in → no big card', () => {
     expect(sortTrips([plans[2]], [], T).now).toBeNull();
   });
+  it('splits trips being planned from ideas', () => {
+    const s = sortTrips(plans, [], T);
+    expect(s.planning.map((x) => x.plan.id)).toEqual(['d']);
+    expect(s.suggested.map((x) => x.plan.id)).toEqual(['c']);
+  });
+  it('v8: the live "March" shape (planning, not proposed, no dates, organiser set, no trip) is being planned', () => {
+    const march = { id: '17f1ac42', kind: 'trip', name: 'March', status: 'planning', proposed: false, start_date: null, end_date: null,
+      location_name: 'Blue mountains', organiser_id: 'p1', trip_id: null, created_at: '2026-10-18' };
+    const past = { id: 'sc', status: 'done', start_date: '2026-10-16', end_date: '2026-10-18', trip_id: 't1' };
+    const s = sortTrips([march, past], [{ id: 't1', status: 'active', start_date: '2026-10-16', end_date: '2026-10-18' }], '2026-10-23');
+    expect(s.planning.map((x) => x.plan.id)).toEqual(['17f1ac42']);
+    expect(s.now).toBeNull();
+    expect(s.past.map((x) => x.plan.id)).toEqual(['sc']);
+  });
 });
 
 describe('stillToDecide', () => {

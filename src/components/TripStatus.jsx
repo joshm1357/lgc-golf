@@ -9,8 +9,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
-import { useData, useScores, useSession, useSideEntries, useFeature, useRealtime, playerName } from '../lib/store.jsx';
-import { roundBoard, compBonuses, isNetFormat, isTeamFormat } from '../lib/board.js';
+import { useData, useScores, useSession, useSideEntriesState, useFeature, useRealtime, playerName } from '../lib/store.jsx';
+import { readyBoard, isNetFormat, isTeamFormat } from '../lib/board.js';
 import { formatToPar } from '../lib/scoring.js';
 import { focusRound } from '../lib/activetrip.js';
 import { compStandings, COMP_TYPE, dayOf } from '../lib/comps.js';
@@ -25,12 +25,16 @@ function RoundBoardMini({ round, when }) {
   const data = useData();
   const { status } = useSession();
   const scores = useScores(round.id);
-  const side = useSideEntries(round.id);
-  const board = useMemo(() => roundBoard({
+  const side = useSideEntriesState(round.id);
+  // Null until the side comp entries are here when the round has bonus strokes — never a total without its bonus.
+  const board = useMemo(() => readyBoard({
     round, course: data.coursesById[round.course_id], teams: data.teamsByRound[round.id] || [], roundPlayers: data.roundPlayers[round.id] || [],
     playersById: data.playersById, scoresIdx: scores.index, quickResults: data.quick_results,
-    bonuses: compBonuses(round, data.teamsByRound[round.id] || [], side),
+    sideEntries: side.rows, sideLoaded: side.loaded,
   }), [round, data, scores.index, side]);
+  if (!board) {
+    return <div className="card pad small muted" data-testid="trip-round-board-loading">Loading {round.name}’s leaderboard…</div>;
+  }
   const isNet = isNetFormat(board.format);
   const me = status?.player_id;
   const imPlaying = isTeamFormat(board.format)

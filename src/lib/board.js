@@ -27,6 +27,23 @@ export function courseHoles(course) {
  * Side-comp bonus strokes for Ambrose: the leader of each closest-to-pin / longest-drive hole
  * takes `round.comp_bonus` strokes off their team's score. Returns { teamId: { strokes, wins: [label] } }.
  */
+/** Does this round's board depend on side comp entries (Ambrose with bonus strokes and at least one CTP/LD hole)? */
+export function needsSideEntries(round) {
+  return !!round && round.format === 'ambrose' && Number(round.comp_bonus || 0) > 0
+    && ((round.ctp_holes || []).length + (round.ld_holes || []).length) > 0;
+}
+
+/**
+ * A round board, or null while an input it needs is still loading (v8 fix): with side-comp bonus strokes the board
+ * waits for the side entries, so it never shows a total without its bonus. `args` as for roundBoard, plus
+ * `sideEntries` and `sideLoaded`.
+ */
+export function readyBoard({ sideEntries = [], sideLoaded = true, ...args }) {
+  if (!args.round) return null;
+  if (needsSideEntries(args.round) && !sideLoaded) return null;
+  return roundBoard({ ...args, bonuses: compBonuses(args.round, args.teams || [], sideEntries) });
+}
+
 export function compBonuses(round, teams, sideEntries = []) {
   const bonus = Number(round?.comp_bonus || 0);
   const out = {};

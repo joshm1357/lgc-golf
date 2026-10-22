@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase, friendlyError } from '../lib/supabase.js';
-import { useData, useScores, useSession, useSideEntries, playerName } from '../lib/store.jsx';
-import { roundBoard, stablefordTrophyBoard, compBonuses } from '../lib/board.js';
+import { useData, useScores, useSession, useSideEntriesState, playerName } from '../lib/store.jsx';
+import { readyBoard, stablefordTrophyBoard } from '../lib/board.js';
 import { formatToPar } from '../lib/scoring.js';
 import { Seg, Avatar, AvatarStack, Icon, Sheet, toast } from '../components/ui.jsx';
 import { TrophyArt } from '../components/TrophyArt.jsx';
@@ -58,11 +58,11 @@ export default function Trophies() {
     playersById: data.playersById, scoresIdx: scores.index, quickResults: data.quick_results, adjustments,
   }) : null), [trip, data, scores.index, adjustments]);
   const aRound = [...tripRounds].reverse().find((r) => r.format === 'ambrose');
-  const aSide = useSideEntries(aRound?.id);
-  const aBoard = useMemo(() => (aRound ? roundBoard({
+  const aSide = useSideEntriesState(aRound?.id);
+  const aBoard = useMemo(() => (aRound ? readyBoard({
     round: aRound, course: data.coursesById[aRound.course_id], teams: data.teamsByRound[aRound.id] || [],
-    playersById: data.playersById, scoresIdx: scores.index,
-    bonuses: compBonuses(aRound, data.teamsByRound[aRound.id] || [], aSide), adjustments,
+    playersById: data.playersById, scoresIdx: scores.index, adjustments,
+    sideEntries: aSide.rows, sideLoaded: aSide.loaded,
   }) : null), [aRound, data, scores.index, aSide, adjustments]);
 
   const plaquesFor = (name) => honourOrder(data.honour_board.filter((h) => h.trophy_name.toLowerCase() === name.toLowerCase()));
@@ -173,7 +173,7 @@ export default function Trophies() {
               </div>
               <p className="note" style={{ margin: 0 }}>{trophy.name}: winning team of {aRound.name}. <Link to={`/?r=${aRound.id}`} style={{ color: '#EBD496' }}>Open the live leaderboard</Link>.</p>
             </>
-          ) : <div className="card pad">No Ambrose round set up yet.</div>)}
+          ) : <div className="card pad">{aRound ? 'Loading the leaderboard…' : 'No Ambrose round set up yet.'}</div>)}
 
           {!general && trophy.type === 'manual' && !plaques.length && (
             <div className="card pad">No winners engraved yet.{status.is_admin && !trophy.historyOnly ? ' Tap “Engrave winner” when it’s decided.' : ''}</div>

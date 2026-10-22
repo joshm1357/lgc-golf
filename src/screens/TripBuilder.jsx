@@ -172,7 +172,7 @@ export default function TripBuilder() {
   if (!plan) return <div className="page"><Header back="Trip" title="Build the trip" /><div className="empty">This trip has been removed.</div></div>;
   if (!org && !row) return <div className="page"><Header back="Trip" title="Build the trip" sub={plan.name} /><div className="empty">The organiser hasn’t started building this trip yet.</div></div>;
 
-  const steps = TB.builderSteps(st, { teeCount: tees.filter((t) => t.times?.length).length });
+  const steps = TB.builderSteps(st, { teeCount: tees.filter((t) => slotsFor(t).length).length });
   const current = step || (steps.find((s) => !s.done && !s.locked) || steps[steps.length - 1]).key;
   const days = TB.tripDays(st.nights).map((d) => ({ ...d, options: st.days.find((x) => x.index === d.index && x.leg === d.leg)?.options || [] }));
   const weekendDates = (index) => st.weekends.map((w) => TB.dayLabel(TB.dayDate(w, index))).join(' / ');
@@ -468,7 +468,7 @@ export default function TripBuilder() {
   const summaries = {
     area: [st.region || (st.regionOptions.length ? `${st.regionOptions.join(' or ')}?` : null), st.weekends.map((w) => TB.weekendLabel(w)).join(' / ')].filter(Boolean).join(' · '),
     courses: stays.length ? `Stay ${stays.map((s) => s.name).join(' / ')} · ${days.filter((d) => d.options.length).length} of ${days.length} days with options` : null,
-    calls: st.callsMade ? `${tees.filter((t) => t.times?.length).length} sets of tee times in` : null,
+    calls: st.callsMade ? `${tees.filter((t) => slotsFor(t).length).length} sets of tee times in` : null,
     configs: st.pickedText || (configs.length ? `${configs.length} trip${configs.length === 1 ? '' : 's'} that work` : null),
   };
 

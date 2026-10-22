@@ -186,25 +186,39 @@ await wk.nth(0).click(); await wait(400);
 await wk.nth(1).click(); await wait(400);
 check(state().regionOptions?.length === 2 && state().weekends?.length === 2, `two areas and two weekends chosen (${JSON.stringify(state().regionOptions)})`);
 check((await wk.nth(0).innerText()).match(/^Fri \d+/) != null, `weekends are Fri–Sun suggestions (${await wk.nth(0).innerText()})`);
+// The area map (080): South Coast's courses on the table — several, never one.
+await page.locator('[data-testid="area-courses"]').getByText('Gerringong GC').waitFor({ timeout: 8000 });
+await page.locator('[data-testid="area-courses"]').getByLabel('Gerringong GC').check(); await wait(400);
+await page.locator('[data-testid="area-courses"]').getByLabel('Kiama GC').check(); await wait(400);
+check(state().areaCourses?.['South Coast NSW']?.length === 2, `South Coast has its own course set (${JSON.stringify(state().areaCourses)})`);
 await page.screenshot({ path: `${SHOTS}/1-area.png`, fullPage: true });
-await page.getByRole('button', { name: /Put it to the group: “Where and when\?”/ }).click();
-await page.waitForFunction(() => true);
-await wait(1200);
+await page.getByTestId('tb-call-vote1').click();
+await page.getByTestId('call-vote').waitFor({ timeout: 5000 });
+await page.getByTestId('call-the-vote').click();
+await page.getByTestId('how-it-goes-out').waitFor({ timeout: 8000 });
+await page.getByRole('button', { name: 'Done' }).click();
+await wait(800);
 const b1 = db.vote_batches[0];
 const v1polls = db.plan_polls.filter((p) => p.vote_batch === b1?.id);
 check(b1 && b1.title === 'Where and when?' && b1.keen === true, 'vote card "Where and when?" made, asking if you’re keen');
-check(v1polls.map((p) => p.question).join('|') === 'Which area?|Which weekend?', `sections: ${v1polls.map((p) => p.question).join(', ')}`);
-check(db.plan_options.filter((o) => o.poll_id === v1polls[0]?.id).every((o) => /courses nearby|drive/.test(o.notes || '')), 'each area says courses nearby / the drive');
+check(v1polls.map((p) => p.question).join('|') === 'Which area?|Which weekend?|South Coast NSW: which courses?', `sections: ${v1polls.map((p) => p.question).join(', ')}`);
+check((db.plan_options.find((o) => o.poll_id === v1polls[0]?.id && o.label === 'South Coast NSW')?.notes || '').startsWith('Courses: Gerringong GC, Kiama GC'), 'the area on the ballot shows its course list');
 check(notifyCalls.filter((n) => n.type === 'poll_open').length === 1, `one notification for the whole card (${notifyCalls.filter((n) => n.type === 'poll_open').length})`);
 
 // The card on the trip's Vote tab: sections, keen, still to answer.
 await page.goto(`${BASE}#/plan/${PLAN}?tab=vote`);
 await page.locator('[data-testid="vote-batch"]').waitFor({ timeout: 10000 });
 const card = page.locator('[data-testid="vote-batch"]');
-check(await card.locator('[data-testid="vote-batch-section"]').count() === 2 && await card.locator('[data-testid="vote-batch-keen"]').count() === 1, 'ONE card with two sections and "Are you keen?"');
+check(await card.locator('[data-testid="vote-batch-section"]').count() === 3 && await card.locator('[data-testid="vote-batch-keen"]').count() === 1, 'ONE card with three sections and "Are you keen?"');
 check(await page.locator('[data-testid="vote-batch"]').count() === 1 && !(await page.getByText('Which area?').count() > 1), 'the sections aren’t shown again as separate votes');
-await card.locator('[data-testid="vote-batch-section"]').nth(0).getByRole('button', { name: '✓ Can' }).first().click(); await wait(600);
+// The organiser sees the results; "See it as a voter" shows the ballot (areas: Prefer / Option / Don't like).
+await card.getByTestId('see-as-voter').click(); await wait(300);
+await card.locator('[data-testid="vote-batch-section"]').nth(0).getByRole('button', { name: '⭐ Prefer' }).first().click(); await wait(600);
 await card.locator('[data-testid="vote-batch-section"]').nth(1).getByRole('button', { name: '✓ Can' }).first().click(); await wait(600);
+await card.locator('[data-testid="vote-batch-section"]').nth(2).getByRole('button', { name: '👍 Option' }).first().click(); await wait(600);
+await card.locator('[data-testid="vote-batch-keen"]').getByRole('button', { name: '✓ In' }).click(); await wait(600);
+check(await card.getByTestId('voter-thanks').isVisible(), 'answered everything: "Thanks — here’s how it’s looking"');
+await card.getByTestId('see-as-voter').click(); await wait(300);
 let waitingText = await card.locator('[data-testid="vote-batch-waiting"]').innerText();
 check(/Still to answer \(11\)/.test(waitingText) && !waitingText.includes('Josh'), `answered every section → off the "still to answer" list (${waitingText.slice(0, 40)})`);
 await page.screenshot({ path: `${SHOTS}/2-vote-card.png`, fullPage: true });
@@ -212,11 +226,10 @@ await page.screenshot({ path: `${SHOTS}/2-vote-card.png`, fullPage: true });
 // 3. The organiser picks: South Coast, the first weekend (settled).
 await page.goto(`${BASE}#/plan/${PLAN}/build`);
 await step('area').waitFor({ timeout: 10000 });
-const scRow = step('area').locator('.row', { hasText: 'South Coast NSW' }).first();
-check((await scRow.innerText()).match(/South Coast NSW\s*2/) != null, 'vote points show next to the area');
-await scRow.getByRole('button', { name: 'We’re going here' }).click(); await wait();
+await page.getByTestId('going-here').click(); await wait();
 await page.locator('[data-testid="tb-weekends"] .row').first().getByRole('button', { name: 'Go with this' }).click(); await wait();
 check(state().region === 'South Coast NSW' && state().weekends.length === 1 && state().weekendsSettled === true, 'area decided, one weekend settled');
+check(state().days?.[1]?.options?.length === 2, `the stay day starts pre-filled from the area’s course set (${JSON.stringify(state().days?.[1]?.options)})`);
 const W = state().weekends[0];
 
 // 4. Stay areas: Nowra from the chips, Jervis Bay from its pin on the map.
@@ -244,9 +257,9 @@ check(/Worrigee Links · \d+–\d+ min/.test(sug2), `stay-day drive shown as a r
 check(sug2.indexOf('Nowra GC') > -1 && sug2.indexOf('Nowra GC') < sug2.indexOf('Worrigee'), 'the favourite (★4.5) ranks above a course not played before');
 await days.nth(1).getByRole('button', { name: /\+ Nowra GC/ }).click(); await wait();
 await days.nth(1).getByRole('button', { name: /\+ Worrigee Links/ }).click(); await wait();
-const known = await days.nth(1).locator('[data-testid="tb-option"]').first().locator('[data-testid="tb-known"]').innerText();
+const known = await days.nth(1).locator('[data-testid="tb-option"]', { hasText: 'Nowra GC' }).first().locator('[data-testid="tb-known"]').innerText();
 check(known.startsWith('Played 2023 · ★4.5'), `course card: "${known}"`);
-const range = await days.nth(1).locator('[data-testid="tb-option"]').nth(1).locator('[data-testid="tb-option-drive"]').innerText();
+const range = await days.nth(1).locator('[data-testid="tb-option"]', { hasText: 'Worrigee' }).first().locator('[data-testid="tb-option-drive"]').innerText();
 check(/^1\d–3\d min$/.test(range), `Worrigee: "${range}" from where we stay`);
 await page.screenshot({ path: `${SHOTS}/3-stay-day.png`, fullPage: true });
 
@@ -270,7 +283,7 @@ await page.getByRole('button', { name: 'Close' }).click(); await wait();
 // 7. Day 3 — on the way home.
 await days.nth(2).getByRole('button').first().click(); await wait();
 await days.nth(2).getByRole('button', { name: /\+ Kiama GC/ }).click(); await wait();
-check(state().days?.map((d) => d.options.length).join(',') === '2,2,1', `options per day: ${state().days?.map((d) => d.options.length).join(',')}`);
+check(state().days?.map((d) => d.options.length).join(',') === '2,4,1', `options per day: ${state().days?.map((d) => d.options.length).join(',')}`);
 
 // 8. Call the courses: one job per course with the exact date and 3 tee times (12 in).
 await step('calls').getByRole('button').first().click(); await wait();
@@ -284,17 +297,24 @@ check(shJob && /ask for 3 tee times in a row on Fri \d+ \w+ from \d+:\d0$/.test(
 const ngJob = callJobs.find((j) => j.title.includes('Nowra GC'));
 check(ngJob?.body.includes('Phone 02 4421 0000'), 'the job carries the booking phone');
 
-const tee = (course, date) => page.locator('[data-testid="tb-call"]', { hasText: course }).locator(`[data-testid="tb-tee"][data-date="${date}"]`);
+const tee = (course, date) => page.locator('[data-testid="tb-call"]', { hasText: course }).locator(`[data-testid="tee-day"][data-date="${date}"]`);
 const dateOf = (n) => { const d = new Date(`${W.start}T00:00:00`); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
-const enter = async (course, n, text) => { const t = tee(course, dateOf(n)); await t.locator('input').first().fill(text); await t.getByRole('button', { name: 'Save' }).first().click(); await wait(700); };
-await enter('Shoalhaven Heads GC', 0, '10:20 10:30 10:40');
-await enter('Gerringong GC', 0, '9:00, 9:10');
-await enter('Nowra GC', 1, '8:00 8:10 8:20 8:30');
-await enter('Worrigee Links', 1, '9:00 9:10');
-await enter('Kiama GC', 2, '9:10 9:20 9:30');
+// Each course's call covers the whole weekend (080): available, the times on offer, then Save.
+const enter = async (course, n, text) => {
+  const t = tee(course, dateOf(n));
+  await t.getByTestId('tee-day-edit').click();
+  await t.getByRole('button', { name: '✓ Yes' }).click();
+  await t.getByLabel(`Times on offer ${dateOf(n)}`).fill(text);
+  await t.getByTestId('tee-day-save').click(); await wait(700);
+};
+await enter('Shoalhaven Heads GC', 0, '10:20-10:40');
+await enter('Gerringong GC', 0, '9:00-9:10');
+await enter('Nowra GC', 1, '8:00-8:30');
+await enter('Worrigee Links', 1, '9:00-9:10');
+await enter('Kiama GC', 2, '9:10-9:30');
 check(db.trip_tee_options.length === 5 && db.trip_tee_options.every((t) => /^\d{4}-\d\d-\d\d$/.test(t.play_date) && t.job_id), 'tee times stored per course per DATE, linked to the job');
-check((await tee('Worrigee Links', dateOf(1)).locator('[data-testid="tb-tee-status"]').innerText()).startsWith('Only'), 'a course with only 2 times says so');
-check((await tee('Nowra GC', dateOf(1)).locator('[data-testid="tb-tee-status"]').innerText()) === '✓ 3 in a row 8:00–8:20', 'a course with enough says the block');
+check((await tee('Worrigee Links', dateOf(1)).locator('[data-testid="tee-day-status"]').innerText()).includes('not enough in a row'), 'a course with only 2 times says so');
+check((await tee('Nowra GC', dateOf(1)).locator('[data-testid="tee-day-status"]').innerText()) === '✓ 3 in a row 8:00–8:20', 'a course with enough says the block');
 await page.screenshot({ path: `${SHOTS}/5-calls.png`, fullPage: true });
 
 // 9. Configurations: only workable ones (Worrigee and Gerringong left out), ranked; pick one.
@@ -338,7 +358,7 @@ await page.reload();
 await step('area').waitFor({ timeout: 10000 });
 await step('calls').getByRole('button').first().click(); await wait(600);
 check(!(await page.locator('[data-testid="tb-make-calls"]').count()) && !(await page.getByLabel('Area').count()), 'a player sees it read-only');
-check((await page.locator('[data-testid="tb-call"]').count()) === 5 && !(await page.locator('[data-testid="tb-tee"] input').count()), 'a player without a call job can’t enter tee times');
+check((await page.locator('[data-testid="tb-call"]').count()) === 5 && !(await page.locator('[data-testid="tee-day-edit"]').count()), 'a player without a call job can’t enter tee times');
 await page.screenshot({ path: `${SHOTS}/9-player.png`, fullPage: true });
 
 // 12. Switched off: hidden.

@@ -118,6 +118,11 @@ async function fakeHelper(route) {
   calls.push({ body, auth: req.headers().authorization || '' });
   const json = (b) => route.fulfill({ status: 200, contentType: 'application/json', headers: cors, body: JSON.stringify(b) });
   if (body.mode === 'plan') { left = { month: left.month - 1, today: left.today - 1 }; return json({ trip_plan: TRIP_PLAN, summary: SUMMARY, remaining: left, log_id: 11 }); }
+  // The planning chat (080): the draft (a shortlist) + questions with quick answers.
+  if (body.mode === 'plan_chat') {
+    left = { month: left.month - 1, today: left.today - 1 };
+    return json({ chat: { message: 'Here are some options — want to add any?', draft: { ...TRIP_PLAN, extras: [] }, questions: [{ id: 'places', text: 'These are the places I’d look at — any others?', quick: ['Looks good', 'Add another…'] }], done: false, summary: SUMMARY }, remaining: left, log_id: 11 });
+  }
   if (body.mode === 'plan_apply') {
     const id = crypto.randomUUID();
     db.plans.push({ id, group_id: GROUP, kind: 'trip', name: body.plan.name, status: 'planning', proposed: false, brief: 'Rough costs each (AI estimate — check before booking)', budget_pp: 500, created_by: K, created_at: now });
@@ -153,17 +158,14 @@ check(true, 'organiser sees "✨ Plan it with AI" on the Trips tab');
 check(await page.getByText('✨ Ask about our trips').isVisible(), 'the Ask chip shows on the Trips tab');
 await page.screenshot({ path: `${SHOTS}/1-trips.png`, fullPage: true });
 await page.getByRole('button', { name: '✨ Plan it with AI' }).click();
-const box = page.getByLabel('Describe the trip you want');
+const box = page.getByLabel('Your message');
 check((await box.getAttribute('placeholder')).startsWith('Weekend away in March'), 'the example is the placeholder');
-check(await page.getByRole('button', { name: 'Plan it', exact: true }).isDisabled(), 'Plan it waits for some words');
+check(await page.getByRole('button', { name: 'Send', exact: true }).isDisabled(), 'Send waits for some words');
 await box.fill('Weekend away in March, 12 of us, somewhere within 3 hours of Sydney, about $500 each');
-await page.getByRole('button', { name: 'Plan it', exact: true }).click();
-await page.getByText('I’ll set up:').waitFor({ timeout: 10000 });
-const card = await page.getByLabel('What will be made').innerText();
-check(SUMMARY.every((l) => card.includes(l)), 'the confirm card lists exactly what will be made');
-check(await page.getByText('Note: Both within 3 hours of Sydney.').isVisible(), 'the helper’s note shows');
+await page.getByRole('button', { name: 'Send', exact: true }).click();
+await page.getByTestId('draft-card').waitFor({ timeout: 10000 });
 check(await page.getByText('56 questions left this month for the group · 8 for you today').isVisible(), 'questions left shows');
-const planCall = calls.find((c) => c.body.mode === 'plan');
+const planCall = calls.find((c) => c.body.mode === 'plan_chat');
 check(!!planCall && planCall.body.group_id === GROUP && /^Bearer /.test(planCall.auth), 'plan call: mode, group and the person’s own sign-in');
 check(db.plans.length === 0, 'nothing saved before Create it');
 // 👍
@@ -172,12 +174,16 @@ await page.getByText('Thanks!').waitFor({ timeout: 5000 });
 const rate = rpcs.find((r) => r.name === 'rate_helper');
 check(!!rate && rate.body.p_log === 11 && rate.body.p_rating === 1, '👍 is recorded against this answer (rate_helper, log 11, +1)');
 check((await page.getByRole('button', { name: 'Helpful', exact: true }).getAttribute('aria-pressed')) === 'true', '👍 shows as chosen');
+await page.getByTestId('use-plan').click();
+await page.getByText('I’ll set up:').waitFor({ timeout: 10000 });
+const card = await page.getByLabel('What will be made').innerText();
+check(SUMMARY.every((l) => card.includes(l)), 'the confirm card lists exactly what will be made');
 await page.screenshot({ path: `${SHOTS}/2-plan-confirm.png`, fullPage: true });
 // Create it → plan_apply → the new trip opens.
 await page.getByRole('button', { name: 'Create it' }).click();
 await page.waitForURL(/#\/plan\/[0-9a-f-]{36}/, { timeout: 10000 });
 const apply = calls.find((c) => c.body.mode === 'plan_apply');
-check(!!apply && JSON.stringify(apply.body.plan) === JSON.stringify(TRIP_PLAN) && apply.body.group_id === GROUP, 'Create it calls plan_apply with the plan');
+check(!!apply && apply.body.plan.name === TRIP_PLAN.name && apply.body.plan.places.map((p) => p.place).join() === 'Hunter Valley,Port Stephens' && apply.body.plan.dates.length === 2 && apply.body.group_id === GROUP, 'Create it calls plan_apply with the draft as a plan');
 await page.getByText('March Away 2027').first().waitFor({ timeout: 10000 });
 check(true, 'the new trip opens');
 await page.screenshot({ path: `${SHOTS}/3-created.png`, fullPage: true });

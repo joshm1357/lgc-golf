@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { buildReplay, buildTimeline, isRoundFinished, raceSubjects, gapWords, holeWord, sideCompWinners, timelineSeconds } from './replay.js';
+import { buildReplay, isRoundFinished, raceSubjects, gapWords, holeWord, sideCompWinners } from './replay.js';
+import { buildStory } from './replaybeats.js';
 import { roundBoard } from './board.js';
 import {
   LINES, STYLES, pickLine, fill, captionFor, pickInJoke, popWord, ordinal, savedStyle, saveStyle, DEFAULT_STYLE,
-  captionsFor, popFor, topMoment,
+  popFor, topMoment,
 } from './replay-lines.js';
 
 const PARS = [[5, 17], [4, 9], [3, 8], [4, 3], [3, 11], [5, 16], [4, 18], [4, 15], [4, 1], [4, 6], [3, 14], [4, 5], [4, 10], [5, 7], [3, 12], [5, 2], [4, 13], [4, 4]];
@@ -167,7 +168,7 @@ describe('buildReplay — other formats', () => {
     const r = buildReplay({ round: { id: 'x', format: 'stableford' }, course, roundPlayers: [{ player_id: 'a' }], playersById: {}, scores: [] });
     expect(r.empty).toBe(true);
     expect(r.winner).toBeNull();
-    expect(buildTimeline(r)).toEqual([{ scene: 'end', ms: null }]);
+    expect(buildStory(r).steps).toEqual([{ scene: 'end', kind: 'end', text: '', ms: null }]);
   });
 
   it('typed-in (quick) cards join at the end, so the winner still matches the leaderboard', () => {
@@ -209,30 +210,7 @@ describe('side comps and posts', () => {
   });
 });
 
-describe('timeline', () => {
-  const r = buildReplay(stableford());
-  const steps = buildTimeline(r);
-
-  it('runs welcome → field → race → finish → slow last holes → winner → awards → end', () => {
-    expect(steps.map((s) => s.scene).filter((s, i, a) => s !== a[i - 1])).toEqual(['welcome', 'field', 'race', 'finish', 'race', 'winner', 'awards', 'end']);
-    const fin = steps.findIndex((s) => s.scene === 'finish');
-    expect(steps.slice(fin + 1).filter((s) => s.scene === 'race')).toHaveLength(3);
-    expect(steps.slice(fin + 1).filter((s) => s.scene === 'race').every((s) => s.slow)).toBe(true);
-    expect(steps[steps.length - 1]).toEqual({ scene: 'end', ms: null });
-  });
-
-  it('quiet holes are short, drama is longer, and the whole thing is about a minute', () => {
-    const race = steps.filter((s) => s.scene === 'race');
-    expect(race[9].ms).toBeGreaterThan(race[4].ms);
-    const secs = timelineSeconds(steps);
-    expect(secs).toBeGreaterThan(40);
-    expect(secs).toBeLessThan(90);
-  });
-
-  it('fast mode (tests) makes every step quick', () => {
-    expect(buildTimeline(r, { fast: true }).filter((s) => s.ms != null).every((s) => s.ms === 150)).toBe(true);
-  });
-});
+// The story (beats, lines, timing) is tested in replaybeats.test.js.
 
 describe('small helpers', () => {
   it('isRoundFinished: locked, or everyone done', () => {
@@ -269,7 +247,7 @@ describe('replay lines', () => {
   });
 
   it('every placeholder is a known one', () => {
-    const known = new Set(['name', 'other', 'hole', 'par', 'strokes', 'over', 'places', 'rank', 'gap', 'left', 'comp', 'score', 'by', 'round', 'course', 'count', 'text']);
+    const known = new Set(['name', 'other', 'hole', 'par', 'strokes', 'over', 'places', 'rank', 'gap', 'left', 'comp', 'score', 'by', 'round', 'course', 'count', 'text', 'holes']);
     for (const style of Object.keys(LINES)) for (const k of KINDS) for (const line of LINES[style][k]) for (const [, v] of line.matchAll(/\{(\w+)\}/g)) expect(known.has(v), `${style}.${k}: {${v}}`).toBe(true);
   });
 
@@ -311,11 +289,10 @@ describe('replay lines', () => {
 
   it('captions for every step: steady, in the chosen style, quiet holes get a quiet line', () => {
     const r = buildReplay(stableford());
-    const steps = buildTimeline(r);
     const opts = { style: 'larrikins', seed: 42, roundName: 'Saturday', courseName: 'Cypress Lakes' };
-    const a = captionsFor(r, steps, opts);
-    expect(a).toEqual(captionsFor(r, steps, opts));
-    expect(a).toHaveLength(steps.length);
+    const { steps } = buildStory(r, opts);
+    const a = steps.map((s) => s.text);
+    expect(a).toEqual(buildStory(r, opts).steps.map((s) => s.text));
     expect(a.every((x) => typeof x === 'string')).toBe(true);
     expect(a[0]).toMatch(/Saturday|Cypress Lakes/);
     expect(a.slice(0, -1).every((x) => x.length > 0)).toBe(true);

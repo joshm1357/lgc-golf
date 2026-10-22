@@ -1,6 +1,10 @@
-// Round replay (Stage 12, v1): a finished round played back as a short animated story, phone portrait.
-// Plays itself. Tap right = next, tap left = back, hold = pause. Sound (the phone reading the lines) is off until
-// you turn it on. All the working-out is in lib/replay.js and lib/replay-lines.js; this file only shows it.
+// Round replay (Stage 12; ov20 story pacing, 23 Oct 2026): a finished round played back as a short story, phone
+// portrait. Quiet stretches of holes share a beat, key moments get their own, the last three holes go one at a
+// time, then the winner. Normal speed by default; Fast is about twice as quick; Skip to the end jumps to the winner.
+// Tap right = next, tap left = back, hold (or the button) = pause. The voice (the phone reading the lines) is off
+// until you turn it on, and when it's on the replay waits for each line to finish before moving on.
+// All the working-out is in lib/replay.js, lib/replaybeats.js, lib/replay-lines.js and lib/voice.js; this file only
+// shows it.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useData, useSession, useFeature, cacheGet } from '../lib/store.jsx';
@@ -8,8 +12,10 @@ import { supabase } from '../lib/supabase.js';
 import { Avatar, AvatarStack, Loading, toast } from '../components/ui.jsx';
 import { shareText, appLink } from '../lib/push.js';
 import { currentGroup } from '../lib/group.js';
-import { buildReplay, buildTimeline, holeWord, gapWords } from '../lib/replay.js';
-import { STYLES, captionsFor, popFor, topMoment, hashSeed, savedStyle, saveStyle, ordinal } from '../lib/replay-lines.js';
+import { buildReplay, holeWord, gapWords } from '../lib/replay.js';
+import { buildStory, stepMs, skipTarget, SPEEDS, TRANSITION_MS } from '../lib/replaybeats.js';
+import { STYLES, popFor, topMoment, hashSeed, savedStyle, saveStyle, ordinal } from '../lib/replay-lines.js';
+import { createSpeaker, voiceRate } from '../lib/voice.js';
 import { jokesFromLines } from '../lib/injokes.js';
 import './replay.css';
 
@@ -18,7 +24,7 @@ const MAX_ROWS = 8;
 
 /** Everything the replay needs that isn't already loaded. Each read is allowed to fail (older database, feature
  * off, no signal): the replay just leaves that part out. */
-function useReplayExtras(roundId, jokesOn) {
+function useReplayExtras(roundId, jokesOn, commentaryOn) {
   const [extras, setExtras] = useState(null);
   useEffect(() => {
     let live = true;
@@ -27,7 +33,7 @@ function useReplayExtras(roundId, jokesOn) {
     };
     setExtras(null);
     (async () => {
-      const [scores, sideEntries, posts, ownDefs, ownEntries, jokes] = await Promise.all([
+      const [scores, sideEntries, posts, ownDefs, ownEntries, jokes, commentary] = await Promise.all([
         safe(supabase.from('scores').select('*').eq('round_id', roundId)),
         safe(supabase.from('side_entries').select('*').eq('round_id', roundId)),
         safe(supabase.from('posts').select('*').eq('round_id', roundId)),
@@ -35,26 +41,45 @@ function useReplayExtras(roundId, jokesOn) {
         safe(supabase.from('side_comp_entries').select('*').eq('round_id', roundId)),
         // A few running jokes for the captions (072: never the whole list).
         jokesOn ? safe(supabase.rpc('in_joke_lines', { p_n: 5 })) : Promise.resolve([]),
+        // The group's live commentary for this round (071): used on the beats it fits, the report on the end card.
+        commentaryOn ? safe(supabase.from('commentary').select('key,kind,facts,line,status').eq('round_id', roundId).eq('status', 'ready')) : Promise.resolve([]),
       ]);
       if (!live) return;
       setExtras({
         scores: scores ?? cacheGet(`scores-${roundId}`) ?? [],
-        sideEntries: sideEntries || [], posts: posts || [], ownDefs: ownDefs || [], ownEntries: ownEntries || [], jokes: jokesFromLines(jokes),
+        sideEntries: sideEntries || [], posts: posts || [], ownDefs: ownDefs || [], ownEntries: ownEntries || [],
+        jokes: jokesFromLines(jokes), commentary: commentary || [],
       });
     })();
     return () => { live = false; };
-  }, [roundId, jokesOn]);
+  }, [roundId, jokesOn, commentaryOn]);
   return extras;
+}
+
+/** Does this phone ask for less movement? */
+function useReducedMotion() {
+  const query = '(prefers-reduced-motion: reduce)';
+  const [on, setOn] = useState(() => { try { return window.matchMedia(query).matches; } catch { return false; } });
+  useEffect(() => {
+    let mq;
+    try { mq = window.matchMedia(query); } catch { return undefined; }
+    const f = () => setOn(mq.matches);
+    mq.addEventListener?.('change', f);
+    return () => mq.removeEventListener?.('change', f);
+  }, []);
+  return on;
 }
 
 export default function Replay() {
   const { roundId } = useParams();
   const [params] = useSearchParams();
-  const fast = params.get('fast') === '1';
+  // ?quick=1 (or the older ?fast=1) is for tests only: every step 150 ms.
+  const quick = params.get('quick') === '1' || params.get('fast') === '1';
   const data = useData();
   const { status } = useSession();
   const jokesOn = useFeature('in_jokes');
-  const extras = useReplayExtras(roundId, jokesOn);
+  const commentaryOn = useFeature('commentary');
+  const extras = useReplayExtras(roundId, jokesOn, commentaryOn);
   const round = data.rounds?.find((r) => r.id === roundId) || null;
   const course = round ? data.coursesById[round.course_id] : null;
   const groupId = status?.group_id || currentGroup();
@@ -68,10 +93,12 @@ export default function Replay() {
       sideEntries: extras.sideEntries, ownDefs: extras.ownDefs, ownEntries: extras.ownEntries, posts: extras.posts,
     });
   }, [round, course, extras, data]);
-  const steps = useMemo(() => (replay ? buildTimeline(replay, { fast }) : []), [replay, fast]);
-  const captions = useMemo(
-    () => (replay ? captionsFor(replay, steps, { style, seed: hashSeed(round?.id || ''), jokes: extras?.jokes || [], roundName: round?.name, courseName: course?.name }) : []),
-    [replay, steps, style, extras, round, course],
+  const story = useMemo(
+    () => (replay ? buildStory(replay, {
+      style, seed: hashSeed(round?.id || ''), jokes: extras?.jokes || [], commentary: extras?.commentary || [],
+      roundName: round?.name, courseName: course?.name,
+    }) : null),
+    [replay, style, extras, round, course],
   );
 
   if (!data.ready || (round && !extras)) return <div className="rp"><Loading text="Setting up the replay…" /></div>;
@@ -85,50 +112,89 @@ export default function Replay() {
   }
   return (
     <Player
-      key={`${round.id}-${fast ? 'fast' : 'normal'}`}
-      round={round} course={course} replay={replay} steps={steps} captions={captions}
+      key={`${round.id}-${quick ? 'quick' : 'play'}`}
+      round={round} course={course} replay={replay} story={story} quick={quick}
       style={style} setStyle={(s) => { setStyle(s); saveStyle(groupId, s); }}
     />
   );
 }
 
-function Player({ round, course, replay, steps, captions, style, setStyle }) {
+const SPEED_KEY = 'tgt-replay-speed';
+function savedSpeed() {
+  try { return localStorage.getItem(SPEED_KEY) === 'fast' ? 'fast' : 'normal'; } catch { return 'normal'; }
+}
+const END_STEP = { scene: 'end', kind: 'end', text: '', ms: null };
+
+function Player({ round, course, replay, story, quick, style, setStyle }) {
   const nav = useNavigate();
+  const steps = story?.steps?.length ? story.steps : [END_STEP];
+  const beats = story?.beats || [];
   const [idx, setIdx] = useState(0);
   const [held, setHeld] = useState(false);
   const [stopped, setStopped] = useState(false); // the pause button
-  const [muted, setMuted] = useState(true);
+  const [voiceOn, setVoiceOn] = useState(false); // off until turned on
+  const [speedPick, setSpeedPick] = useState(savedSpeed);
+  const speed = quick ? 'quick' : speedPick;
+  const reduced = useReducedMotion();
   const paused = held || stopped;
-  const step = steps[idx] || { scene: 'end', ms: null };
+  const step = steps[Math.min(idx, steps.length - 1)];
   const last = steps.length - 1;
-  const go = (d) => setIdx((i) => Math.max(0, Math.min(last, i + d)));
+  const ms = stepMs(step, speed);
+  // Jumping (tap, back, skip, watch again) starts that step's clock and voice afresh.
+  const go = (to) => { setTimerIdx(-1); setVoiceIdx(-1); setIdx(Math.max(0, Math.min(last, to))); };
 
-  // The clock: each step waits its time, then moves on. Pausing keeps the time left.
+  // Two things must be done before the next step: the clock, and (voice on) reading the line out. timerIdx and
+  // voiceIdx say which step each has finished for (anything else means "not yet").
+  const [timerIdx, setTimerIdx] = useState(-1);
+  const [voiceIdx, setVoiceIdx] = useState(-1);
+  const speaker = useMemo(() => {
+    const w = typeof window !== 'undefined' ? window : {};
+    return createSpeaker(w.speechSynthesis || null, w.SpeechSynthesisUtterance || null);
+  }, []);
+  const voiceNeeded = voiceOn && speaker.ok && !!step.text && ms != null;
+
+  // The clock. Pausing keeps the time left (counted at Normal, so changing speed part-way through is fair).
   const remaining = useRef(null);
   const forIdx = useRef(-1);
   useEffect(() => {
     if (forIdx.current !== idx) { forIdx.current = idx; remaining.current = step.ms; }
-    if (step.ms == null || paused) return undefined;
+    if (ms == null || paused || timerIdx === idx) return undefined;
+    const factor = step.ms ? ms / step.ms : 1;
     const started = performance.now();
-    const t = setTimeout(() => setIdx((i) => Math.min(last, i + 1)), Math.max(0, remaining.current));
-    return () => { clearTimeout(t); remaining.current -= performance.now() - started; };
-  }, [idx, paused, step.ms, last]);
+    const t = setTimeout(() => setTimerIdx(idx), Math.max(0, remaining.current * factor));
+    return () => { clearTimeout(t); remaining.current -= (performance.now() - started) / (factor || 1); };
+  }, [idx, paused, ms, step.ms, timerIdx]);
 
-  // Sound: the phone reads each line out (off until switched on).
+  // The voice: one line at a time, never over another. Pausing stops it; playing again reads the line from the top.
   useEffect(() => {
-    const synth = typeof window !== 'undefined' ? window.speechSynthesis : null;
-    if (!synth) return undefined;
-    synth.cancel();
-    if (muted || !captions[idx]) return undefined;
+    if (!voiceNeeded || paused || voiceIdx === idx) return undefined;
+    const at = idx;
+    speaker.speak(step.text, { rate: voiceRate(speed), onEnd: () => setVoiceIdx(at) });
+    return () => speaker.stop();
+  }, [idx, voiceNeeded, paused, speed]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => speaker.stop(), [speaker]);
+
+  // Move on once the clock is done and the line has been read out.
+  useEffect(() => {
+    if (ms == null || paused) return;
+    if (timerIdx === idx && (!voiceNeeded || voiceIdx === idx)) setIdx((i) => Math.min(last, i + 1));
+  }, [timerIdx, voiceIdx, idx, paused, voiceNeeded, ms, last]);
+
+  const toggleVoice = () => {
+    if (voiceOn) { speaker.stop(); setVoiceOn(false); return; }
+    // iPhones only allow speech that starts from a tap: say nothing, silently, right now, to unlock it.
     try {
-      const u = new SpeechSynthesisUtterance(captions[idx]);
-      const voices = synth.getVoices();
-      u.voice = voices.find((v) => /en-AU/i.test(v.lang)) || voices.find((v) => /^en/i.test(v.lang)) || null;
-      u.rate = style === 'larrikins' ? 1.08 : 0.98;
-      synth.speak(u);
-    } catch { /* no voice on this phone: fine */ }
-    return () => synth.cancel();
-  }, [idx, muted, captions, style]);
+      const u = new window.SpeechSynthesisUtterance(' ');
+      u.volume = 0;
+      window.speechSynthesis.speak(u);
+    } catch { /* no voice on this phone */ }
+    setVoiceOn(true);
+  };
+  const setSpeed = (k) => {
+    setSpeedPick(k);
+    try { localStorage.setItem(SPEED_KEY, k); } catch { /* fine */ }
+  };
+  const skip = () => { speaker.stop(); setStopped(false); go(skipTarget(steps)); };
 
   // Hold anywhere to pause; a quick tap on the left third goes back, anywhere else goes forward.
   const press = useRef(null);
@@ -145,7 +211,7 @@ function Player({ round, course, replay, steps, captions, style, setStyle }) {
     clearTimeout(p.t);
     if (p.hold) { setHeld(false); return; }
     if (step.scene === 'end') return;
-    go(p.x < p.w / 3 ? -1 : 1);
+    go(idx + (p.x < p.w / 3 ? -1 : 1));
   };
   const cancel = () => {
     const p = press.current;
@@ -154,8 +220,8 @@ function Player({ round, course, replay, steps, captions, style, setStyle }) {
   };
   useEffect(() => {
     const key = (e) => {
-      if (e.key === 'ArrowRight') go(1);
-      else if (e.key === 'ArrowLeft') go(-1);
+      if (e.key === 'ArrowRight') go(idx + 1);
+      else if (e.key === 'ArrowLeft') go(idx - 1);
       else if (e.key === ' ') { e.preventDefault(); setStopped((s) => !s); }
     };
     window.addEventListener('keydown', key);
@@ -170,16 +236,22 @@ function Player({ round, course, replay, steps, captions, style, setStyle }) {
   const nextStyle = STYLES[(STYLES.findIndex((s) => s.key === style) + 1) % STYLES.length];
   const stop = (e) => e.stopPropagation();
 
-  // Which leaderboard frame the race shows (the finish card sits over the board as it stood with 3 to play).
-  const frameIdx = step.scene === 'race' ? step.frame : step.scene === 'finish' ? replay?.finish?.frameIndex : null;
+  // Which board the race shows (the "3 to play" card sits over the board as it stood then).
+  const beat = step.scene === 'race' ? beats[step.beat] : null;
+  const finishFrame = step.scene === 'finish' ? replay?.finish?.frameIndex ?? null : null;
+  const timed = steps.filter((s) => s.ms != null);
 
   return (
-    <div className="rp" data-scene={step.scene} data-step={idx} data-paused={paused ? '1' : '0'}>
+    <div
+      className="rp" data-scene={step.scene} data-step={idx} data-paused={paused ? '1' : '0'} data-speed={speed}
+      data-beat={beat ? beat.type : ''} data-voice={voiceOn ? '1' : '0'}
+      style={{ '--rp-tr': `${reduced ? 0 : TRANSITION_MS[speed] ?? 700}ms` }}
+    >
       <div className="rp-inner">
         <div className="rp-progress" aria-hidden="true">
-          {steps.filter((s) => s.ms != null).map((s, i) => (
-            <span key={i} className={'rp-seg' + (i < idx ? ' done' : i === idx ? ' now' : '')} style={{ flexGrow: Math.max(1, Math.round(s.ms / 500)) }}>
-              <i key={i === idx ? `n${idx}` : 'x'} style={i === idx ? { animationDuration: `${s.ms}ms`, animationPlayState: paused ? 'paused' : 'running' } : undefined} />
+          {timed.map((s, i) => (
+            <span key={i} className={'rp-seg' + (i < idx ? ' done' : i === idx ? ' now' : '')} style={{ flexGrow: Math.max(1, Math.round(s.ms / 1500)) }}>
+              <i key={i === idx ? `n${idx}-${speed}` : 'x'} style={i === idx ? { animationDuration: `${stepMs(s, speed)}ms`, animationPlayState: paused ? 'paused' : 'running' } : undefined} />
             </span>
           ))}
         </div>
@@ -189,41 +261,54 @@ function Player({ round, course, replay, steps, captions, style, setStyle }) {
           <button type="button" className="rp-btn" aria-label={`Commentary: ${STYLES.find((s) => s.key === style)?.name}. Tap for ${nextStyle.name}`} onClick={() => setStyle(nextStyle.key)}>
             🎙️ {STYLES.find((s) => s.key === style)?.name}
           </button>
-          <button type="button" className="rp-btn" aria-label={muted ? 'Sound off — tap to turn on' : 'Sound on — tap to turn off'} aria-pressed={!muted} onClick={() => setMuted((m) => !m)}>
-            {muted ? '🔇' : '🔊'}
+          <button type="button" className="rp-btn" aria-label={voiceOn ? 'Voice on — tap to turn off' : 'Voice off — tap to turn on'} aria-pressed={voiceOn} onClick={toggleVoice}>
+            {voiceOn ? '🔊' : '🔈'}
           </button>
           {step.ms != null && (
             <button type="button" className="rp-btn" aria-label={stopped ? 'Play' : 'Pause'} onClick={() => setStopped((s) => !s)}>{stopped ? '▶' : '❚❚'}</button>
           )}
         </div>
+        {step.ms != null && (
+          <div className="rp-speed" role="group" aria-label="Speed" onPointerDown={stop} onPointerUp={stop}>
+            {SPEEDS.map((s) => (
+              <button key={s.key} type="button" aria-pressed={speed === s.key} onClick={() => setSpeed(s.key)}>{s.key === 'fast' ? 'Fast ⏩' : s.name}</button>
+            ))}
+            <button type="button" onClick={skip}>Skip to the end ⏭</button>
+          </div>
+        )}
 
         <div className="rp-stage" onPointerDown={down} onPointerUp={up} onPointerLeave={cancel} onPointerCancel={cancel} onContextMenu={(e) => e.preventDefault()}>
           {paused && step.ms != null && <div className="rp-paused" role="status">PAUSED</div>}
-          {!replay || replay.empty ? (
-            <div className="rp-center">
-              <div className="rp-title" style={{ fontSize: 34 }}>Nothing to replay yet</div>
-              <div className="rp-sub">Once scores are in, the replay builds itself.</div>
-            </div>
-          ) : step.scene === 'welcome' ? (
-            <Welcome round={round} course={course} replay={replay} />
-          ) : step.scene === 'field' ? (
-            <Field replay={replay} />
-          ) : frameIdx != null ? (
-            <>
-              <Race replay={replay} frameIdx={frameIdx} stepKey={idx} quietPop={step.scene === 'finish'} />
-              {step.scene === 'finish' && <Finish replay={replay} />}
-            </>
-          ) : step.scene === 'winner' ? (
-            <Winner replay={replay} />
-          ) : step.scene === 'awards' ? (
-            <Awards replay={replay} />
-          ) : null}
-          {step.scene === 'end' && (
-            <End replay={replay} round={round} style={style} setStyle={setStyle} onAgain={() => { setStopped(false); setIdx(0); }} onShare={share} stop={stop} />
-          )}
+          {/* The board stays put between beats (its rows slide); other scenes fade in. */}
+          <div className="rp-scene" key={beat || finishFrame != null ? 'board' : `s${idx}`}>
+            {!replay || replay.empty ? (
+              <div className="rp-center">
+                <div className="rp-title" style={{ fontSize: 34 }}>Nothing to replay yet</div>
+                <div className="rp-sub">Once scores are in, the replay builds itself.</div>
+              </div>
+            ) : step.scene === 'welcome' ? (
+              <Welcome round={round} course={course} replay={replay} />
+            ) : step.scene === 'field' ? (
+              <Field replay={replay} />
+            ) : beat ? (
+              <Race replay={replay} beat={beat} stepKey={idx} reduced={reduced} speed={speed} />
+            ) : finishFrame != null ? (
+              <>
+                <Race replay={replay} beat={{ from: finishFrame, to: finishFrame, label: replay.frames[finishFrame].label, moments: [], key: false }} stepKey={idx} reduced quiet speed={speed} />
+                <Finish replay={replay} />
+              </>
+            ) : step.scene === 'winner' ? (
+              <Winner replay={replay} />
+            ) : step.scene === 'awards' ? (
+              <Awards replay={replay} />
+            ) : null}
+            {step.scene === 'end' && (
+              <End replay={replay} round={round} style={style} setStyle={setStyle} onAgain={() => { setStopped(false); go(0); }} onShare={share} stop={stop} />
+            )}
+          </div>
         </div>
 
-        <div className="rp-caption" aria-live="polite">{captions[idx] ? <span key={`${idx}-${style}`}>{captions[idx]}</span> : null}</div>
+        <div className="rp-caption" aria-live="polite">{step.text ? <span key={`${idx}-${style}`}>{step.text}</span> : null}</div>
       </div>
     </div>
   );
@@ -264,28 +349,50 @@ function Field({ replay }) {
   );
 }
 
-function Race({ replay, frameIdx, stepKey, quietPop }) {
-  const f = replay.frames[frameIdx];
-  const shown = Math.min(MAX_ROWS, f.rows.length);
-  const top = topMoment(f);
-  const pop = quietPop ? null : popFor(f);
-  const post = top?.kind === 'post' ? top : null;
+/** The board for a beat: it opens as it stood before the beat, then the rows slide to where they were after it. */
+function Race({ replay, beat, stepKey, reduced, quiet, speed }) {
+  const startIdx = Math.max(0, beat.from - 1);
+  const instant = reduced || quiet || beat.from === 0;
+  const [shown, setShown] = useState(instant ? beat.to : startIdx);
+  useEffect(() => {
+    if (instant) { setShown(beat.to); return undefined; }
+    setShown(startIdx);
+    const t = setTimeout(() => setShown(beat.to), speed === 'quick' ? 0 : speed === 'fast' ? 350 : 700);
+    return () => clearTimeout(t);
+  }, [stepKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const f = replay.frames[shown] || replay.frames[beat.to];
+  const end = replay.frames[beat.to];
+  const before = beat.from > 0 ? replay.frames[beat.from - 1] : null;
+  const settled = shown === beat.to;
+  const rowsShown = Math.min(MAX_ROWS, f.rows.length);
+  const top = topMoment(beat);
+  const pop = quiet || !beat.key || !settled ? null : popFor(beat);
+  const post = settled ? (beat.moments || []).find((m) => m.kind === 'post') : null;
+  // Places gained or lost over the whole beat.
+  const moved = (id) => {
+    if (!before || !settled || end.rows.length < 3) return 0;
+    const a = before.rows.findIndex((r) => r.id === id);
+    const b = end.rows.findIndex((r) => r.id === id);
+    return a < 0 || b < 0 ? 0 : a - b;
+  };
   const lead = f.rows[0];
+  const oneHole = /^Hole \d+$/.test(beat.label || '');
   return (
     <>
       <div className="rp-hole">
-        <span className="h">{f.label}</span>
+        <span className="h" data-testid="replay-beat-label">{beat.label}</span>
         <span className="p">
-          {f.par ? `Par ${f.par}` : ''}
+          {beat.turn && <span className="rp-turn">The turn</span>}
+          {oneHole && end.par ? <div>Par {end.par}</div> : null}
           {lead?.thru > 0 && f.gap != null && <div>{f.leader ? `${lead.name} by ${gapWords(replay.format, f.gap)}` : 'Tied at the top'}</div>}
         </span>
       </div>
-      <div className="rp-board" style={{ height: shown * ROW_H + (f.rows.length > shown ? 22 : 0) }}>
+      <div className="rp-board" style={{ height: rowsShown * ROW_H + (f.rows.length > rowsShown ? 22 : 0) }}>
         {f.rows.map((r, pos) => {
-          const mv = f.moves[r.id] || 0;
-          const cls = 'rp-row' + (pos === 0 && f.leader === r.id ? ' lead' : '') + (top?.subjectId === r.id ? ' hot' : '') + (pos >= shown ? ' off' : '');
+          const mv = moved(r.id);
+          const cls = 'rp-row' + (pos === 0 && f.leader === r.id ? ' lead' : '') + (settled && top?.subjectId === r.id ? ' hot' : '') + (pos >= rowsShown ? ' off' : '');
           return (
-            <div key={r.id} className={cls} style={{ transform: `translateY(${Math.min(pos, shown) * ROW_H}px)` }} data-name={r.name}>
+            <div key={r.id} className={cls} style={{ transform: `translateY(${Math.min(pos, rowsShown) * ROW_H}px)` }} data-name={r.name}>
               <span className="pos">{r.thru ? r.rankLabel : '–'}</span>
               {r.players.length > 1 ? <AvatarStack players={r.players} size={30} /> : <Avatar player={r.players[0]} size={36} />}
               <span className="nm">{r.name}</span>
@@ -294,7 +401,7 @@ function Race({ replay, frameIdx, stepKey, quietPop }) {
             </div>
           );
         })}
-        {f.rows.length > shown && <div className="rp-more" style={{ top: shown * ROW_H }}>+ {f.rows.length - shown} more</div>}
+        {f.rows.length > rowsShown && <div className="rp-more" style={{ top: rowsShown * ROW_H }}>+ {f.rows.length - rowsShown} more</div>}
       </div>
       {post && (
         <div className="rp-post" key={`p${stepKey}`}>
@@ -302,7 +409,7 @@ function Race({ replay, frameIdx, stepKey, quietPop }) {
           <span className="small">💬 <strong>{post.name}</strong>{post.text ? `: ${post.text}` : ''}</span>
         </div>
       )}
-      {pop && <div key={`w${stepKey}`} className={'rp-word' + (pop.kind === 'lead_change' || pop.kind === 'tied_lead' ? ' lead' : pop.kind === 'blowup' ? ' ouch' : '')}>{pop.word}</div>}
+      {pop && <div key={`w${stepKey}`} className={'rp-word' + (pop.kind === 'lead_change' || pop.kind === 'tied_lead' || pop.kind === 'swing' ? ' lead' : pop.kind === 'blowup' ? ' ouch' : '')}>{pop.word}</div>}
     </>
   );
 }

@@ -18,6 +18,7 @@ export default function StaySearch({ places = [], weekends = [], people = 0, max
   const [opened, setOpened] = useState(null); // { area, site }
   const [paste, setPaste] = useState('');
   const [tweak, setTweak] = useState(false);
+  const [wk, setWk] = useState(0);
   if (!places.length) return null;
   if (!weekends.length) return <div className="small muted">Search links show up once there are weekends to look at.</div>;
   const save = () => {
@@ -39,7 +40,12 @@ export default function StaySearch({ places = [], weekends = [], people = 0, max
           <label className="field"><span>Max $/night</span><input className="input" inputMode="numeric" value={cap} onChange={(e) => setCap(e.target.value.replace(/\D/g, ''))} /></label>
         </div>
       )}
-      {places.slice(0, 4).map((area) => weekends.slice(0, 3).map((w) => {
+      {weekends.length > 1 && (
+        <div className="tb-chips" role="group" aria-label="Which weekend to search">
+          {weekends.slice(0, 3).map((w, i) => <button key={w.start} type="button" className="chip" aria-pressed={i === wk} onClick={() => setWk(i)}>{fmtRange(w.start, w.end)}</button>)}
+        </div>
+      )}
+      {places.slice(0, 4).map((area) => [weekends[Math.min(wk, weekends.length - 1)]].map((w) => {
         const q = { town: area, start: w.start, end: w.end, people: n, bedrooms: beds || null, maxPerNight: cap || null };
         return (
           <div key={`${area}|${w.start}`} className="stack" style={{ gap: 4 }} data-testid="stay-search-set">

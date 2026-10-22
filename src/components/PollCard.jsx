@@ -40,6 +40,7 @@ export function PollCard({ poll, pd, inCard = false, asVoter = false }) {
   const [closing, setClosing] = useState(false);
   const [mineOpen, setMineOpen] = useState(false);
   const [extend, setExtend] = useState(null);
+  const [expanded, setExpanded] = useState(!inCard);
   const [busy, run] = useRun();
   const options = pd.options.filter((o) => o.poll_id === poll.id);
   const votes = pd.votes.filter((v) => v.poll_id === poll.id);
@@ -110,9 +111,22 @@ export function PollCard({ poll, pd, inCard = false, asVoter = false }) {
   // ---------------------------------------------------------------- organiser view: the results
   if (org) {
     const name = (id) => playerName(data.playersById[id]);
+    if (inCard && !expanded) {
+      const lead = results.leader;
+      return (
+        <button type="button" className="card" onClick={() => setExpanded(true)} data-testid="poll-organiser" data-collapsed="true"
+          style={{ width: '100%', textAlign: 'left', padding: '10px 14px', background: '#fff', color: 'inherit', font: 'inherit', cursor: 'pointer' }}>
+          <div className="row between" style={{ gap: 8 }}>
+            <strong>{poll.question}</strong><span className="small muted">▾</span>
+          </div>
+          <div className="small">{lead ? <>Leading: <strong>{optionTitle(poll, lead.option)}</strong> ({lead.score})</> : 'No votes yet'} · {options.length} option{options.length === 1 ? '' : 's'} · {results.answered.length} answered</div>
+          {results.rows.filter((r) => r.against).slice(0, 2).map((r) => <div key={r.option.id} className="small" style={{ color: 'var(--under)', fontWeight: 700 }} data-testid="against">⚠️ {optionTitle(poll, r.option)}: {r.against}</div>)}
+        </button>
+      );
+    }
     return (
       <div className="card" style={{ overflow: 'hidden' }} data-testid="poll-organiser">
-        {header}
+        {inCard ? <button type="button" onClick={() => setExpanded(false)} style={{ width: '100%', textAlign: 'left', background: 'none', border: 0, padding: 0, color: 'inherit', font: 'inherit' }}>{header}</button> : header}
         {rows.length === 0 && <div className="empty">No options yet — add one.</div>}
         {results.rows.map((r) => {
           const o = r.option;

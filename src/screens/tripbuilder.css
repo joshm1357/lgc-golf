@@ -26,3 +26,6 @@
 /* The regions side by side (080): stacked on a phone, in columns on a wider screen. */
 .tb-compare { display: grid; grid-template-columns: 1fr; gap: 8px; }
 @media (min-width: 640px) { .tb-compare { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); } }
+
+/* The start's region map (080 review): taller, so pins don't sit on top of each other. */
+.tb-map.tb-map-tall { height: 45vh; min-height: 280px; }

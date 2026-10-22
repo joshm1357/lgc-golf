@@ -348,6 +348,8 @@ const card = page.getByTestId('vote-batch');
 check((await card.getAttribute('data-view')) === 'organiser', 'the organiser gets the results view');
 check((await card.getByTestId('against').first().innerText()).includes('3 don’t like it'), 'an option several don’t like is flagged ("3 don’t like it")');
 check((await card.getByTestId('batch-dashboard').innerText()).includes('Still to answer'), 'who hasn’t answered, with Nudge');
+check((await card.locator('[data-testid="poll-organiser"][data-collapsed="true"]').count()) >= 5, 'each question is a compact row that expands');
+await card.locator('[data-testid="poll-organiser"]', { hasText: 'Where should we stay?' }).click(); await wait(300);
 check((await card.getByTestId('option-link').count()) > 0 && (await card.getByTestId('option-link').first().innerText()).includes('View places'), 'places carry a "View places" link');
 check(await card.getByTestId('your-vote').first().isVisible(), 'their own ballot is a small "Your vote"');
 await shot('09-organiser-results');

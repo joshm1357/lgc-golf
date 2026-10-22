@@ -56,7 +56,8 @@ export default function TripBuilder() {
   const [pinName, setPinName] = useState('');
   const [busy, run] = useRun();
   const [batches] = useVoteBatches(planId);
-  const [calling, setCalling] = useState(null); // { title, range, keen, slot, attach, state } — the Call the vote sheet
+  const [calling, setCalling] = useState(null);
+  const [comparing, setComparing] = useState(false); // the Compare tab shows only the comparison (080 review) // { title, range, keen, slot, attach, state } — the Call the vote sheet
   const [accom, setAccom] = useState([]);
   const loadAccom = useCallback(async () => {
     const { data: a } = await supabase.from('plan_stays').select('*').eq('plan_id', planId).order('created_at');
@@ -323,8 +324,9 @@ export default function TripBuilder() {
       {(st.region || st.regionOptions.length > 0) && (
         <AreaStart plan={plan} st={st} save={save} org={org} areas={areas} history={history} accom={accom} reloadAccom={loadAccom}
           people={need.people || data.players.filter((p) => p.approved !== false).length} origin={origin} tees={tees}
-          onCallVote={org && votesOn && !v1 ? vote1 : null} />
+          onCallVote={org && votesOn && !v1 ? vote1 : null} onMode={(m) => setComparing(m === 'compare')} />
       )}
+      {!(comparing && st.regionOptions.length > 1 && !st.region) && <>
       {org && (
         <div className="small muted">Coming from: <strong>{origin?.label || 'not set'}</strong>{!origin && ' — add starting points in “Find a course”, or people’s home suburbs.'}</div>
       )}
@@ -358,6 +360,7 @@ export default function TripBuilder() {
       {org && votesOn && !v1 && (st.regionOptions.length > 0 || st.region) && (
         <button type="button" className="btn gold block" disabled={busy} onClick={vote1} data-testid="tb-call-vote1">🗳️ Call the vote: “{st.region ? 'Weekend, where to stay and courses' : 'Where and when?'}”</button>
       )}
+      </>}
       {v1 && <VoteLink planId={planId} title={v1.title} />}
     </>
   );
@@ -488,7 +491,7 @@ export default function TripBuilder() {
         <div className="tb-layout">
           <div className="tb-side">
             {current !== 'area' && map}
-            <div className="small muted" style={{ marginTop: 4 }}>🏠 places to stay · ● courses (teal = an option for {focusDay.name.replace(/ —.*/, '')}, red = most votes). Drives are “about”.</div>
+            {current !== 'area' && <div className="small muted" style={{ marginTop: 4 }}>🏠 = a place to stay. Dots are courses: green = on the list for {focusDay.name.replace(/ —.*/, '')}, red = most votes, yellow = others nearby. Drive times are rough.</div>}
           </div>
           <div className="stack">
             {steps.map((s) => stepBox(s, bodies[s.key], summaries[s.key]))}

@@ -60,6 +60,7 @@ export function VoteBatchCard({ batch, pd }) {
   const org = canRun && !asVoter;
   const doneAll = hasAnsweredAll({ polls: polls.filter((p) => p.status === 'open'), votes: pd.votes, me, keen: batch.keen, rsvps: pd.rsvps });
   const name = (id) => playerName(data.playersById[id]);
+  const answeredCount = polls.filter((p) => pd.votes.some((v) => v.poll_id === p.id && v.player_id === me)).length + (batch.keen && mine ? 1 : 0);
   const looking = polls.map((p) => {
     const r = sectionResults(p, pd.options, pd.votes, people);
     return r.leader ? `${p.question.replace(/\?$/, '')}: ${r.leader.option.label}` : null;
@@ -71,7 +72,7 @@ export function VoteBatchCard({ batch, pd }) {
     pd.reload();
   }, 'Closing date moved');
   return (
-    <div className="card" data-testid="vote-batch" data-view={org ? 'organiser' : 'voter'} style={{ overflow: 'hidden', borderColor: 'var(--navy)', borderWidth: 2 }}>
+    <div className="card" data-testid="vote-batch" data-view={org ? 'organiser' : 'voter'} style={{ overflow: org ? 'hidden' : 'visible', borderColor: 'var(--navy)', borderWidth: 2 }}>
       <div style={{ padding: '12px 14px', background: 'var(--navy)', color: '#fff' }}>
         <div className="small" style={{ fontWeight: 700, opacity: 0.85 }}>🗳️ {sections} quick question{sections === 1 ? '' : 's'}{open ? (batch.closes_on ? ` · closes ${closesWord(batch.closes_on, todayISO())}` : ' · open') : ' · closed'}</div>
         <div style={{ fontSize: 20, fontWeight: 800 }}>{batch.title}</div>
@@ -103,6 +104,11 @@ export function VoteBatchCard({ batch, pd }) {
           </div>
           <ShareVoteButton plan={pd.plan} title={batch.title} closes={batch.closes_on} />
           <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={() => setAsVoter(true)} data-testid="your-vote">🗳️ Your vote{doneAll ? ' ✓' : ''}</button>
+        </div>
+      )}
+      {!org && open && me && (
+        <div className="small" data-testid="voter-progress" style={{ position: 'sticky', top: 0, zIndex: 5, padding: '8px 14px', background: 'var(--navy)', color: '#fff', fontWeight: 700 }}>
+          {answeredCount} of {sections} answered · saved as you go{batch.closes_on ? ` · closes ${closesWord(batch.closes_on, todayISO())}` : ''}
         </div>
       )}
       {!org && open && doneAll && (

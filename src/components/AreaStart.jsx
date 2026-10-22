@@ -31,11 +31,12 @@ function useAreaLib(pins) {
   return lib;
 }
 
-export default function AreaStart({ plan, st, save, org, areas, history, accom = [], reloadAccom, people = 0, origin = null, tees = [], onCallVote = null }) {
+export default function AreaStart({ plan, st, save, org, areas, history, accom = [], reloadAccom, people = 0, origin = null, tees = [], onCallVote = null, onMode = null }) {
   const [busy, run] = useRun();
   const options = st.region ? [st.region] : st.regionOptions;
   const [tab, setTab] = useState(options[0] || null);
   const comparing = tab === '__compare' && options.length > 1;
+  useEffect(() => { onMode?.(comparing ? 'compare' : 'region'); }, [comparing]); // eslint-disable-line react-hooks/exhaustive-deps
   const area = options.includes(tab) ? tab : options[0] || null;
   const [addPin, setAddPin] = useState(null);
   const [pinName, setPinName] = useState('');
@@ -119,7 +120,7 @@ export default function AreaStart({ plan, st, save, org, areas, history, accom =
   return (
     <div className="stack" style={{ gap: 10 }} data-testid="area-start">
       {tabs}
-      <BuilderMap className="tb-map" courses={mapCourses} stays={mapStays} onCourse={(c) => toggleCourse(courseMap[c.id] || c)} onStay={toggleStay}
+      <BuilderMap className="tb-map tb-map-tall" courses={mapCourses} stays={mapStays} onCourse={(c) => toggleCourse(courseMap[c.id] || c)} onStay={toggleStay}
         onTap={org && addPin === 'tap' ? (p) => { setAddPin(p); setPinName(''); } : undefined} />
       <span className="small muted">Tap ⛳ pins and 🏠 pins to put them on the table (or tick them below). ✨ = suggested — you choose.</span>
 

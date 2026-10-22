@@ -74,8 +74,9 @@ export function readReply(data, error) {
     return { kind: 'tripplan', plan: d.trip_plan, summary: d.summary, warnings: d.trip_plan.warnings || [], notes: d.trip_plan.notes || '', remaining, ...log };
   }
   // The planning chat (080): the helper's message, its draft (a shortlist), questions with quick answers.
-  if (d.chat && typeof d.chat === 'object' && d.chat.draft) {
-    return { kind: 'chat', text: String(d.chat.message || ''), draft: d.chat.draft, questions: Array.isArray(d.chat.questions) ? d.chat.questions : [], done: !!d.chat.done, summary: Array.isArray(d.chat.summary) ? d.chat.summary : [], remaining, ...log };
+  // ov16: the first reply to a vague request is questions only — no draft yet (draft: null).
+  if (d.chat && typeof d.chat === 'object' && (d.chat.draft || Array.isArray(d.chat.questions))) {
+    return { kind: 'chat', text: String(d.chat.message || ''), draft: d.chat.draft || null, questions: Array.isArray(d.chat.questions) ? d.chat.questions : [], done: !!d.chat.done, summary: Array.isArray(d.chat.summary) ? d.chat.summary : [], remaining, ...log };
   }
   if (typeof d.message === 'string' && d.message) return { kind: 'message', text: d.message, remaining, ...log };
   // The Caddie (22 Oct): an answer can come with a place to go (go_to) — { key, label, round?, trip?, plan?, tab? }.

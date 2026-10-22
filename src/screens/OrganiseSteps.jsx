@@ -125,7 +125,7 @@ export function OrganiseView({ pd, stage, trip, wide, desk, onEdit }) {
         <div className="grow" style={{ minWidth: 0 }}>
           <div className="small org-next-label">NEXT STEP</div>
           <div style={{ fontWeight: 800, fontSize: 17, lineHeight: 1.25 }}>{primary.title}</div>
-          {primary.detail && <div className="small muted" style={{ marginTop: 2 }}>{primary.detail}</div>}
+          {primary.detail && <div className={primary.late ? 'small' : 'small muted'} data-testid={primary.late ? 'next-step-late' : undefined} style={{ marginTop: 2, ...(primary.late ? { color: 'var(--under)', fontWeight: 700 } : {}) }}>{primary.detail}</div>}
           {primary.who && data.playersById[primary.who] && (
             <div className="row small" style={{ gap: 6, marginTop: 6 }}><Avatar player={data.playersById[primary.who]} size={22} /><span>On {primary.who === status.player_id ? 'you' : playerName(data.playersById[primary.who])}</span></div>
           )}
@@ -197,7 +197,7 @@ export function OrganiseView({ pd, stage, trip, wide, desk, onEdit }) {
       {desk ? (
         <div className="org-desk">
           <div className="org-main">{main}</div>
-          <LazyArea fallback={null} quiet><OrganiseSide pd={pd} onStep={openStep} /></LazyArea>
+          <LazyArea fallback={null} quiet><OrganiseSide pd={pd} onStep={(k, t) => (t ? openTab(t) : openStep(k))} /></LazyArea>
         </div>
       ) : main}
       {sheets}

@@ -247,7 +247,7 @@ Deno.test('sloppy model: repairable JSON is just fixed; broken JSON gets one mor
   const bad: Any = await helperRequest({ mode: 'setup', text: 'Kurri Thursday' }, d);
   assertMatch(bad.error, /wires crossed/);
   assertEquals(twice.calls.length, 2);
-  assertEquals(log[1].error, 'bad_json');
+  assertMatch(log[1].error, /^bad_json r2/);
 });
 
 Deno.test('sloppy model: words instead of the plan → one nudge → plan; words twice → shown as a message', async () => {

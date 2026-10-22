@@ -58,7 +58,7 @@ export function stepOfNext(next, { items = [], polls = [], builder = {} } = {}) 
     return ps.length && ps.every((p) => p.purpose === 'stay') ? 'book' : 'vote';
   }
   if (['calls-mine', 'calls-wait'].includes(kind)) return 'book';
-  if (['allocate', 'job', 'wait'].includes(kind)) return stepOfJob(items.find((j) => j.id === id), items, builder.callJobIds);
+  if (['allocate', 'job', 'wait', 'late'].includes(kind)) return stepOfJob(items.find((j) => j.id === id), items, builder.callJobIds);
   if (['lock', 'make_jobs', 'deposit_ask', 'confirm-deposits', 'collect', 'pay', 'pay-wait', 'keen'].includes(kind)) return 'lockin';
   if (['sorted', 'on', 'on-draw', 'done'].includes(kind)) return 'day';
   return null;
@@ -152,7 +152,7 @@ export function organiseSteps(ctx) {
  */
 export function primaryFor(next, { current, polls = [], builderOn = true, builderStarted = false } = {}) {
   if (!next || !current) return null;
-  const base = { title: next.title, detail: next.detail, label: next.label, action: next.action, icon: next.icon, who: next.who };
+  const base = { title: next.title, detail: next.detail, label: next.label, action: next.action, icon: next.icon, who: next.who, late: !!next.late };
   const [kind, id] = String(next.key).split(/:(.*)/s);
   if (kind === 'idea') return { ...base, label: null, action: null }; // Approve / Pass are on the idea card itself
   if (kind === 'weekends') {

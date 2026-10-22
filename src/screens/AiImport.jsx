@@ -31,6 +31,7 @@ import {
   HISTORY_KEYS, NEEDS_TRIP, chooseItemTrip, newTripName, tripWords, findCourse, libraryPick, cardHoles, roundRow, noteRow, cupHonour,
 } from '../lib/historyimport.js';
 import { isYearOnly } from '../lib/trips.js';
+import Thinking from '../components/Thinking.jsx';
 
 /** A photo, shrunk in the browser to 1600px on its longest side, as a JPEG data URL (kept in memory only). */
 async function shrinkPhoto(file) {
@@ -355,8 +356,9 @@ function ImportFlow({ about, tripId }) {
             {note && <span className="small muted" role="status">{note}</span>}
             <span className="small muted">Up to {MAX_PHOTOS} photos (scorecards, results sheets, honour boards). .txt, .csv, .md, Word and Excel files are read on your phone. Anything else: open it, copy the text and paste it here.</span>
             <button type="button" className="btn gold block" disabled={busy || (text.trim().length < 10 && !photos.length)} onClick={read}>
-              {busy ? 'Reading it… (can take a minute)' : 'Read it'}
+              {busy ? 'Reading it…' : 'Read it'}
             </button>
+            {busy && <Thinking steps={['Reading what you sent', 'Finding names, scores and winners', 'Matching trips and courses', 'Putting it together for you to check']} />}
             {reply?.kind === 'error' && <div className="small err" style={{ margin: 0 }} role="alert">{reply.text}</div>}
             {reply?.kind === 'message' && <div className="card pad small" style={{ background: 'var(--ground)' }}>💬 {reply.text}</div>}
             <Remaining r={remaining} />

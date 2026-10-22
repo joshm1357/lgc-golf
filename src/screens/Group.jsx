@@ -97,7 +97,7 @@ export function SignInCard({ returnHash = '' } = {}) {
   return (
     <div className="card pad stack" style={{ gap: 8, borderColor: 'var(--gold)' }} data-testid="sign-in-card">
       <strong>🔐 Save your spot</strong>
-      <span className="small">Right now you’re only signed in on this phone. Sign in once so the app knows it’s you on any phone or laptop — same name, same scores.</span>
+      <span className="small">Right now you’re only on this phone. Connect Google or email so you can sign in on your laptop — same name, same scores.</span>
       <SaveSpotPanel returnHash={returnHash || undefined} onDone={() => setDone(true)} />
     </div>
   );

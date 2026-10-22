@@ -20,6 +20,8 @@ import { setupSteps } from '../lib/setupguide.js';
 import { formatName } from '../lib/board.js';
 import { groupWhen } from '../lib/teegroups.js';
 import { download } from './DeskNav.jsx';
+import { useLateJobs } from '../components/LateJobs.jsx';
+import { lateJobs } from '../lib/latejobs.js';
 import './desk.css';
 
 /** Plans for the trip switcher. */
@@ -76,6 +78,7 @@ export function OrganiseSide({ pd, onStep }) {
       </div>
       <PeoplePanel p={panels.people} />
       <VotesPanel p={panels.votes} onStep={onStep} />
+      <LatePanel pd={pd} onStep={onStep} />
     </aside>
   );
 }
@@ -118,6 +121,21 @@ function Stat({ label, value, warn }) {
 
 function optionTitle(poll, o) {
   return poll.kind === 'dates' && o.start_date ? fmtRange(o.start_date, o.end_date) : o.label;
+}
+
+/** Late jobs at a glance (085): how many, whose. Tap to open Jobs & money → Jobs (the badges and Waive are there). */
+function LatePanel({ pd, onStep }) {
+  const data = useData();
+  const late = useLateJobs();
+  const list = late.rule ? lateJobs(pd.items.filter((i) => i.kind === 'job'), late.rule, { penalties: late.penalties, adjustments: late.adjustments }).filter((x) => !x.info.waived) : [];
+  if (!list.length) return null;
+  return (
+    <Panel id="late" title="⚠️ Late jobs" count={String(list.length)}>
+      <button type="button" className="org-vote-btn small" onClick={() => onStep?.('money', 'jobs')}>
+        {list.map(({ job, info }) => `${job.title} (${playerName(data.playersById[job.owner_id])}, ${info.daysLate} days)`).join(' · ')}
+      </button>
+    </Panel>
+  );
 }
 
 /** Open votes at a glance: the leader and who's still to vote. Tap one to open its step. */

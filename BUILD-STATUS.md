@@ -1017,6 +1017,76 @@ screen, "Viewing as Mike · read only", and Stop.
 - **Tested:** Vitest 1145 (savespot 27 new); e2e `save-spot-test.mjs` 89 checks; signin-home 71, links 24, stage2 19,
   beta 46, phone 17, notify-prompt 31 pass.
 
+## Late organising jobs cost strokes (OV12, 22 Oct 2026) — branch `ov12-late-job-penalty`, migration 085
+- **Rule:** every group has a standard Rulebook rule "Late organising job" (Fines): more than N days overdue on a trip
+  job → X penalty strokes in the next round. Starts at 0 strokes / 5 days (listed, does nothing). Organisers change X
+  and N in the rule's Edit sheet (under the group's decision rule); it can be retired but not deleted. Both numbers are
+  RuleTags (disputable); an upheld verdict on either can be applied in one tap.
+- **Server decides:** `private.late_jobs()`; when a round goes live (`zz_late_jobs` trigger on rounds) each late job whose
+  owner plays costs X strokes once (`score_adjustments`, unique per job): "Late job: Book the bus (+2)". The job's own
+  trip first; another round only when that trip has no rounds left to start. Done before the round = nothing.
+  Daily `lgc-late-jobs` cron tells the owner once (notify_queue via `gov_queue`). Organiser waiver:
+  `waive_late_penalty` (recorded in `job_penalties` / on the adjustment). Owners can't move a late job's due date.
+- **Scoring:** `scoring.js penaltyFor / applyPenalty`; Stableford/4BBB −1 point per stroke, Ambrose/stroke play +1 net.
+  Leaderboard tag, scorecard line (RuleTag, disputable) + Penalty row, score entry, Stableford trophy.
+- **Tested:** SQL `supabase/tests/085_late_job_penalty.sql` (50 results, staging); Vitest 1172 (latejobs 27 new);
+  e2e `late-job-test.mjs` 30 checks + trip-plan, stroke, rulebook ×3, dispute, fourball, plan-ux pass.
+## Sign in first, as part of joining (ov13), branch `ov13-signin-first-join`, 22 Oct 2026
+- **Why:** Josh joined on his phone, missed Save your spot, then tapped "Sign in" with Google on his laptop and got a
+  separate, empty account. "That seems weird that I need Save my spot in addition to signing in with Google."
+- **Join links (sign-in builds):** any join link (invite, team, organiser) on a phone or laptop that isn't signed in
+  shows ONE screen first: "Join <group> — Sign in so it's you on any phone or laptop." Continue with Google (Google's
+  own button where it can, else the redirect, which keeps the code and `?to=` page), email + password in one form
+  ("Continue with email": tries sign in; no account → "Create my account" → 6-digit code if the project confirms;
+  existing email + wrong password → "Forgot password"), and a small "Just this phone for now" (the old phone-only
+  join; Save your spot stays for those people). After signing in the link is used by the SIGNED-IN account straight
+  away (no second Join tap) → pick name → notifications → the page.
+- **Already in:** signed in and already in that group with a name → straight to the page, toast "Welcome back, Kurt".
+  In it with no name (names freed) → straight to pick name.
+- **Signed in, no group:** "You're signed in as <email> but not in a group yet. Open your group's link (paste it here)
+  and you'll join as this account." with the link box showing (pasting joins as that account).
+- **Used one-use links:** organiser link → "This link's already been used. If that was you, sign in below." (086);
+  personal link opened when not signed in → same words + sign-in below.
+- **Taken name:** adds "That's you on another phone? Sign in there and connect Google or email, then sign in here."
+- **Save your spot wording:** "Connect Google or email so you can sign in on your laptop".
+- **Migration 086** (staging only): `used_link_info(token)` → `{state:'used'|'expired'}` for organiser links, else null.
+  Signed-in only, uses the wrong-guess limit, gives nothing else away. Old app versions never call it.
+- **Files:** `src/lib/joinfirst.js` (+test), `src/lib/links.js` (inviteNext: signed in → straight there),
+  `src/screens/Join.jsx` (JoinSignIn, auto-join), `src/components/SignInForms.jsx` (EmailContinue), `src/App.jsx`
+  (welcome back), `src/screens/YourGroups.jsx`, `ProfileSetup.jsx`, `PersonalLink.jsx`, `src/components/SaveSpot.jsx`,
+  `Group.jsx`, `src/lib/savespot.js`, `supabase/migrations/086_used_link_info.sql`,
+  `supabase/tests/086_signin_first_join.sql` (+expected), `tests/e2e/signin-first-test.mjs`.
+- **Tested:** Vitest 1166 (joinfirst 21 new); SQL on staging 32 checks, rolled back (signed-in user joining via player
+  invite, team link → cup_side, organiser link → role + once only, personal link via 046 claim_player_link, taken name,
+  used_link_info); e2e signin-first 59, save-spot 89, signin-home 76, links 24, stage2, notify-prompt, beta pass.
+## ov16 — Plan it with AI: ask first, never dead-end, lives in the Caddie, branch `ov16-ai-ask-first`, 22 Oct 2026
+- **Why:** on live "Plan it with AI" twice ended `too_many_rounds` (8 model calls used up: a 3-course library, the
+  helper kept searching). Josh: it should ask questions back, not do the whole thing from one message; and "Plan it
+  with AI" should BE the Caddie, with the real trip screen filling in as you talk.
+- **Ask first (plan_chat):** a vague first message gets a short reply — what it understood + 1–3 questions with quick
+  answers (incl. "Driving or flying?") — and no draft (`draft` is optional in reply_with_draft). It builds once it
+  knows when / where / how many, or when the organiser says "plan it" (detected server-side and in a tappable chip;
+  "Or just say 'plan it'…" shows under every reply). Conversational, local-knowledge tone. "done" always keeps a
+  question to refine. Flying: said to be coming soon; kept as `travel: 'fly'` on the draft (brief note, builder state).
+- **Never dead-end (all modes, logic.ts runLoop):** repeated identical tool calls answered from cache with a note
+  (2 repeats → last round early); the last round (out of rounds, or < 30 s before the deadline) tells the model to
+  answer now and, in plan_chat, forces reply_with_draft (Anthropic tool_choice; OpenAI-style hosts get only that tool);
+  the same validation problems twice, or any on the last round → the reply with the bad parts left out (lenient
+  checks; setup drops rounds on unknown courses); else a server-built "I got stuck finding X — can you tell me …?".
+  plan_chat now gets 10 model calls (still inside the 130 s request deadline).
+- **Fewer wasted rounds:** courses_near takes `places: [...]` (up to 4 in one call); the library's size goes in as data.
+- **Logged why:** helper_log.error (40 chars) e.g. `too_many_rounds r8 past,course m2`, `salvaged r2 past`, `stuck r6 m2`
+  (rescued replies don't use up a question); a counts-only line in the function log. No new columns.
+- **In the Caddie:** a second mode "✨ Plan a trip" (tabs Ask | Plan a trip). Laptop: the side panel. Phone: a
+  non-modal sheet that folds to a bar ("Show the trip ↓"). The first draft makes a draft trip and opens the trip
+  builder; each draft is merged into trip_builds as ✨ suggestions (the organiser's own picks kept); what the page shows
+  goes back with the next question (`page` → `<data source="trip_page">`). Trips' "Plan it with AI" opens it. Without
+  the trip builder feature it shows the draft card + Create it as before.
+- **Files:** `supabase/functions/ai-helper/{logic,plan,providers,index}.ts`, `askfirst.test.ts` (new), `src/components/
+  {Caddie,CaddiePlan (new),AiChat}.jsx`, `caddie.css`, `src/lib/{planchat,aihelper}.js`, `caddieplan.test.js` (new),
+  `src/screens/AiPlanner.jsx`, `TripBuilder.jsx` (one listener to reload), e2e `plan-ux-test.mjs` (section A/G rewritten).
+- **Tested:** Deno 154 (askfirst 16 new); Vitest 1161; e2e plan-ux, ai-helper-v2, ai-helper, caddie, trip-builder pass.
+
 ## Organise tidy-up (ov14), branch `ov14-organise-tidy`, 22 Oct 2026
 - **Why:** Josh: "The organiser screen is a bit messy for the trip. It's not clear where to start … Maybe only having
   votes in the viewing screen would be cleaner too."
@@ -1039,3 +1109,7 @@ screen, "Viewing as Mike · read only", and Stop.
 - **Tested:** Vitest 1159; e2e new `organise-tidy-test.mjs` (42 checks, new → planned → vote → booked → locked), and
   plan-ux 67, trip-builder 48, trip-plan 43, trips 22, trip-overview 23, desktop 125, caddie 35, email-votes 28,
   links 24, phone 17, stage10 15, trip-extras 36, tripfinder 30 pass (selectors updated where the layout moved).
+- **Merged with ov12 / ov13 / ov16 (next-after-v7):** late jobs (summary, badges, Waive) live under step 5 Jobs & money
+  → Jobs and the job sheet; a late Next step shows red in the step's big button; the laptop status column has a
+  "⚠️ Late jobs" count (tap → Jobs). Re-tested: Vitest 1223; organise-tidy 42, late-job 26, plan-ux 79, trip-plan 43,
+  desktop 125, caddie 35 pass.

@@ -3,14 +3,16 @@
 // Reusable: "Plan it with AI" uses it now; the Caddie can later. No maths here — see lib/planchat.js.
 import React, { useEffect, useRef, useState } from 'react';
 import { quickChoice } from '../lib/planchat.js';
+import Thinking from './Thinking.jsx';
 import './planux.css';
 
 /**
  * turns: [{ role: 'user' | 'assistant', text, questions?: [{ id, text, quick: [] }], card?: node }]
  * onSend(text) → sends one message. busy: waiting for the helper. left: questions left (null = don't show).
- * placeholder: the box's hint. footer: anything under the box (e.g. "Use this plan").
+ * placeholder: the box's hint. footer: anything under the box (e.g. "Use this plan"). hint: a line under the helper's
+ * latest reply (the planning chat's "Or just say 'plan it'…", ov16).
  */
-export default function AiChat({ turns = [], onSend, busy = false, left = null, placeholder = 'Type here…', footer = null, intro = null, maxLength = 600 }) {
+export default function AiChat({ turns = [], onSend, busy = false, left = null, placeholder = 'Type here…', footer = null, intro = null, hint = null, maxLength = 600, thinkingSteps = undefined }) {
   const [text, setText] = useState('');
   const box = useRef(null);
   const end = useRef(null);
@@ -43,9 +45,10 @@ export default function AiChat({ turns = [], onSend, busy = false, left = null, 
               </div>
             </div>
           ))}
+          {t === last && t.role === 'assistant' && hint}
         </div>
       ))}
-      {busy && <div className="small muted" role="status">✨ Thinking…</div>}
+      {busy && <Thinking steps={thinkingSteps} />}
       <div ref={end} />
       {out ? <span className="small muted">That’s the most questions for one chat — use what you’ve got, or start again.</span> : (
         <form className="row" style={{ gap: 6, alignItems: 'flex-end' }} onSubmit={(e) => { e.preventDefault(); send(text); }}>

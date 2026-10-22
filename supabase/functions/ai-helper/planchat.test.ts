@@ -39,9 +39,9 @@ Deno.test('a chat reply checks out: draft like a plan, extras de-duplicated, que
   const v = validatePlanChat(reply(), tctx);
   assert(v.ok, v.errors.join(' '));
   const r = v.value!;
-  assertEquals(r.draft.places.map((p) => p.label), ['Hunter Valley', 'Mudgee']);
-  assertEquals(r.draft.places[0].courses, [K, C, V]);
-  assertEquals(r.draft.extras.map((e) => e.label), ['Bus', 'Shirts']);
+  assertEquals(r.draft!.places.map((p) => p.label), ['Hunter Valley', 'Mudgee']);
+  assertEquals(r.draft!.places[0].courses, [K, C, V]);
+  assertEquals(r.draft!.extras.map((e) => e.label), ['Bus', 'Shirts']);
   assertEquals(r.questions[0].id, 'places-');
   assertEquals(r.questions[0].quick, ['Looks good', 'Add another…', 'a', 'b']);
   assertEquals(r.questions[0].quick.length <= PLAN_LIMITS.quick, true);
@@ -52,8 +52,8 @@ Deno.test('a chat reply checks out: draft like a plan, extras de-duplicated, que
 Deno.test('library courses only; dates must be real and in the future; up to 6 courses a place', () => {
   const v = validatePlanChat(reply({ draft: { ...reply().draft, places: [{ place: 'Hunter', courses: [K, UNKNOWN, C, V, M, K, C, V] }] } }), tctx);
   assert(v.ok);
-  assertEquals(v.value!.draft.places[0].courses, [K, C, V, M]);
-  assertMatch(v.value!.draft.warnings.join(' '), /isn’t in the course library/);
+  assertEquals(v.value!.draft!.places[0].courses, [K, C, V, M]);
+  assertMatch(v.value!.draft!.warnings.join(' '), /isn’t in the course library/);
   const past = validatePlanChat(reply({ draft: { ...reply().draft, dates: [{ start_date: '2020-01-01' }] } }), tctx);
   assertEquals(past.ok, false);
   assertMatch(past.errors.join(' '), /in the past/);
@@ -64,7 +64,9 @@ Deno.test('library courses only; dates must be real and in the future; up to 6 c
 Deno.test('a draft can be partial while it is being asked about; questions are needed unless done', () => {
   const v = validatePlanChat({ message: 'Where are you thinking?', draft: {}, questions: [{ text: 'Roughly where?', quick: ['Hunter', 'South Coast', 'Somewhere else…'] }] }, tctx);
   assert(v.ok, v.errors.join(' '));
-  assertEquals(v.value!.draft.name, 'Golf trip');
+  assertEquals(v.value!.draft, null); // ov16: an empty draft means "still asking" — no draft yet
+  const sketch = validatePlanChat({ message: 'Where?', draft: { places: [{ place: 'Hunter Valley' }] }, questions: [{ text: 'Roughly where?', quick: ['Hunter'] }] }, tctx);
+  assertEquals(sketch.value!.draft!.name, 'Golf trip');
   const none = validatePlanChat({ draft: {}, questions: [] }, tctx);
   assertEquals(none.ok, false);
   assertMatch(none.errors[0], /questions/);

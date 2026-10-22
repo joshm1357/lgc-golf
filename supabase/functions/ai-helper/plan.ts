@@ -367,7 +367,12 @@ ASK FIRST. Don't do the whole plan from one vague message. The key facts are:
   1. roughly when (which month or weekends) and how many nights;
   2. roughly where (regions or towns, or how far they'll travel);
   3. how many are coming.
-Also ask early (with the first questions): "Driving or flying?" [Driving] [Flying] [Not sure].
+Also ask early: "Driving or flying?" [Driving] [Flying] [Not sure].
+WHICH QUESTIONS FIRST (you only get 3): pick in this order, skipping anything they've already said —
+  a. roughly WHEN ("Roughly when?" [March] [April] [Other…]) — always one of your first questions unless they've already said when;
+  b. how many are coming;
+  c. driving or flying, then how far they'll travel / where.
+  So a vague first message ("golf trip next year") gets: when, how many, driving or flying. Never leave out "when" to ask "how far" or "driving or flying".
   - Driving (the default, and "Not sure"): one region within a drive of home — that's what you plan.
   - Flying: say plainly that flying and multi-stop trips are coming soon to the app, and offer to plan a driving trip now or keep the idea for later. Don't plan flights. Put travel: "fly" on the draft and a short line in its notes (e.g. "Keen on a flying trip — coming soon"); if they then want a driving one, set travel: "drive".
 Budget each and must-haves (one big house, a particular course…) are good to know but not needed to start.
@@ -433,6 +438,31 @@ const CHANGE_Q = { id: 'change', text: 'Anything to tweak — a course, the week
 /** "plan it" / "just suggest something" / "surprise me": stop asking and build the draft now (Josh, 22 Oct). */
 export const wantsPlanNow = (text: string) =>
   /\b(plan it|just plan|plan (it|one|something) (now|for (me|us))|just suggest|suggest something|surprise (me|us)|you (pick|choose|decide)|stop asking|enough questions)\b/i.test(String(text || ''));
+
+/** Has the organiser said roughly when? A month, a season, a holiday, a long weekend, "next month", a date. A year on
+ *  its own ("next year") isn't enough. */
+export const saidWhen = (text: string) => {
+  const t = String(text || '');
+  return /\b(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|jun(e)?|jul(y)?|aug(ust)?|sep(t|tember)?|oct(ober)?|nov(ember)?|dec(ember)?)\b/i.test(t)
+    || /\bMay\b/.test(t)
+    || /\b(summer|autumn|winter|spring|easter|christmas|xmas|new year'?s|long weekend|school hol(iday)?s|anzac|labour day|king'?s birthday|melbourne cup|this (week|weekend|month)|next (week|weekend|fortnight|month)|in (a|\d+) (weeks?|months?))\b/i.test(t)
+    || /\b\d{1,2}[/.-]\d{1,2}\b/.test(t);
+};
+const asksWhen = (q: { id?: string; text: string }) => q.id === 'when' || /\bwhen\b|month|weekend|dates?\b|time of year/i.test(q.text);
+export const WHEN_Q = { id: 'when', text: 'Roughly when?', quick: ['March', 'April', 'Other…'] };
+
+/**
+ * v8 (23 Oct, Josh): the first questions left out "when" (it asked how many, driving/flying, how far). On the first
+ * message, unless they've already said when, "when" is always one of the (at most 3) questions — first, ahead of
+ * how many and driving/flying/how far.
+ */
+export function whenFirst(reply: ChatReply, text: string): ChatReply {
+  if (!reply || saidWhen(text)) return reply;
+  const qs = reply.questions || [];
+  const i = qs.findIndex(asksWhen);
+  const questions = i >= 0 ? [qs[i], ...qs.filter((_, j) => j !== i)] : [WHEN_Q, ...qs];
+  return { ...reply, questions: questions.slice(0, 3) };
+}
 
 /** What the trip screen shows now (the organiser can change it there too), made small for the model. The app sends
  *  it from the trip builder's saved state; it's data, never instructions. */

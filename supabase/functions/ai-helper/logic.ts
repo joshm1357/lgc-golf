@@ -18,7 +18,7 @@ import { LIVE_TOOLS, liveTool, pickRound, pickTrip } from './live.ts';
 import { goToTool, checkGoTo, cleanContext, DESTINATIONS, type GoTo } from './routes.ts';
 import {
   PLAN_TOOLS, PLAN_TOOL_NAMES, planSystem, validateTripPlan, tripPlanSummary, applyTripPlan, tripPlanIds,
-  CHAT_TOOLS, CHAT_TOOL_NAMES, planChatSystem, validatePlanChat, chatMessages, chatDraftIn, fallbackChat, orList, wantsPlanNow, tripPageIn,
+  CHAT_TOOLS, CHAT_TOOL_NAMES, planChatSystem, validatePlanChat, chatMessages, chatDraftIn, fallbackChat, orList, wantsPlanNow, whenFirst, tripPageIn,
   type TripPlanContext, type PlanApplyDb,
 } from './plan.ts';
 
@@ -930,9 +930,10 @@ export async function helperRequest(body: Any, d: Deps): Promise<Record<string, 
       const draftNow = chatDraftIn(body?.draft, tctx);
       const page = tripPageIn(body?.page);
       // "plan it" (Josh, 22 Oct): the organiser can stop the questions any time.
+      const firstAsk = !convo.length && !draftNow && !wantsPlanNow(text); // v8: "when" is always asked first
       const steer = wantsPlanNow(text)
         ? '\n(The organiser said to plan it now: build the draft this turn, guessing sensibly for anything still unknown, and say what you guessed.)'
-        : !convo.length && !draftNow ? '\n(This is the organiser’s first message.)' : '';
+        : !convo.length && !draftNow ? '\n(This is the organiser’s first message. Unless it already says when, one of your questions is "Roughly when?".)' : '';
       result = await runLoop({
         ...common, system: planChatSystem(today, group), tools: CHAT_TOOLS, allowed: CHAT_TOOL_NAMES, maxTokens: LIMITS.planMaxTokens,
         maxRounds: LIMITS.chatToolRounds, forceFinal: true,
@@ -941,11 +942,11 @@ export async function helperRequest(body: Any, d: Deps): Promise<Record<string, 
         stopTool: 'reply_with_draft',
         onStop: async (input) => {
           const v = validatePlanChat(input, await d.tripPlanContext(input?.draft));
-          return v.ok ? { ok: true, value: v.value } : { ok: false, errors: v.errors };
+          return v.ok ? { ok: true, value: firstAsk ? whenFirst(v.value!, text) : v.value } : { ok: false, errors: v.errors };
         },
         salvage: async (input) => {
           const v = validatePlanChat(input, await d.tripPlanContext(input?.draft), { lenient: true });
-          return v.ok ? { ok: true, value: v.value } : { ok: false };
+          return v.ok ? { ok: true, value: firstAsk ? whenFirst(v.value!, text) : v.value } : { ok: false };
         },
         fallback: ({ missing }) => ({ kind: 'stop', value: fallbackChat({ draft: draftNow, missing }) }),
       });

@@ -157,8 +157,8 @@ function Members() {
   useEffect(() => { load(); }, [load]);
   if (!rows) return <Loading />;
   const organisers = rows.filter((r) => r.role === 'organiser').length;
-  const named = new Set(rows.map((r) => r.player_id).filter(Boolean));
-  const freeNames = data.players.filter((p) => p.approved !== false && !named.has(p.id)).sort((a, b) => playerName(a).localeCompare(playerName(b)));
+  const taken = new Set(rows.map((r) => r.player_id).filter(Boolean));
+  const freeNames = data.players.filter((p) => p.approved !== false && !taken.has(p.id)).sort((a, b) => playerName(a).localeCompare(playerName(b)));
   const changeRole = (r, p, role) => {
     const self = r.user_id === user?.id;
     const who = p ? playerName(p) : 'this person';
@@ -169,10 +169,11 @@ function Members() {
       if (self) await refresh(); else load();
     }, 'Role changed');
   };
-  return (
-    <div className="card">
-      <div className="label" style={{ padding: '12px 14px 4px' }}>People in the group · {rows.length}</div>
-      {rows.map((r) => {
+  // v8 fix: sign-ins with no name (mostly old ones from before the move to the new address, whose names were freed)
+  // fold into one line, and aren't counted as people in the group. Nothing is deleted.
+  const named = rows.filter((r) => data.playersById[r.player_id]);
+  const nameless = rows.filter((r) => !data.playersById[r.player_id]);
+  const line = (r) => {
         const p = data.playersById[r.player_id];
         const me = r.user_id === user?.id;
         const lastOrganiser = r.role === 'organiser' && organisers <= 1;
@@ -201,7 +202,20 @@ function Members() {
             )}
           </div>
         );
-      })}
+  };
+  return (
+    <div className="card" data-testid="members-card">
+      <div className="label" style={{ padding: '12px 14px 4px' }}>People in the group · {named.length}</div>
+      {named.map(line)}
+      {nameless.length > 0 && (
+        <details data-testid="nameless-sign-ins" style={{ borderTop: '1px solid var(--line-soft)' }}>
+          <summary style={{ padding: '12px 14px', cursor: 'pointer', fontWeight: 700, minHeight: 48 }}>
+            {nameless.length} old sign-in{nameless.length === 1 ? '' : 's'} without a name
+            <div className="small muted" style={{ fontWeight: 400 }}>Phones that signed in but haven’t picked a name (mostly from before the move to the new address). Not counted above. Give one a name if you know who it is.</div>
+          </summary>
+          {nameless.map(line)}
+        </details>
+      )}
       <div className="small muted" style={{ padding: '8px 14px 12px' }}>{Object.entries(ROLE_HELP).map(([k, h]) => `${ROLE_LABEL[k]}: ${h}`).join(' ')}</div>
     </div>
   );
@@ -376,9 +390,11 @@ export function LookCard({ onSaved, hideName = false } = {}) {
           <span><div style={{ fontFamily: preview['--display'], fontSize: 22, fontWeight: 700, lineHeight: 1 }}>{v.name || 'Group name'}</div>
             <div style={{ fontSize: 13, color: preview['--on-navy-muted'] }}>Leaderboard</div></span>
         </div>
-        <div style={{ padding: 10, background: '#fff' }}>
+        {/* v8 fix: real spaces between the samples, so read out (or copied) it isn't "A gold button2026". */}
+        <div className="row" data-testid="look-preview-samples" style={{ gap: 10, padding: 10, background: '#fff', flexWrap: 'wrap' }}>
           <span className="btn sm" style={{ background: preview['--gold'], color: 'var(--text)', borderColor: preview['--gold'] }}>A gold button</span>
-          <span className="small" style={{ marginLeft: 10, padding: '4px 8px', borderRadius: 6, background: preview['--navy'], color: preview['--gold'], fontWeight: 700 }}>2026</span>
+          {' '}
+          <span className="small" style={{ padding: '4px 8px', borderRadius: 6, background: preview['--navy'], color: preview['--gold'], fontWeight: 700 }}>🏆 2026</span>
         </div>
       </div>
       {!hideName && <label className="field"><span>Group name</span><input className="input" value={v.name} maxLength={40} onChange={(e) => set({ ...v, name: e.target.value })} /></label>}

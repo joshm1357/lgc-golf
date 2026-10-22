@@ -72,10 +72,15 @@ export function useRoundAdjustments(roundIds) {
   const [rows, setRows] = useState([]);
   const load = useCallback(async () => {
     if (!ids.length) { setRows([]); return; }
-    setRows(await rowsOr(supabase.from('score_adjustments').select('*').in('round_id', ids)));
+    // 093: strokes won or copped from an award or fine sit in award_strokes — added the same way.
+    const [adj, award] = await Promise.all([
+      rowsOr(supabase.from('score_adjustments').select('*').in('round_id', ids)),
+      rowsOr(supabase.from('award_strokes').select('*').in('round_id', ids)),
+    ]);
+    setRows([...adj, ...award.map((a) => ({ ...a, kind: 'award' }))]);
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [load]);
-  useRealtime(['score_adjustments'], load);
+  useRealtime(['score_adjustments', 'award_strokes'], load);
   return rows;
 }
 
@@ -89,13 +94,15 @@ export function PenaltyLines({ lines = [], round, names }) {
       {lines.map((l) => (
         <div key={l.id} className="row between" style={{ gap: 8, textDecoration: l.waived ? 'line-through' : 'none', opacity: l.waived ? 0.6 : 1 }}>
           <span>
-            <RuleTag testId="penalty-line" rule={penaltyRef(l, round)}
-              explain="A trip job given to this player was more than the set number of days overdue when the round started, so the Rulebook’s “Late organising job” rule added penalty strokes. An organiser can waive it.">
-              {l.label}
-            </RuleTag>
+            {l.kind === 'award' ? <span data-testid="award-stroke-line">{l.strokes < 0 ? '🏆 ' : '🏷 '}{l.label}</span> : (
+              <RuleTag testId="penalty-line" rule={penaltyRef(l, round)}
+                explain="A trip job given to this player was more than the set number of days overdue when the round started, so the Rulebook’s “Late organising job” rule added penalty strokes. An organiser can waive it.">
+                {l.label}
+              </RuleTag>
+            )}
             {names && l.player_id && <span className="muted"> · {playerName(data.playersById[l.player_id])}</span>}
           </span>
-          <strong style={{ whiteSpace: 'nowrap' }}>{l.waived ? 'waived' : points ? `−${l.strokes} pts` : `+${l.strokes}`}</strong>
+          <strong style={{ whiteSpace: 'nowrap' }}>{l.waived ? 'waived' : points ? `${l.strokes > 0 ? '−' : '+'}${Math.abs(l.strokes)} pts` : `${l.strokes < 0 ? '−' : '+'}${Math.abs(l.strokes)}`}</strong>
         </div>
       ))}
     </div>

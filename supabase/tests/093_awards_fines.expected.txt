@@ -1,0 +1,48 @@
+Part A run on staging 23 Oct 2026 (rolled back). One line per check:
+every group has the leftover kitty rule: A / value = 1 / On the bar the last night
+proposed: category / value / status = Latest out:fines:−1 stroke:proposed, Wrong-ball fine:fines:$5:proposed
+proposals became new-rule cases = 2
+award worth 0 strokes = refused: Strokes: a whole number from −10 to 10 (not 0)
+guest proposes = refused: new row violates row-level security policy "guests don't propose rules" for table "rules"
+guest gives an opinion = refused: new row violates row-level security policy "no guests (add)" for table "rule_opinions"
+other group sees A's award rules = 0
+reminder tick: trips reminded = 1
+reminder: waiting proposals = 2
+reminder tick again (once only) = 1 row, tick=0
+opinion as someone else = refused: new row violates row-level security policy for table "rule_opinions"
+opinions on the fine = about_right,too_much
+after deciding: statuses = Latest out:active, Wrong-ball fine:active
+award_for_trip twice → same award = true
+trip fine: title / kind / penalty = Wrong-ball fine / fine / $5
+nomination from a post: post linked / photo copied = true / https://example.com/ball.jpg
+other group: award_for_trip = refused: Trip not found
+other group: nominate = refused: That belongs to another group
+other group sees A's nominations / opinions = 0 / 0
+guest: award_for_trip = refused: Guests can't fine or nominate
+guest: nominate = refused: new row violates row-level security policy "no guests (add)" for table "dinner_award_nominations"
+appeal: kind / subject / status = ruling / setting:dinner_award_nominations / open
+claim without a time = refused: This one needs a time
+claim without a photo = refused: This one needs a photo
+claim saved with time = 2:47am
+settle before closing = refused: Close the voting first
+
+Part B — expected, NOT YET RUN (needs a person to confirm UPDATE / DELETE in the Supabase MCP):
+fined player deletes the fine = still there
+organiser removes it = gone
+player settles = refused: Only an organiser can decide it
+settled: status / post = settled / 🏆 Latest out — Tom, 2:47am 📷 · −1 stroke next round
+settle again = already
+feed post = 🏆 Latest out — Tom, 2:47am 📷 · −1 stroke next round
+strokes waiting: who / strokes / label / round = Tom / -1 / Latest out (−1) / none
+organiser changes the winner by hand = Tom
+after the round starts: round set / applied = true / true
+Tom reads his strokes = 1
+player edits strokes = refused: permission denied for table award_strokes
+player changes the leftover rule = On the bar the last night
+opinion on the leftover rule = 1
+organiser changes it: value / detail = Split back to everyone / Whatever’s left in the kitty at the end of a trip: split back to everyone. Words only — no money moves in the app.
+"other" with no words = refused: Say what happens to the leftover kitty
+organiser deletes the standard rule = still there
+switched off: change opinion = too_much   (refused by the feature switch: 0 rows changed)
+switched off: award_for_trip = refused: Fines and dinner awards is switched off for this group (wording from require_feature)
+switched off: still readable = 2

@@ -257,9 +257,9 @@ export default function Leaderboard() {
                 <span className="lb-name ellipsis">{r.name}</span>
                 <span className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
                   <AvatarStack players={r.players} size={isTeams ? 26 : 22} />
-                  {r.penalty > 0 && (
-                    <span data-testid="lb-penalty" title={(r.penaltyLines || []).filter((l) => !l.waived).map((l) => l.label).join(', ')} style={{ marginLeft: 8, display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 999, background: '#FDF1EF', border: '1px solid var(--under)', color: 'var(--under)', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap' }}>
-                      ⚠️ +{r.penalty} late job
+                  {!!r.penalty && (
+                    <span data-testid="lb-penalty" title={(r.penaltyLines || []).filter((l) => !l.waived).map((l) => l.label).join(', ')} style={{ marginLeft: 8, display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 999, background: r.penalty > 0 ? '#FDF1EF' : 'var(--gold-soft)', border: `1px solid ${r.penalty > 0 ? 'var(--under)' : 'var(--gold)'}`, color: r.penalty > 0 ? 'var(--under)' : 'var(--text)', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap' }}>
+                      {r.penalty > 0 ? '⚠️ +' : '🏆 −'}{Math.abs(r.penalty)} {(r.penaltyLines || []).every((l) => l.kind !== 'award') ? 'late job' : 'strokes'}
                     </span>
                   )}
                   {(r.bonusWins || []).map((w) => (
@@ -361,10 +361,10 @@ export function Scorecard({ row, board, round }) {
                   </tr>
                 );
               })}
-              {row.penalty > 0 && (
+              {!!row.penalty && (
                 <tr data-testid="sc-penalty-row">
-                  <td colSpan={5}><strong>Penalty</strong> <span className="muted">(late job)</span></td>
-                  <td><strong>{isNet ? `+${row.penalty}` : `−${row.penalty}`}</strong></td>
+                  <td colSpan={5}><strong>{row.penalty > 0 ? 'Penalty' : 'Strokes off'}</strong> <span className="muted">({(row.penaltyLines || []).every((l) => l.kind !== 'award') ? 'late job' : 'awards, fines and late jobs'})</span></td>
+                  <td><strong>{(isNet ? row.penalty > 0 : row.penalty < 0) ? '+' : '−'}{Math.abs(row.penalty)}</strong></td>
                 </tr>
               )}
               <tr>

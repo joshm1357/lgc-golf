@@ -27,6 +27,7 @@ import { frontDoor, isFreshSignIn, clearFreshSignIn, takeReturn, choosesItsOwnWa
 import YourGroups, { YourGroupsInside } from './screens/YourGroups.jsx';
 import PersonalLink from './screens/PersonalLink.jsx';
 import { personalCode } from './lib/personal.js';
+import { takeWelcome, welcomeName } from './lib/joinfirst.js';
 import ProfileSetup, { AwaitingApproval } from './screens/ProfileSetup.jsx';
 import Leaderboard from './screens/Leaderboard.jsx';
 import TripNow from './screens/TripNow.jsx';
@@ -232,6 +233,14 @@ function Inside() {
     const b = onOutboxDrop((msg) => toast(msg));
     return () => { a(); b(); };
   }, []);
+  // Signed in from a join link and already in this group with a name: "Welcome back, Josh" (ov13).
+  const meNow = data.ready ? data.playersById[status?.player_id] : null;
+  useEffect(() => {
+    if (!data.ready || !status?.group_id) return;
+    // In the group but with no name yet (names were freed): they pick one first — no "welcome back" after that.
+    if (!meNow) { takeWelcome(status.group_id); return; }
+    if (takeWelcome(status.group_id)) toast(welcomeName(meNow));
+  }, [data.ready, meNow?.id, status?.group_id, loc.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!data.ready) {
     return data.error ? <div className="empty">Couldn't load: {data.error.message}. Pull down to refresh.</div> : <Loading />;
   }

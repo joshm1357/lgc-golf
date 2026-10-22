@@ -211,3 +211,33 @@ export function formatToPar(n, dp = 0) {
   if (v === 0) return 'E';
   return (v < 0 ? '−' : '+') + Math.abs(v).toFixed(dp);
 }
+
+// ---------- Penalty strokes (score_adjustments, migration 085) ----------
+// One row per player per round from the server (today: late organising jobs). A waived row stays on the card, struck
+// out, and doesn't count.
+
+/**
+ * A subject's penalties in a round. adjustments: score_adjustments rows; playerIds: the player, or a team's players.
+ * Returns { strokes, lines: [{ id, label, strokes, waived, rule_id, player_id }] } — strokes counts only unwaived rows.
+ */
+export function penaltyFor(adjustments = [], playerIds = []) {
+  const ids = new Set(playerIds);
+  const lines = (adjustments || []).filter((a) => ids.has(a.player_id))
+    .map((a) => ({ id: a.id, label: a.label, strokes: Number(a.strokes) || 0, waived: !!a.waived_at, rule_id: a.rule_id || null, player_id: a.player_id }));
+  const strokes = lines.filter((l) => !l.waived).reduce((s, l) => s + l.strokes, 0);
+  return { strokes, lines };
+}
+
+/**
+ * A status with penalty strokes added. Net formats (Ambrose, stroke play): + strokes on net to par. Points formats
+ * (Stableford, 4BBB): one penalty stroke costs one point (a stroke more on a hole is a point less, while you're
+ * still scoring on it).
+ */
+export function applyPenalty(format, st, strokes) {
+  const n = Number(strokes) || 0;
+  if (!n) return { ...st, penalty: 0 };
+  if (format === 'ambrose' || format === 'stroke') {
+    return { ...st, penalty: n, netToPar: st.netToPar + n, ...(st.finalNet != null ? { finalNet: st.finalNet + n } : {}) };
+  }
+  return { ...st, penalty: n, points: st.points - n, vsExpected: st.vsExpected - n };
+}

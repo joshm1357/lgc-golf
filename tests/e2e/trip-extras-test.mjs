@@ -208,8 +208,12 @@ await page.reload();
 await page.getByTestId('weather-day').first().waitFor({ timeout: 15000 });
 check(meteo.forecast === before && before === 1, `forecast fetched once, then the phone’s copy for the hour (fetches: ${meteo.forecast})`);
 
-// 3. Same as last time on the past trip.
+// 3. Same as last time on the past trip (Organise → On the day; never on the Overview, ov14).
 await page.goto(`${BASE}#/plan/${PPAST}`);
+await page.getByTestId('overview-glance').or(page.getByText('Done and dusted')).first().waitFor({ timeout: 15000 });
+await page.waitForTimeout(600);
+check(!(await page.getByRole('button', { name: /Same as last time/ }).count()), 'Same as last time isn’t on the Overview (organiser-only)');
+await page.goto(`${BASE}#/plan/${PPAST}?view=organise`);
 await page.getByRole('button', { name: /Same as last time/ }).click();
 await page.getByTestId('repeat-sheet').waitFor({ timeout: 10000 });
 await page.getByTestId('repeat-line').first().waitFor({ timeout: 10000 });
@@ -219,8 +223,11 @@ check(lines.some((l) => l.includes('Sun · Ambrose at The Vintage · CTP 5')), '
 check(lines.some((l) => l.includes('Trophies: The BD Trophy')) && lines.some((l) => l.includes('1 job · 1 on the bring list')) && lines.some((l) => l.includes('Invited: Kurt, Al Blue')), 'confirm card: trophies, jobs and the crew who were in');
 await page.screenshot({ path: `${SHOTS}/3-repeat-confirm.png`, fullPage: true });
 await page.getByRole('button', { name: 'Make the trip idea' }).click();
-await page.getByTestId('repeat-info').waitFor({ timeout: 15000 });
+await page.waitForTimeout(1200);
 const made = db.plans.find((p) => p.repeat_of === PPAST);
+// ov14: who from last time hasn't replied sits on Organise → Lock in (who's in).
+await page.goto(`${BASE}#/plan/${made?.id}?tab=people`);
+await page.getByTestId('repeat-info').waitFor({ timeout: 15000 });
 check(made && made.start_date === '2026-10-23' && made.end_date === '2026-10-25' && made.status === 'planning' && made.proposed === false && made.location_name === 'Hunter Valley' && made.name === 'Hunter 2026',
   `new trip idea: Hunter 2026, Fri 23 – Sun 25 Oct 2026, Hunter Valley (${JSON.stringify(made && { n: made.name, s: made.start_date, e: made.end_date })})`);
 check(made?.repeat_shape?.rounds?.length === 2 && made.repeat_shape.rounds[0].ctp_holes.join() === '3,12' && made.repeat_shape.rounds[0].games[0].kind === 'skins', 'the golf is kept as the shape (courses, formats, CTP holes, games)');
@@ -231,6 +238,7 @@ check((await page.getByTestId('repeat-info').innerText()).includes('Al Blue'), '
 await page.screenshot({ path: `${SHOTS}/4-repeat-made.png`, fullPage: true });
 
 // 3b. "Set it up in the app" on the copied trip fills the rounds from last time, then puts the side comps and games back.
+await page.goto(`${BASE}#/plan/${made?.id}?view=organise&step=day`);
 await page.getByRole('button', { name: /Set it up in the app/ }).click();
 const selects = page.getByLabel('Course');
 await selects.first().waitFor({ timeout: 10000 });

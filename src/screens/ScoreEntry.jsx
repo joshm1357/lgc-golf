@@ -5,10 +5,11 @@ import { useData, useScores, useSession, playerName, useFeature } from '../lib/s
 import { saveScore } from '../lib/offline.js';
 import { sendOrQueue } from '../lib/outbox.js';
 import { courseHoles } from '../lib/board.js';
-import { strokesReceived, stablefordPoints } from '../lib/scoring.js';
+import { strokesReceived, stablefordPoints, penaltyFor } from '../lib/scoring.js';
 import { Icon, Loading, toast, PhotoButtons } from '../components/ui.jsx';
 import Distances from '../components/Distances.jsx';
 import RuleTag, { roundRef, useActiveRules } from '../components/RuleTag.jsx';
+import { useRoundAdjustments, PenaltyLines } from '../components/LateJobs.jsx';
 
 const MOMENTS = ['Chip-in', 'Bomb drive', 'Lost ball', 'Air shot', 'Three-putt', 'Tree hit', 'Sandy save'];
 
@@ -204,6 +205,7 @@ export default function ScoreEntry() {
       )}
 
       {gpsOn && <Distances round={round} course={course} hole={hole} />}
+      <SubjectPenalties round={round} subject={subject} />
 
       <div className="section">
         <div className="card" style={{ padding: '20px 16px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
@@ -270,4 +272,13 @@ export default function ScoreEntry() {
       </div>
     </div>
   );
+}
+
+/** This player's (or team's) penalty strokes for the round, e.g. a late organising job (085). */
+function SubjectPenalties({ round, subject }) {
+  const adjustments = useRoundAdjustments(round?.id);
+  const ids = subject?.players?.length ? subject.players.filter(Boolean).map((p) => p.id) : [subject?.id];
+  const p = penaltyFor(adjustments, ids);
+  if (!p.lines.length) return null;
+  return <div className="section"><PenaltyLines lines={p.lines} round={round} names={ids.length > 1} /></div>;
 }

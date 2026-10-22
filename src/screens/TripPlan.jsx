@@ -18,6 +18,8 @@ import {
 import { tripStage } from '../lib/trips.js';
 import StaySearch from '../components/StaySearch.jsx';
 import { CallVoteSheet } from '../components/CallVote.jsx';
+import { useLateJobs, LateBadge, WaiveButton } from '../components/LateJobs.jsx';
+import { lateJobs } from '../lib/latejobs.js';
 
 const RSVP_WORD = { in: 'In', maybe: 'Keen', out: 'Out' };
 
@@ -94,35 +96,45 @@ export async function makeTripJobs(pd, status) {
 
 // ---------------------------------------------------------------- The Next step card
 
-export function NextStepCard({ pd, stage, onTab, onView }) {
+/** The Next step (lib/tripjobs.js nextStep) for whoever's signed in. ex: useTripExtras(pd). */
+export function useNextStep(pd, stage, ex) {
   const data = useData();
   const { status } = useSession();
-  const nav = useNavigate();
   const tasksOn = useFeature('planner_tasks');
   const costsOn = useFeature('planner_costs');
-  const ex = useTripExtras(pd);
-  const [sheet, setSheet] = useState(null);
-  const [busy, run] = useRun();
+  const late = useLateJobs();
   const plan = pd.plan;
   const names = useMemo(() => Object.fromEntries(data.players.map((p) => [p.id, playerName(p)])), [data.players]);
-  const step = useMemo(() => nextStep({
+  return useMemo(() => nextStep({
     plan: costsOn ? plan : { ...plan, deposit_pp: null, deposit_asked_at: null }, stage,
     items: tasksOn ? pd.items : [], polls: tasksOn ? pd.polls : [], options: pd.options, votes: pd.votes, rsvps: pd.rsvps,
     transfers: pd.transfers, playerIds: data.players.filter((p) => p.approved !== false).map((p) => p.id),
     me: status.player_id, isOrganiser: !!status.is_admin, names, builder: ex.builder,
-  }), [plan, stage, pd, data.players, status, names, ex.builder, tasksOn, costsOn]);
-  if (!step) return null;
-  const who = step.who ? data.playersById[step.who] : null;
+    late: tasksOn ? late : null,
+  }), [plan, stage, pd, data.players, status, names, ex.builder, tasksOn, costsOn, late]);
+}
+
+/**
+ * What a Next step's button does: { act(action), busy, sheets, setSheet }. Render `sheets` once.
+ * onTab(tab) opens a part of Organise; actions it doesn't know go to onOther(action).
+ */
+export function useStepActions(pd, ex, { onTab, onOther } = {}) {
+  const { status } = useSession();
+  const nav = useNavigate();
+  const [sheet, setSheet] = useState(null);
+  const [busy, run] = useRun();
+  const late = useLateJobs();
+  const plan = pd.plan;
   const job = (id) => pd.items.find((i) => i.id === id);
-  const act = () => {
-    const a = step.action;
-    if (a.type === 'tab') { if (a.tab === 'stay') setSheet({ kind: 'stay' }); else onTab(a.tab); return; }
+  const act = (a) => {
+    if (!a) return;
+    if (a.type === 'tab') { if (a.tab === 'stay') setSheet({ kind: 'stay' }); else onTab?.(a.tab); return; }
     if (a.type === 'allocate') { setSheet({ kind: 'allocate', job: job(a.id) }); return; }
     if (a.type === 'job') { setSheet({ kind: 'job', job: job(a.id) }); return; }
     if (a.type === 'pay') { setSheet({ kind: 'pay' }); return; }
     if (a.type === 'deposits') { setSheet({ kind: 'deposits' }); return; }
     if (a.type === 'trip_plan') { setSheet({ kind: 'budget' }); return; }
-    if (a.type === 'builder') { onView('organise'); return; }
+    if (a.type === 'builder' || a.type === 'plan_builder') { nav(`/plan/${plan.id}/build`); return; }
     if (a.type === 'lock') {
       const openVotes = pd.polls.filter((p) => p.status === 'open').length;
       if (openVotes && !window.confirm(`${openVotes} vote${openVotes === 1 ? ' is' : 's are'} still open. Lock it in anyway?`)) return;
@@ -140,8 +152,25 @@ export function NextStepCard({ pd, stage, onTab, onView }) {
     if (a.type === 'make_jobs') {
       run(async () => { const n = await makeTripJobs(pd, status); pd.reload(); return n; })
         .then((n) => n != null && toast(n ? `Added ${n} jobs with due dates` : 'The jobs are already there'));
+      return;
     }
+    onOther?.(a);
   };
+  const sheets = <TripSheets sheet={sheet} setSheet={setSheet} pd={pd} ex={ex} onTab={onTab} late={late} />;
+  return { act, busy, sheets, setSheet };
+}
+
+/** The Next step card (Overview, for players: their own next thing — a deposit to pay, a job). hideVotes: skip
+ *  vote steps (the votes are on the page already). */
+export function NextStepCard({ pd, stage, onTab, hideVotes = false }) {
+  const data = useData();
+  const { status } = useSession();
+  const ex = useTripExtras(pd);
+  const step = useNextStep(pd, stage, ex);
+  const { act, busy, sheets } = useStepActions(pd, ex, { onTab });
+  if (!step) return null;
+  if (hideVotes && /^vote/.test(step.key)) return null;
+  const who = step.who ? data.playersById[step.who] : null;
   return (
     <div className="section" style={{ paddingBottom: 0 }}>
       <div className="card" data-testid="next-step" style={{ borderColor: 'var(--navy)', borderWidth: 2, overflow: 'hidden' }}>
@@ -150,22 +179,22 @@ export function NextStepCard({ pd, stage, onTab, onView }) {
           <span style={{ fontSize: 28, lineHeight: 1 }} aria-hidden="true">{step.icon}</span>
           <div className="grow" style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 800, fontSize: 17, lineHeight: 1.25 }}>{step.title}</div>
-            {step.detail && <div className="small muted" style={{ marginTop: 2 }}>{step.detail}</div>}
+            {step.detail && <div className={step.late ? 'small' : 'small muted'} data-testid={step.late ? 'next-step-late' : undefined} style={{ marginTop: 2, ...(step.late ? { color: 'var(--under)', fontWeight: 700 } : {}) }}>{step.detail}</div>}
             {who && <div className="row small" style={{ gap: 6, marginTop: 6 }}><Avatar player={who} size={22} /><span>On {who.id === status.player_id ? 'you' : playerName(who)}</span></div>}
           </div>
         </div>
         <div style={{ padding: '0 14px 12px' }}>
-          <button type="button" className="btn gold block" disabled={busy} onClick={act}>{step.label}</button>
+          <button type="button" className="btn gold block" disabled={busy} onClick={() => act(step.action)}>{step.label}</button>
         </div>
       </div>
-      <TripSheets sheet={sheet} setSheet={setSheet} pd={pd} ex={ex} onTab={onTab} />
+      {sheets}
     </div>
   );
 }
 
 // ---------------------------------------------------------------- Organise: where to stay, the trip plan, deposits
 
-export function TripPlanCards({ pd }) {
+export function TripPlanCards({ pd, only = null }) {
   const data = useData();
   const { status } = useSession();
   const tasksOn = useFeature('planner_tasks');
@@ -182,7 +211,7 @@ export function TripPlanCards({ pd }) {
     tasksOn && { k: 'stay', icon: '🏠', title: 'Where to stay', sub: chosen ? `${chosen.name}${chosen.total_cost != null ? ` · ${money(chosen.total_cost)}` : ''}` : ex.stays.length ? `${ex.stays.length} on the shortlist` : plan.start_date ? 'Find 2–3 places, then the group votes' : 'Once the dates are known' },
     costsOn && { k: 'budget', icon: '🧾', title: 'Trip plan', sub: ex.budget.length ? `${money(sum.total)} · ${money(sum.perPerson)} each${sum.basis === 'keen' ? ' if everyone keen comes' : ''}` : status.is_admin ? 'Costs, food plan and the deposit' : 'Not started yet' },
     costsOn && dep && { k: 'deposits', icon: '💳', title: `Deposits · ${money(plan.deposit_pp)} each`, sub: `${dep.people.filter((p) => p.state === 'paid').length} of ${dep.people.length} paid` },
-  ].filter(Boolean);
+  ].filter(Boolean).filter((r) => !only || only.includes(r.k));
   if (!rows.length) return null;
   return (
     <div className="card" style={{ overflow: 'hidden' }}>
@@ -199,12 +228,12 @@ export function TripPlanCards({ pd }) {
   );
 }
 
-function TripSheets({ sheet, setSheet, pd, ex, onTab }) {
+function TripSheets({ sheet, setSheet, pd, ex, onTab, late }) {
   if (!sheet) return null;
   const close = () => setSheet(null);
   const open = (s) => setSheet(s);
   if (sheet.kind === 'allocate' && sheet.job) return <AllocateSheet pd={pd} job={sheet.job} onClose={close} />;
-  if (sheet.kind === 'job' && sheet.job) return <JobSheet pd={pd} job={sheet.job} onClose={close} open={open} />;
+  if (sheet.kind === 'job' && sheet.job) return <JobSheet pd={pd} job={sheet.job} onClose={close} open={open} late={late} />;
   if (sheet.kind === 'stay') return <StaySheet pd={pd} ex={ex} onClose={close} onTab={onTab} />;
   if (sheet.kind === 'budget') return <BudgetSheet pd={pd} ex={ex} onClose={close} />;
   if (sheet.kind === 'pay') return <PaySheet pd={pd} onClose={close} />;
@@ -262,7 +291,7 @@ function AllocateSheet({ pd, job, onClose }) {
 }
 
 /** One job: what to do, To do → Asked / waiting → Done ✓, a note (confirmation number, cost), hand it on. */
-function JobSheet({ pd, job, onClose, open }) {
+function JobSheet({ pd, job, onClose, open, late }) {
   const data = useData();
   const { status } = useSession();
   const me = status.player_id;
@@ -292,6 +321,8 @@ function JobSheet({ pd, job, onClose, open }) {
           {owner ? <><Avatar player={owner} size={24} /><span>{owner.id === me ? 'You' : playerName(owner)}</span></> : <span className="muted">Nobody on it yet</span>}
           {job.due && <span className="muted">· due {fmtRange(job.due)}</span>}
         </div>
+        <LateBadge job={job} late={late} />
+        <WaiveButton job={job} late={late} onDone={onClose} />
         {(job.formula_key === 'shortlist_stay' || isReserve) && <button type="button" className="btn ghost" onClick={() => open({ kind: 'stay' })}>🏠 Where to stay — search links and the shortlist</button>}
         {job.formula_key === 'deposit_ask' && <button type="button" className="btn ghost" onClick={() => open({ kind: 'budget' })}>🧾 Open the trip plan and set the deposit</button>}
         {job.formula_key === 'chase_deposits' && <button type="button" className="btn ghost" onClick={() => open({ kind: 'deposits' })}>💳 See who’s paid</button>}
@@ -326,8 +357,10 @@ export function TripJobsTab({ pd, AddSheet }) {
   const [adding, setAdding] = useState(false);
   const [busy, run] = useRun();
   const ex = useTripExtras(pd);
+  const lateData = useLateJobs();
   const today = todayISO();
   const jobs = sortJobs(pd.items);
+  const lateList = lateJobs(jobs, lateData.rule, { today, penalties: lateData.penalties, adjustments: lateData.adjustments }).filter((x) => !x.info.waived);
   const shown = jobs.filter((j) => (filter === 'mine' ? j.owner_id === me : filter === 'todo' ? jobStage(j) !== 'done' : true));
   const done = jobs.filter((j) => jobStage(j) === 'done').length;
   const unowned = jobs.filter((j) => !j.owner_id && jobStage(j) !== 'done').length;
@@ -341,6 +374,13 @@ export function TripJobsTab({ pd, AddSheet }) {
         </div>
       </div>
       {jobs.length > 0 && <div className="vote-bar"><span className="g" style={{ width: `${(done / jobs.length) * 100}%`, background: 'var(--navy)' }} /></div>}
+      {status.is_admin && lateList.length > 0 && (
+        <div className="card pad small" data-testid="late-summary" style={{ background: '#FDF1EF', borderColor: 'var(--under)' }}>
+          <strong>⚠️ {lateList.length} late job{lateList.length === 1 ? '' : 's'}</strong>
+          <span className="muted"> — {lateData.rule.strokes} penalty stroke{lateData.rule.strokes === 1 ? '' : 's'} each in the next round unless they’re done first. Tap one to waive it.</span>
+          <div style={{ marginTop: 4 }}>{lateList.map(({ job, info }) => `${job.title} (${playerName(data.playersById[job.owner_id])}, ${info.daysLate} days)`).join(' · ')}</div>
+        </div>
+      )}
       {status.is_admin && !hasFormula && pd.plan.kind === 'trip' && pd.plan.start_date && (
         <button type="button" className="card pad row" disabled={busy} style={{ width: '100%', textAlign: 'left', color: 'inherit', gap: 10, borderColor: 'var(--gold)' }}
           onClick={() => run(async () => { const n = await makeTripJobs(pd, status); pd.reload(); return n ? `Added ${n} jobs` : 'Already there'; }).then((m) => m && toast(m))}>
@@ -365,6 +405,7 @@ export function TripJobsTab({ pd, AddSheet }) {
                     {lock ? `after: ${lock.title}` : [owner ? playerName(owner) : 'Nobody yet', st === 'asked' ? 'asked, waiting' : null, j.due ? `due ${fmtRange(j.due)}${late ? ' — overdue' : ''}` : null].filter(Boolean).join(' · ')}
                   </div>
                   {j.note && <div className="small muted" style={{ whiteSpace: 'pre-wrap' }}>📝 {j.note}</div>}
+                  <LateBadge job={j} late={lateData} compact />
                 </button>
                 {canAllocate(j, me, status.is_admin) && st !== 'done' ? (
                   <button type="button" className="btn ghost sm" onClick={() => setSheet({ kind: 'allocate', job: j })}>{owner ? <Avatar player={owner} size={22} /> : null}{owner ? '' : 'Allocate'}</button>
@@ -380,9 +421,9 @@ export function TripJobsTab({ pd, AddSheet }) {
           })}
         </div>
       )}
-      <button type="button" className="btn gold block" onClick={() => setAdding(true)}>+ Add a job</button>
+      <button type="button" className="btn ghost block" onClick={() => setAdding(true)}>+ Add a job</button>
       {adding && AddSheet && <AddSheet plan={pd.plan} kind="job" item={null} onClose={() => setAdding(false)} onSaved={pd.reload} />}
-      <TripSheets sheet={sheet} setSheet={setSheet} pd={pd} ex={ex} />
+      <TripSheets sheet={sheet} setSheet={setSheet} pd={pd} ex={ex} late={lateData} />
     </>
   );
 }

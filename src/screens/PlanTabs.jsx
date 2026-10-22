@@ -283,7 +283,8 @@ export function JobsTab({ pd }) {
 
 // ---------------------------------------------------------------- Kitty
 
-export function KittyTab({ pd }) {
+// table: the costs table is on screen above (a laptop) — skip the costs list here, it would be there twice.
+export function KittyTab({ pd, table = false }) {
   const data = useData();
   const { status } = useSession();
   const me = status.player_id;
@@ -350,7 +351,8 @@ export function KittyTab({ pd }) {
       </div>
       {pd.plan.kitty_note && <div className="card pad"><div className="label">Paying into the kitty</div><div style={{ fontSize: 16, fontWeight: 600 }}>{pd.plan.kitty_note}</div></div>}
 
-      <div className="row between"><span className="label">Costs</span><button type="button" className="btn ghost sm" onClick={() => setCostFor({})}>+ Add a cost {status.is_admin ? '' : 'I paid'}</button></div>
+      <div className="row between"><span className="label">{table ? 'A cost with the details (who shares it, per head, a note)' : 'Costs'}</span><button type="button" className="btn ghost sm" onClick={() => setCostFor({})}>+ Add a cost {status.is_admin ? '' : 'I paid'}</button></div>
+      {!table && (<>
       {pd.costs.length === 0 ? <div className="small muted">Nothing yet. Paid for the house, a round or dinner? Add it — the app splits it and works out who pays who.</div> : (
         <div className="card">
           {pd.costs.map((c) => {
@@ -369,6 +371,7 @@ export function KittyTab({ pd }) {
         </div>
       )}
 
+      </>)}
       {k.settle.length > 0 && (
         <>
           <span className="label">Who pays who</span>

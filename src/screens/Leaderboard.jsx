@@ -22,6 +22,7 @@ import { WeatherChip } from '../components/Weather.jsx';
 import { AskChip } from '../components/AskChip.jsx';
 import { RoundTools } from '../components/RoundTools.jsx';
 import { SaveSpotBanner } from '../components/SaveSpot.jsx';
+import { useRoundAdjustments, PenaltyLines } from '../components/LateJobs.jsx';
 
 const DrawSetup = lazyScreen(() => import('../components/DrawSetup.jsx'), 'default', { inline: true });
 
@@ -63,6 +64,7 @@ export default function Leaderboard() {
   const tvOn = useFeature('clubhouse_tv');
   const scores = useScores(round?.id);
   const sideEntries = useSideEntries(round?.id);
+  const adjustments = useRoundAdjustments(round?.id);
 
   const board = useMemo(() => {
     if (!round) return null;
@@ -70,9 +72,9 @@ export default function Leaderboard() {
       round, course: data.coursesById[round.course_id], teams: data.teamsByRound[round.id] || [],
       roundPlayers: data.roundPlayers[round.id] || [], playersById: data.playersById,
       scoresIdx: scores.index, quickResults: data.quick_results,
-      bonuses: compBonuses(round, data.teamsByRound[round.id] || [], sideEntries),
+      bonuses: compBonuses(round, data.teamsByRound[round.id] || [], sideEntries), adjustments,
     });
-  }, [round, data, scores.index, sideEntries]);
+  }, [round, data, scores.index, sideEntries, adjustments]);
 
   // "Since you last looked": ranks stored on this phone at the last visit.
   const storeKey = round ? `lgc-ranks-${round.id}` : null;
@@ -248,6 +250,11 @@ export default function Leaderboard() {
                 <span className="lb-name ellipsis">{r.name}</span>
                 <span className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
                   <AvatarStack players={r.players} size={isTeams ? 26 : 22} />
+                  {r.penalty > 0 && (
+                    <span data-testid="lb-penalty" title={(r.penaltyLines || []).filter((l) => !l.waived).map((l) => l.label).join(', ')} style={{ marginLeft: 8, display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 999, background: '#FDF1EF', border: '1px solid var(--under)', color: 'var(--under)', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap' }}>
+                      ⚠️ +{r.penalty} late job
+                    </span>
+                  )}
                   {(r.bonusWins || []).map((w) => (
                     <span key={w} title={`${w}: −${round.comp_bonus} strokes`} style={{ marginLeft: 8, display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 7px', borderRadius: 999, background: 'var(--gold)', color: 'var(--text)', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap' }}>
                       {w.split(' ')[0]} {w.split(' ')[1]} −{round.comp_bonus}
@@ -296,15 +303,15 @@ export default function Leaderboard() {
       {drawing && <LazyArea onClose={() => setDrawing(false)}><DrawSetup round={round} onClose={() => setDrawing(false)} /></LazyArea>}
       {open && (
         <Sheet title={open.name} onClose={() => setOpen(null)}>
-          <Scorecard row={open} board={board} />
+          <Scorecard row={open} board={board} round={round} />
         </Sheet>
       )}
     </div>
   );
 }
 
-export function Scorecard({ row, board }) {
-  if (board.format === 'fourball') return <FourballCard row={row} board={board} />;
+export function Scorecard({ row, board, round }) {
+  if (board.format === 'fourball') return <FourballCard row={row} board={board} round={round} />;
   const isA = board.format === 'ambrose';
   const isNet = isNetFormat(board.format);
   const isStroke = board.format === 'stroke';
@@ -318,6 +325,7 @@ export function Scorecard({ row, board }) {
           explain="A team’s handicap is its players’ handicaps added up, divided by twice the team size (4 players ÷ 8, 3 players ÷ 6), unless an organiser set it by hand.">Team handicap {row.handicap}</RuleTag> : `Playing off ${row.handicap}`}</span>
       </div>
       {row.bonus ? <div className="card pad small" style={{ background: 'var(--gold-soft)', borderColor: 'var(--gold)' }}><strong>Side comp bonus −{row.bonus}</strong> · {row.bonusWins.join(', ')} (already taken off the score)</div> : null}
+      <PenaltyLines lines={row.penaltyLines} round={round} names={(row.players || []).length > 1} />
       {row.quick ? (
         <div className="card pad">Typed in from a paper card: <strong>{row.points} points</strong>.</div>
       ) : (
@@ -346,9 +354,15 @@ export function Scorecard({ row, board }) {
                   </tr>
                 );
               })}
+              {row.penalty > 0 && (
+                <tr data-testid="sc-penalty-row">
+                  <td colSpan={5}><strong>Penalty</strong> <span className="muted">(late job)</span></td>
+                  <td><strong>{isNet ? `+${row.penalty}` : `−${row.penalty}`}</strong></td>
+                </tr>
+              )}
               <tr>
                 <td><strong>Tot</strong></td><td>{tot.par}</td><td /><td /><td><strong>{isStroke ? row.gross || '' : tot.s || ''}</strong></td>
-                <td><strong>{isNet ? formatToPar(row.netToPar, isA && row.finished ? 1 : 0) : tot.x}</strong></td>
+                <td><strong>{isNet ? formatToPar(row.netToPar, isA && row.finished ? 1 : 0) : tot.x - (row.penalty || 0)}</strong></td>
               </tr>
             </tbody>
           </table>
@@ -379,7 +393,7 @@ function TvToggle({ round }) {
 }
 
 /** A 4BBB pair's card: both players' scores and points, and the better ball that counted. */
-function FourballCard({ row, board }) {
+function FourballCard({ row, board, round }) {
   const holes = board.holes;
   const m = row.members || [];
   const name = (id) => playerName(row.players.find((p) => p.id === id));
@@ -387,6 +401,7 @@ function FourballCard({ row, board }) {
   return (
     <div className="stack">
       <div className="row"><AvatarStack players={row.players} size={34} /><span className="muted small">{m.map((x) => `${name(x.id)} off ${Math.round(x.hcp)}`).join(' · ')}</span></div>
+      <PenaltyLines lines={row.penaltyLines} round={round} names />
       <div className="card" style={{ overflowX: 'auto' }}>
         <table className="sc">
           <thead><tr><th>Hole</th><th>Par</th><th>SI</th>{m.map((x) => <th key={x.id}>{name(x.id).split(' ')[0]}</th>)}<th>Best</th></tr></thead>

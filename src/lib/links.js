@@ -81,13 +81,14 @@ export function readLink(text) {
  *  'switch' already in this group, but another one is open on this phone: switch, then the page
  *  'open'   already in (a plain invite with no page): a button to open it
  *  'join'   not in it yet (or a team link that would put them on a team): the Join button
+ * Signed in properly (ov13): already in → straight there, no button ("Welcome back").
  */
-export function inviteNext({ info, inside = false, currentGroupId = null, hasTarget = false } = {}) {
+export function inviteNext({ info, inside = false, currentGroupId = null, hasTarget = false, signedIn = false } = {}) {
   if (!info || info.bad) return 'bad';
   const teamToJoin = !!(info.team && !info.my_team);
   if (info.already_in && !teamToJoin) {
     if (inside && info.group_id === currentGroupId) return 'go';
-    return hasTarget ? 'switch' : 'open';
+    return hasTarget || signedIn ? 'switch' : 'open';
   }
   return 'join';
 }

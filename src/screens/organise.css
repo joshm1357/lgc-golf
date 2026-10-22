@@ -1,0 +1,53 @@
+/* ---------- Organise as six steps (ov14, 22 Oct; screens/OrganiseSteps.jsx) ----------
+   Phone: the steps stacked, the current one open with the one big button; done ones are a ✓ line, later ones grey.
+   Laptop (1024 px and up): the steps across the top as a strip, only the open step below it. */
+
+.org-strip, .org-strip-wrap { display: none; }
+.org-steps { display: flex; flex-direction: column; gap: 8px; }
+
+.org-step { background: var(--card, #fff); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.org-step.open { border: 2px solid var(--navy); }
+.org-step.later:not(.open) { opacity: .6; }
+.org-step-hdr { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 10px 14px; border: 0; background: none; text-align: left; color: inherit; }
+.org-step.open .org-step-hdr { cursor: default; background: var(--ground); }
+.org-step-title { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 16px; }
+.org-step-sum { display: block; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.org-step.done .org-step-sum { color: var(--navy); font-weight: 600; }
+.org-step-body { padding: 12px 14px 14px; gap: 12px; }
+.org-now { font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; background: var(--gold); color: var(--navy); border-radius: 999px; padding: 2px 8px; }
+
+.org-n { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; font-weight: 800; font-size: 14px; border: 2px solid var(--line); color: var(--muted); background: #fff; }
+.done > .org-step-hdr .org-n, .org-chip.done .org-n { background: var(--gold-soft); border-color: var(--navy); color: var(--navy); }
+.current > .org-step-hdr .org-n, .org-chip.current .org-n { background: var(--navy); border-color: var(--navy); color: #fff; }
+
+.org-primary { border: 2px solid var(--navy); border-radius: 12px; padding: 12px; background: #fff; }
+.org-next-label { font-weight: 800; letter-spacing: .04em; color: var(--muted); }
+.org-upnext { display: flex; flex-direction: column; gap: 6px; }
+
+.org-more { background: var(--card, #fff); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+.org-more > .chips { margin-top: 6px; }
+
+.org-vote-btn { display: block; width: 100%; text-align: left; border: 0; background: none; color: inherit; padding: 0; cursor: pointer; }
+
+/* The open votes on the Overview. */
+.ov-vote { border: 2px solid var(--gold); border-radius: 16px; background: var(--gold-soft); padding: 8px; }
+.ov-vote-hdr { display: flex; align-items: center; gap: 10px; padding: 4px 6px 8px; }
+.ov-vote-tag { flex: none; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; background: var(--navy); color: #fff; border-radius: 999px; padding: 4px 10px; }
+
+@media (min-width: 1024px) {
+  .org-strip { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; list-style: none; margin: 0; padding: 0; }
+  .org-strip-wrap { display: block; padding-bottom: 0; }
+  .org-desk-page .org-strip-wrap { padding-left: 0; padding-right: 0; }
+  .org-chip-top { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .org-n.sm { width: 24px; height: 24px; font-size: 12px; }
+  .org-chip button { display: flex; align-items: flex-start; gap: 8px; width: 100%; min-height: 64px; height: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: #fff; text-align: left; color: inherit; cursor: pointer; }
+  .org-chip.later button { opacity: .6; }
+  .org-chip.open button { border: 2px solid var(--navy); box-shadow: 0 2px 8px rgba(0, 0, 0, .08); }
+  .org-chip.done button { background: var(--gold-soft); }
+  .org-chip-text { display: flex; flex-direction: column; min-width: 0; }
+  .org-chip-text .small { color: var(--muted); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.25; }
+  .org-chip.done .org-chip-text .small { color: var(--navy); }
+  .org-steps > .org-step:not(.open) { display: none; }
+  .org-step.open { border-width: 1px; }
+  .org-step-body { padding: 16px; }
+}

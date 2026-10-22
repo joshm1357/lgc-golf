@@ -12,6 +12,7 @@ import { LinkForm } from './Join.jsx';
 import { paintLook, DEFAULT_LOOK } from '../lib/theme.js';
 import { SIGN_IN } from '../lib/auth.js';
 import { NEW_GROUPS } from '../lib/beta.js';
+import { noGroupWords, markJoinAfterSignIn } from '../lib/joinfirst.js';
 
 /** Go into a group. Everything on screen belongs to the old group, so start fresh in the new one. */
 function openGroup(id) {
@@ -48,6 +49,9 @@ export default function YourGroups() {
   const [showPin, setShowPin] = useState(false);
   const rows = groupRows(status?.groups, status?.group_id);
   const none = rows.length === 0;
+  const words = noGroupWords(user?.email);
+  // Signed in but in no group (e.g. a fresh Google account from the front door): open the link → join as this account.
+  const openLink = (l) => { if (l.kind === 'invite') markJoinAfterSignIn(l.code); window.location.hash = l.hash; };
   const ghost = { color: '#fff', borderColor: 'rgba(255,255,255,.5)', background: 'transparent', maxWidth: 340 };
   // Not in any one group here: The Golf Trip's own colours (not the last group's).
   useEffect(() => { paintLook(DEFAULT_LOOK, null); }, []);
@@ -55,18 +59,18 @@ export default function YourGroups() {
     <div style={{ minHeight: '100vh', background: 'var(--navy)', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 }}>
       <GolfTripCrest size={84} />
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontFamily: 'var(--display)', fontSize: 32, fontWeight: 700 }}>{none ? 'You’re not in a group yet' : 'Your groups'}</div>
-        <div className="small" style={{ color: 'var(--on-navy-muted)', marginTop: 4 }}>
-          {none ? (NEW_GROUPS ? 'Start one for your mates, or join theirs with the invite link from the group chat.' : 'Join your group with the invite link from the group chat.') : 'Tap the one you want to go into.'}
+        <div style={{ fontFamily: 'var(--display)', fontSize: 32, fontWeight: 700 }}>{none ? words.title : 'Your groups'}</div>
+        <div className="small" style={{ color: 'var(--on-navy-muted)', marginTop: 4, maxWidth: 340 }} data-testid={none ? 'no-group' : undefined}>
+          {none ? words.body : 'Tap the one you want to go into.'}
         </div>
       </div>
       {!none && <GroupList rows={rows} status={status} onPick={(g) => openGroup(g.id)} />}
-      {none && NEW_GROUPS && <a href="#/start" className="btn gold block" style={{ maxWidth: 340 }}>Start a new group</a>}
-      {showPin
-        ? <LinkForm autoFocus />
-        : <button type="button" className="btn ghost block" style={ghost} onClick={() => setShowPin(true)}>{none ? 'Join with an invite link' : 'Join another with an invite link'}</button>}
+      {/* No group: the link box straight away, never a blank screen (ov13). */}
+      {none || showPin
+        ? <LinkForm autoFocus={showPin} onOpen={openLink} />
+        : <button type="button" className="btn ghost block" style={ghost} onClick={() => setShowPin(true)}>Join another with an invite link</button>}
       {none && <div className="small" style={{ color: 'var(--on-navy-muted)', textAlign: 'center', maxWidth: 340 }}>Played before without signing in? Ask your organiser for your personal link. It brings your scores and history with you.</div>}
-      {!none && NEW_GROUPS && <a href="#/start" className="btn ghost block" style={{ ...ghost, borderColor: 'transparent', textDecoration: 'underline' }}>Start a new group</a>}
+      {NEW_GROUPS && <a href="#/start" className="btn ghost block" style={{ ...ghost, borderColor: 'transparent', textDecoration: 'underline' }}>{none ? 'Or start a new group' : 'Start a new group'}</a>}
       <div className="small" style={{ color: 'var(--on-navy-muted)', textAlign: 'center' }}>
         {user?.email ? <>Signed in as {user.email}. </> : null}
         <button type="button" onClick={() => { clearFreshSignIn(); supabase.auth.signOut().then(() => { window.location.hash = '#/'; window.location.reload(); }); }}

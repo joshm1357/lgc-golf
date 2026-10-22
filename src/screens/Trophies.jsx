@@ -13,6 +13,7 @@ import { useTripComps } from '../components/CompsChip.jsx';
 import { useCompData, CompStandingsView } from './CompsBoard.jsx';
 import { compStandings } from '../lib/comps.js';
 import RuleTag from '../components/RuleTag.jsx';
+import { useRoundAdjustments } from '../components/LateJobs.jsx';
 
 /** Is this trophy's comp the classic kind the Trophy Room always showed (all the trip's Stableford / Ambrose rounds,
  *  or awarded)? Then it's shown exactly as before; any other comp shows its own standings (lib/comps.js). */
@@ -45,6 +46,7 @@ export default function Trophies() {
   const trophy = trophies.find((t) => t.id === sel) || trophies[0];
   const tripRounds = trip ? data.rounds.filter((r) => r.trip_id === trip.id) : [];
   const scores = useScores(tripRounds.map((r) => r.id));
+  const adjustments = useRoundAdjustments(tripRounds.map((r) => r.id)); // late job penalties (085)
   // Comps (migration 067): a trophy is a comp with a trophy.
   const [comps] = useTripComps(trip?.id);
   const cd = useCompData(trip?.id, { scoresIdx: scores.index });
@@ -53,15 +55,15 @@ export default function Trophies() {
 
   const sBoard = useMemo(() => (trip ? stablefordTrophyBoard({
     trip, rounds: data.rounds, coursesById: data.coursesById, roundPlayers: data.roundPlayers,
-    playersById: data.playersById, scoresIdx: scores.index, quickResults: data.quick_results,
-  }) : null), [trip, data, scores.index]);
+    playersById: data.playersById, scoresIdx: scores.index, quickResults: data.quick_results, adjustments,
+  }) : null), [trip, data, scores.index, adjustments]);
   const aRound = [...tripRounds].reverse().find((r) => r.format === 'ambrose');
   const aSide = useSideEntries(aRound?.id);
   const aBoard = useMemo(() => (aRound ? roundBoard({
     round: aRound, course: data.coursesById[aRound.course_id], teams: data.teamsByRound[aRound.id] || [],
     playersById: data.playersById, scoresIdx: scores.index,
-    bonuses: compBonuses(aRound, data.teamsByRound[aRound.id] || [], aSide),
-  }) : null), [aRound, data, scores.index, aSide]);
+    bonuses: compBonuses(aRound, data.teamsByRound[aRound.id] || [], aSide), adjustments,
+  }) : null), [aRound, data, scores.index, aSide, adjustments]);
 
   const plaquesFor = (name) => honourOrder(data.honour_board.filter((h) => h.trophy_name.toLowerCase() === name.toLowerCase()));
   const leaderLine = (t) => {

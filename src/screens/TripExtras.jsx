@@ -16,7 +16,9 @@ import { tripStage } from '../lib/trips.js';
 import { buildRepeat, describeRepeat, nextYearStart, nextName, shiftDate, extrasForRounds, notReplied } from '../lib/repeat.js';
 import { TripWeather } from '../components/Weather.jsx';
 
-export default function TripExtras({ pd }) {
+// viewer: on the Overview — nothing organiser-only (Same as last time lives on Organise).
+// noRepeat: leave out "who from last time hasn't replied" (Organise shows it on the Lock in step).
+export default function TripExtras({ pd, viewer = false, noRepeat = false }) {
   const data = useData();
   const { status } = useSession();
   const dinnerOn = useFeature('dinner_awards');
@@ -27,17 +29,17 @@ export default function TripExtras({ pd }) {
   return (
     <>
       {stage !== 'cancelled' && stage !== 'done' && <TripWeather plan={plan} rounds={data.rounds} coursesById={data.coursesById} shapeCourseIds={shapeCourseIds} />}
-      {plan.repeat_shape && stage !== 'done' && stage !== 'cancelled' && <RepeatInfo pd={pd} />}
+      {!noRepeat && plan.repeat_shape && stage !== 'done' && stage !== 'cancelled' && <RepeatInfo pd={pd} />}
       {dinnerOn && trip && ['locked', 'on', 'done'].includes(stage) && (
         <Link to={`/dinner/${trip.id}`} className="small" style={{ fontWeight: 700 }} data-testid="dinner-link">🍽️ Fines and dinner awards →</Link>
       )}
-      {status.is_admin && !status.viewing && stage === 'done' && plan.start_date && <SameAsLastTime pd={pd} />}
+      {!viewer && status.is_admin && !status.viewing && stage === 'done' && plan.start_date && <SameAsLastTime pd={pd} />}
     </>
   );
 }
 
 /** On a copied trip: who from last time hasn't replied, and where the golf comes from. */
-function RepeatInfo({ pd }) {
+export function RepeatInfo({ pd }) {
   const data = useData();
   const shape = pd.plan.repeat_shape;
   const waiting = notReplied(shape.invited || [], pd.rsvps);

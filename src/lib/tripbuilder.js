@@ -651,17 +651,17 @@ export function startRange(st = {}, { courseMap = {}, accom = [], extras = null 
   const stayOpts = [];
   for (const r of areas) {
     const pins = st.region && st.stays?.length ? st.stays : areaStays[r] || [];
-    for (const s of pins) stayOpts.push({ key: `stay:${s.key || s.name}`, label: areas.length > 1 ? `${s.name} (${r})` : s.name, notes: null });
+    for (const s of pins) stayOpts.push({ key: `stay:${s.key || s.name}`, label: areas.length > 1 ? `${s.name} (${r})` : s.name, notes: null, area: r });
   }
   if (stayOpts.length) out.push({ key: 'stay', kind: 'other', question: 'Which town to stay in?', options: stayOpts });
   for (const r of areas) {
     const ids = areaCourses[r] || [];
     if (!ids.length) continue;
-    out.push({ key: `courses:${r}`, kind: 'other', question: areas.length > 1 ? `${r}: which courses?` : 'Which courses?', options: ids.map((id) => ({ key: `areacourse:${r}:${id}`, label: courseMap[id]?.name || 'Course', notes: courseMap[id]?.area || null })) });
+    out.push({ key: `courses:${r}`, kind: 'other', question: areas.length > 1 ? `${r}: which courses?` : 'Which courses?', options: ids.map((id) => ({ key: `areacourse:${r}:${id}`, label: courseMap[id]?.name || 'Course', notes: courseMap[id]?.area || null, area: r })) });
   }
   const ideas = (accom || []).filter((a) => !a.option_id);
   if (ideas.length) {
-    out.push({ key: 'accom', kind: 'other', question: 'Where should we stay?', options: ideas.map((a) => ({ key: `accom:${a.id}`, label: a.name, notes: [a.area, a.total_cost != null ? `$${Number(a.total_cost)} total` : null, a.sleeps ? `sleeps ${a.sleeps}` : null].filter(Boolean).join(' · ') || null, stayId: a.id })) });
+    out.push({ key: 'accom', kind: 'other', question: 'Where should we stay?', options: ideas.map((a) => ({ key: `accom:${a.id}`, label: a.name, notes: [a.area, a.total_cost != null ? `$${Number(a.total_cost)} total` : null, a.sleeps ? `sleeps ${a.sleeps}` : null].filter(Boolean).join(' · ') || null, stayId: a.id, area: a.area || undefined })) });
   }
   if (extras) out.push(extras);
   return out;

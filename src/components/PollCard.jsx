@@ -135,7 +135,7 @@ export function PollCard({ poll, pd, inCard = false, asVoter = false }) {
           );
         })}
         <div className="stack" style={{ padding: '10px 14px', gap: 8 }}>
-          <EmailVoteLine poll={poll} pd={pd} />
+          {!inCard && <EmailVoteLine poll={poll} pd={pd} />}
           {!inCard && isOpen && (
             <>
               <div className="small"><strong>{timeLeft(poll.closes_on, todayISO())}</strong> · {results.answered.length} of {people.length} answered</div>
@@ -171,7 +171,7 @@ export function PollCard({ poll, pd, inCard = false, asVoter = false }) {
               }).then((m) => m && toast(m))}>+ Add the winners to the trip plan ({results.rows.filter((r) => extraWins(r)).map((r) => r.option.label).join(', ')})</button>
           )}
           {!inCard && isOpen && <ShareVoteButton plan={pd.plan} title={poll.question} closes={poll.closes_on} />}
-          {isOpen && me && (
+          {isOpen && me && !inCard && (
             <div className="stack" style={{ gap: 4 }}>
               <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={() => setMineOpen(!mineOpen)} data-testid="your-vote">🗳️ Your vote{iAnswered ? ' ✓' : ''} {mineOpen ? '▴' : '▾'}</button>
               {mineOpen && <div className="card" style={{ overflow: 'hidden' }}>{ballot(false)}</div>}

@@ -19,7 +19,7 @@ export default function AiChat({ turns = [], onSend, busy = false, left = null, 
   const tapQuick = (q, quick) => {
     const c = quickChoice(q, quick);
     if (c.send) send(c.send);
-    else { setText(c.ask); setTimeout(() => { box.current?.focus(); box.current?.setSelectionRange?.(c.ask.length, c.ask.length); }, 0); }
+    else { setText(c.ask); setTimeout(() => { const el = box.current; if (!el) return; el.focus(); const n = el.value.length; el.setSelectionRange?.(n, n); }, 0); }
   };
   const out = left != null && left <= 0;
   return (

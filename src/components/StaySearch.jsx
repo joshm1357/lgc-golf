@@ -21,7 +21,7 @@ export default function StaySearch({ places = [], weekends = [], people = 0, max
   if (!places.length) return null;
   if (!weekends.length) return <div className="small muted">Search links show up once there are weekends to look at.</div>;
   const save = () => {
-    const row = cleanStay({ name: isListLink(paste) ? `${opened?.site || 'Shortlist'} list — ${opened?.area || places[0]}` : `${opened?.area || places[0]} — a place`, link: paste });
+    const row = cleanStay({ name: isListLink(paste) ? `${opened?.site ? `${opened.site} list` : 'Shared list'} — ${opened?.area || places[0]}` : `${opened?.area || places[0]} — a place`, link: paste });
     if (!row?.link) return;
     onSave?.({ area: opened?.area || places[0], name: row.name, link: row.link, is_list: isListLink(row.link) });
     setPaste('');

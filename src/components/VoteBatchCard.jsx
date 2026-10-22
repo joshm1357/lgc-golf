@@ -102,6 +102,7 @@ export function VoteBatchCard({ batch, pd }) {
               )}
           </div>
           <ShareVoteButton plan={pd.plan} title={batch.title} closes={batch.closes_on} />
+          <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={() => setAsVoter(true)} data-testid="your-vote">🗳️ Your vote{doneAll ? ' ✓' : ''}</button>
         </div>
       )}
       {!org && open && doneAll && (

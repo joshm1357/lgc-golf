@@ -155,7 +155,7 @@ export function CallVoteSheet({ plan, title, range, keenDefault = true, keenOpti
               <strong>{s.question}</strong>
               {s.options.map((o) => (
                 <label key={o.key} className="row" style={{ gap: 10, minHeight: 44, alignItems: 'center' }}>
-                  <input type="checkbox" checked={!!ticks[o.key]} onChange={() => setTicks(toggleTick(ticks, o.key))} style={{ width: 22, height: 22, flex: 'none' }} aria-label={`${s.question}: ${o.label}`} />
+                  <input type="checkbox" checked={!!ticks[o.key]} onChange={() => setTicks(toggleTick(ticks, o.key, range))} style={{ width: 22, height: 22, flex: 'none' }} aria-label={`${s.question}: ${o.label}`} />
                   <span className="grow"><span style={{ fontWeight: 600 }}>{o.label}</span>{o.suggested && <span className="small muted"> ✨</span>}
                     {o.notes && <span className="small muted" style={{ display: 'block' }}>{o.notes}</span>}</span>
                 </label>

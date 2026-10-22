@@ -39,8 +39,17 @@ export function allTicked(range = []) {
   return out;
 }
 
-/** Tick or untick one option. */
-export const toggleTick = (ticks, key) => ({ ...ticks, [key]: !ticks[key] });
+/**
+ * Tick or untick one option. Unticking an area ("area:<name>") also unticks everything that belongs to it (its
+ * places to stay, courses and accommodation ideas — options with area: <name>); ticking it back ticks them again.
+ */
+export function toggleTick(ticks, key, range = []) {
+  const on = !ticks[key];
+  const next = { ...ticks, [key]: on };
+  const m = /^area:(.+)$/.exec(key);
+  if (m) for (const s of range) for (const o of s.options || []) if (o.area === m[1]) next[o.key] = on;
+  return next;
+}
 
 /**
  * The ballot from the range and the ticks: each section keeps only its ticked options; a section with none is left

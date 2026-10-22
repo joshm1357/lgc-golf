@@ -61,6 +61,14 @@ describe('Call the vote', () => {
     expect(b2.sections.map((s) => s.key)).toEqual(['area']);
     expect(b2.skipped).toEqual(['Which weekend?']);
   });
+  it('unticking an area takes its towns, courses and ideas off too', () => {
+    const r = [{ key: 'area', options: [{ key: 'area:A', label: 'A' }, { key: 'area:B', label: 'B' }] }, { key: 'stay', options: [{ key: 'stay:x', area: 'A' }, { key: 'stay:y', area: 'B' }] }];
+    let t = CV.allTicked(r);
+    t = CV.toggleTick(t, 'area:A', r);
+    expect(t['stay:x']).toBe(false);
+    expect(t['stay:y']).toBe(true);
+    expect(CV.toggleTick(t, 'area:A', r)['stay:x']).toBe(true);
+  });
   it('the polls payload', () => {
     const rows = CV.pollRows(CV.ballotFrom(range, CV.allTicked(range)).sections, { planId: PLAN, batchId: 'b', closes: '2026-10-25' });
     expect(rows[0].poll).toEqual({ plan_id: PLAN, kind: 'location', question: 'Which area?', closes_on: '2026-10-25', vote_batch: 'b' });

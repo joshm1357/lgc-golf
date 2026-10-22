@@ -322,7 +322,7 @@ await flow(375, true);
   check(hashOf(page) === '#/plan', `g t opens Trips (${hashOf(page)})`);
   await page.keyboard.press('g'); await page.keyboard.press('l');
   await page.waitForTimeout(500);
-  check(/#\/$/.test(page.url()), `g l goes to the leaderboard (${page.url()})`);
+  check(/#\/leaderboard$/.test(page.url()), `g l goes to the leaderboard (${page.url()})`);
   await page.keyboard.press('g'); await page.keyboard.press('p');
   await page.getByTestId('players-table').waitFor({ timeout: 8000 });
   check(hashOf(page) === '#/group/players', 'g p opens the players table');

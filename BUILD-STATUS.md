@@ -1141,3 +1141,10 @@ screen, "Viewing as Mike · read only", and Stop.
   the handicap history as "Tribunal verdict (dispute)". **Applied on staging only.**
 - **Also:** shortcuts `g h` This trip, `g l` → `#/leaderboard`; Caddie `trip_now` destination and "Players & group"
   (routes.ts too — the ai-helper function needs a deploy for the new key); What's new; wording.
+- **Tested (merged with next-after-v7):** Vitest 1246 (activetrip 23 new). E2E new `nav-test.mjs` 37 checks; also
+  pass: organise-tidy 42, late-job 26, signin-first 59, save-spot 89, signin-home 76, phone 17, desktop 125, trips,
+  trip-overview, comps, cup, games, own-comps, stage2, governance, dispute, email-votes, features, awards, caddie,
+  ai-helper(-v2), rulebook-v3, setup-guide, trip-extras, commentary, view-as, notify-prompt, jokes, look, wishes,
+  plan-ux, trip-plan, links. Tests that meant "the leaderboard" now open `#/leaderboard`. beta-test's "same as the
+  product branch" pixel checks differ by design (new tab bar and first screen). quick, stage9, start and rulebook-v2
+  already failed on the base before this change.

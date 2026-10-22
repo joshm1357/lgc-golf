@@ -36,6 +36,7 @@ const Admin = lazyScreen(() => import('./screens/Admin.jsx'));
 const SetupGuide = lazyScreen(() => import('./screens/SetupGuide.jsx'));
 const Privacy = lazyScreen(() => import('./screens/Legal.jsx'), 'Privacy');
 const Terms = lazyScreen(() => import('./screens/Legal.jsx'), 'Terms');
+const VoteLink = lazyScreen(() => import('./screens/VoteLink.jsx'));
 const Profile = lazyScreen(() => import('./screens/Profile.jsx'));
 const Comps = lazyScreen(() => import('./screens/Comps.jsx'));
 const MapScreen = lazyScreen(() => import('./screens/MapScreen.jsx'));
@@ -148,6 +149,7 @@ function Gate() {
   if (loc.pathname === '/start' || loc.pathname.startsWith('/start/')) return <StartOrClosed />;
   // Privacy and terms (drafts): anyone can read them.
   if (loc.pathname === '/privacy') return <LazyArea resetKey="privacy" fallback={<Loading />}><Privacy /></LazyArea>;
+  if (loc.pathname.startsWith('/v/')) return <LazyArea resetKey="vote-link" fallback={<Loading />}><Routes><Route path="/v/:token" element={<VoteLink />} /></Routes></LazyArea>; // 079: vote email answers, no sign-in
   if (loc.pathname === '/terms') return <LazyArea resetKey="terms" fallback={<Loading />}><Terms /></LazyArea>;
   // The clubhouse TV: read-only, no sign-in.
   if (loc.pathname.startsWith('/tv/')) return <LazyArea resetKey="tv" fallback={<Loading />}><Routes><Route path="/tv/:slug" element={<TvBoard />} /></Routes></LazyArea>;

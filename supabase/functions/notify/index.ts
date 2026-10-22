@@ -11,6 +11,9 @@
 // only important things. Digest messages wait in notify_queue. "The draw room is open" always goes straight away.
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 import webpush from 'npm:web-push@3.6.7';
+// 079: votes by email (each person: in the app, by email or both).
+import { emailOnlyUsers, emailVoteOpen, emailVoteReminders } from './votemail.ts';
+import { VOTE_KINDS } from '../_shared/emailvotes.js';
 
 // The app's web address for links in notifications. Set APP_URL in the function's secrets when the app moves
 // (e.g. https://app.thegolftrip.club/); until then it's the GitHub Pages address.
@@ -99,7 +102,12 @@ async function send(g: string, to: string[] | 'all', msg: Msg, except: string | 
     mq = mq.in('player_id', ids);
   }
   const { data: people } = await mq;
-  const users = [...new Set((people || []).filter((m) => !except || m.player_id !== except).map((m) => m.user_id))];
+  let users = [...new Set((people || []).filter((m) => !except || m.player_id !== except).map((m) => m.user_id))];
+  // 079: people who chose "By email" (and have an address) get votes by email instead of a notification.
+  if (VOTE_KINDS.has(kind)) {
+    const skip = await emailOnlyUsers(db, g);
+    users = users.filter((u) => !skip.has(u));
+  }
   if (!users.length) return 0;
   const { data: prefs } = await db.from('notify_prefs').select('user_id,mode').eq('group_id', g).in('user_id', users);
   const mode = new Map((prefs || []).map((p) => [p.user_id, p.mode as string]));
@@ -288,6 +296,8 @@ async function dailyFor(g: string) {
   for (const p of tasksOn ? closing || [] : []) {
     if (!(await once(`poll-closing:${p.id}:${today}`))) continue;
     sent += await send(g, await openPollNonVoters(g, p.plan_id, p.id), { title: '⏰ Vote closes tomorrow', body: p.question, url: planUrl(p.plan_id, 'vote'), tag: `poll-${p.id}` }, null, 'poll_closing');
+    // 079: one reminder email (at most) to people on email who haven't answered.
+    await emailVoteReminders(db, APP, g, p.plan_id, p.id).catch(() => 0);
   }
   // RSVP deadline tomorrow → people who haven't replied.
   const { data: dl } = await db.from('plans').select('*').eq('group_id', g).eq('rsvp_deadline', tomorrow).eq('rsvp_locked', false).eq('proposed', false).neq('status', 'cancelled');
@@ -345,6 +355,10 @@ Deno.serve(async (req) => {
     if (!from && !me.is_admin && body.type !== 'test') return json({ error: 'Pick your name first' }, 403);
 
     let sent = 0;
+    let emailed = 0;
+    let emailNote = '';
+    /** 079: vote emails go with the same switches as vote notifications. */
+    const votesOn = async () => (await featureOn(g, 'notifications')) && (await featureOn(g, 'planner_tasks'));
     switch (body.type) {
       case 'test':
         sent = await send(g, [from!], { title: '🔔 Notifications are on', body: 'You’ll get trip votes, reminders and jobs here.', url: `${APP}#/plan` }, null, 'test');
@@ -361,6 +375,8 @@ Deno.serve(async (req) => {
         if (!(await once(`poll-open:${p.id}`))) break;
         const pl = await plan(g, p.plan_id);
         sent = await send(g, 'all', { title: `🗳️ Vote: ${p.question}`, body: `${pl.name}${p.closes_on ? ` · closes ${fmt(p.closes_on)}` : ''}`, url: planUrl(pl.id, 'vote'), tag: `poll-${p.id}` }, from, 'poll_open');
+        // 079: one email per batch for people on email (a combined vote card's other polls ride along).
+        if (await votesOn()) ({ emailed, note: emailNote } = await emailVoteOpen(db, APP, g, p, from));
         break;
       }
       case 'poll_decided': {
@@ -395,6 +411,7 @@ Deno.serve(async (req) => {
       case 'nudge_votes': {
         const pl = await plan(g, body.plan_id);
         sent = await send(g, await openPollNonVoters(g, pl.id), { title: '🗳️ Still need your vote', body: pl.name, url: planUrl(pl.id, 'vote') }, from, 'nudge_votes');
+        if (await votesOn()) emailed = await emailVoteReminders(db, APP, g, pl.id);
         break;
       }
       case 'nudge_rsvp': {
@@ -495,7 +512,7 @@ Deno.serve(async (req) => {
       default:
         return json({ error: 'Unknown notification' }, 400);
     }
-    return json({ sent });
+    return json(emailed || emailNote ? { sent, emailed, ...(emailNote ? { email_note: emailNote } : {}) } : { sent });
   } catch (e) {
     if (e instanceof NotYours) return json({ error: 'Not in your group' }, 403);
     return json({ error: String((e as Error)?.message || e) }, 500);

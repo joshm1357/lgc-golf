@@ -21,6 +21,8 @@ export const GROUP_TABLES = new Set([
   'plan_payments', 'plan_groups', 'plan_transfers', 'rule_votes',
   // Stage 1b (migration 025)
   'plan_comments', 'notify_prefs',
+  // Votes by email (migration 079)
+  'vote_emails',
   // Stage 3 (migration 029)
   'group_features',
   // Team match play (migration 050)

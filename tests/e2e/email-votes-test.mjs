@@ -239,8 +239,8 @@ await page.getByText('Shirt colour?').first().waitFor({ timeout: 15000 });
 await page.waitForTimeout(500);
 const line = page.getByTestId('email-vote-line').first();
 check((await line.innerText()).includes('📧 1 person answered by email'), 'vote card: "1 person answered by email" (Hamish)');
-await page.getByText('Getting this by email').first().waitFor({ timeout: 5000 }).catch(() => {});
-{ const t = await line.innerText(); check(/Getting this by email: .*Mike/.test(t) && /Getting this by email: .*Hamish/.test(t), `organiser sees who gets votes by email (${t.replace(/\n/g, ' / ')})`); }
+await page.getByText(/getting this by email/).first().waitFor({ timeout: 5000 }).catch(() => {});
+{ const t = await line.innerText(); check(/2 people are getting this by email/.test(t) && !/Mike|Hamish/.test(t), `organiser sees how many get it by email, not who (${t.replace(/\n/g, ' / ')})`); }
 await page.locator('.card').filter({ hasText: 'Shirt colour?' }).first().screenshot({ path: `${SHOTS}/ev3-vote-card.png` });
 await page.getByRole('button', { name: '🗳️ Call a vote' }).click();
 await page.getByRole('button', { name: 'Anything else' }).click();

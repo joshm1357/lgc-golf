@@ -146,7 +146,7 @@ export function EmailVoteLine({ poll, pd }) {
     <div className="small" data-testid="email-vote-line">
       {n > 0 && <div style={{ fontWeight: 700 }}>{emailAnswerLine(n)}</div>}
       {status.is_admin && poll.status === 'open' && onEmail.length > 0 && (
-        <div className="muted">Getting this by email: {onEmail.map((id) => playerName(data.playersById[id])).filter(Boolean).join(', ')}</div>
+        <div className="muted">{onEmail.length === 1 ? '1 person is' : `${onEmail.length} people are`} getting this by email</div>
       )}
     </div>
   );

@@ -166,7 +166,7 @@ check(await page.getByText(/only come off once side comp bonus strokes are switc
 // A player sees no picker, just a hint.
 STATUS.v = { ...NEW, is_admin: false, role: 'player', groups: [{ id: GROUP, name: 'The Mulligans', slug: 'mull', role: 'player' }] };
 await page.reload();
-await page.getByText('The Rulebook').first().waitFor({ timeout: 15000 });
+await page.getByTestId('gov-tab-rulebook').waitFor({ timeout: 15000 }); // ov19: the Rulebook is a Governance tab
 await page.waitForTimeout(800);
 check(!(await page.getByText('Start your Rulebook').count()), 'a player sees no starter picker');
 check(await page.getByText(/Your organiser can start from a ready-made Rulebook/).isVisible(), 'a player is told the organiser can start one');

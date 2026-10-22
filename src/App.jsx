@@ -46,15 +46,14 @@ const Profile = lazyScreen(() => import('./screens/Profile.jsx'));
 const Comps = lazyScreen(() => import('./screens/Comps.jsx'));
 const MapScreen = lazyScreen(() => import('./screens/MapScreen.jsx'));
 const Trophies = lazyScreen(() => import('./screens/Trophies.jsx'));
-const Tribunal = lazyScreen(() => import('./screens/Tribunal.jsx'));
 const TribunalCase = lazyScreen(() => import('./screens/Tribunal.jsx'), 'TribunalCase');
 const Courses = lazyScreen(() => import('./screens/Courses.jsx'));
 const Planner = lazyScreen(() => import('./screens/Trips.jsx'));
 const PlanDetail = lazyScreen(() => import('./screens/Planner.jsx'), 'PlanDetail');
-const Rulebook = lazyScreen(() => import('./screens/Rulebook.jsx'));
 const RulePage = lazyScreen(() => import('./screens/RulePage.jsx'));
 const CaseHearing = lazyScreen(() => import('./screens/Cases.jsx'), 'CaseHearing');
 const Governance = lazyScreen(() => import('./screens/Cases.jsx'), 'Governance');
+const GovernanceHub = lazyScreen(() => import('./screens/GovernanceHub.jsx'));
 const GreenMapper = lazyScreen(() => import('./screens/GreenMapper.jsx'));
 const Group = lazyScreen(() => import('./screens/Group.jsx'));
 const History = lazyScreen(() => import('./screens/History.jsx'));
@@ -126,10 +125,22 @@ function CompsRoute() {
 }
 
 // Screens of a switched-off feature (opened from an old post, a bookmark or a notification) say so instead of half-working.
+/** ov19: the Rulebook, Tribunal and Committees live under Governance. Old links redirect into the right tab, keeping
+ *  ?round= / ?f= / ?propose=. Deep links to one rule (/rules/:id) or one case (/tribunal/case/:id) keep their pages. */
+function GovRedirect({ to }) {
+  const loc = useLocation();
+  return <Navigate to={`${to}${loc.search}`} replace />;
+}
+
 function FeatureRoute({ feature, label, children }) {
   return useFeature(feature) ? children : (
     <div className="page"><div className="empty" style={{ marginTop: 40 }}>{label} is switched off for this group.<div className="small muted" style={{ marginTop: 6 }}>An organiser can switch it on in Players & group → Features.</div></div></div>
   );
+}
+/** A case's page: the Tribunal, or (ov19) an election when only committees are on. */
+function CaseRoute({ children }) {
+  const committees = useFeature('committees');
+  return committees ? children : <FeatureRoute feature="tribunal" label="The Tribunal">{children}</FeatureRoute>;
 }
 function DrawOverlayIfOn() {
   return useFeature('draw') ? <DrawOverlay /> : null;
@@ -281,12 +292,16 @@ function Inside() {
         <Route path="/games" element={<FeatureRoute feature="games" label="Games and side bets"><Games /></FeatureRoute>} />
         <Route path="/replay/:roundId" element={<FeatureRoute feature="replay" label="Round replay"><Replay /></FeatureRoute>} />
         <Route path="/trophies" element={<FeatureRoute feature="trophies" label="The Trophy Room"><Trophies /></FeatureRoute>} />
-        <Route path="/tribunal" element={<FeatureRoute feature="tribunal" label="The Handicap Tribunal"><Tribunal /></FeatureRoute>} />
+        <Route path="/tribunal" element={<GovRedirect to="/governance/tribunal" />} />
+        <Route path="/cases" element={<GovRedirect to="/governance/tribunal" />} />
+        <Route path="/committees" element={<GovRedirect to="/governance/committees" />} />
         <Route path="/tribunal/:caseId" element={<FeatureRoute feature="tribunal" label="The Handicap Tribunal"><TribunalCase /></FeatureRoute>} />
         <Route path="/stats" element={<FeatureRoute feature="stats" label="Player stats"><Stats /></FeatureRoute>} />
         <Route path="/dinner/:tripId?" element={<FeatureRoute feature="dinner_awards" label="Fines and dinner awards"><DinnerAwards /></FeatureRoute>} />
-        <Route path="/tribunal/case/:caseId" element={<FeatureRoute feature="tribunal" label="The Tribunal"><CaseHearing /></FeatureRoute>} />
-        <Route path="/governance" element={<FeatureRoute feature="tribunal" label="The Tribunal"><Governance /></FeatureRoute>} />
+        <Route path="/tribunal/case/:caseId" element={<CaseRoute><CaseHearing /></CaseRoute>} />
+        <Route path="/governance" element={<GovRedirect to="/governance/rulebook" />} />
+        <Route path="/governance/settings" element={<FeatureRoute feature="tribunal" label="The Tribunal"><Governance /></FeatureRoute>} />
+        <Route path="/governance/:tab" element={<GovernanceHub />} />
         <Route path="/player/:playerId" element={<Profile />} />
         <Route path="/courses" element={<Courses />} />
         <Route path="/admin" element={<Admin />} />
@@ -295,7 +310,7 @@ function Inside() {
         <Route path="/plan/:planId" element={<FeatureRoute feature="planner" label="The Trips planner"><PlanDetailRoute /></FeatureRoute>} />
         <Route path="/plan/:planId/find" element={<FeatureRoute feature="trip_finder" label="The trip finder"><TripFinder /></FeatureRoute>} />
         <Route path="/plan/:planId/build" element={<FeatureRoute feature="trip_finder" label="The trip builder"><TripBuilder /></FeatureRoute>} />
-        <Route path="/rules" element={<Rulebook />} />
+        <Route path="/rules" element={<GovRedirect to="/governance/rulebook" />} />
         <Route path="/rules/:ruleId" element={<RulePage />} />
         <Route path="/courses/:courseId/greens" element={<GreenMapper />} />
         <Route path="/guide/:courseId/:hole?" element={<FeatureRoute feature="gps" label="The course guide"><CourseGuide /></FeatureRoute>} />

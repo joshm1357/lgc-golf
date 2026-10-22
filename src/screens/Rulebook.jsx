@@ -42,7 +42,7 @@ function useRules() {
   return d ? { ...d, reload: load } : null;
 }
 
-export default function Rulebook() {
+export default function Rulebook({ embedded = false }) {
   const { status } = useSession();
   const votingOn = useFeature('rule_voting');
   const rb = useRules();
@@ -60,7 +60,7 @@ export default function Rulebook() {
     const r = params.get('round'); const f = params.get('f');
     if (r || f) setView({ filter: f || 'all', round: r || null });
   }, [params]);
-  if (!rb) return <div className="page"><Header logo title="The Rulebook" /><Loading /></div>;
+  if (!rb) return embedded ? <Loading /> : <div className="page"><Header logo title="The Rulebook" /><Loading /></div>;
   const filter = view.filter;
   const round = view.round ? rd.rounds.find((r) => r.id === view.round) : null;
   const classic = !round && filter === 'all' && !search.trim();
@@ -74,8 +74,9 @@ export default function Rulebook() {
   const showPicker = status.is_admin && rb.rules.filter((r) => !r.system_key && (r.status === 'active' || r.status === 'proposed')).length === 0;
 
   return (
-    <div className="page">
-      <Header logo title="The Rulebook" sub="How we play, what counts, and what’s up for a vote" />
+    // Embedded: the Rulebook tab of Governance (ov19) — the hub draws the header.
+    <div className={embedded ? undefined : 'page'}>
+      {!embedded && <Header logo title="The Rulebook" sub="How we play, what counts, and what’s up for a vote" />}
       <div className="section stack">
         <RulesFilterBar filter={filter} onFilter={(f) => setView({ filter: f, round: null })} round={view.round} onRound={(r) => setView({ ...view, round: r })} search={search} onSearch={setSearch} rd={rd} />
         {round && <div className="row between" style={{ gap: 8 }}><strong style={{ fontSize: 17 }} data-testid="round-rules-title">📘 The rules for {round.name}</strong><button type="button" className="btn ghost sm" onClick={() => setView({ ...view, round: null })}>Close</button></div>}

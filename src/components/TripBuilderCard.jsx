@@ -1,0 +1,37 @@
+import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { supabase } from '../lib/supabase.js';
+import { useSession, useFeature } from '../lib/store.jsx';
+import { builderSteps } from '../lib/tripbuilder.js';
+
+// The way into the trip builder (077) on a trip that's still being decided: the first card on its overview, and in
+// Organise. Organisers always see it; players see it once the organiser has started building (read-only + votes).
+export function TripBuilderCard({ pd, first = false }) {
+  const on = useFeature('trip_finder');
+  const { status } = useSession();
+  const plan = pd?.plan;
+  const [build, setBuild] = useState(undefined);
+  useEffect(() => {
+    if (!on || !plan?.id) return undefined;
+    let live = true;
+    supabase.from('trip_builds').select('state').eq('plan_id', plan.id).maybeSingle()
+      .then(({ data }) => live && setBuild(data?.state || null), () => live && setBuild(null));
+    return () => { live = false; };
+  }, [on, plan?.id]);
+  if (!on || !plan || plan.status !== 'planning' || plan.proposed) return null;
+  if (!status.is_admin && !build) return null;
+  const steps = builderSteps(build || {});
+  const at = steps.find((s) => !s.done) || steps[steps.length - 1];
+  const doneCount = steps.filter((s) => s.done).length;
+  return (
+    <Link to={`/plan/${plan.id}/build`} className="card pad row" data-testid="tb-link"
+      style={{ textDecoration: 'none', color: 'inherit', gap: 12, borderColor: 'var(--navy)', borderWidth: 2, marginBottom: first ? 12 : 0 }}>
+      <span style={{ fontSize: 26 }}>🗺️</span>
+      <span className="grow">
+        <strong>{status.is_admin ? 'Build the trip' : 'How the trip’s coming together'}</strong>
+        <div className="small muted">{build ? `Step ${at.n} of ${steps.length}: ${at.label}${doneCount ? ` · ${doneCount} done` : ''}` : 'Area and weekends → courses each day → tee times → pick the trip. Minimal typing.'}</div>
+      </span>
+      <span className="btn sm">{status.is_admin ? (build ? 'Open' : 'Start') : 'Look'}</span>
+    </Link>
+  );
+}

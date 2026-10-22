@@ -43,6 +43,8 @@ export const GROUP_TABLES = new Set([
   'player_home_areas', 'trip_finds', 'trip_start_points', 'course_notes', 'course_ratings',
   // The trip plan: accommodation shortlist and the tick-list budget (migration 078)
   'plan_stays', 'plan_budget_items',
+  // Trip builder (migration 077) — stay_areas and course_booking_info are shared by every group, so not here
+  'trip_builds', 'trip_tee_options', 'vote_batches',
   // Comps — what you're playing for (migration 067)
   'comps',
   // Governance and the Tribunal (migration 061)

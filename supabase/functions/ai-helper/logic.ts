@@ -14,7 +14,8 @@ import * as scoringJs from '../../../src/lib/scoring.js';
 import * as setupJs from '../../../src/lib/setupguide.js';
 import { callModel, type AiConfig, type Msg, type ToolResult, type Usage } from './providers.ts';
 import { clean, asData, isUuid, isoDate, dayNumber, zoned, zonedStart, zonedToday, longDate, TZ, FORMATS, FORMAT_NAMES, MONTHS } from './util.ts';
-import { LIVE_TOOLS, liveTool } from './live.ts';
+import { LIVE_TOOLS, liveTool, pickRound, pickTrip } from './live.ts';
+import { goToTool, checkGoTo, cleanContext, DESTINATIONS, type GoTo } from './routes.ts';
 import {
   PLAN_TOOLS, PLAN_TOOL_NAMES, planSystem, validateTripPlan, tripPlanSummary, applyTripPlan, tripPlanIds,
   type TripPlanContext, type PlanApplyDb,
@@ -106,6 +107,8 @@ How to answer:
 - Answer in one to four short sentences of plain Australian English, naming the trips and years (e.g. "at Hunter Valley 2025"). No tables, lists or headings.
 - Stableford and 4BBB: more points is better. Stroke play and Ambrose: lower net is better. Only finished rounds count as wins and records.
 - Only answer questions about this group's golf. For anything else, say in one sentence that you can only help with the group's golf.
+- The screen they're looking at may be given in <data source="screen"> (e.g. a round's leaderboard): "this round" means that one.
+- If they want to go somewhere or do something in the app (change the teams, enter a score, propose a rule, pay into the kitty), call go_to with the right place, then say in one short sentence what to do there. The app shows a "Go there" button. You can't change anything yourself.
 
 ${GUARD}`;
 }
@@ -656,6 +659,8 @@ export type Deps = {
   tripPlanContext: (raw: Any) => Promise<TripPlanContext>;
   planTool: (name: string, input: Any) => Promise<unknown>;
   planDb: PlanApplyDb;
+  // The Caddie (22 Oct): the group's trip plans (id, name), read with the person's own sign-in, for go_to.
+  plans?: () => Promise<{ id: string; name?: string | null; trip_id?: string | null }[]>;
 };
 
 const ASK_TOOLS = [...HISTORY_TOOLS, ...LIVE_TOOLS];
@@ -710,6 +715,7 @@ export async function helperRequest(body: Any, d: Deps): Promise<Record<string, 
 
   const today = zonedToday(now);
   const group = d.status.group_name || 'your group';
+  let go: GoTo | null = null; // "Take me there" (go_to), the last one the model asked for that checked out
   let result: LoopResult = { kind: 'error', code: 'crash', message: 'Something went wrong.', usage: { input_tokens: 0, output_tokens: 0 } };
   try {
     const common = { ai: d.ai, fetchFn: d.fetchFn, deadline: started + LIMITS.totalMs };
@@ -738,11 +744,19 @@ export async function helperRequest(body: Any, d: Deps): Promise<Record<string, 
     } else {
       let ix: Ix | null = null;
       const asker = d.status.player_name ? clean(d.status.player_name, 40) : null;
+      const screen = cleanContext(body?.context); // the screen they're on: data, never instructions
+      const goTool = goToTool(!!d.status.is_admin);
       result = await runLoop({
-        ...common, system: historySystem(today, group), tools: ASK_TOOLS, allowed: ASK_TOOL_NAMES,
-        userText: `${asker ? `${asData('asker', { name: asker })}\n` : ''}<question>${text}</question>`,
+        ...common, system: historySystem(today, group), tools: [...ASK_TOOLS, goTool], allowed: new Set([...ASK_TOOL_NAMES, 'go_to']),
+        userText: `${asker ? `${asData('asker', { name: asker })}\n` : ''}${screen ? `${asData('screen', screen)}\n` : ''}<question>${text}</question>`,
         exec: async (name, input) => {
           ix ||= indexHistory(await d.history());
+          if (name === 'go_to') {
+            const r = await goTo(input, ix, screen, today, d);
+            if (!r.ok) throw new Error(r.error);
+            go = r.go;
+            return { ok: true, offered: r.go.label, note: 'The app shows a "Go there" button under your answer.' };
+          }
           return TOOL_NAMES.history.has(name) ? historyTool(name, input, ix) : liveTool(name, input, ix, today, asker);
         },
       });
@@ -767,5 +781,25 @@ export async function helperRequest(body: Any, d: Deps): Promise<Record<string, 
     if (result.kind === 'stop') return { trip_plan: result.value, summary: tripPlanSummary(result.value), remaining, log_id };
     return { message: result.text, remaining, log_id };
   }
-  return { answer: result.kind === 'text' ? result.text : '', remaining, log_id };
+  return { answer: result.kind === 'text' ? result.text : '', remaining, log_id, ...(go ? { go } : {}) };
+}
+
+/** go_to: check the model's choice against the group's own rounds, trips and plans (read as the person). */
+export async function goTo(input: Any, ix: Ix, screen: ReturnType<typeof cleanContext>, today: string, d: Deps) {
+  const dest = DESTINATIONS.find((x) => x.key === String(input?.destination ?? ''));
+  const on = dest?.feature ? await d.featureOn(dest.feature) : true;
+  const needsPlan = !!dest && [...dest.needs, ...dest.takes].includes('plan');
+  const plans = needsPlan && d.plans ? await d.plans() : [];
+  const curTrip = pickTrip(ix, today)?.trip;
+  const known = {
+    rounds: ix.h.rounds.map((r: Any) => ({ id: r.id, name: r.name, course_name: ix.courses[r.course_id]?.name || null })),
+    trips: ix.h.trips.map((t: Any) => ({ id: t.id, name: t.name })),
+    plans: plans.map((p) => ({ id: p.id, name: p.name })),
+  };
+  const defaults = {
+    round: screen?.round_id || pickRound(ix, today)?.id || null,
+    trip: screen?.trip_id || curTrip?.id || null,
+    plan: screen?.plan_id || plans.find((p) => curTrip && p.trip_id === curTrip.id)?.id || null,
+  };
+  return checkGoTo(input, { isAdmin: !!d.status.is_admin, known, defaults, featureOn: () => on });
 }

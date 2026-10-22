@@ -4,7 +4,9 @@
 //   * "✨ Plan it with AI" (organisers, Trips tab): plain words → a trip plan to vote on (dates, places, jobs, bring
 //     list, rough costs). Nothing is saved until [Create it] → { mode: 'plan_apply', plan }.
 //   * Ask (anyone in the group): what's on (current trip, live round, who's leading, what someone needs) and the
-//     group's history (trips, rounds, honour boards, records, handicaps).
+//     group's history (trips, rounds, honour boards, records, handicaps). The Caddie (22 Oct) asks the same way, with
+//     the screen it's on (`context`, cleaned in routes.ts and passed as data) and a read-only go_to tool that offers a
+//     "Go there →" button (routes.ts checks the place and ids).
 //
 // Safe by design:
 //   * Called with the person's own sign-in (verify_jwt on). Every read and write goes through a Supabase client that
@@ -211,6 +213,8 @@ function makeDeps(db: SupabaseClient, g: string, uid: string, status: Any): Deps
       ]);
       return { trips, rounds, courses, players, round_players, teams, team_players, scores, quick_results, honour_board, handicap_history } as History;
     },
+    // The Caddie's go_to (routes.ts): the group's trip plans, read as the person (so only their group's).
+    plans: async () => (await must(db.from('plans').select('id,name,trip_id').eq('group_id', g).limit(200))) as Any[],
     applyDb: {
       insertTrip: async (row) => ((await must(db.from('trips').insert(row).select('id').single())) as Any).id,
       copyLibraryCourse: async (libraryId) => (await must(db.rpc('copy_library_course', { p_id: libraryId }))) as string,

@@ -289,7 +289,7 @@ export function SuggestSheet({ onClose, onSaved, initial = null }) {
         </div>
         <label className="field"><span>Pitch it (optional)</span><textarea className="textarea" rows={3} style={{ padding: 12 }} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Why it’d be great, who’s keen…" /></label>
         <span className="small muted">{votesOn ? `Anyone can add more options once it’s up. ${status.is_admin ? 'You lock it in when it’s decided.' : 'The admin picks the winners and locks it in.'}` : (status.is_admin ? 'You lock it in when it’s sorted.' : 'The admin locks it in.')}</span>
-        <button type="button" className="btn gold block" disabled={busy || !name.trim()} onClick={save}>Put it to the group</button>
+        <button type="button" className="btn gold block" disabled={busy || !name.trim()} onClick={save}>{votesOn ? '🗳️ Call the vote' : 'Put it to the group'}</button>
       </div>
     </Sheet>
   );

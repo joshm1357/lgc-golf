@@ -4,7 +4,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
-import { ANSWERS, RSVP_ANSWERS, parseVoteLink, recordedLine } from '../lib/emailvotes.js';
+import { ANSWERS, RSVP_ANSWERS, parseVoteLink, recordedLine, answersFor, safeLink, linkWord } from '../lib/emailvotes.js';
 
 // Josh can switch this on to record the tapped answer as soon as the page opens (truly one tap). Off by default:
 // some work email systems open every link in an email to check it, which would record every answer in turn.
@@ -58,7 +58,9 @@ export default function VoteLink() {
   const app = `${window.location.origin}${import.meta.env.BASE_URL}`;
   const openApp = view?.plan ? `${app}#/plan/${view.plan.id}?tab=vote` : app;
   const pending = !done && !view?.closed && view?.ok && (link.o || link.rsvp);
-  const pendingWords = link.o ? `${ANSWERS[link.r] || ANSWERS.yes} for ${optionLabel(view, link.o)}` : RSVP_ANSWERS[link.rsvp];
+  const pendingPoll = link.o ? (view?.polls || []).find((p) => (p.options || []).some((o) => o.id === link.o)) : null;
+  const pendingAnswers = pendingPoll ? answersFor(pendingPoll) : ANSWERS;
+  const pendingWords = link.o ? `${pendingAnswers[link.r] || pendingAnswers.yes} for ${optionLabel(view, link.o)}` : RSVP_ANSWERS[link.rsvp];
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg, #F6F4EE)' }}>
@@ -102,7 +104,7 @@ export default function VoteLink() {
         {view?.ok && view.lastError && !view.closed && <div className="card pad small" role="alert" style={{ color: 'var(--under)', fontWeight: 700 }}>{view.lastError}</div>}
         {!link.stop && done && (
           <div className="card pad" role="status" style={{ borderColor: 'var(--navy)' }} data-testid="vote-thanks">
-            <div style={{ fontWeight: 800, fontSize: 18 }}>{recordedLine(view.name, done)}</div>
+            <div style={{ fontWeight: 800, fontSize: 18 }}>{recordedLine(view.name, done, (view.polls || []).find((p) => p.id === done.poll))}</div>
             <div className="small muted">Change it any time — tap another answer below, or <a href={openApp}>open the vote in the app</a>.</div>
           </div>
         )}
@@ -112,13 +114,14 @@ export default function VoteLink() {
             {p.options.map((o) => (
               <div key={o.id} style={{ padding: '10px 14px', borderBottom: '1px solid var(--line-soft)' }}>
                 <div style={{ fontWeight: 700 }}>{o.label}</div>
+                {safeLink(o.link) && <a href={safeLink(o.link)} target="_blank" rel="noreferrer noopener" className="small" style={{ fontWeight: 700 }} data-testid="option-link">{linkWord(p)}</a>}
                 {p.open && (
                   <div style={{ display: 'grid', gridTemplateColumns: p.choice === 'single' ? '1fr' : '1fr 1fr 1fr', gap: 6, marginTop: 6 }}>
                     {(p.choice === 'single' ? ['yes'] : ['yes', 'maybe', 'no']).map((r) => {
                       const on = p.mine?.[o.id] === r;
                       return (
                         <button key={r} type="button" className="btn ghost sm" aria-pressed={on} disabled={busy} style={{ minHeight: 44, ...(on ? { background: TONE[r], borderColor: TONE[r], color: '#fff' } : {}) }}
-                          onClick={() => send({ o: o.id, r })}>{p.choice === 'single' ? (on ? '✓ Picked' : 'Pick this') : ANSWERS[r]}</button>
+                          onClick={() => send({ o: o.id, r })}>{p.choice === 'single' ? (on ? '✓ Picked' : 'Pick this') : answersFor(p)[r]}</button>
                       );
                     })}
                   </div>

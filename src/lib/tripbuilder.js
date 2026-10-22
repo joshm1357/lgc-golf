@@ -561,6 +561,8 @@ export function newState(plan = {}) {
     weekendsSettled: false, stays: [], pins: [], stayMax: DEFAULT_STAY_MAX, detourMax: DEFAULT_DETOUR_MAX,
     days: tripDays(nights).map((d) => ({ index: d.index, leg: d.leg, options: [] })), courses: {}, headcount: null,
     votes: {}, optionKeys: {}, callsMade: false, configs: [], picked: null,
+    // The start (080): each area's courses and places to stay on the table, ✨ suggestions not yet kept, extras.
+    areaCourses: {}, areaStays: {}, suggested: {}, extras: null,
   };
 }
 /** Days follow the nights: keep each day's options where the leg is the same. */
@@ -569,5 +571,134 @@ export function resizeDays(days = [], nights) {
     const old = days.find((x) => x.index === d.index && x.leg === d.leg);
     return { index: d.index, leg: d.leg, options: old?.options || [] };
   });
+}
+
+// ------------------------------------------------------------------ the start: one map for the area (22 Oct, Josh)
+// "A map with pins for viable courses for a general region and pins for potential locations/towns or parts of town.
+// Then they can be voted on as well." Each area option carries its own set of courses and places to stay, chosen by
+// the organiser (the app and the AI only suggest — ✨ — the organiser ticks them in). Never one course per area here.
+
+export const AREA_SUGGEST = 6;   // courses the app suggests for an area (the organiser ticks them in)
+export const MAX_AREA_COURSES = 10;
+export const MAX_AREA_STAYS = 6;
+
+/**
+ * Every viable course for an area: within `stayMax` minutes of at least one of its stay pins (towns, or spots the
+ * organiser dropped). Ranked like a stay day; the top AREA_SUGGEST are marked suggested.
+ * → [{ course, drive: { min, max, text }, history, why, score, suggested }]
+ */
+export function areaCourseCandidates(courses = [], stayPins = [], { stayMax = DEFAULT_STAY_MAX, history = () => null, today = new Date(), limit = 40 } = {}) {
+  if (!stayPins.length) return [];
+  const cands = courses.filter((c) => c && c.lat != null && c.lng != null).map((c) => ({
+    course: c, drive: legDrive('stay', c, { stays: stayPins }), history: history(c.id) || null, booking: null, facts: c.facts || {},
+  })).filter((c) => fitsLeg('stay', c.drive, { stayMax }));
+  return rankCandidates(cands, { leg: 'stay', today }).slice(0, limit).map((c, i) => ({ ...c, suggested: i < AREA_SUGGEST }));
+}
+
+/** The app's suggestion for an area's course set (ids only — the organiser decides which go on the table). */
+export function proposeAreaCourses(courses, stayPins, opts = {}) {
+  return areaCourseCandidates(courses, stayPins, opts).filter((c) => c.suggested).map((c) => c.course.id);
+}
+
+/** How many of the courses on the table are within `withinMin` of a stay pin. */
+export function staySupport(stay, courseIds = [], courseMap = {}, withinMin = DEFAULT_STAY_MAX) {
+  return courseIds.map((id) => courseMap[id]).filter((c) => c && c.lat != null && driveBetween(stay, c) <= withinMin).length;
+}
+
+/** Tick something in or out of a list (capped). Returns the new list. */
+export function toggleId(list = [], id, max = MAX_AREA_COURSES) {
+  if (list.includes(id)) return list.filter((x) => x !== id);
+  return list.length >= max ? list : [...list, id];
+}
+
+/**
+ * Days start pre-filled from the area's course set: every stay day with no options yet gets the area's courses that
+ * fit it (closest first, up to MAX_OPTIONS_PER_DAY). The way there / home days are left for the organiser (they
+ * depend on the drive). Several per day — never just one.
+ */
+export function prefillStayDays(days = [], courseIds = [], courseMap = {}, { stays = [], stayMax = DEFAULT_STAY_MAX } = {}) {
+  const ranked = courseIds.map((id) => courseMap[id]).filter(Boolean)
+    .map((c) => ({ id: c.id, d: stays.length ? legDrive('stay', c, { stays }) : { min: 0 } }))
+    .filter((x) => !stays.length || fitsLeg('stay', x.d, { stayMax }))
+    .sort((a, b) => (a.d.min ?? 999) - (b.d.min ?? 999)).map((x) => x.id);
+  return days.map((d) => (d.leg === 'stay' && !(d.options || []).length ? { ...d, options: ranked.slice(0, MAX_OPTIONS_PER_DAY) } : d));
+}
+
+/** The line under an area on the ballot: "Courses: A, B, C, D · Stay: Nowra, Huskisson". */
+export function areaBallotNote(courseIds = [], courseMap = {}, stayPins = []) {
+  const names = courseIds.map((id) => courseMap[id]?.name).filter(Boolean);
+  return [names.length ? `Courses: ${names.join(', ')}` : null, stayPins.length ? `Stay: ${stayPins.map((s) => s.name).join(', ')}` : null].filter(Boolean).join(' · ').slice(0, 480);
+}
+
+/**
+ * Everything on the table at the start, as the sections "Call the vote" shows (each option ticked = on the ballot).
+ * st: the builder state; ctx: { courseMap, accom: plan_stays rows, extras: a ballot section or null }.
+ * Sections: which area (2+ areas), which weekend (2+), where to stay (stay pins), courses (per area), accommodation
+ * ideas, and "Would you do these?" (extras).
+ * → [{ key, kind, question, options: [{ key, label, notes, start_date?, end_date?, stayId? }] }]
+ */
+export function startRange(st = {}, { courseMap = {}, accom = [], extras = null } = {}) {
+  const out = [];
+  const areas = st.region ? [st.region] : (st.regionOptions || []);
+  const areaStays = st.areaStays || {};
+  const areaCourses = st.areaCourses || {};
+  if (!st.region && areas.length >= 2) {
+    out.push({ key: 'area', kind: 'location', question: 'Which area?', options: areas.map((r) => ({ key: `area:${r}`, label: r, notes: areaBallotNote(areaCourses[r] || [], courseMap, areaStays[r] || []) || null })) });
+  }
+  if ((st.weekends || []).length >= 2 && !st.weekendsSettled) {
+    out.push({ key: 'weekend', kind: 'dates', question: 'Which weekend?', options: st.weekends.map((w) => ({ key: `weekend:${w.start}`, label: weekendLabel(w), start_date: w.start, end_date: w.end })) });
+  }
+  const stayOpts = [];
+  for (const r of areas) {
+    const pins = st.region && st.stays?.length ? st.stays : areaStays[r] || [];
+    for (const s of pins) stayOpts.push({ key: `stay:${s.key || s.name}`, label: areas.length > 1 ? `${s.name} (${r})` : s.name, notes: null, area: r });
+  }
+  if (stayOpts.length) out.push({ key: 'stay', kind: 'other', question: 'Which town to stay in?', options: stayOpts });
+  for (const r of areas) {
+    const ids = areaCourses[r] || [];
+    if (!ids.length) continue;
+    out.push({ key: `courses:${r}`, kind: 'other', question: areas.length > 1 ? `${r}: which courses?` : 'Which courses?', options: ids.map((id) => ({ key: `areacourse:${r}:${id}`, label: courseMap[id]?.name || 'Course', notes: courseMap[id]?.area || null, area: r })) });
+  }
+  const ideas = (accom || []).filter((a) => !a.option_id);
+  if (ideas.length) {
+    out.push({ key: 'accom', kind: 'other', question: 'Where should we stay?', options: ideas.map((a) => ({ key: `accom:${a.id}`, label: a.name, notes: [a.area, a.total_cost != null ? `$${Number(a.total_cost)} total` : null, a.sleeps ? `sleeps ${a.sleeps}` : null].filter(Boolean).join(' · ') || null, stayId: a.id, area: a.area || undefined })) });
+  }
+  if (extras) out.push(extras);
+  return out;
+}
+
+/**
+ * The regions side by side (080): for each area option — its courses and places to stay on the table, accommodation
+ * ideas (with list links), rough cost each to stay (the cheapest idea's total ÷ people), the drive from where people
+ * come from (to the area's middle), and how many days of tee times are in for its courses.
+ * → [{ area, courses: [names], stays: [names], ideas, costEach, drive, driveText, teeDays }]
+ */
+export function compareAreas(st = {}, { areas = [], accom = [], people = 0, origin = null, tees = [] } = {}) {
+  const list = st.region ? [st.region] : (st.regionOptions || []);
+  const regs = regionsFrom(areas);
+  return list.map((area) => {
+    const ids = (st.areaCourses || {})[area] || [];
+    const stays = (st.areaStays || {})[area] || [];
+    const ideas = (accom || []).filter((a) => a.area === area);
+    const totals = ideas.map((a) => Number(a.total_cost)).filter((n) => Number.isFinite(n) && n > 0);
+    const reg = regs.find((r) => r.region === area);
+    const drive = origin && reg ? driveBetween(origin, reg) : null;
+    const days = new Set((tees || []).filter((t) => ids.includes(t.course_id) && (t.available === 'yes' || (t.times || []).length || (t.ranges || []).length)).map((t) => String(t.play_date).slice(0, 10)));
+    return {
+      area, courses: ids.map((id) => (st.courses || {})[id]?.name).filter(Boolean), stays: stays.map((s) => s.name), ideas,
+      costEach: totals.length && people > 0 ? Math.round(Math.min(...totals) / people) : null,
+      drive, driveText: drive != null ? fmtDrive(drive) : null, teeDays: days.size,
+    };
+  });
+}
+
+/** Points per course id for an area from the start vote ('areacourse:<area>:<id>'). */
+export function areaCourseVotes(points, area) {
+  const out = {};
+  for (const [k, n] of Object.entries(points || {})) {
+    const pre = `areacourse:${area}:`;
+    if (k.startsWith(pre)) out[k.slice(pre.length)] = n;
+  }
+  return out;
 }
 

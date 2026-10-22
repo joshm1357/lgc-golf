@@ -18,6 +18,29 @@ export const CHANNEL_HELP = {
 export const VOTE_KINDS = new Set(['poll_open', 'poll_closing', 'nudge_votes']);
 export const ANSWERS = { yes: '✓ Can', maybe: '? Maybe', no: '✗ Can’t' };
 export const RSVP_ANSWERS = { in: 'I’m keen', maybe: 'Maybe', out: 'Out' };
+// Josh, 22 Oct: the words depend on what's being voted on. The stored answers stay yes / maybe / no (so tallies,
+// emails and older app versions keep working) and score the same: 2 / 1 / 0.
+//   dates and weekends: ✓ Can · ? Maybe · ✗ Can't
+//   places (areas, where to stay, courses, which trip, accommodation, anything else): ⭐ Prefer · 👍 Option · 👎 Don't like
+//   optional extras ("Would you do these?"): ⭐ Want it · 👍 Happy either way · 👎 Skip it
+export const PLACE_ANSWERS = { yes: '⭐ Prefer', maybe: '👍 Option', no: '👎 Don’t like' };
+export const EXTRA_ANSWERS = { yes: '⭐ Want it', maybe: '👍 Happy either way', no: '👎 Skip it' };
+export const EXTRA_QUESTION = 'Would you do these?';
+
+/** 'dates' | 'place' | 'extra' for a poll ({ kind, question, purpose }). */
+export function answerKind(poll) {
+  const q = String(poll?.question || '').trim();
+  if (poll?.kind === 'dates') return 'dates';
+  if (/^would you\b/i.test(q)) return 'extra';
+  if (poll?.kind === 'location' || poll?.purpose === 'stay') return 'place';
+  if (/\bweekends?\b|\bwhich dates?\b|^when\b|\bwhat dates?\b/i.test(q)) return 'dates';
+  return 'place';
+}
+/** The three answer words for a poll: { yes, maybe, no }. */
+export function answersFor(poll) {
+  const k = answerKind(poll);
+  return k === 'dates' ? ANSWERS : k === 'extra' ? EXTRA_ANSWERS : PLACE_ANSWERS;
+}
 
 export function cleanEmail(s) {
   return String(s || '').trim().toLowerCase();
@@ -145,6 +168,16 @@ export function parseVoteLink(token, search = '') {
   };
 }
 
+/** A link that's safe to show (http/https only), or null. Accommodation lists and listings go with their option. */
+export function safeLink(u) {
+  const s = String(u || '').trim();
+  return /^https?:\/\/[^\s<>"]{3,600}$/i.test(s) ? s : null;
+}
+/** "View places" for a place or stay option; "Have a look" for anything else. */
+export function linkWord(poll) {
+  return answerKind(poll) === 'place' ? 'View places ↗' : 'Have a look ↗';
+}
+
 export function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -156,7 +189,7 @@ const button = (href, label, tone) => `<a href="${escapeHtml(href)}" style="${BT
 /**
  * The vote email. Only the trip's name, the questions and options, and the person's own first name — nothing else
  * about the group goes in it.
- * polls: [{ id, question, choice, options: [{ id, label }] }]; rsvp: ask "are you keen?" too.
+ * polls: [{ id, question, kind, choice, options: [{ id, label }] }]; rsvp: ask "are you keen?" too.
  */
 export function buildVoteEmail({ app, token, first, planName, planId, polls = [], rsvp = false, reminder = false, closes = '' }) {
   const link = (p) => voteLink(app, token, p);
@@ -175,15 +208,17 @@ export function buildVoteEmail({ app, token, first, planName, planId, polls = []
     h.push(`<h2 style="font-size:18px;margin:18px 0 6px;">${escapeHtml(poll.question)}</h2>`);
     t.push(poll.question);
     for (const o of poll.options || []) {
+      const view = safeLink(o.link);
       if (poll.choice === 'single') {
-        h.push(`<div>${button(link({ o: o.id, r: 'yes' }), o.label, 'pick')}</div>`);
-        t.push(`  ${o.label}: ${link({ o: o.id, r: 'yes' })}`);
+        h.push(`<div>${button(link({ o: o.id, r: 'yes' }), o.label, 'pick')}${view ? ` <a href="${escapeHtml(view)}">${escapeHtml(linkWord(poll))}</a>` : ''}</div>`);
+        t.push(`  ${o.label}: ${link({ o: o.id, r: 'yes' })}${view ? ` (${linkWord(poll).replace(' ↗', '')}: ${view})` : ''}`);
       } else {
-        h.push(`<div style="margin:10px 0 2px;font-weight:700;">${escapeHtml(o.label)}</div><div>`);
-        h.push(['yes', 'maybe', 'no'].map((r) => button(link({ o: o.id, r }), ANSWERS[r], r)).join(''));
+        h.push(`<div style="margin:10px 0 2px;font-weight:700;">${escapeHtml(o.label)}${view ? ` <a href="${escapeHtml(view)}" style="font-weight:600;">${escapeHtml(linkWord(poll))}</a>` : ''}</div><div>`);
+        const words = answersFor(poll);
+        h.push(['yes', 'maybe', 'no'].map((r) => button(link({ o: o.id, r }), words[r], r)).join(''));
         h.push('</div>');
-        t.push(`  ${o.label}`);
-        for (const r of ['yes', 'maybe', 'no']) t.push(`    ${ANSWERS[r]}: ${link({ o: o.id, r })}`);
+        t.push(`  ${o.label}${view ? ` — ${linkWord(poll).replace(' ↗', '')}: ${view}` : ''}`);
+        for (const r of ['yes', 'maybe', 'no']) t.push(`    ${words[r]}: ${link({ o: o.id, r })}`);
       }
     }
     t.push('');

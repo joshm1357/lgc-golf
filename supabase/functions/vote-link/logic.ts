@@ -5,10 +5,10 @@
 // address), which calls this with { t } to show the vote, then { t, o, r } / { t, rsvp } to record an answer, or
 // { t, stop: true } to stop vote emails. Every reply is JSON; the page writes the words.
 import { splitToken, sha256Hex, safeEqual } from '../_shared/tokens.ts';
-import { ANSWERS, RSVP_ANSWERS, firstName } from '../_shared/emailvotes.js';
+import { ANSWERS, RSVP_ANSWERS, firstName, safeLink } from '../_shared/emailvotes.js';
 
 export type TokenRow = { id: string; group_id: string; plan_id: string; player_id: string; poll_ids: string[]; secret_hash: string; expires_at: string };
-export type Poll = { id: string; plan_id: string; group_id: string; question: string; kind: string; status: string; closes_on?: string | null; choice?: string | null };
+export type Poll = { id: string; plan_id: string; group_id: string; question: string; kind: string; status: string; closes_on?: string | null; choice?: string | null; purpose?: string | null };
 export type Option = { id: string; poll_id: string; label: string };
 export type Vote = { option_id: string; poll_id: string; response: string };
 export type Deps = {
@@ -63,7 +63,7 @@ export async function handle(input: unknown, d: Deps): Promise<Reply> {
     if (!o || !poll) return no(403, 'That answer isn’t part of your vote.', base);
     if (poll.status !== 'open') return no(410, 'This vote has closed.', { closed: true, ...base });
     const r = poll.choice === 'single' ? 'yes' : String(body.r || '');
-    if (!Object.hasOwn(ANSWERS, String(r))) return no(400, 'Pick ✓ Can, ? Maybe or ✗ Can’t.', base);
+    if (!Object.hasOwn(ANSWERS, String(r))) return no(400, 'Pick one of the three answers.', base);
     await d.saveVote({ group_id: row.group_id, poll_id: poll.id, option_id: o.id, player_id: row.player_id, response: r });
     if (poll.choice === 'single') await d.clearOtherVotes(poll.id, row.player_id, o.id);
     recorded = { kind: 'vote', poll: poll.id, option: o.id, label: o.label, response: r };
@@ -80,8 +80,8 @@ export async function handle(input: unknown, d: Deps): Promise<Reply> {
     closed: openPolls.length === 0,
     recorded,
     polls: polls.map((p) => ({
-      id: p.id, question: p.question, kind: p.kind, choice: p.choice || null, open: p.status === 'open',
-      options: options.filter((o) => o.poll_id === p.id).map((o) => ({ id: o.id, label: o.label })),
+      id: p.id, question: p.question, kind: p.kind, purpose: p.purpose || null, choice: p.choice || null, open: p.status === 'open',
+      options: options.filter((o) => o.poll_id === p.id).map((o) => ({ id: o.id, label: o.label, link: safeLink((o as { link?: string | null }).link) })),
       mine: Object.fromEntries(mine.filter((v) => v.poll_id === p.id).map((v) => [v.option_id, v.response])),
     })),
     rsvp: { asked: rsvpAsk && openPolls.length > 0, mine: rsvp },

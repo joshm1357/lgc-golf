@@ -153,19 +153,47 @@ export function depositStatus({ deposit, rsvps = [], transfers = [] }) {
  * Search links for accommodation, filled in with the town, dates and headcount. Just links: nothing is booked
  * or scraped. A one-day trip searches one night.
  */
-export function stayLinks({ town, start, end, people }) {
+export function stayLinks({ town, start, end, people, bedrooms = null, maxPerNight = null }) {
   const where = String(town || '').trim();
   if (!where || !start) return [];
   const d = parseDate(start);
   const next = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
   const checkout = end && end > start ? end : `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`;
   const n = Math.max(1, Math.round(num(people)) || 1);
+  const beds = bedrooms != null && num(bedrooms) > 0 ? Math.min(30, Math.round(num(bedrooms))) : null;
+  const cap = maxPerNight != null && num(maxPerNight) > 0 ? Math.round(num(maxPerNight)) : null;
   const q = encodeURIComponent(where);
+  // Real requests (080): the bedrooms the group needs, and a price cap a night when the organiser set a budget.
+  const rooms = beds || Math.max(1, Math.ceil(n / 2));
   return [
-    { name: 'Booking.com', url: `https://www.booking.com/searchresults.html?ss=${q}&checkin=${start}&checkout=${checkout}&group_adults=${n}&no_rooms=${Math.max(1, Math.ceil(n / 2))}&group_children=0` },
-    { name: 'Airbnb', url: `https://www.airbnb.com.au/s/${q}/homes?checkin=${start}&checkout=${checkout}&adults=${n}` },
-    { name: 'Stayz', url: `https://www.stayz.com.au/search?destination=${q}&startDate=${start}&endDate=${checkout}&adults=${n}` },
+    { name: 'Booking.com', url: `https://www.booking.com/searchresults.html?ss=${q}&checkin=${start}&checkout=${checkout}&group_adults=${n}&no_rooms=${rooms}&group_children=0${cap ? `&nflt=${encodeURIComponent(`price=AUD-min-${cap}-1`)}` : ''}` },
+    { name: 'Airbnb', url: `https://www.airbnb.com.au/s/${q}/homes?checkin=${start}&checkout=${checkout}&adults=${n}${beds ? `&min_bedrooms=${beds}&min_beds=${Math.max(beds, Math.ceil(n / 2))}` : ''}${cap ? `&price_max=${cap}` : ''}` },
+    { name: 'Stayz', url: `https://www.stayz.com.au/search?destination=${q}&startDate=${start}&endDate=${checkout}&adults=${n}${beds ? `&minBedrooms=${beds}` : ''}${cap ? `&price=0-${cap}` : ''}` },
   ];
+}
+
+/** Bedrooms for a group: two to a room unless the organiser says otherwise. */
+export function bedroomsFor(people, perRoom = 2) {
+  const n = Math.round(num(people));
+  return n > 0 ? Math.ceil(n / Math.max(1, Math.round(num(perRoom)) || 2)) : null;
+}
+
+/** What the search links look for, in one line: "Kiama · 13–15 Mar · 12 people · 6+ bedrooms · under $400/night". */
+export function staySearchLine({ town, start, end, people, bedrooms = null, maxPerNight = null, fmt = (a, b) => `${a} – ${b}` }) {
+  return [String(town || '').trim() || null, start ? fmt(start, end || start) : null, people ? `${people} ${Number(people) === 1 ? 'person' : 'people'}` : null,
+    bedrooms ? `${bedrooms}+ bedrooms` : null, maxPerNight ? `under $${maxPerNight}/night` : null].filter(Boolean).join(' · ');
+}
+
+/** Save-a-list how-tos (links only — nothing is fetched from these sites). */
+export const LIST_HOWTO = {
+  Airbnb: ['Tap the ♡ on the places you like and save them to a new wishlist (e.g. “Golf trip — Kiama”)', 'Open Wishlists → your list → Share', 'Copy link, then paste it here'],
+  'Booking.com': ['Tap the ♡ on the places you like (they go in “My next trip” or a new list)', 'Open Saved → the list → Share', 'Copy link, then paste it here'],
+  Stayz: ['Tap the ♡ to save places to a Trip Board', 'Open the Trip Board → Invite / Share', 'Copy link, then paste it here'],
+};
+
+/** Is a pasted link a shared list (wishlist / saved list / trip board) rather than one place? */
+export function isListLink(url) {
+  return /airbnb\.[a-z.]+\/(wishlists|s\/wishlists)|booking\.com\/(mywishlist|wishlist|lists?)|stayz\.com\.au\/(trip-?boards?|tripboard|trips)/i.test(String(url || ''));
 }
 
 /** Clean up a pasted place: name, link, rough total, sleeps, distance note. Null if there's no name. */

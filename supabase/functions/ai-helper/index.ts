@@ -157,11 +157,19 @@ function makeDeps(db: SupabaseClient, g: string, uid: string, status: Any): Deps
         // The place → the first library course there that has a location → courses near that point.
         const place = clean(input?.place, 60);
         const hits = await searchLibrary(place, null, null, 5);
+        // The group's own notes on each course's usual social golf times (080), so the helper can mention them.
+        const withSocial = async (list: Any[]) => {
+          const ids = list.map((c) => c.id).filter(Boolean);
+          if (!ids.length) return list;
+          const { data } = await db.from('course_social_times').select('course_id,weekdays,weekends,price,group_size').eq('group_id', g).in('course_id', ids);
+          const by = Object.fromEntries((data || []).map((r: Any) => [r.course_id, [r.weekdays && `weekdays ${clean(r.weekdays, 60)}`, r.weekends && `weekends ${clean(r.weekends, 60)}`, clean(r.price, 30), clean(r.group_size, 40)].filter(Boolean).join(' · ')]));
+          return list.map((c) => (by[c.id] ? { ...c, social_times: by[c.id] } : c));
+        };
         for (const h of hits.slice(0, 3)) {
           const l = await library(h.id);
-          if (l?.lat != null && l?.lng != null) return { near: place, courses: shapeNear(await searchLibrary('', Number(l.lat), Number(l.lng), 10)) };
+          if (l?.lat != null && l?.lng != null) return { near: place, courses: await withSocial(shapeNear(await searchLibrary('', Number(l.lat), Number(l.lng), 10))) };
         }
-        return hits.length ? { near: place, courses: shapeNear(hits) } : { near: place, courses: [], note: 'Nothing in the course library there yet.' };
+        return hits.length ? { near: place, courses: await withSocial(shapeNear(hits)) } : { near: place, courses: [], note: 'Nothing in the course library there yet.' };
       }
       throw new Error('No such tool');
     },

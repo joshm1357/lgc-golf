@@ -190,10 +190,10 @@ export function suggestions(plan, ctx) {
   const inCount = rsvps.filter((r) => r.status === 'in').length;
 
   if (!plan.start_date && !openPoll('dates')) {
-    out.push({ key: 'dates', title: 'Put up a date vote', why: 'Offer 3–4 options, ideally 3+ months out so everyone can clear the calendar.', when: 'Now', tab: 'vote' });
+    out.push({ key: 'dates', title: 'Call a vote on dates', why: 'Offer 3–4 options, ideally 3+ months out so everyone can clear the calendar.', when: 'Now', tab: 'vote' });
   }
   if (!plan.location_name && !openPoll('location')) {
-    out.push({ key: 'location', title: isTrip ? 'Put up a location vote' : 'Pick the course', why: 'Let the lads suggest places with a link and rough cost per head, then vote.', when: 'Now', tab: 'vote' });
+    out.push({ key: 'location', title: isTrip ? 'Call a vote on where' : 'Pick the course', why: 'Let the lads suggest places with a link and rough cost per head, then vote.', when: 'Now', tab: 'vote' });
   }
   const missing = playerIds.filter((id) => !replied.has(id)).length;
   if (missing > 0 && !plan.rsvp_locked) {

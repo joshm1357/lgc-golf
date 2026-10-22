@@ -172,7 +172,7 @@ await page.getByLabel('Place 1').fill('Orange');
 await page.screenshot({ path: `${SHOTS}/t2-suggest.png`, fullPage: true });
 await noSideScroll('Suggest sheet');
 writes.length = 0;
-await page.getByRole('button', { name: 'Put it to the group' }).click();
+await page.getByRole('button', { name: '🗳️ Call the vote' }).click();
 await page.waitForTimeout(1200);
 const ins = writes.find((w) => w.method === 'POST' && w.table === 'plans');
 const rpc = writes.find((w) => w.method === 'RPC' && w.table === 'start_trip_votes');
@@ -198,7 +198,7 @@ await noSideScroll('Chat tab');
 
 // 4. Admin closes a vote through the server step.
 await page.getByRole('tab', { name: /Vote/ }).click();
-await page.getByRole('button', { name: /Close the vote/ }).first().click();
+await page.getByRole('button', { name: /Close now & pick the winner/ }).first().click();
 writes.length = 0;
 await page.getByRole('button', { name: 'Pick this winner' }).click();
 await page.waitForTimeout(800);

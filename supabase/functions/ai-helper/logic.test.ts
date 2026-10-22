@@ -122,17 +122,21 @@ Deno.test('the month and day start at midnight Sydney time', () => {
   assertEquals(zonedStart(new Date('2026-07-15T03:00:00Z'), 'day'), '2026-07-14T14:00:00.000Z');
 });
 
-Deno.test('cap: 60 a group a month, 10 a person a day', () => {
+Deno.test('cap: by default 2000 a group a month, 100 a person a day (room to try it out)', () => {
   const now = new Date('2026-10-21T03:00:00Z');
-  assertEquals(capCheck({ month: 0, today: 0 }, now), { ok: true, remaining: { month: 60, today: 10 }, message: '' });
-  const m = capCheck({ month: 60, today: 1 }, now);
+  assertEquals([LIMITS.groupPerMonth, LIMITS.personPerDay], [2000, 100]);
+  assertEquals(capCheck({ month: 0, today: 0 }, now), { ok: true, remaining: { month: 2000, today: 100 }, message: '' });
+  const m = capCheck({ month: 2000, today: 1 }, now);
   assertEquals(m.ok, false);
-  assertEquals(m.message, 'Your group has used all 60 helper questions for October. They start again on 1 November.');
-  const d = capCheck({ month: 5, today: 10 }, now);
+  assertEquals(m.message, 'Your group has used all 2000 helper questions for October. They start again on 1 November.');
+  const d = capCheck({ month: 5, today: 100 }, now);
   assertEquals(d.ok, false);
-  assertMatch(d.message, /10 times today/);
-  assertEquals(capCheck({ month: 59, today: 9 }, now).ok, true);
-  assertEquals(capCheck({ month: 60, today: 0 }, new Date('2026-12-10T03:00:00Z')).message.endsWith('1 January.'), true);
+  assertMatch(d.message, /100 times today/);
+  assertEquals(capCheck({ month: 1999, today: 99 }, now).ok, true);
+  assertEquals(capCheck({ month: 2000, today: 0 }, new Date('2026-12-10T03:00:00Z')).message.endsWith('1 January.'), true);
+  // More room for answers and plans, and more steps.
+  assertEquals([LIMITS.maxTokens, LIMITS.planMaxTokens, LIMITS.maxToolRounds], [4096, 8192, 8]);
+  assert(LIMITS.totalMs <= 140000 && LIMITS.callTimeoutMs <= 60000);
 });
 
 // ------------------------------------------------------------------ Data stays data
@@ -249,7 +253,7 @@ Deno.test('setup: the model finds a course then proposes → a checked plan come
   const first = model.calls[0];
   assertEquals(first.url, 'https://api.anthropic.com/v1/messages');
   assertEquals(first.req.model, 'example-model-id'); // from the AI_MODEL secret, never hard-coded
-  assertEquals(first.req.max_tokens, 2048);
+  assertEquals(first.req.max_tokens, 4096);
   assertEquals((first.headers as Any)['anthropic-version'], '2023-06-01');
   assertEquals(first.req.messages[0].content, '<request>Kurri on Thursday 22 Oct, stableford, ctp on the par 3s</request>');
   // Logged: one row started before the call, finished with token counts (no text).
@@ -417,6 +421,18 @@ Deno.test('API errors become friendly words', async () => {
     assertEquals(r.kind, 'error');
     assertMatch((r as Any).message, re);
   }
+});
+
+Deno.test('a failed answer says why (code, so the app can retry once) and leaves the count as it was', async () => {
+  const fetchFn = (async () => new Response('{}', { status: 529 })) as unknown as typeof fetch;
+  const out: Any = await helperRequest({ mode: 'ask', text: 'Who is leading?' }, fakeDeps({ fetchFn, usage: async () => ({ month: 3, today: 1 }) }).d);
+  assertEquals(out.code, 'provider_busy');
+  assertEquals(out.remaining, { month: 58, today: 10 }); // usage 3 / 1 includes this one, which isn't counted
+  // The per-call timeout never runs past the request's deadline.
+  let seen = 0;
+  const slow = (async (_u: string, init: Any) => { seen = 1; assert(init.signal); return new Response('{}', { status: 529 }); }) as unknown as typeof fetch;
+  const r = await runLoop({ ai: ANTHROPIC, fetchFn: slow, system: 's', tools: [], allowed: new Set(), userText: 'q', exec: async () => null, deadline: Date.now() + 1000 });
+  assertEquals([seen, r.kind], [1, 'error']);
 });
 
 Deno.test('setup: the model asking a question comes back as a message, not a plan', async () => {

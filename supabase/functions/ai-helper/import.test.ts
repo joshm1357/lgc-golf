@@ -5,7 +5,7 @@ const assert = (v: unknown, msg?: string) => nodeAssert.ok(v, msg);
 const assertEquals = (a: unknown, b: unknown) => nodeAssert.deepStrictEqual(a, b);
 const assertMatch = (s: string, re: RegExp) => nodeAssert.match(String(s), re);
 import type { AiConfig } from './providers.ts';
-import { importRequest, validateImport, readImages, readHcp, readYear, readDate, importConfig, IMPORT_LIMITS, NO_PHOTOS, type ImportDeps } from './import.ts';
+import { importRequest, validateImport, readImages, readHcp, readYear, readDate, importConfig, cleanRule, importSystem, IMPORT_TOOL, IMPORT_LIMITS, NO_PHOTOS, type ImportDeps } from './import.ts';
 
 // deno-lint-ignore no-explicit-any
 type Any = any;
@@ -174,4 +174,65 @@ Deno.test('import: who can, the switch, the cap, and bad photos', async () => {
   assertEquals(readImages(['data:image/png;base64,AAAA']), { ok: true, images: ['data:image/png;base64,AAAA'] });
   assertEquals(importConfig(OPENAI, 'vision-model', false).model, 'cheap-text');
   assertEquals(importConfig(OPENAI, 'vision-model', true).model, 'vision-model');
+});
+
+// ------------------------------------------------------------------ 22 Oct fixes (Josh's browser test)
+
+Deno.test('rules: the group’s own words — a short sentence-case title, the wording only when it adds something', () => {
+  // The same text underneath (any case or punctuation) is dropped.
+  assertEquals(cleanRule('Gimmes inside the leather', 'gimmes inside the leather.'), { title: 'Gimmes inside the leather', wording: null });
+  assertEquals(cleanRule('gimmes inside the leather', ''), { title: 'Gimmes inside the leather', wording: null });
+  // Wording that says more is kept in full, never shortened.
+  const ob = 'OB is played as a lateral hazard: drop where it went out, one shot penalty, no going back to the tee.';
+  assertEquals(cleanRule('OB played as a lateral hazard', ob), { title: 'OB played as a lateral hazard', wording: ob });
+  // An all-caps title is calmed down; golf's short forms are kept.
+  assertEquals(cleanRule('NO MULLIGANS ON THE 1ST TEE', null).title, 'No mulligans on the 1st tee');
+  assertEquals(cleanRule('OB LATERAL HAZARD RULE', null).title, 'OB lateral hazard rule');
+  // A title too long for the Rulebook: a shorter title, and the whole text kept as the wording.
+  const long = 'Anyone who leaves a bunker unraked pays five dollars into the kitty and buys the first round at the bar that night';
+  const r = cleanRule(long, '');
+  assert(r.title.length <= 80 && long.startsWith(r.title), r.title);
+  assertEquals(r.wording, long);
+  // Through validateImport too.
+  const v = validateImport({ rules: [{ title: 'Gimmes inside the leather', wording: 'Gimmes inside the leather', category: 'etiquette' }, { title: 'Birdie bonus', wording: '$5 from each player' }] }, TODAY);
+  assertEquals(v.rules[0].wording, null);
+  assertEquals(v.rules[1].wording, '$5 from each player');
+  // The prompt and the tool say so.
+  assertMatch(importSystem(TODAY, 'L.G.C'), /sentence-case title/);
+  assertMatch(importSystem(TODAY, 'L.G.C'), /Never repeat the title as the wording/);
+  assertMatch(JSON.stringify(IMPORT_TOOL), /never the title again/);
+});
+
+Deno.test('guesses: the model flags items built on an assumption (only a real true counts)', () => {
+  const v = validateImport({
+    players: [{ name: 'Kurt', guess: true }, { name: 'Bluey', guess: 'yes' }],
+    trips: [{ name: 'Hunter 2019', year: 2019, guess: true }],
+    winners: [{ trophy: 'BD', year: 2019, winners: ['Kurt'], guess: true }, { trophy: 'BD', year: 2018, winners: ['Sam'] }],
+    handicaps: [{ player: 'Kurt', date: '2019', handicap: 12, guess: true }],
+    rules: [{ title: 'Ready golf', guess: true }],
+  }, TODAY);
+  assertEquals(v.players, [{ name: 'Kurt', nickname: null, guess: true }, { name: 'Bluey', nickname: null }]);
+  assertEquals(v.trips[0].guess, true);
+  assertEquals([v.winners[0].guess, 'guess' in v.winners[1]], [true, false]);
+  assertEquals(v.handicaps[0].guess, true);
+  assertEquals(v.rules[0].guess, true);
+  // Every item in the tool can carry it, and the prompt asks for it.
+  const props = (IMPORT_TOOL.input_schema.properties as Any);
+  for (const k of ['players', 'trips', 'winners', 'handicaps', 'rules']) assertEquals(props[k].items.properties.guess.type, 'boolean');
+  assertMatch(importSystem(TODAY, 'L.G.C'), /set guess: true on THAT item/);
+});
+
+Deno.test('import: more room (8192 tokens); a failed import says why (code) and doesn’t use up a question', async () => {
+  const p = fakeProvider([openaiCall({ players: [], trips: [], winners: [], handicaps: [], rules: [] })]);
+  await importRequest({ mode: 'import', text: 'Kurt Dahl is in the group' }, deps({}, p.fn).d);
+  assertEquals(p.sent[0].max_tokens, 8192);
+  assert(IMPORT_LIMITS.totalMs <= 140000);
+  // Busy provider → code provider_busy, remaining as it was (usage 1 / 1 includes this one → 60 / 10 left).
+  const busy = fakeProvider([{ error: 'busy' }], 503);
+  const out: Any = await importRequest({ mode: 'import', text: 'Kurt Dahl is in the group' }, deps({}, busy.fn).d);
+  assertEquals(out.code, 'provider_busy');
+  assertEquals(out.remaining, { month: 60, today: 10 });
+  // An odd reply → odd_reply.
+  const odd = fakeProvider([{ choices: [] }]);
+  assertEquals(((await importRequest({ mode: 'import', text: 'Kurt Dahl is in the group' }, deps({}, odd.fn).d)) as Any).code, 'odd_reply');
 });

@@ -22,7 +22,7 @@ Deno.test('provider from secrets: OpenAI-compatible when AI_BASE_URL is set', ()
   assertEquals(r.cfg.provider, 'openai');
   assertEquals(r.cfg.baseUrl, 'https://api.moonshot.ai/v1');
   assertEquals(endpoint(r.cfg), 'https://api.moonshot.ai/v1/chat/completions');
-  assertEquals(r.cfg.caps, { groupPerMonth: 60, personPerDay: 10 });
+  assertEquals(r.cfg.caps, { groupPerMonth: 2000, personPerDay: 100 });
 });
 
 Deno.test('provider from secrets: Anthropic when only ANTHROPIC_API_KEY is set; caps from secrets', () => {
@@ -37,7 +37,7 @@ Deno.test('provider from secrets: Anthropic when only ANTHROPIC_API_KEY is set; 
   assertEquals([r2.cfg.provider, r2.cfg.apiKey], ['anthropic', 'k3']);
   // Bad cap secrets fall back to the defaults.
   const r3: Any = aiConfig(env({ ANTHROPIC_API_KEY: 'k', AI_MODEL: 'm', AI_GROUP_MONTHLY_CAP: 'lots', AI_PERSON_DAILY_CAP: '-3' }));
-  assertEquals(r3.cfg.caps, { groupPerMonth: 60, personPerDay: 10 });
+  assertEquals(r3.cfg.caps, { groupPerMonth: 2000, personPerDay: 100 });
 });
 
 Deno.test('provider from secrets: missing or wrong settings say why (without the key)', () => {
@@ -316,7 +316,7 @@ Deno.test('plan: the model looks up courses near a town and proposes → a check
   assertEquals(p.closes_on, '2026-10-31');
   assertEquals(out.summary[0], 'Start the trip “March Away 2027”, about $500 each');
   assertEquals(out.summary[1], 'Vote on dates: Fri 12 Mar – Sun 14 Mar · Fri 19 Mar – Sun 21 Mar');
-  assertEquals(api.calls[0].req.max_tokens, 4096);
+  assertEquals(api.calls[0].req.max_tokens, 8192);
   assertEquals(api.calls[0].req.tools.map((t: Any) => t.function.name), ['our_players', 'past_trips', 'courses_near', 'find_course', 'propose_trip_plan']);
   assertEquals(log[0].start.area, 'plan');
   assertEquals(log[0].start.mode, 'setup'); // counts against the cap like a setup question
@@ -379,10 +379,10 @@ Deno.test('plan checks: names cleaned, past/long/far dates refused, money capped
   assertEquals(briefText({ ...round.plan!, notes: '', costs: [] }, true), null);
 });
 
-Deno.test('OpenRouter: keeps thinking short and out of the reply; others unchanged; a choice error is not a reply', () => {
+Deno.test('OpenRouter: medium thinking, kept out of the reply; others unchanged; a choice error is not a reply', () => {
   const base = { provider: 'openai', apiKey: 'k', model: 'moonshotai/kimi-k2.6' } as Any;
   const or = requestBody({ ...base, baseUrl: 'https://openrouter.ai/api/v1' }, { system: 's', tools: [], messages: [{ role: 'user', text: 'hi' }], maxTokens: 10 }) as Any;
-  nodeAssert.deepEqual(or.reasoning, { effort: 'low', exclude: true });
+  nodeAssert.deepEqual(or.reasoning, { effort: 'medium', exclude: true });
   const moon = requestBody({ ...base, baseUrl: 'https://api.moonshot.ai/v1' }, { system: 's', tools: [], messages: [{ role: 'user', text: 'hi' }], maxTokens: 10 }) as Any;
   nodeAssert.equal(moon.reasoning, undefined);
   nodeAssert.equal(parseReply({ ...base, baseUrl: 'https://openrouter.ai/api/v1' }, { choices: [{ error: { code: 502, message: 'x' } }] }, '{}'), null);

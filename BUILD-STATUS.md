@@ -954,3 +954,16 @@ screen, "Viewing as Mike · read only", and Stop.
 - **Tested:** Vitest `disputes.test.js` 17 (1032 in all); `supabase/tests/082_rule_disputes.sql` 18 checks (rolled
   back); `dispute-test.mjs` 23; rulebook-v2/v3, governance, games, cup, comps, own-comps, stroke, fourball, stats pass.
   `rulebook-test`, `phone-test`, `trip-overview-test` time out on wave2-all as well (not from this branch).
+
+## ov8b — Apply a dispute's verdict, branch `ov8b-apply-verdict`, 22 Oct 2026
+- **What:** on an upheld dispute about a setting, organisers see "Change it to" (filled from the case's "What it should
+  be", checked as they type) and "Apply the verdict: change Worth 2 strokes from 2 to 1". After: "✓ Applied by Josh,
+  2:41 pm: 2 → 1" on the case, a feed post, the setting changed. If the setting changed since the case was raised:
+  "It's changed since — now 4. Apply anyway?". Settings objects, Rulebook and standard rules are still changed where
+  they're set (Rulebook rules via the existing organiser-checked "Into the Rulebook").
+- **Migration 084** (staging only): `cases.setting_applied_by / setting_applied_at / setting_change`,
+  `private.dispute_value()` (types and ranges per field), `apply_dispute_verdict(case, value, force)` — organiser of
+  the case's group only; upheld (`passed`) setting disputes only; once; same fixed field list as 082; refuses (returns
+  `changed`) when the value moved since raised unless `p_force`; table triggers still run.
+- **Tested:** Vitest `disputes.test.js` 21 (1071 in all); `supabase/tests/084_apply_dispute_verdict.sql` 17 checks
+  (rolled back); `dispute-test.mjs` 34; governance 44, comps 24.

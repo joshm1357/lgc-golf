@@ -16,7 +16,9 @@ import {
   canVote, canDecide, canApproveMidTrip, verdictWord, verdictLine, voteWords, closesIn, ruleLine, applyWords, termStatus,
   termLabel, challengeBlock, sydneyDate,
 } from '../lib/governance.js';
-import { disputeTitle, refForServer, valueWords, SOURCE, subjectLine } from '../lib/disputes.js';
+import {
+  disputeTitle, refForServer, valueWords, SOURCE, subjectLine, canApplyVerdict, applySpec, parseApplyValue, suggestedValue, appliedLine,
+} from '../lib/disputes.js';
 import { refreshDisputes } from '../components/RuleTag.jsx';
 
 const KIND_EMOJI = { new_rule: '📜', change_rule: '✏️', scrap_rule: '🗑️', ruling: '🔎', handicap: '⛳', other: '👔', election: '🪑', governance: '🏛️' };
@@ -354,7 +356,7 @@ export function CaseHearing() {
           {c.kind === 'ruling' && <div style={{ fontWeight: 700, fontSize: 17 }}>{c.title}</div>}
           {c.body && <div style={{ fontSize: 16, lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>{c.body}</div>}
           <Proposal c={c} rule={rule} g={g} />
-          <DisputedThing c={c} organiser={status.role === 'organiser'} />
+          <DisputedThing c={c} role={status.role} g={g} />
           {c.penalty && <div className="small"><strong>Penalty if guilty:</strong> {c.penalty} <span className="muted">(words only — no money moves)</span></div>}
           {c.evidence_url && <img src={c.evidence_url} alt="Evidence" style={{ width: '100%', borderRadius: 10, marginTop: 6 }} />}
           {post && <Link to="/feed" className="card pad small" style={{ color: 'inherit' }}>📎 From the feed: {(post.body || 'a photo').slice(0, 120)}{post.photo_url ? <img src={post.photo_url} alt="" style={{ width: '100%', borderRadius: 8, marginTop: 6 }} /> : null}</Link>}
@@ -390,7 +392,8 @@ export function CaseHearing() {
 
 // A dispute (082): what was disputed, its value when raised, and where it was seen. A verdict never changes a setting
 // by itself: an organiser changes it where it's set (or writes the verdict into the Rulebook, organiser-checked).
-function DisputedThing({ c, organiser }) {
+function DisputedThing({ c, role, g }) {
+  const data = useData();
   const s = subjectLine(c);
   if (!s) return null;
   return (
@@ -402,9 +405,43 @@ function DisputedThing({ c, organiser }) {
         {s.path && <Link to={s.path}>Where it was seen →</Link>}
         {s.ruleId && !c.rule_id && <Link to={`/rules/${s.ruleId}`}>The rule →</Link>}
       </div>
-      {c.status === 'passed' && organiser && c.subject_kind === 'setting' && (
-        <span className="muted">The verdict doesn’t change the setting by itself — if it should change, change it where it’s set.</span>
+      {c.setting_applied_at && <strong data-testid="verdict-applied">✓ {appliedLine(c, playerName(data.playersById[c.setting_applied_by]))}</strong>}
+      {canApplyVerdict(c, role) && <ApplyVerdict c={c} g={g} label={s.label} />}
+      {c.status === 'passed' && role === 'organiser' && c.subject_kind === 'setting' && !c.setting_applied_at && !applySpec(c.subject_ref) && (
+        <span className="muted">This one is changed where it’s set — the verdict doesn’t change it by itself.</span>
       )}
+    </div>
+  );
+}
+
+// 084: an organiser applies an upheld dispute to the setting ("change Worth 2 strokes from 2 to 1"). The database checks
+// the value, refuses a second go, and says if the setting has changed since the case was raised.
+function ApplyVerdict({ c, g, label }) {
+  const data = useData();
+  const [text, setText] = useState(() => suggestedValue(c));
+  const [changed, setChanged] = useState(null); // { now } when it changed since the case was raised
+  const [busy, run] = useRun();
+  const p = parseApplyValue(c.subject_ref, text);
+  const from = valueWords(changed ? changed.now : c.subject_ref?.value);
+  const go = (force) => run(async () => {
+    const r = await must(supabase.rpc('apply_dispute_verdict', { p_case: c.id, p_value: p.value, p_force: !!force }));
+    if (r?.status === 'changed') { setChanged({ now: r.now }); return; }
+    g.reload();
+    data.reload?.(); // the setting itself (rounds etc.) — realtime does it too
+    refreshDisputes();
+    toast('Verdict applied');
+  });
+  return (
+    <div className="court-card card pad stack" style={{ gap: 6, marginTop: 6 }} data-testid="apply-verdict">
+      <label className="field"><span>Change it to</span>
+        <input className="input" value={text} onChange={(e) => { setText(e.target.value); }} data-testid="apply-value" />
+      </label>
+      {text.trim() !== '' && !p.ok && <span className="small" role="alert" style={{ color: 'var(--under)' }}>{p.error}</span>}
+      {changed && <span className="small" role="alert" data-testid="apply-changed" style={{ fontWeight: 700 }}>It’s changed since — now {valueWords(changed.now)}. Apply anyway?</span>}
+      <button type="button" className="btn gold block" disabled={busy || !p.ok} data-testid="apply-go" onClick={() => go(!!changed)}>
+        {changed ? `Apply anyway: ${valueWords(changed.now)} → ${valueWords(p.value)}` : `Apply the verdict: change ${label} from ${from} to ${p.ok ? valueWords(p.value) : '…'}`}
+      </button>
+      <span className="small muted">Organisers only. It changes the setting for everyone and posts to the feed.</span>
     </div>
   );
 }

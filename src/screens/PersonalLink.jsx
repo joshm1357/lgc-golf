@@ -79,6 +79,7 @@ export default function PersonalLink({ code }) {
   const phoneOnly = !SIGN_IN.length;
   const screen = info === undefined ? 'checking' : phoneOnly ? phoneScreen(info, inGroup) : linkScreen(info, signedIn);
   const name = info?.player_name || 'mate';
+  const usedSignIn = screen === 'used' && SIGN_IN.length > 0 && !signedIn;
   const group = info?.group_name || 'your group';
   const muted = { color: 'var(--on-navy-muted)', textAlign: 'center' };
   return (
@@ -96,13 +97,16 @@ export default function PersonalLink({ code }) {
       {['used', 'expired', 'replaced'].includes(screen) && (
         <>
           <div style={{ fontFamily: 'var(--display)', fontSize: 30, fontWeight: 700, textAlign: 'center' }}>
-            {screen === 'used' ? 'This link has been used' : screen === 'expired' ? 'This link has run out' : 'There’s a newer link'}
+            {screen === 'used' ? (usedSignIn ? 'This link’s already been used' : 'This link has been used') : screen === 'expired' ? 'This link has run out' : 'There’s a newer link'}
           </div>
           <div style={{ ...muted, maxWidth: 340 }}>
-            {screen === 'used' && `Someone has already used ${name}'s link. If that wasn't you, ask an organiser of ${group} for a new one.`}
+            {screen === 'used' && usedSignIn && `If that was you, sign in below. If it wasn't, ask an organiser of ${group} for a new one.`}
+            {screen === 'used' && !usedSignIn && `Someone has already used ${name}'s link. If that wasn't you, ask an organiser of ${group} for a new one.`}
             {screen === 'expired' && `Personal links last 14 days. Ask an organiser of ${group} to send you a new one.`}
             {screen === 'replaced' && 'Your organiser sent you a newer link. Use the latest one in your messages.'}
           </div>
+          {/* A used link on a phone or laptop that isn't signed in: it may have been them (ov13). */}
+          {usedSignIn && <SignInButtons returnHash={`#/me/${code}`} />}
         </>
       )}
 

@@ -9,6 +9,7 @@ import { useSession } from '../lib/store.jsx';
 import { setCurrentGroup } from '../lib/group.js';
 import { cleanEmailCode, looksLikeEmail } from '../lib/home.js';
 import { authProblem, passwordProblem } from '../lib/savespot.js';
+import { afterSignInTry } from '../lib/joinfirst.js';
 import {
   signInPassword, signUpPassword, confirmSignUpCode, resendSignUpCode, sendResetCode, resetWithCode,
   linkEmailPassword, confirmLinkCode, signInWithEmail, verifyEmailCode,
@@ -162,6 +163,88 @@ export function EmailPasswordSignIn({ light = false, startWith = 'sign-in', pres
       {Problem}
       <button type="button" className={second} style={secondStyle} onClick={() => { setCode(''); setStep('forgot'); }}>Send a new code</button>
     </form>
+  );
+}
+
+/**
+ * Joining from a link (ov13): ONE email + password form that works out which. It tries to sign in; if there's no
+ * account with that email and password it offers to make one (confirmed with the 6-digit code if the project asks
+ * for it), or "Forgot password?". The rules are in lib/joinfirst.js (afterSignInTry).
+ */
+export function EmailContinue({ light = false }) {
+  const { refresh } = useSession();
+  const { step, setStep, busy, problem, setProblem, go } = useStep('form');
+  const [email, setEmail] = useState('');
+  const [pw, setPw] = useState('');
+  const [code, setCode] = useState('');
+  const main = 'btn gold block';
+  const secondStyle = light ? undefined : GHOST_ON_NAVY;
+  const say = (text) => <span className="small" style={{ color: muted(light), textAlign: 'center' }}>{text}</span>;
+  const Problem = problem && <div className="err" role="alert" style={errStyle(light)}>{problem.message}</div>;
+  const create = go(async () => {
+    setCurrentGroup(null);
+    const r = await signUpPassword(email, pw);
+    if (r === 'code') { setStep('code'); return; }
+    await refresh();
+  }, 'sign-up');
+
+  if (step === 'form' || step === 'no-match') {
+    const noMatch = step === 'no-match';
+    // "Create my account" found the email already has one: so it was the password that was wrong.
+    const exists = noMatch && problem?.action === 'sign-in';
+    return (
+      <form className="stack" style={{ gap: 8 }} data-testid="email-continue" onSubmit={go(async () => {
+        setCurrentGroup(null); // whoever used this phone before: don't carry their group across
+        try {
+          await signInPassword(email, pw);
+        } catch (x) {
+          const p = authProblem(x);
+          const next = afterSignInTry(p);
+          if (next === 'code') { await resendSignUpCode(email).catch(() => {}); setStep('code'); setProblem(p); return; }
+          if (next === 'no-match') { setStep('no-match'); return; }
+          throw x;
+        }
+        await refresh();
+      })}>
+        <EmailInput value={email} onChange={(v) => { setEmail(v); if (noMatch) setStep('form'); }} />
+        <PasswordInput value={pw} onChange={(v) => { setPw(v); if (noMatch) setStep('form'); }} label="Password" autoComplete="current-password" light={light} />
+        {!noMatch && <button className={main} disabled={busy || !looksLikeEmail(email) || !pw}>{busy ? 'Checking…' : 'Continue with email'}</button>}
+        {!noMatch && say('New here? Type your email and choose a password — we’ll make your account.')}
+        {noMatch && exists && (
+          <div className="stack" style={{ gap: 8 }} data-testid="no-match">
+            <div className="err" role="alert" style={errStyle(light)}>That email already has an account, so the password didn’t match. Check it, or set a new one.</div>
+            <button type="button" className={main} onClick={() => setStep('forgot')}>Forgot password</button>
+          </div>
+        )}
+        {noMatch && !exists && (
+          <div className="stack" style={{ gap: 8 }} data-testid="no-match">
+            {say(<>No account with that email and password. New here? Make one with <strong style={{ color: light ? 'inherit' : '#fff' }}>{email.trim()}</strong>.</>)}
+            {passwordProblem(pw) && <span className="small" data-testid="password-rule" style={{ color: muted(light), textAlign: 'center' }}>{`For a new account: ${passwordProblem(pw)}`}</span>}
+            <button type="button" className={main} disabled={busy || !!passwordProblem(pw)} onClick={create}>{busy ? 'Making it…' : 'Create my account'}</button>
+            <button type="button" className="btn ghost block" style={secondStyle} onClick={() => setStep('forgot')}>Been here before? Forgot password</button>
+          </div>
+        )}
+        {!exists && Problem}
+      </form>
+    );
+  }
+  if (step === 'code') {
+    return (
+      <form className="stack" style={{ gap: 8 }} data-testid="email-continue-code" onSubmit={go(async () => { await confirmSignUpCode(email, cleanEmailCode(code)); await refresh(); })}>
+        {say(<>We’ve emailed a 6-digit code to <strong style={{ color: light ? 'inherit' : '#fff' }}>{email.trim()}</strong> to confirm it’s you. It can take a minute (check junk too).</>)}
+        <CodeInput value={code} onChange={setCode} />
+        <button className={main} disabled={busy || !cleanEmailCode(code)}>{busy ? 'Checking…' : 'Confirm'}</button>
+        {Problem}
+        <button type="button" className="btn ghost block" style={secondStyle} disabled={busy} onClick={go(async () => { await resendSignUpCode(email); setProblem({ message: 'New code sent.' }); })}>Send a new code</button>
+      </form>
+    );
+  }
+  // 'forgot': the usual reset (an emailed code, then a new password), starting with this email.
+  return (
+    <div className="stack" style={{ gap: 8 }}>
+      <EmailPasswordSignIn light={light} startWith="forgot" presetEmail={email} />
+      <button type="button" className="btn ghost block" style={secondStyle} onClick={() => setStep('form')}>Back</button>
+    </div>
   );
 }
 

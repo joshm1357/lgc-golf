@@ -4,6 +4,8 @@ import { useData, useSession, playerName } from '../lib/store.jsx';
 import { uploadPhoto } from '../lib/images.js';
 import { Avatar, Icon, Loading, PhotoButtons, Sheet, toast } from '../components/ui.jsx';
 import { QuickJoin } from './QuickRound.jsx';
+import { SIGN_IN } from '../lib/auth.js';
+import { takenHelp } from '../lib/joinfirst.js';
 
 function PhotoCircle({ preview, player }) {
   return (
@@ -142,7 +144,11 @@ function PickOrAdd() {
             <PhotoCircle preview={preview} player={chosen} />
             <PhotoButtons onPick={setFile} facing="user" cameraLabel={chosen.avatar_url ? 'New selfie' : 'Take a selfie'} libraryLabel="Choose photo" />
             <span className="small muted" style={{ textAlign: 'center' }}>Optional — you can add or change your photo later.</span>
-            {err && <div className="err">{err}</div>}
+            {err && <div className="err" role="alert">{err}</div>}
+            {/* Someone else has this name: maybe it's them on another phone (ov13). */}
+            {(taken.has(chosen.id) || /already picked that name/i.test(err)) && (
+              <div className="small" data-testid="taken-help" style={{ textAlign: 'center' }}>{takenHelp(SIGN_IN.length > 0)}</div>
+            )}
             <button type="button" className="btn gold block" disabled={busy} onClick={claim}>{busy ? 'Saving…' : `Yes, I'm ${playerName(chosen)}`}</button>
           </div>
         </Sheet>

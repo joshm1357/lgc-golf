@@ -131,7 +131,7 @@ export function authProblem(err, context = 'sign-in') {
 export function signInReminder(name, groupName, link = '') {
   const who = String(name || '').trim() || 'mate';
   const group = String(groupName || '').trim() || 'the group';
-  return `G'day ${who}, quick one for ${group} on The Golf Trip: open the app and tap “Save your spot” (More → Group & invites) to sign in once with Google or your email. Then it's you on any phone or laptop — no more links.${link ? ` ${link}` : ''}`;
+  return `G'day ${who}, quick one for ${group} on The Golf Trip: open the app and tap “Save your spot” (More → Group & invites) to connect Google or your email. Then you can sign in on your laptop or a new phone — same name, same scores.${link ? ` ${link}` : ''}`;
 }
 
 /** Which button an organiser sees for a player who hasn't saved their spot: 'remind' (on the app on a phone) | 'link'. */

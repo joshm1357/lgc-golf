@@ -378,8 +378,12 @@ await page.getByRole('button', { name: 'Join', exact: true }).waitFor({ timeout:
 await shot('12-join');
 await page.getByRole('button', { name: 'Join', exact: true }).click();
 await page.waitForURL(new RegExp(`#/plan/${PLAN}\\?tab=vote`), { timeout: 15000 });
+// ov14: a player's vote link opens the Overview, votes front and centre (Al has voted already: "You've voted ✓").
+await page.getByTestId('overview-votes').waitFor({ timeout: 15000 });
+check(await page.getByTestId('voted').first().isVisible(), 'after joining, they land on the vote (on the Overview; already voted → "You’ve voted ✓")');
+await page.getByTestId('voted').first().getByRole('button').first().click();
 await page.getByTestId('vote-batch').waitFor({ timeout: 15000 });
-check(true, 'after joining, they land on the vote');
+check((await page.getByTestId('vote-batch').getAttribute('data-view')) === 'voter', 'see results: the ballot with how it’s looking');
 await shot('13-joined-vote');
 
 // ---------------------------------------------------------------- F. Calling the courses
@@ -495,6 +499,7 @@ await page.setViewportSize({ width: 375, height: 812 });
 asPlayer = true;
 await page.goto(`${BASE}#/plan/${PLAN}?tab=vote`);
 await page.reload();
+await page.getByTestId('voted').first().getByRole('button').first().click();
 await page.getByTestId('vote-batch').waitFor({ timeout: 15000 });
 await page.getByTestId('voter-progress').scrollIntoViewIfNeeded();
 await vshot('d-07-voter-375');

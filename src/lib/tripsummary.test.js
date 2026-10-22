@@ -10,6 +10,11 @@ describe('defaultView', () => {
     expect(defaultView('idea')).toBe('organise');
     expect(defaultView('cancelled')).toBe('organise');
   });
+  it('players always open on the overview (the votes are there)', () => {
+    expect(defaultView('deciding', false)).toBe('overview');
+    expect(defaultView('idea', false)).toBe('overview');
+    expect(defaultView('locked', false)).toBe('overview');
+  });
 });
 
 describe('dayLabel', () => {

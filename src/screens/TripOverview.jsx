@@ -59,7 +59,8 @@ function RoundLine({ round, course, board, upcoming }) {
   );
 }
 
-export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage = null, onOrganise = null }) {
+// votes: the open votes (OverviewVotes), shown straight after the trip at a glance.
+export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage = null, onOrganise = null, votes = null }) {
   const data = useData();
   const { status } = useSession();
   const feedOn = useFeature('feed');
@@ -97,13 +98,18 @@ export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage 
         {photos[0] && <img src={photos[0].photo_url} alt="" style={{ width: '100%', maxHeight: 200, objectFit: 'cover', borderRadius: 10 }} />}
         <div className="row between" style={{ gap: 8, alignItems: 'flex-start' }}>
           <div className="grow" style={{ minWidth: 0 }}>
-            {/* The plan page's header already shows the dates and place. */}
             {!plan && <div className="small muted">{[start ? (isYearOnly(trip) ? tripWhen(trip) : fmtRange(start, end)) : 'Dates TBC', place || null].filter(Boolean).join(' · ')}</div>}
-            {!done && plan && <div style={{ fontWeight: 800 }}>{countdown === 'On now' ? '⛳ On now' : '🔒 Locked in'}</div>}
+            {!done && plan && <div style={{ fontWeight: 800 }} data-testid="overview-stage">{countdown === 'On now' || stage === 'on' ? '⛳ On now' : stage === 'locked' ? '🔒 Locked in' : stage === 'idea' ? '💡 Just an idea so far' : '🗳️ Still being decided'}</div>}
             {done && <div style={{ fontWeight: 800 }}>🏁 Done and dusted</div>}
           </div>
           {countdown && countdown !== 'On now' && <span className="chip" style={{ alignSelf: 'center', background: 'var(--navy)', borderColor: 'var(--navy)', color: '#fff', fontWeight: 800, whiteSpace: 'nowrap' }}>{countdown}</span>}
         </div>
+        {plan && !done && (
+          <div className="row small" style={{ gap: 14, flexWrap: 'wrap' }} data-testid="overview-glance">
+            <span>📍 <strong>{plan.location_name || 'Place to be decided'}</strong></span>
+            <span>📅 <strong>{start ? fmtRange(start, end) : 'Dates to be decided'}</strong></span>
+          </div>
+        )}
         {people.length > 0 && (
           <div className="row" style={{ gap: 8 }}>
             <AvatarStack players={people} />
@@ -111,6 +117,8 @@ export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage 
           </div>
         )}
       </div>
+
+      {votes}
 
       {/* Results (done) */}
       {done && honours.length > 0 && (
@@ -132,8 +140,8 @@ export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage 
             </div>
           ))}
         </div>
-      ) : (
-        <div className="card pad small muted">No rounds set up yet.{status?.is_admin && plan && onOrganise ? ' Add them under Organise → Set up your trip.' : ''}</div>
+      ) : (stage === 'idea' || stage === 'deciding') ? null : (
+        <div className="card pad small muted">No rounds set up yet.</div>
       )}
 
       {/* What you're playing for */}

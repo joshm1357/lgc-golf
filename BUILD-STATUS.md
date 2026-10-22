@@ -1016,3 +1016,26 @@ screen, "Viewing as Mike · read only", and Stop.
   `supabase/functions/notify/index.ts`, `docs/SIGN-IN-SETUP.md`, `tests/e2e/save-spot-test.mjs`.
 - **Tested:** Vitest 1145 (savespot 27 new); e2e `save-spot-test.mjs` 89 checks; signin-home 71, links 24, stage2 19,
   beta 46, phone 17, notify-prompt 31 pass.
+
+## Organise tidy-up (ov14), branch `ov14-organise-tidy`, 22 Oct 2026
+- **Why:** Josh: "The organiser screen is a bit messy for the trip. It's not clear where to start … Maybe only having
+  votes in the viewing screen would be cleaner too."
+- **Organise = six steps:** 1 Plan → 2 Vote → 3 Book → 4 Lock in → 5 Jobs & money → 6 On the day. The current step is
+  open with ONE big button (the Next step, worded for the step: "Start: plan where and when", "Pick the winner",
+  "Allocate the calls", "Lock it in"…); done steps fold to a ✓ line ("✓ Hunter Valley · Fri 13 – Sun 15 Mar"); later
+  steps are greyed but open. Everything else sits under its step (votes → Vote; calls and where to stay → Book; who's
+  in, trip plan, deposits → Lock in; Jobs / Kitty / Rooms & cars → Jobs & money; rounds, draw, checklist → On the day)
+  or in **More** (Chat, Details, organiser Checklist, Tribunal on a laptop). Old `?tab=` links still land in the right
+  place; `?step=` opens a step. Laptop: steps across the top, a slim status column (who's in, open votes) with no
+  buttons; the costs show once (the table). The stage bar, Lock-it-in card, checklist and builder cards at the top are
+  gone (folded into the steps).
+- **Overview:** the trip at a glance (where, when, who's in, and "Still being decided" instead of a wrong "Locked in"),
+  then the open votes front and centre ("Vote now" ballot, or "You've voted ✓ — see results"). Organisers see the
+  ballot here and the results on Organise → Vote. Nothing organiser-only (no organiser Next step, Build the trip, Same
+  as last time). Players always open on the Overview; a player's vote link (?tab=vote) lands there.
+- **Files:** `src/lib/organisesteps.js` (+test), `src/screens/OrganiseSteps.jsx`, `src/screens/organise.css`,
+  `src/components/OverviewVotes.jsx`, `Planner.jsx`, `TripPlan.jsx` (useNextStep / useStepActions), `OrganisePanels.jsx`,
+  `PlanTabs.jsx`, `TripOverview.jsx`, `TripExtras.jsx`, `VoteBatchCard.jsx`, `lib/tripsummary.js`.
+- **Tested:** Vitest 1159; e2e new `organise-tidy-test.mjs` (42 checks, new → planned → vote → booked → locked), and
+  plan-ux 67, trip-builder 48, trip-plan 43, trips 22, trip-overview 23, desktop 125, caddie 35, email-votes 28,
+  links 24, phone 17, stage10 15, trip-extras 36, tripfinder 30 pass (selectors updated where the layout moved).

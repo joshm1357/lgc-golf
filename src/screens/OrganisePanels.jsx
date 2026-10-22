@@ -1,19 +1,20 @@
-// Trips → a trip → Organise, on a laptop (1024 px and up), for the trip's organisers: the panels that were the
-// Trip desk (Stage 11c) down the right of the Organise view, so everything about organising a trip is in one place.
-// Josh, 22 Oct: "Why is there still a Trip desk if there is Trips?" — the desk folded in here; phones are unchanged.
-//   OrganiseSide   the right-hand column: countdown and trip switcher, who's in, votes, the kitty, jobs, rooms & cars,
-//                  rounds & tee times (with paper cards, Present and Print), the organiser checklist, the Tribunal
-//   CostsPanel     the costs table (sort, filter, edit in place, CSV, who pays whom) — on the Kitty tab
+// Trips → a trip → Organise, on a laptop (1024 px and up), for the trip's organisers: what was the Trip desk
+// (Stage 11c). Since the Organise tidy-up (ov14, 22 Oct) the panels sit where they belong instead of all down the right:
+//   OrganiseSide    the slim right-hand column: the trip at a glance and trip switcher, who's in, open votes (status only)
+//   CostsPanel      the costs table (sort, filter, edit in place, CSV, who pays whom) — Jobs & money → Kitty
+//   RoundsPanel     rounds & tee times with paper cards, Present and Print — the On the day step
+//   ChecklistPanel  the set-up checklist and "worth doing" — the On the day step
+//   TribunalPanel   open Tribunal cases — Organise → More
 // The working-out lives in lib/desk.js. Old /desk addresses forward from screens/Desk.jsx.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
 import { useData, useSession, useFeature, useRealtime, playerName } from '../lib/store.jsx';
 import { Avatar, AvatarStack, toast } from '../components/ui.jsx';
-import { everyone, feedPost, shareNudge, useRun, must } from './Planner.jsx';
+import { everyone, shareNudge, useRun, must } from './Planner.jsx';
 import { nudgeText, fmtRange, money, suggestions } from '../lib/plan.js';
 import { STAGE_LABEL } from '../lib/trips.js';
-import { notify, appLink } from '../lib/push.js';
+import { appLink } from '../lib/push.js';
 import { deskHeader, deskPanels, sortRows, nextSort, filterRows, costsCsv, csvName, TOOL } from '../lib/desk.js';
 import { setupSteps } from '../lib/setupguide.js';
 import { formatName } from '../lib/board.js';
@@ -34,7 +35,7 @@ function usePlans() {
 }
 
 /** The feature switches the panels follow. */
-function usePanelFeatures() {
+export function usePanelFeatures() {
   return {
     tasks: useFeature('planner_tasks'), costs: useFeature('planner_costs'), rooms: useFeature('planner_rooms'),
     tribunal: useFeature('tribunal'), tee: useFeature('tee_groups'), replay: useFeature('replay'), cup: useFeature('cup'), side_comps: useFeature('side_comps'),
@@ -42,32 +43,19 @@ function usePanelFeatures() {
 }
 
 /**
- * The right-hand column of Organise on a laptop. pd: the plan's data; current: the open tab; onTab(tab) opens one;
- * onNewCost() asks the costs table to start a new cost ("n").
+ * The slim right-hand column of Organise on a laptop (ov14, 22 Oct): status only — the trip at a glance (with the trip
+ * switcher), who's in, and the open votes. No buttons to compete with the step's one big button; tapping a vote opens
+ * its step. pd: the plan's data; onStep(key) opens a step.
  */
-export function OrganiseSide({ pd, current, onTab, onNewCost }) {
+export function OrganiseSide({ pd, onStep }) {
   const data = useData();
   const { status } = useSession();
   const nav = useNavigate();
   const plans = usePlans();
-  const on = usePanelFeatures();
   const people = everyone(data);
   const playerIds = people.map((p) => p.id);
   const panels = useMemo(() => deskPanels(pd, { playerIds, me: status.player_id, isAdmin: !!status.is_admin }),
     [pd, playerIds.join(','), status.player_id, status.is_admin]); // eslint-disable-line react-hooks/exhaustive-deps
-  // "n" on Organise: a new cost (opens the Kitty tab, where the costs table is).
-  const latest = useRef(null);
-  latest.current = { current, costs: on.costs, onTab, onNewCost };
-  useEffect(() => {
-    const f = () => {
-      const l = latest.current;
-      if (!l.costs) return;
-      if (l.current !== 'kitty') l.onTab('kitty');
-      l.onNewCost?.();
-    };
-    window.addEventListener('tgt:new', f);
-    return () => window.removeEventListener('tgt:new', f);
-  }, []);
   const { plan } = pd;
   const trip = plan.trip_id ? data.trips.find((t) => t.id === plan.trip_id) : null;
   const head = deskHeader(plan, trip);
@@ -86,14 +74,8 @@ export function OrganiseSide({ pd, current, onTab, onNewCost }) {
           </select>
         )}
       </div>
-      <PeoplePanel pd={pd} p={panels.people} />
-      {on.tasks && <VotesPanel pd={pd} p={panels.votes} goTab={onTab} />}
-      {on.costs && <KittyPanel pd={pd} p={panels.costs} goTab={onTab} current={current} />}
-      {on.tasks && <JobsPanel pd={pd} p={panels.jobs} goTab={onTab} />}
-      {on.rooms && <RoomsPanel pd={pd} p={panels.rooms} goTab={onTab} />}
-      <RoundsPanel plan={plan} trip={trip} on={on} />
-      <ChecklistPanel pd={pd} trip={trip} on={on} goTab={onTab} />
-      {on.tribunal && <TribunalPanel />}
+      <PeoplePanel p={panels.people} />
+      <VotesPanel p={panels.votes} onStep={onStep} />
     </aside>
   );
 }
@@ -113,24 +95,10 @@ function Panel({ id, title, count, children, next, wide }) {
 
 const names = (data, ids) => ids.map((id) => playerName(data.playersById[id])).join(', ');
 
-function PeoplePanel({ pd, p }) {
+function PeoplePanel({ p }) {
   const data = useData();
-  const { status } = useSession();
-  const [busy, run] = useRun();
-  const { plan } = pd;
-  const lock = () => {
-    if (!window.confirm(`Lock in the ${p.in.length} who are in? After this only you can change who’s coming.`)) return;
-    run(async () => {
-      await must(supabase.from('plans').update({ rsvp_locked: true, status: plan.status === 'planning' ? 'confirmed' : plan.status }).eq('id', plan.id));
-      await feedPost(status.player_id, plan, `🔒 ${plan.name}: the list is locked — ${p.in.length} in: ${names(data, p.in)}.`);
-      await notify('rsvp_locked', { plan_id: plan.id });
-      pd.reload();
-    }, 'Locked in — everyone’s been told');
-  };
-  const nudge = () => shareNudge(nudgeText('rsvp', { plan, names: p.noReply.map((id) => playerName(data.playersById[id])), url: appLink(`/plan/${plan.id}?tab=people`) }));
   return (
-    <Panel id="people" title="🙋 Who’s in" count={`${p.in.length} in`}
-      next={p.next && <button type="button" className="btn sm gold" disabled={busy} onClick={p.next.kind === 'lock' ? lock : nudge}>{p.next.label}</button>}>
+    <Panel id="people" title="🙋 Who’s in" count={`${p.in.length} in`}>
       <div className="desk-stats">
         <Stat label="In" value={p.in.length} />
         <Stat label="Maybe" value={p.maybe.length} />
@@ -152,30 +120,14 @@ function optionTitle(poll, o) {
   return poll.kind === 'dates' && o.start_date ? fmtRange(o.start_date, o.end_date) : o.label;
 }
 
-function VotesPanel({ pd, p, goTab }) {
+/** Open votes at a glance: the leader and who's still to vote. Tap one to open its step. */
+function VotesPanel({ p, onStep }) {
   const data = useData();
-  const { status } = useSession();
-  const [busy, run] = useRun();
-  const [pick, setPick] = useState({});
-  const close = (v) => {
-    const choice = pick[v.poll.id] || v.leading?.option.id || v.rows[0]?.option.id;
-    const o = v.rows.find((r) => r.option.id === choice)?.option;
-    if (!o) return;
-    run(async () => {
-      // One step on the server: closes the vote, records the winner and sets the trip's dates or place.
-      await must(supabase.rpc('decide_poll', { p_poll: v.poll.id, p_option: o.id, p_apply: v.poll.kind !== 'other' }));
-      await feedPost(status.player_id, pd.plan, `✅ ${pd.plan.name} — ${v.poll.question} ${optionTitle(v.poll, o)}.`);
-      await notify('poll_decided', { poll_id: v.poll.id });
-      pd.reload();
-    }, 'Decided — everyone’s been told');
-  };
   return (
-    <Panel id="votes" title="🗳️ Votes" count={p.open.length ? `${p.open.length} open` : `${p.decided} decided`}
-      next={!p.open.length && p.next ? <button type="button" className="btn sm gold" onClick={() => goTab('vote')}>{p.next.label}</button>
-        : p.next?.kind === 'nudge-votes' ? <button type="button" className="btn sm ghost" onClick={() => shareNudge(nudgeText('votes', { plan: pd.plan, names: p.open[0].waiting.map((id) => playerName(data.playersById[id])), url: appLink(`/plan/${pd.plan.id}?tab=vote`) }))}>{p.next.label}</button> : null}>
+    <Panel id="votes" title="🗳️ Open votes" count={p.open.length ? `${p.open.length} open` : `${p.decided} decided`}>
       {!p.open.length && <div className="small muted">No votes open.</div>}
       {p.open.map((v) => (
-        <div key={v.poll.id} className="desk-vote" data-testid="desk-vote">
+        <button key={v.poll.id} type="button" className="desk-vote org-vote-btn" data-testid="desk-vote" onClick={() => onStep?.(v.poll.purpose === 'stay' ? 'book' : 'vote')}>
           <div style={{ fontWeight: 800 }}>{v.poll.question}</div>
           <table className="desk-table compact">
             <tbody>
@@ -189,74 +141,8 @@ function VotesPanel({ pd, p, goTab }) {
             </tbody>
           </table>
           {v.waiting.length > 0 && <div className="small muted">Still to vote: {names(data, v.waiting)}</div>}
-          {p.canDecide && v.rows.length > 0 && (
-            <div className="row" style={{ gap: 8, marginTop: 6 }}>
-              <select className="select grow" aria-label={`Winner for ${v.poll.question}`} value={pick[v.poll.id] || v.leading?.option.id || v.rows[0].option.id} onChange={(e) => setPick({ ...pick, [v.poll.id]: e.target.value })}>
-                {v.rows.map((r) => <option key={r.option.id} value={r.option.id}>{optionTitle(v.poll, r.option)} · {r.score} pts</option>)}
-              </select>
-              <button type="button" className="btn sm gold" disabled={busy} onClick={() => close(v)}>Close & pick</button>
-            </div>
-          )}
-        </div>
+        </button>
       ))}
-    </Panel>
-  );
-}
-
-function JobsPanel({ pd, p, goTab }) {
-  const data = useData();
-  const { status } = useSession();
-  const [busy, run] = useRun();
-  const [title, setTitle] = useState('');
-  const input = useRef(null);
-  const add = () => {
-    const t = title.trim();
-    if (!t) return;
-    run(async () => { await must(supabase.from('plan_items').insert({ plan_id: pd.plan.id, kind: 'job', title: t })); setTitle(''); pd.reload(); }, 'Job added');
-  };
-  return (
-    <Panel id="jobs" title="📋 Jobs" count={`${p.open.length} to do`}
-      next={p.next.tab ? <button type="button" className="btn sm ghost" onClick={() => goTab('jobs')}>{p.next.label}</button> : null}>
-      {p.open.length === 0 && <div className="small muted">Nothing to do. {p.done ? `${p.done} done ✓` : ''}</div>}
-      <ul className="desk-list">
-        {p.open.slice(0, 8).map((j) => (
-          <li key={j.id}>
-            <label className="row" style={{ gap: 8 }}>
-              <input type="checkbox" checked={false} disabled={busy} aria-label={`Done: ${j.title}`}
-                onChange={() => run(async () => { await must(supabase.from('plan_items').update({ done: true }).eq('id', j.id)); pd.reload(); }, 'Nice work ✓')} />
-              <span className="grow">{j.title}</span>
-              <span className="small muted">{j.owner_id ? playerName(data.playersById[j.owner_id]) : 'no owner'}</span>
-            </label>
-          </li>
-        ))}
-      </ul>
-      {p.open.length > 8 && <div className="small muted">and {p.open.length - 8} more</div>}
-      {(status.is_admin || status.player_id) && (
-        <form className="row" style={{ gap: 8, marginTop: 8 }} onSubmit={(e) => { e.preventDefault(); add(); }}>
-          <input ref={input} className="input grow" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Add a job…" aria-label="New job" />
-          <button className="btn sm" disabled={busy || !title.trim()}>Add</button>
-        </form>
-      )}
-    </Panel>
-  );
-}
-
-/** The kitty at a glance (the full costs table is on the Kitty tab). */
-function KittyPanel({ pd, p, goTab, current }) {
-  const data = useData();
-  const who = (id) => (id === 'kitty' ? 'the kitty' : playerName(data.playersById[id]));
-  return (
-    <Panel id="kitty" title="💰 Kitty" count={money(p.total)}
-      next={<>
-        {p.next.kind === 'nudge-kitty' && <button type="button" className="btn sm ghost" onClick={() => shareNudge(nudgeText('kitty', { plan: pd.plan, names: p.owing.map((x) => who(x.player_id)), url: appLink(`/plan/${pd.plan.id}?tab=kitty`) }))}>{p.next.label}</button>}
-        {current !== 'kitty' && <button type="button" className="btn sm ghost" onClick={() => goTab('kitty')}>Costs table →</button>}
-      </>}>
-      <div className="desk-stats" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
-        <Stat label="Costs" value={p.count} />
-        <Stat label="To settle" value={money(p.toCollect)} warn={p.toCollect > 0.5} />
-        <Stat label="Owe" value={p.owing.length} warn={p.owing.length > 0} />
-      </div>
-      {p.owing.length > 0 && <div className="small" style={{ marginTop: 6 }}><strong>Still owe:</strong> <span className="muted">{p.owing.map((x) => who(x.player_id)).join(', ')}</span></div>}
     </Panel>
   );
 }
@@ -265,7 +151,7 @@ function KittyPanel({ pd, p, goTab, current }) {
  * The costs table (Kitty tab, laptop, organisers): sort, filter, edit in place, add with the keyboard, CSV, who pays
  * whom. focusAt: when "n" was pressed (the new-cost box takes the cursor if that was just now).
  */
-export function CostsPanel({ pd, focusAt = 0 }) {
+export function CostsPanel({ pd, focusAt = 0, owes = true }) {
   const data = useData();
   const { status } = useSession();
   const me = status.player_id;
@@ -373,7 +259,7 @@ export function CostsPanel({ pd, focusAt = 0 }) {
           </tfoot>
         </table>
       </div>
-      {p.settle.length > 0 && (
+      {owes && p.settle.length > 0 && (
         <div className="desk-owes" data-testid="who-owes">
           <span className="label">Who pays whom</span>
           {p.settle.map((s, i) => <div key={i} className="small"><strong>{who(s.from)}</strong> → {who(s.to)} <strong>{money(s.amount)}</strong></div>)}
@@ -383,34 +269,15 @@ export function CostsPanel({ pd, focusAt = 0 }) {
   );
 }
 
-function RoomsPanel({ pd, p, goTab }) {
-  const data = useData();
-  const kinds = pd.plan.kind === 'round' ? ['car'] : ['room', 'car'];
-  return (
-    <Panel id="rooms" title="🛏️ Rooms & cars" next={p.next && <button type="button" className="btn sm ghost" onClick={() => goTab('groups')}>{p.next.label}</button>}>
-      {kinds.map((k) => {
-        const x = p[k];
-        const w = k === 'room' ? ['room', 'rooms', 'beds'] : ['car', 'cars', 'seats'];
-        return (
-          <div key={k} className="small" style={{ marginBottom: 6 }}>
-            <strong>{x.count} {x.count === 1 ? w[0] : w[1]}</strong> · {x.spaces} {w[2]} · {x.placed} placed
-            {x.unplaced.length > 0 && <div className="muted">Not placed: {names(data, x.unplaced)}</div>}
-          </div>
-        );
-      })}
-    </Panel>
-  );
-}
-
-function ChecklistPanel({ pd, trip, on, goTab }) {
+export function ChecklistPanel({ pd, trip, on, goTab, ideasToo = true }) {
   const data = useData();
   const { status } = useSession();
   const steps = trip ? setupSteps(data, { cup: on.cup, side_comps: on.side_comps }, trip) : [];
-  const ideas = status.is_admin ? suggestions(pd.plan, { ...pd, playerIds: everyone(data).map((p) => p.id) }).slice(0, 4) : [];
+  const ideas = status.is_admin && ideasToo ? suggestions(pd.plan, { ...pd, playerIds: everyone(data).map((p) => p.id) }).slice(0, 4) : [];
   const done = steps.filter((s) => s.done).length;
   return (
     <Panel id="checklist" title="📝 Organiser checklist" count={trip ? `${done} of ${steps.length}` : null}
-      next={trip && steps.some((s) => !s.done && !s.optional) ? <Link to="/setup" className="btn sm gold">Set up the trip →</Link> : null}>
+      next={trip && steps.some((s) => !s.done && !s.optional) ? <Link to="/setup" className="btn sm ghost">Set up the trip →</Link> : null}>
       {trip ? (
         <ul className="desk-list">
           {steps.map((s) => (
@@ -438,7 +305,7 @@ function ChecklistPanel({ pd, trip, on, goTab }) {
   );
 }
 
-function RoundsPanel({ plan, trip, on }) {
+export function RoundsPanel({ plan, trip, on }) {
   const data = useData();
   const rounds = trip ? data.rounds.filter((r) => r.trip_id === trip.id) : [];
   const ids = rounds.map((r) => r.id);
@@ -488,7 +355,7 @@ function RoundsPanel({ plan, trip, on }) {
   );
 }
 
-function TribunalPanel() {
+export function TribunalPanel() {
   const data = useData();
   const [cases, setCases] = useState(null);
   const load = useCallback(async () => {
@@ -518,3 +385,19 @@ function TribunalPanel() {
   );
 }
 
+/** The On the day step on a laptop: rounds & tee times (paper cards, Present, Print) and the set-up checklist. */
+export function DayPanels({ pd, trip, goTab }) {
+  const on = usePanelFeatures();
+  return (
+    <div className="stack" style={{ gap: 12 }}>
+      <RoundsPanel plan={pd.plan} trip={trip} on={on} />
+      <ChecklistPanel pd={pd} trip={trip} on={on} goTab={goTab} ideasToo={false} />
+    </div>
+  );
+}
+
+/** Organise → More → Tribunal (laptop, organisers), when the Tribunal is switched on. */
+export function MoreTribunal() {
+  const on = useFeature('tribunal');
+  return on ? <TribunalPanel /> : <div className="small muted">The Tribunal is switched off for this group.</div>;
+}

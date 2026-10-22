@@ -7,12 +7,14 @@ import { STARTERS } from '../lib/starters.js';
 import { Header, Sheet, Loading, toast } from '../components/ui.jsx';
 import { notify } from '../lib/push.js';
 import { useRun, must } from './Planner.jsx';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useGovernance } from './Cases.jsx';
 import { ruleLine, closesIn } from '../lib/governance.js';
 import { ImportLink } from './AiImport.jsx';
 import { StandardRules, RuleIdeas } from '../components/StandardRules.jsx';
 import { standardOptions, standardRule } from '../lib/standardrules.js';
+import { useRuleData, RulesFilterBar, RoundRules, TargetRules, RuleScopeFields, scopeRow, ScopeBadge } from '../components/RuleLayers.jsx';
+import { filterLocal, loadFilter, saveFilter, chipTarget, scopeFromValue } from '../lib/rulelayers.js';
 
 const CATS = [
   ['format', 'Format & scoring'], ['side_comp', 'Side comps'], ['bonus', 'Bonuses'], ['handicap', 'Handicaps'],
@@ -26,12 +28,13 @@ const VOTE = { for: '👍 For', against: '👎 Against', abstain: 'Abstain' };
 function useRules() {
   const [d, setD] = useState(null);
   const load = useCallback(async () => {
-    const [{ data: rules, error }, { data: votes }] = await Promise.all([
+    const [{ data: rules, error }, { data: votes }, { data: versions }] = await Promise.all([
       supabase.from('rules').select('*').order('sort').order('created_at'),
       supabase.from('rule_votes').select('*'),
+      supabase.from('rule_versions').select('rule_id,event,case_id').not('case_id', 'is', null),
     ]);
     if (error) return;
-    setD({ rules: rules || [], votes: votes || [] });
+    setD({ rules: rules || [], votes: votes || [], versions: versions || [] });
   }, []);
   useEffect(() => { load(); }, [load]);
   useRealtime(['rules', 'rule_votes'], load);
@@ -44,11 +47,25 @@ export default function Rulebook() {
   const rb = useRules();
   const g = useGovernance();
   const gov = g?.ok ? g : null;
-  const [filter, setFilter] = useState('all');
+  const rd = useRuleData();
+  const [params] = useSearchParams();
+  // v3: the filter bar (chips, search, a round's rules). Remembered for this session; a link (?round= / ?f=) wins.
+  const [view, setView] = useState(() => (params.get('round') || params.get('f') ? { filter: params.get('f') || 'all', round: params.get('round') || null } : loadFilter()));
+  const [search, setSearch] = useState('');
   const [editing, setEditing] = useState(null); // {} = new
+  useEffect(() => { saveFilter(view); }, [view]);
+  useEffect(() => {
+    const r = params.get('round'); const f = params.get('f');
+    if (r || f) setView({ filter: f || 'all', round: r || null });
+  }, [params]);
   if (!rb) return <div className="page"><Header logo title="The Rulebook" /><Loading /></div>;
-  const fits = (r) => filter === 'all' || r.applies_to.includes('all') || r.applies_to.includes(filter);
-  const active = rb.rules.filter((r) => r.status === 'active' && fits(r));
+  const filter = view.filter;
+  const round = view.round ? rd.rounds.find((r) => r.id === view.round) : null;
+  const classic = !round && filter === 'all' && !search.trim();
+  const listMode = !round && ['local', 'voted', 'waiting'].includes(filter);
+  const active = rb.rules.filter((r) => r.status === 'active');
+  const listed = listMode ? filterLocal(rb.rules, filter, { versions: rb.versions, cases: gov?.cases || [], search }) : [];
+  const newStart = chipTarget(filter) ? { category: 'other', applies_to: ['all'], status: 'proposed', ...scopeFromValue(filter) } : null;
   const proposed = rb.rules.filter((r) => r.status === 'proposed');
   const old = rb.rules.filter((r) => r.status === 'rejected' || r.status === 'retired');
   const showPicker = status.is_admin && rb.rules.filter((r) => r.status === 'active' || r.status === 'proposed').length === 0;
@@ -57,11 +74,16 @@ export default function Rulebook() {
     <div className="page">
       <Header logo title="The Rulebook" sub="How we play, what counts, and what’s up for a vote" />
       <div className="section stack">
+        <RulesFilterBar filter={filter} onFilter={(f) => setView({ filter: f, round: null })} round={view.round} onRound={(r) => setView({ ...view, round: r })} search={search} onSearch={setSearch} rd={rd} />
+        {round && <div className="row between" style={{ gap: 8 }}><strong style={{ fontSize: 17 }} data-testid="round-rules-title">📘 The rules for {round.name}</strong><button type="button" className="btn ghost sm" onClick={() => setView({ ...view, round: null })}>Close</button></div>}
+        {round && <RoundRules round={round} localRules={rb.rules} rd={rd} search={search} />}
+        {!round && !classic && !listMode && <TargetRules filter={filter} localRules={rb.rules} rd={rd} search={search} />}
+        {listMode && (listed.length ? listed.map((r) => (r.status === 'proposed'
+          ? <ProposedCard key={r.id} rule={r} votes={rb.votes.filter((v) => v.rule_id === r.id)} reload={() => { rb.reload(); gov?.reload(); }} onEdit={() => setEditing(r)} c={gov?.cases.find((x) => x.rule_id === r.id && x.kind === 'new_rule' && x.status === 'open')} />
+          : <RuleCard key={r.id} rule={r} names={rd.names} />)) : <div className="empty">{filter === 'voted' ? 'No rules changed by a vote yet.' : filter === 'waiting' ? 'Nothing waiting for a vote.' : 'No rules match.'}</div>)}
+        {classic && <>
         <StandardRules localRules={rb.rules} />
-        <div data-testid="our-rules"><strong style={{ fontSize: 17 }}>🏌️ Local and special rules</strong><div className="small muted">Your group’s own rules — they beat the standard ones.</div></div>
-        <div className="seg light" role="group">
-          {[['all', 'All'], ['stableford', 'Stableford'], ['ambrose', 'Ambrose']].map(([k, l]) => <button key={k} type="button" aria-pressed={filter === k} onClick={() => setFilter(k)}>{l}</button>)}
-        </div>
+        <div data-testid="our-rules"><strong style={{ fontSize: 17 }}>🏌️ Local and special rules</strong><div className="small muted">Your group’s own rules — they beat the standard ones, and a rule for one comp beats both (for that comp).</div></div>
 
         {showPicker && <StarterPicker reload={rb.reload} />}
 
@@ -79,13 +101,14 @@ export default function Rulebook() {
           return (
             <div key={cat} className="stack" style={{ gap: 8 }}>
               <span className="label">{label}</span>
-              {list.map((r) => <RuleCard key={r.id} rule={r} />)}
+              {list.map((r) => <RuleCard key={r.id} rule={r} names={rd.names} />)}
             </div>
           );
         })}
-        {active.length === 0 && !showPicker && <div className="empty">No rules for this comp yet.{!status.is_admin && rb.rules.length === 0 ? ' Your organiser can start from a ready-made Rulebook.' : ''}</div>}
+        {active.length === 0 && !showPicker && <div className="empty">No rules yet.{!status.is_admin && rb.rules.length === 0 ? ' Your organiser can start from a ready-made Rulebook.' : ''}</div>}
+        </>}
 
-        {(status.is_admin || (votingOn && status.role !== 'guest')) && <button type="button" className="btn gold block" onClick={() => setEditing({})}>{votingOn ? '+ Propose a rule' : '+ Add a rule'}</button>}
+        {(status.is_admin || (votingOn && status.role !== 'guest')) && <button type="button" className="btn gold block" onClick={() => setEditing(newStart ? { start: newStart } : {})}>{votingOn ? '+ Propose a rule' : '+ Add a rule'}</button>}
         {(status.is_admin || (votingOn && status.role !== 'guest')) && <RuleIdeas localRules={rb.rules} onPropose={(r) => setEditing({ start: r })} />}
 
         {status.is_admin && <ImportLink label="✨ Import rules from a photo or text" about="rules" />}
@@ -97,7 +120,7 @@ export default function Rulebook() {
           </details>
         )}
       </div>
-      {editing && <RuleSheet rule={editing.id ? editing : null} start={editing.start} settings={gov?.settings} onClose={() => setEditing(null)} onSaved={rb.reload} />}
+      {editing && <RuleSheet rule={editing.id ? editing : null} start={editing.start} settings={gov?.settings} localRules={rb.rules} onClose={() => setEditing(null)} onSaved={rb.reload} />}
     </div>
   );
 }
@@ -113,7 +136,7 @@ export function Chips({ rule }) {
 }
 
 // Tap any rule to open it: wording, history, rulings, and "Challenge this rule" (RulePage.jsx).
-function RuleCard({ rule }) {
+function RuleCard({ rule, names }) {
   const data = useData();
   const by = data.playersById[rule.proposed_by];
   return (
@@ -123,6 +146,7 @@ function RuleCard({ rule }) {
         {rule.status !== 'active' && <span className="small muted" style={{ fontWeight: 700, textTransform: 'uppercase' }}>{rule.status}</span>}
       </div>
       <Chips rule={rule} />
+      {names && <ScopeBadge rule={rule} names={names} />}
       {rule.detail && <div style={{ fontSize: 15, lineHeight: 1.45 }}>{rule.detail}</div>}
       {(rule.decision_note || by) && <div className="small muted">{by ? `Proposed by ${playerName(by)}. ` : ''}{rule.decision_note || ''}</div>}
     </Link>
@@ -198,7 +222,7 @@ function ProposedCard({ rule, votes, reload, onEdit, c }) {
   );
 }
 
-export function RuleSheet({ rule, start, onClose, onSaved, settings }) {
+export function RuleSheet({ rule, start, onClose, onSaved, settings, localRules = [] }) {
   const { status } = useSession();
   const isAdmin = status.is_admin;
   // Stage 11b: an organiser adds, changes or retires rules directly only where the group's decision rule says an
@@ -216,6 +240,7 @@ export function RuleSheet({ rule, start, onClose, onSaved, settings }) {
     const row = { title: v.title.trim(), detail: v.detail?.trim() || null, category: v.category, applies_to: v.applies_to, value: v.value?.trim() || null };
     // Which standard rule it changes (073). Only sent when set (or being cleared), so an older database still works.
     if (v.overrides || rule?.overrides) row.overrides = v.overrides || null;
+    Object.assign(row, scopeRow(v, rule)); // v3 (076): what it's for, and which of our rules it changes
     if (rule) {
       const extra = isAdmin && asStatus && asStatus !== rule.status ? { status: asStatus, decided_at: asStatus === 'proposed' ? null : new Date().toISOString() } : {};
       await must(supabase.from('rules').update({ ...row, ...extra }).eq('id', rule.id));
@@ -245,6 +270,7 @@ export function RuleSheet({ rule, start, onClose, onSaved, settings }) {
             {standardOptions().map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
           </select>
         </label>
+        <RuleScopeFields v={v} set={set} localRules={localRules} />
         <span className="label">Applies to</span>
         <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
           {APPLIES.map(([k, l]) => <button key={k} type="button" className="chip" aria-pressed={v.applies_to.includes(k)} onClick={() => toggle(k)}>{l}</button>)}

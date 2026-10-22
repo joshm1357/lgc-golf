@@ -171,6 +171,22 @@ export function targetContext(target, data = {}) {
   return finish(ctx);
 }
 
+/** Everything the group has (for searching the whole Rulebook): every standard section and every rule applies. */
+export function everythingContext(data = {}) {
+  const ctx = emptyCtx();
+  ctx.allFormats = true;
+  for (const f of FORMAT_KEYS) ctx.formats.add(f);
+  for (const c of arr(data.comps)) addComp(ctx, c);
+  for (const t of arr(data.trophies)) ctx.trophyIds.add(t.id);
+  for (const g of arr(data.games)) { ctx.gameIds.add(g.id); ctx.gameKeys.add(g.kind); }
+  for (const k of Object.keys(GAME_LABEL)) ctx.gameKeys.add(k);
+  for (const c of arr(data.customGames)) ctx.customGameIds.add(c.id);
+  for (const k of Object.keys(SIDE_LABEL)) ctx.sideKeys.add(k);
+  for (const d of arr(data.ownDefs)) ctx.sideIds.add(d.id);
+  ctx.standardKeys = new Set(STANDARD_SECTIONS.map((s) => s.key));
+  return ctx;
+}
+
 /** Does a local rule apply in this context? */
 export function appliesIn(rule, ctx) {
   if (!rule || !ctx) return false;

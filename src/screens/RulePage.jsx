@@ -8,6 +8,7 @@ import { Header, Loading, timeAgo } from '../components/ui.jsx';
 import { useGovernance, RaiseCase } from './Cases.jsx';
 import { challengeBlock, sydneyDate, applyWords, canRaise, KIND } from '../lib/governance.js';
 import { RuleSheet, Chips } from './Rulebook.jsx';
+import { RuleScopeLine } from '../components/RuleLayers.jsx';
 
 const EVENT = { recorded: 'In the Rulebook', proposed: 'Proposed', added: 'Added', adopted: 'Adopted', rejected: 'Rejected', changed: 'Changed', retired: 'Retired', restored: 'Brought back' };
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
@@ -58,6 +59,7 @@ export default function RulePage() {
         <div className="card pad stack" style={{ gap: 8 }} data-testid="rule-wording">
           <strong style={{ fontSize: 18 }}>{rule.title}</strong>
           <Chips rule={rule} />
+          <RuleScopeLine rule={rule} />
           {rule.detail && <div style={{ fontSize: 16, lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>{rule.detail}</div>}
           <div className="small muted">
             {origin ? `${EVENT[origin.event] || 'In the Rulebook'} ${fmtDate(rule.decided_at || origin.created_at)}` : `Since ${fmtDate(rule.decided_at || rule.created_at)}`}

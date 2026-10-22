@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  rankOf, layerOf, roundContext, targetContext, appliesIn, effectiveRules, topicsOf, keywordConflicts, suggestOverride,
+  rankOf, layerOf, roundContext, targetContext, everythingContext, appliesIn, effectiveRules, topicsOf, keywordConflicts, suggestOverride,
   filterChips, chipTarget, filterLocal, matchesSearch, scopeFromValue, scopeValue, scopeLabel, nameIndex, scopeOptions,
   loadFilter, saveFilter, overrideTitle,
 } from './rulelayers.js';
@@ -70,6 +70,12 @@ describe('contexts', () => {
     expect(cg.customGameIds.has('cg-beer') && cg.gameKeys.has('skins')).toBe(true);
     expect(targetContext({ kind: 'format', key: 'stroke' }, data).standardKeys.has('stroke')).toBe(true);
     expect(targetContext(null, data).allFormats).toBe(true);
+  });
+  it('everything: every section and every scoped rule (for search)', () => {
+    const ctx = everythingContext(data);
+    expect(ctx.standardKeys.has('nassau') && ctx.standardKeys.has('cup')).toBe(true);
+    expect(appliesIn(rule('x', { scope_kind: 'comp', scope_id: BD.id }), ctx)).toBe(true);
+    expect(appliesIn(rule('y', { scope_kind: 'side_comp', scope_id: 'def-putt' }), ctx)).toBe(true);
   });
   it('applies: scoped rules only where their target is in play; old applies_to still works', () => {
     const amb = roundContext(R_AMB, data);

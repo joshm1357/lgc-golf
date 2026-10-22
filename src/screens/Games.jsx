@@ -15,6 +15,7 @@ import {
 } from '../lib/games.js';
 import { withCustom, roundGameFromCustom, copyFrom } from '../lib/customgames.js';
 import { useCustomGames, CustomGamesCard, OptionControls, CustomGameSheet } from '../components/CustomGames.jsx';
+import { RulesLink } from '../components/RulesLinks.jsx';
 
 const byId = (list) => Object.fromEntries(list.map((c) => [c.id, c]));
 
@@ -148,6 +149,7 @@ function GameCard({ played, round }) {
       <div className="small muted">{info.blurb} {stakeWords(game)}</div>
       {game.house_rules && <div className="small" style={{ whiteSpace: 'pre-wrap' }} data-testid="house-rules"><strong>House rules ({game.base_name}, our way):</strong> {game.house_rules}</div>}
       {played.note && <div className="small muted">{played.note}</div>}
+      <div><RulesLink value={game.custom_game_id ? `custom_game:${game.custom_game_id}` : `game:${kind}`} /></div>
       {skipped ? <div className="small muted">{skipped}.</div>
         : kind === 'skins' ? <SkinsView result={result} subjects={subjects} />
           : kind === 'nassau' ? <NassauView result={result} subjects={subjects} />

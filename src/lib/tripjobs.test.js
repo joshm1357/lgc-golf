@@ -190,7 +190,8 @@ describe('nextStep', () => {
     const pickArea = nextStep({ ...org, builder: { weekends: 3, started: true, region: null, weekendsSettled: false } });
     expect([pickArea.key, pickArea.title]).toEqual(['area-pick', 'Choose the area and the primary and backup weekends']);
     expect(nextStep({ ...org, builder: { weekends: 3, started: true, region: 'Hunter Valley', weekendsSettled: false } }).title).toBe('Set the primary and backup weekends');
-    expect(nextStep({ ...org, builder: { weekends: 2, started: true, region: 'Hunter Valley', weekendsSettled: true } }).key).not.toBe('area-pick');
+    expect(nextStep({ ...org, builder: { weekends: 2, started: true, region: 'Hunter Valley', weekendsSettled: true } }).key).toBe('courses-pick');
+    expect(nextStep({ ...org, builder: { weekends: 2, started: true, region: 'Hunter Valley', weekendsSettled: true, coursesDone: true } }).key).toBe('calls-make');
     expect(nextStep({ ...org, plan: { ...p, start_date: '2027-03-12' } }).action).toEqual({ type: 'lock' });
   });
 

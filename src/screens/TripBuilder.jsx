@@ -34,6 +34,7 @@ import AreaVoteResults from '../components/AreaVoteResults.jsx';
 import { chooseAreaFromVotes, reopenArea, courseSummary, staySummary, areaSummary, regionNote } from '../lib/areavote.js';
 import { tripHeadcount, settlePrimaryBackup, openUpWeekend, makePrimary, weekendRole, rolesLine, lengthSection, leadingNights, resizeWeekend } from '../lib/weekends.js';
 import { detailCounts } from '../lib/callvote.js';
+import { TRIP_STEPS, areaLine, coursesLine } from '../lib/tripsteps.js';
 import { CourseSheet, StaySheet } from '../components/PlaceSheets.jsx';
 import { usePlaceInfo, RowTip } from '../components/PlanMapTools.jsx';
 import { courseTip, stayTip } from '../lib/placeinfo.js';
@@ -567,9 +568,9 @@ export default function TripBuilder() {
 
   const bodies = { area: stepArea, courses: stepCourses, calls: stepCalls, configs: stepConfigs };
   const summaries = {
-    area: [st.region || (st.regionOptions.length ? `${st.regionOptions.join(' or ')}?` : null),
-      st.weekendsSettled ? rolesLine(st.weekends) : st.weekends.length ? `${st.weekends.length} weekend${st.weekends.length === 1 ? '' : 's'} on the shortlist` : null].filter(Boolean).join(' · '),
-    courses: stays.length ? `Stay ${stays.map((s) => s.name).join(' / ')} · ${days.filter((d) => d.options.length).length} of ${days.length} days with options` : null,
+    // The same lines as the Organise step cards (lib/tripsteps.js).
+    area: areaLine(st),
+    courses: coursesLine(st),
     calls: st.callsMade ? `${tees.filter((t) => slotsFor(t).length).length} sets of tee times in` : null,
     configs: st.pickedText || (configs.length ? `${configs.length} trip${configs.length === 1 ? '' : 's'} that work` : null),
   };
@@ -583,6 +584,10 @@ export default function TripBuilder() {
             <button key={s.key} type="button" role="listitem" className={`tb-step${s.done ? ' done' : ''}${s.locked ? ' locked' : ''}`} aria-current={current === s.key ? 'step' : undefined} onClick={() => setStep(s.key)}>
               {s.locked ? '🔒' : s.done ? '✓' : s.n} {s.label}
             </button>
+          ))}
+          {/* ov23: the same six steps as Organise — the last two live there. */}
+          {TRIP_STEPS.filter((t) => !t.builder).map((t) => (
+            <Link key={t.key} role="listitem" className="tb-step tb-step-out" to={`/plan/${planId}?view=organise&step=${t.key}`} data-testid={`tb-step-link-${t.key}`}>{t.n} {t.title} ↗</Link>
           ))}
         </div>
         {!org && <div className="small muted">The organiser builds the trip here; you vote on the trip’s page{jobs.some((j) => j.owner_id === me && Object.values(callJobIds).includes(j.id)) ? ' — and put in the tee times for your call below' : ''}.</div>}

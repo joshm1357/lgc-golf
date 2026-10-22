@@ -262,6 +262,11 @@ export function nextStep(ctx) {
       return step({ key: 'area-pick', icon: '📍', title: builder.region ? 'Set the primary and backup weekends' : 'Choose the area and the primary and backup weekends',
         detail: 'From the vote (or your call). Then the courses get called about those weekends.', label: 'Build the trip', action: { type: 'builder' } });
     }
+    // Then step 2 (courses each day and where to stay), then step 3 (make the call jobs).
+    if (isOrganiser && !calls.length && builder.started && !plan.start_date && !(builder.teeOptions > 0) && builder.region && builder.weekendsSettled) {
+      if (!builder.coursesDone) return step({ key: 'courses-pick', icon: '⛳', title: 'Pick the course options each day and where to stay', detail: 'Then the courses get called about the primary and backup weekends.', label: 'Build the trip', action: { type: 'builder' } });
+      return step({ key: 'calls-make', icon: '📞', title: 'Call the courses: make the call jobs', detail: 'One job per course, asking about the primary and backup weekends.', label: 'Build the trip', action: { type: 'builder' } });
+    }
     const unowned = calls.find((j) => !j.owner_id);
     if (unowned && isOrganiser) return step({ key: `allocate:${unowned.id}`, icon: '📞', title: `Allocate: ${unowned.title}`, detail: unowned.due ? `Due ${fmtRange(unowned.due)}.` : 'Hand it to someone to ring for times.', label: 'Allocate', action: { type: 'allocate', id: unowned.id } });
     const mineCalls = calls.filter((j) => j.owner_id === me);

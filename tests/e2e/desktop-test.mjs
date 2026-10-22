@@ -210,7 +210,7 @@ async function flow(width, mobile = false) {
     check((await page.getByTestId('panel-tribunal').innerText()).includes('Di'), `${tag}: the open Tribunal case is listed (More)`);
 
     // 2. Close a vote on the Vote step (the leading option is picked by default).
-    await page.getByRole('list', { name: 'Organising steps' }).getByRole('button', { name: /Vote/ }).click();
+    await page.getByRole('list', { name: 'Organising steps' }).getByRole('button', { name: /Areas & weekends/ }).click(); // ov23: the vote is part of step 1
     await page.getByRole('button', { name: /Close now & pick the winner/ }).first().click();
     await page.getByRole('button', { name: 'Pick this winner' }).click();
     await page.getByTestId('panel-votes').getByText('No votes open').waitFor({ timeout: 8000 });

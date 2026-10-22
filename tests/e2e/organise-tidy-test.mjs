@@ -33,7 +33,7 @@ const open = async (q = 'view=organise') => {
   await page.getByTestId(q.includes('overview') ? 'overview-glance' : 'organise-steps').waitFor({ timeout: 15000 });
   await wait(700);
 };
-const states = async () => Object.fromEntries(await Promise.all(['plan', 'vote', 'book', 'lockin', 'money', 'day']
+const states = async () => Object.fromEntries(await Promise.all(['area', 'courses', 'book', 'lockin', 'money', 'day']
   .map(async (k) => [k, await page.getByTestId(`step-${k}`).getAttribute('data-state')])));
 const primary = () => page.getByTestId('primary');
 const golds = () => page.locator('.btn.gold:visible').count();
@@ -45,10 +45,13 @@ const noSideScroll = async (label) => {
 // 1. Brand new ("March", a place only): Plan is current, with one big button.
 await open();
 let s = await states();
-check(s.plan === 'current' && ['vote', 'book', 'lockin', 'money', 'day'].every((k) => s[k] === 'later'), `new trip: Plan is current, the rest greyed (${JSON.stringify(s)})`);
+check(s.area === 'current' && ['courses', 'book', 'lockin', 'money', 'day'].every((k) => s[k] === 'later'), `new trip: Areas & weekends is current, the rest greyed (${JSON.stringify(s)})`);
 check((await primary().innerText()) === 'Start: plan where and when', 'new trip: the big button is "Start: plan where and when"');
 check(await golds() === 1, `new trip: one big button on the page (${await golds()})`);
-check((await page.getByTestId('step-plan').innerText()).includes('Hunter Valley'), 'new trip: the Plan step says the place so far');
+check((await page.getByTestId('step-area').innerText()).includes('Hunter Valley'), 'new trip: Areas & weekends says the place so far');
+// ov23: the same six steps as the trip builder's tabs — no separate Plan or Vote step.
+const titles = (await page.locator('.org-step-title').allInnerTexts()).map((t) => t.replace(/\s*Now$/i, ''));
+check(JSON.stringify(titles) === JSON.stringify(['Areas & weekends', 'Courses & stays', 'Call the courses', 'Pick & lock in', 'Jobs & money', 'Comps & on the day']), `one step list: ${titles.join(' · ')}`);
 check(await page.getByTestId('organise-more').getByRole('tab', { name: '💬 Chat' }).isVisible(), 'chat is under More');
 await shot('01-new');
 await noSideScroll('new trip');
@@ -77,7 +80,7 @@ check(db.plan_polls.some((p) => p.plan_id === PA && p.kind === 'dates' && p.stat
 db.plan_items.push({ id: CALL, plan_id: PA, kind: 'job', title: '📞 Call Cypress Lakes for tee times', owner_id: null, stage: 'todo', done: false, created_by: K, created_at: new Date().toISOString() });
 await open();
 s = await states();
-check(s.plan === 'done' && s.vote === 'current', `vote open: Plan ✓, Vote is current (${JSON.stringify(s)})`);
+check(s.area === 'current', `vote open: it's part of Areas & weekends (current) (${JSON.stringify(s)})`);
 check((await primary().innerText()) === 'Pick the winner', 'vote open: the big button is "Pick the winner"');
 check(await golds() === 1, 'vote open: still one big button');
 await shot('02-vote');
@@ -107,8 +110,8 @@ await wait(900);
 check(!!plan().start_date, 'the winning weekend is the trip’s dates');
 await open();
 s = await states();
-check(s.vote === 'done' && s.book === 'current', `vote decided: Vote ✓, Book is current (${JSON.stringify(s)})`);
-check((await page.getByTestId('step-vote').innerText()).includes('Hunter Valley'), 'Vote folds to a one-line summary (place · dates)');
+check(s.area === 'done' && s.book === 'current', `vote decided: Areas & weekends ✓, Call the courses is current (${JSON.stringify(s)})`);
+check((await page.getByTestId('step-area').innerText()).includes('Hunter Valley'), 'Areas & weekends folds to a one-line summary (place · dates)');
 check((await primary().innerText()) === 'Allocate the calls', 'Book: "Allocate the calls"');
 await primary().click();
 await page.locator('.sheet').getByRole('button', { name: /Al/ }).first().click();
@@ -129,7 +132,7 @@ check(plan().status === 'confirmed', 'locked in');
 check(db.plan_items.some((j) => j.plan_id === PA && j.formula_key === 'shortlist_stay'), 'locking in made the to-do list');
 await open();
 check((await page.getByTestId('step-lockin').innerText()).includes('Locked in'), 'Lock in says "Locked in"');
-check(await page.getByTestId('step-book').getAttribute('data-state') === 'current', 'after locking in: the accommodation (Book) is next');
+check(await page.getByTestId('step-courses').getAttribute('data-state') === 'current', 'after locking in: where to stay (Courses & stays) is next');
 await shot('05-locked');
 
 // 6. Accommodation booked → the deposit (Lock in).
@@ -137,8 +140,8 @@ db.plan_stays.push({ id: 'aaaaaaaa-0000-4000-8000-0000000000d1', plan_id: PA, gr
 for (const j of db.plan_items.filter((x) => x.plan_id === PA && ['shortlist_stay', 'reserve_stay'].includes(x.formula_key))) { j.stage = 'done'; j.done = true; j.amount = 2400; }
 await open();
 s = await states();
-check(s.plan === 'done' && s.vote === 'done' && s.book === 'done' && s.lockin === 'current' && s.money === 'later', `booked: steps 1–3 ✓, Lock in current (${JSON.stringify(s)})`);
-check((await page.getByTestId('step-book').innerText()).includes('Vineyard house'), 'Book folds to "🏠 Vineyard house"');
+check(s.area === 'done' && s.courses === 'done' && s.book === 'done' && s.lockin === 'current' && s.money === 'later', `booked: steps 1–3 ✓, Pick & lock in current (${JSON.stringify(s)})`);
+check((await page.getByTestId('step-courses').innerText()).includes('Vineyard house'), 'Courses & stays folds to "🏠 Vineyard house"');
 check((await primary().innerText()) === 'Open the trip plan', 'Lock in: set the deposit (Open the trip plan)');
 await shot('06-deposit');
 await noSideScroll('deposit step');
@@ -148,6 +151,8 @@ await open('tab=jobs');
 check(await page.getByRole('tab', { name: '📋 Jobs' }).getAttribute('aria-selected') === 'true', '?tab=jobs opens Jobs & money on Jobs');
 await open('tab=people');
 check(await page.getByTestId('step-lockin').locator('.org-step-body').isVisible(), '?tab=people opens Lock in');
+await open('view=organise&step=vote');
+check(await page.getByTestId('step-area').locator('.org-step-body').isVisible(), 'an old ?step=vote link opens Areas & weekends');
 await open('tab=chat');
 check(await page.getByTestId('organise-more').getByRole('tab', { name: '💬 Chat' }).getAttribute('aria-selected') === 'true', '?tab=chat opens More → Chat');
 

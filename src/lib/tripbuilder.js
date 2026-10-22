@@ -13,6 +13,7 @@
 //     no golf, then the drive (less is better) and the group's votes (more is better).
 import { km, driveMinutes, fmtDrive, parseTimes, parseClock, yesNo } from './tripfinder.js';
 import { clock, toMin } from './teeWindow.js';
+import { fromBuilder } from './tripsteps.js';
 
 export const MAX_STAYS = 3;
 export const MAX_OPTIONS_PER_DAY = 4;
@@ -551,7 +552,8 @@ export function builderSteps(state = {}, ctx = {}) {
       after: !areaDone ? 'the area is chosen (Areas & weekends)' : !weekendsDone ? 'the primary and backup weekends are set (Areas & weekends)' : 'Courses & stays' },
     { key: 'configs', label: 'Pick & lock in', done: configsDone, locked: !callsDone, after: 'Call the courses' },
   ];
-  return steps.map((s, i) => ({ ...s, n: i + 1 }));
+  // The labels and numbers come from the one shared step list (lib/tripsteps.js), so they match Organise exactly.
+  return steps.map((s) => { const t = fromBuilder(s.key); return { ...s, label: t.title, n: t.n, organise: t.key }; });
 }
 
 // ------------------------------------------------------------------ the saved state

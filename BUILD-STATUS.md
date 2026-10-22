@@ -1363,6 +1363,13 @@ in** → **5 Jobs & money** → **6 Comps & on the day**. Step keys unchanged (`
   **staging** only. The app sends them only for detail questions.
 - **Edge functions changed (deploy to staging when convenient):** ai-helper (`plan.ts`: draft `headcount`, comps
   rule, comp extras filtered), notify (optional polls skipped), `_shared/emailvotes.js` (optional polls skipped).
+- **One step list (merge with release-v10, Josh's follow-up):** `src/lib/tripsteps.js` is the ONLY list of a trip's
+  steps — Organise's step cards and the trip builder's tabs both read it, with the same summary lines ("Hunter Valley ·
+  Primary Fri 13 – Mon 16 Nov · Backup …"): 1 Areas & weekends (incl. the vote and primary/backup) · 2 Courses & stays ·
+  3 Call the courses · 4 Pick & lock in · 5 Jobs & money · 6 Comps & on the day. No separate Plan or Vote step; old
+  `?step=plan` / `?step=vote` links open step 1. The builder shows all six (5 and 6 link to Organise). New Next steps
+  "Pick the course options each day and where to stay" and "Call the courses: make the call jobs".
+- **Merged release-v10 (ov22):** the vote card's ⓘ Details opens ov22's course / place-to-stay sheets (one sheet everywhere).
 - **Tests:** Vitest 1389 pass (new weekends ×20, areavote ×10, runup ×4, step order). Deno ai-helper/notify/_shared
   154 pass. Playwright: new `weekends-comps-test` 61 checks; `trip-builder`, `plan-ux`, `organise-tidy`,
   `trip-overview`, `desktop`, `trip-plan`, `trip-extras`, `caddie`, `trips`, `email-votes` all pass.

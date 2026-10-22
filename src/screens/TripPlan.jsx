@@ -18,6 +18,7 @@ import {
 import { tripStage } from '../lib/trips.js';
 import StaySearch from '../components/StaySearch.jsx';
 import { tripHeadcount } from '../lib/weekends.js';
+import { coursesDone as builderCoursesDone } from '../lib/tripsteps.js';
 import { CallVoteSheet } from '../components/CallVote.jsx';
 import { useLateJobs, LateBadge, WaiveButton } from '../components/LateJobs.jsx';
 import { lateJobs } from '../lib/latejobs.js';
@@ -60,6 +61,7 @@ export function useTripExtras(pd) {
         weekendList: Array.isArray(state?.weekends) ? state.weekends : [],
         // ov23: where the builder is up to (area chosen? primary and backup weekends set?) and how many are coming.
         started: !!state, region: state?.region || null, weekendsSettled: !!state?.weekendsSettled,
+        state, coursesDone: builderCoursesDone(state), // the shared step lines and "done" (lib/tripsteps.js)
         headcount: Number(state?.headcount) > 0 ? Number(state.headcount) : null, headcountBy: state?.headcountBy || null, nights: state?.nights ?? null,
         // The chosen area with places to stay picked but no accommodation idea or list yet (080; ov23: after the area's chosen).
         noStayList: Object.entries(state?.areaStays || {}).filter(([area, pins]) => (pins || []).length && state.region === area

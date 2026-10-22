@@ -28,7 +28,7 @@ export const STANDARD_SECTIONS = [
     ['drop', 'How to drop', 'Drop from knee height, straight down, in the relief area. If it rolls out of the area, drop again; if it rolls out twice, place it where it landed the second time.'],
     ['green', 'On the green', 'You can mark, lift and clean your ball, fix pitch marks and spike marks, and leave the flag in or take it out. Don’t test the surface by rolling a ball.'],
     ['moved', 'Ball moved by accident', 'Moved your ball by accident while searching or on the green? No penalty — put it back. Anywhere else, if you caused it to move, it’s one shot and put it back.'],
-    ['wrong_place', 'Embedded ball', 'A ball plugged in its own pitch mark anywhere on the course (not in sand) can be lifted, cleaned and dropped right behind the spot, no penalty.'],
+    ['embedded', 'Embedded ball', 'A ball plugged in its own pitch mark anywhere on the course (not in sand) can be lifted, cleaned and dropped right behind the spot, no penalty.'],
     ['max_score', 'Pick up when you’re out of it', 'Keep the group moving: once you can’t score on a hole, pick up. The app counts a pick-up the way each format says (below).'],
     ['handicap', 'Handicaps and shots received', 'Your playing handicap says how many shots you get. You get a shot on each hole whose stroke index is your handicap or lower (index 1 is the hardest hole); over 18 you get two shots on the hardest holes.'],
     ['scores', 'Enter your scores', 'Put your strokes in after each hole (or a marker does it for the group). Check your card before the round is locked — once it’s locked, a missing hole counts as a pick-up.'],

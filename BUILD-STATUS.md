@@ -1187,3 +1187,20 @@ screen, "Viewing as Mike · read only", and Stop.
   "ask your organiser…").
 - **Tested:** Vitest 1293 (80 files); Deno 162; e2e pass: trips, board-bonus (new), nav, trip-overview,
   organise-tidy, course-research, plan-ux, phone, desktop, look, caddie, jokes, links, signin-home, save-spot.
+## ov19 — Governance hub, committees and elections, branch `ov19-governance-hub`, 23 Oct 2026
+- **Hub:** one "⚖️ Governance" item (sidebar and More) with tabs Rulebook · Tribunal · Committees
+  (`#/governance/rulebook|tribunal|committees`). Old `#/rules`, `#/tribunal`, `#/cases`, `#/committees`, `#/governance`
+  redirect into the right tab (keeping `?round=`, `?f=`, `?propose=`); `#/rules/:id` and `#/tribunal/case/:id` keep their
+  pages. Settings moved to `#/governance/settings` ("How we decide things"). Top of the hub: a plain-words summary built
+  from the decision rules (`howWeDecideLine`) and a "How groups work" note.
+- **Data (090, additive, staging only):** `committees.term_limit / staggered / nominate_hours`, `committee_seats.term_no /
+  half_term / vacant_reminded_at`, `cases.election_phase`, new `election_nominations` and `election_ballots` (secret:
+  you read only your own). New functions: `save_committee_v2`, `call_election`, `nominate`, `answer_nomination`,
+  `vote_election`, `decide_election`, `resign_seat`, `election_turnout`. Re-created with the same arguments:
+  `case_evaluate`, `vote_case`, `decide_case`, `seat_term_ended`, `governance_tick_group` (elections + term ends on the
+  hourly `lgc-governance-hourly`). A trigger on seats keeps term counts and enforces term limits / one seat per person
+  on every path (old yes/no elections and appointments too).
+- **Tested:** SQL `supabase/tests/090_committees_elections.sql` (54 checks, rolled back); Vitest 1303 (committees 23
+  new); e2e new `governance-hub-test.mjs` (49 checks); governance, rulebook ×3, dispute, nav, desktop, phone, features
+  pass (governance / rulebook / features tests updated for the hub). Note: rulebook, phone and features tests need a
+  build with the default database address (their fakes route only that address).

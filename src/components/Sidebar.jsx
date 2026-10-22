@@ -40,8 +40,8 @@ function SidebarNav() {
     on.planner && { to: '/plan', label: 'Trips', icon: Icon.calendar },
     { to: '/group', label: 'Players & group', icon: Icon.user },
     on.trophies && { to: '/trophies', label: 'Trophy Room', icon: Icon.trophy },
-    on.tribunal && { to: '/tribunal', label: 'Tribunal', icon: Icon.gavel },
-    { to: '/rules', label: 'Rulebook', icon: Icon.book },
+    // ov19: the Rulebook, Tribunal and Committees are one place — Governance, with tabs.
+    { to: '/governance', label: 'Governance', icon: Icon.gavel },
     { to: '/courses', label: 'Courses', icon: Icon.map },
     { to: '/more', label: 'More', icon: Icon.more },
   ].filter(Boolean);

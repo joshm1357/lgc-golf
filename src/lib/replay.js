@@ -6,8 +6,8 @@
 //     shotgun start on the 10th works), and frame k = everyone's first k holes.
 //   - The leaderboard for each frame comes from roundBoard (board.js), so it's the same maths as the live board,
 //     for all four formats. The last frame uses every score, so the winner always matches the leaderboard.
-//   - Moments (birdies, blow-ups, lead changes, climbers, side comp wins, a close finish, the winner) get a drama
-//     score. Quiet holes fly by; dramatic ones get longer on screen.
+//   - Moments (birdies, blow-ups, lead changes, big swings, climbers, side comp wins, a close finish, the winner) get
+//     a drama score. replaybeats.js groups quiet holes into beats and gives the dramatic ones their own.
 import { roundBoard, compBonuses, courseHoles, isNetFormat, isTeamFormat, formatName } from './board.js';
 import { formatToPar } from './scoring.js';
 import { sortOwnEntries } from './sidecomps.js';
@@ -143,6 +143,7 @@ export function buildReplay(input) {
   const frames = [];
   let prevLeader = null;
   let prevOrder = null;
+  let prevGap = null;
   for (let k = 1; k <= K; k++) {
     const last = k === K;
     // Frame k: everyone's first k holes (the last frame: every score, so it matches the leaderboard exactly).
@@ -205,6 +206,12 @@ export function buildReplay(input) {
     } else if (!leader && tiedTop && prevLeader && k > 1) {
       moments.push({ kind: 'tied_lead', drama: 3, subjectId: top.id, name: top.name, other: rows[1].name });
     }
+    // A big swing: the same leader, but the gap moves by 3 or more on one hole.
+    const gapNow = gapBetween(format, rows[0], rows[1]);
+    if (leader && leader === prevLeader && prevGap != null && gapNow != null && Math.abs(gapNow - prevGap) >= 3) {
+      moments.push({ kind: 'swing', drama: 5, subjectId: leader, name: top.name, hole, gap: gapWords(format, gapNow), grew: gapNow > prevGap });
+    }
+    prevGap = gapNow;
     if (leader) prevLeader = leader;
     // Climbers and fallers (2+ places in one hole), when there's a field to climb through.
     const moves = {};
@@ -338,46 +345,7 @@ export function holeWord(strokes, par) {
   return ({ '-3': 'albatross', '-2': 'eagle', '-1': 'birdie', 0: 'par', 1: 'bogey', 2: 'double bogey', 3: 'triple bogey' })[d] || (d > 0 ? `+${d}` : `${d}`);
 }
 
-// ---------- Timing ----------
-
-export const SCENE_MS = { welcome: 3200, field: 3600, finish: 5500, winner: 6500, awards: 7500 };
-const RACE_BUDGET_MS = 38000;
-
-/** How long a race frame stays on screen: quiet holes fly by, drama lingers. The last three holes go slow. */
-export function frameMs(frame, { slow = false } = {}) {
-  const ms = 850 + 330 * Math.min(10, frame.drama || 0);
-  return Math.round(slow ? ms * 1.5 : ms);
-}
-
-/**
- * The replay as a list of steps the screen plays in order:
- * welcome → the field → the race (with the "3 to play" finish card before the last three holes) → winner →
- * awards → end card. `fast` (tests) makes every step quick. The end card has no time: it waits.
- */
-export function buildTimeline(replay, { fast = false } = {}) {
-  const steps = [];
-  if (!replay || replay.empty) return [{ scene: 'end', ms: null }];
-  steps.push({ scene: 'welcome', ms: SCENE_MS.welcome });
-  steps.push({ scene: 'field', ms: SCENE_MS.field });
-  const n = replay.frames.length;
-  const slowFrom = replay.finish ? replay.finish.frameIndex + 1 : n;
-  const race = replay.frames.map((f, i) => ({ scene: 'race', frame: i, ms: frameMs(f, { slow: i >= slowFrom }), slow: i >= slowFrom }));
-  // Keep the race to about 40 seconds however many holes and how much drama.
-  const total = race.reduce((a, s) => a + s.ms, 0);
-  if (total > RACE_BUDGET_MS) for (const s of race) s.ms = Math.max(600, Math.round((s.ms * RACE_BUDGET_MS) / total));
-  for (const s of race) {
-    if (replay.finish && s.frame === slowFrom) steps.push({ scene: 'finish', ms: SCENE_MS.finish });
-    steps.push(s);
-  }
-  if (replay.winner) steps.push({ scene: 'winner', ms: SCENE_MS.winner });
-  if (replay.awards.climber || replay.awards.worst || replay.awards.best) steps.push({ scene: 'awards', ms: SCENE_MS.awards });
-  steps.push({ scene: 'end', ms: null });
-  if (fast) for (const s of steps) if (s.ms != null) s.ms = 150;
-  return steps;
-}
-
-/** Total running time in seconds (for "a 60-second replay"). */
-export const timelineSeconds = (steps) => Math.round(steps.reduce((a, s) => a + (s.ms || 0), 0) / 1000);
+// Timing and the story (beats, lines, speeds) live in replaybeats.js.
 
 /** A trip's finished (locked) rounds, in the order they were played — for the replay buttons after the round. */
 export function finishedRounds(rounds = []) {

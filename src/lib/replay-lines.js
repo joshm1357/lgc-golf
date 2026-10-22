@@ -7,7 +7,7 @@
 // are only dropped in where they fit the moment.
 //
 // Placeholders: {name} {other} {hole} {par} {strokes} {over} {places} {rank} {gap} {left} {comp} {score} {by}
-// {round} {course} {count} {text}
+// {round} {course} {count} {text} {holes}
 
 export const STYLES = [
   { key: 'broadcast', name: 'Broadcast', blurb: 'Calm, like the telly' },
@@ -40,6 +40,20 @@ export const LINES = {
     award_worst: ['Toughest hole: {name}, a {strokes} on {hole}.'],
     award_best: ['Shot of the day: {name}, a {strokes} on {hole}.'],
     end: ['That’s the replay. Until next time.', 'And that’s how it finished. Thanks for watching.'],
+    // The story (replaybeats.js): stretches of holes, where the top of the board stands, the turn, the last holes.
+    swing: ['A big swing on {hole}. {name} now {gap} clear.', 'That hole changes things — {name}, {gap} in front.'],
+    stretch_start: ['{holes}: a steady start.', '{holes}: everyone finding their feet.', '{holes}: a cagey opening.'],
+    stretch_quiet: ['{holes}: pars and patience.', '{holes}: not much between them.', '{holes}: steady going.'],
+    stretch_birdies: ['{holes}: {count} birdies in that run.', '{holes}: the birdies start to come — {count} of them.'],
+    standing_new: ['Now it’s {name} in front, by {gap}.', '{name} out in front, by {gap}.'],
+    standing_same: ['{name} still in front, by {gap}.', 'Still {name} on top, {gap} clear.'],
+    standing_extends: ['{name} pulling clear — {gap} now.', '{name} stretching it out to {gap}.'],
+    standing_narrows: ['{name} still in front, but only by {gap}.', 'The gap to {name} is down to {gap}.'],
+    standing_tied: ['{name} and {other} all square up top.', 'Level at the top: {name} and {other}.'],
+    turn: ['At the turn it’s {name}, {gap} clear.', 'Nine down, nine to go. {name} in front by {gap}.'],
+    turn_tied: ['All square at the turn: {name} and {other}.', 'Nine down and nothing in it — {name} and {other} level.'],
+    to_play: ['{left} to play.', '{left} holes left.'],
+    last_hole: ['One to play.', 'Down the last.'],
   },
   larrikins: {
     welcome: ['Righto, {round} at {course}. Grab a cold one.', '{course}, {round}. Let’s relive the carnage.', 'Strap in. {round} at {course}, warts and all.'],
@@ -65,6 +79,19 @@ export const LINES = {
     award_worst: ['Shocker of the day: {name}, a {strokes} on {hole}.'],
     award_best: ['Best hole: {name}, a {strokes} on {hole}. Lucky.'],
     end: ['That’s a wrap. Same time next trip.', 'Show’s over. Back to the bar.'],
+    swing: ['Huge swing on {hole}! {name} now {gap} clear.', 'Well, {hole} sorted a few things out. {name} by {gap}.'],
+    stretch_start: ['{holes}: a nervy start, nobody wants to blink.', '{holes}: the first tee jitters wear off.', '{holes}: all a bit polite so far.'],
+    stretch_quiet: ['{holes}: just hacking along.', '{holes}: not a lot to report, mate.', '{holes}: steady, boring, lovely.'],
+    stretch_birdies: ['{holes}: {count} birdies! Who are these people?', '{holes}: birdie party — {count} of them.'],
+    standing_new: ['Sneaky — {name} in front now, by {gap}.', 'Now it’s {name} up top, {gap} clear.'],
+    standing_same: ['{name} still up top, {gap} clear.', 'Still {name} in front, by {gap}. Smug.'],
+    standing_extends: ['{name} getting away — {gap} now.', '{name} out to {gap}. Someone stop them.'],
+    standing_narrows: ['{name} still in front, but it’s only {gap}. Sweating.', 'Gap’s down to {gap}. {name} can hear footsteps.'],
+    standing_tied: ['{name} and {other} level up top. Handbags.', 'Nothing in it: {name} and {other}.'],
+    turn: ['Halfway, and it’s {name} by {gap}. Pies at the turn.', 'At the turn: {name}, {gap} clear. Plenty of golf left to stuff it up.'],
+    turn_tied: ['All square at the turn — {name} and {other}. Grab a pie.', 'Nine down, {name} and {other} level. Game on.'],
+    to_play: ['{left} to play.', '{left} left. Hold your nerve.'],
+    last_hole: ['Down the last.', 'One to go. Don’t look at the water.'],
   },
 };
 
@@ -85,7 +112,9 @@ export function pickLine(kind, style, vars = {}, seed = 0) {
   const bank = LINES[style] || LINES[DEFAULT_STYLE];
   const list = bank[kind] || LINES[DEFAULT_STYLE][kind] || [];
   if (!list.length) return '';
-  return fill(list[hashSeed(`${seed}|${kind}`) % list.length], vars);
+  const line = fill(list[hashSeed(`${seed}|${kind}`) % list.length], vars);
+  // A line that starts with a placeholder ("{comp} on …") still starts with a capital.
+  return line.charAt(0).toUpperCase() + line.slice(1);
 }
 
 const holeText = (h) => (h == null ? '' : `the ${ordinal(h)}`);
@@ -127,12 +156,30 @@ export function pickInJoke(jokes, moment, used = new Set(), seed = 0) {
   return String(j.text).trim();
 }
 
-/** The words for a moment: the template line, plus an in-joke if one fits. */
-export function captionFor(moment, { style = DEFAULT_STYLE, seed = 0, jokes = [], used } = {}) {
+// Verbs the lines put straight after a name, and their "they" form (for teams: "Josh & Hamish go past").
+const PLURAL_VERBS = {
+  goes: 'go', picks: 'pick', takes: 'take', birdies: 'birdie', eagles: 'eagle', wins: 'win', closes: 'close', gets: 'get',
+  pinches: 'pinch', hits: 'hit', leads: 'lead', climbs: 'climb', slips: 'slip', drops: 'drop', pockets: 'pocket',
+  gives: 'give', moves: 'move', snaffles: 'snaffle', edges: 'edge', sneaks: 'sneak', jars: 'jar', ties: 'tie',
+  plays: 'play', posts: 'post', will: 'will', played: 'played',
+};
+/** Make the verb after a team's name agree with it ("Josh & Hamish goes" → "Josh & Hamish go"). */
+export function agree(line, name) {
+  if (!name) return line;
+  const esc = String(name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return line.replace(new RegExp(`(${esc}) (\\w+)`, 'g'), (all, n, verb) => (PLURAL_VERBS[verb] ? `${n} ${PLURAL_VERBS[verb]}` : all));
+}
+
+/**
+ * The words for a moment: the template line, plus an in-joke if one fits. `plural`: the name is a team (Ambrose
+ * and 4BBB pairs), so verbs agree with "they" — except when the moment names one player.
+ */
+export function captionFor(moment, { style = DEFAULT_STYLE, seed = 0, jokes = [], used, plural = false } = {}) {
   if (!moment) return '';
   const vars = { ...moment, hole: moment.hole != null ? holeText(moment.hole) : 'this hole', rank: moment.rank != null ? ordinal(moment.rank) : '' };
   const kind = moment.kind === 'side_comp' && moment.hole == null ? 'side_comp_round' : moment.kind;
-  const line = pickLine(kind, style, vars, seed);
+  let line = pickLine(kind, style, vars, seed);
+  if (plural && !moment.playerId) line = agree(line, moment.name);
   const joke = pickInJoke(jokes, moment, used, seed);
   return joke ? `${line} ${joke}` : line;
 }
@@ -149,6 +196,7 @@ export function popWord(moment) {
     case 'tied_lead': return 'ALL SQUARE';
     case 'blowup': return 'OUCH';
     case 'close': return 'TIGHT!';
+    case 'swing': return 'BIG SWING';
     case 'side_comp': return moment.emoji || null;
     default: return null;
   }
@@ -170,41 +218,6 @@ export function popFor(frame) {
     if (w) return { word: w, kind: m.kind };
   }
   return null;
-}
-
-/**
- * The words under every step of the replay (buildTimeline's steps). Same replay + style + seed = same words.
- * In-jokes are each used once, in order.
- */
-export function captionsFor(replay, steps, { style = DEFAULT_STYLE, seed = 0, jokes = [], roundName = '', courseName = '' } = {}) {
-  const used = new Set();
-  return steps.map((s, i) => {
-    const sd = seed + i * 7919;
-    if (s.scene === 'welcome') return pickLine('welcome', style, { round: roundName || 'Today’s round', course: courseName || 'the course' }, sd);
-    if (s.scene === 'field') return pickLine('field', style, { count: replay.subjects.length }, sd);
-    if (s.scene === 'race') {
-      const f = replay.frames[s.frame];
-      const m = topMoment(f);
-      return m ? captionFor(m, { style, seed: sd, jokes, used }) : captionFor({ kind: 'quiet', hole: f.hole }, { style, seed: sd });
-    }
-    if (s.scene === 'finish' && replay.finish) {
-      const f = replay.finish;
-      return pickLine(f.close ? 'close' : 'gap', style, { name: f.leader, other: f.second, gap: f.gapText, left: f.left }, sd);
-    }
-    if (s.scene === 'winner' && replay.winner) {
-      const last = replay.frames[replay.frames.length - 1];
-      return captionFor(last.moments.find((m) => m.kind === 'win'), { style, seed: sd, jokes, used });
-    }
-    if (s.scene === 'awards') {
-      const a = replay.awards;
-      if (a.worst && a.worst.diff >= 2) return pickLine('award_worst', style, { name: a.worst.name, strokes: a.worst.strokes, hole: `the ${ordinal(a.worst.hole)}` }, sd);
-      if (a.climber) return pickLine('award_climber', style, { name: a.climber.name, places: a.climber.places }, sd);
-      if (a.best) return pickLine('award_best', style, { name: a.best.name, strokes: a.best.strokes, hole: `the ${ordinal(a.best.hole)}` }, sd);
-      return '';
-    }
-    if (s.scene === 'end') return pickLine('end', style, {}, sd);
-    return '';
-  });
 }
 
 /** The group's chosen style, kept on this phone (per group) for now. */

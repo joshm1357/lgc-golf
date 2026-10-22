@@ -1,4 +1,4 @@
-// Round replay browser check, 21 Oct 2026. Fake database only.
+// Round replay browser check, 21 Oct 2026 (ov20 story pacing, voice and speeds: 23 Oct). Fake database only.
 // Usage: node replay-test.mjs <base> <shotDir>   e.g. http://localhost:4314/lgc-golf/
 import { chromium } from '/opt/npm-tools/node_modules/playwright/index.mjs';
 import fs from 'node:fs';
@@ -95,18 +95,40 @@ await ctx.addInitScript(([uid]) => {
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
   if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated' } }));
   localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-notify-prompt', String(Date.now()));
-  // Record each scene the replay shows, and the winner's name, as it plays.
+  // Record each scene the replay shows, each beat's label, when each step started, and the winner's name.
   window.__scenes = [];
+  window.__labels = [];
+  window.__steps = [];
   window.__winner = null;
   const look = () => {
     const el = document.querySelector('.rp[data-scene]');
     if (!el) return;
     const s = el.dataset.scene;
     if (window.__scenes[window.__scenes.length - 1] !== s) window.__scenes.push(s);
+    const st = Number(el.dataset.step);
+    if (window.__steps[window.__steps.length - 1]?.step !== st) window.__steps.push({ step: st, scene: s, t: performance.now() });
+    const lb = document.querySelector('[data-testid="replay-beat-label"]');
+    if (s === 'race' && lb && window.__labels[window.__labels.length - 1] !== lb.textContent) window.__labels.push(lb.textContent);
     const w = document.querySelector('[data-testid="replay-winner"]');
     if (w) window.__winner = w.textContent;
   };
-  new MutationObserver(look).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-scene', 'data-step'] });
+  new MutationObserver(look).observe(document, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['data-scene', 'data-step'] });
+  // A stand-in for the phone's voice: records what it's asked to say; a line only "finishes" when the test says so.
+  const said = [];
+  const fake = {
+    current: null,
+    getVoices: () => [{ name: 'Karen', lang: 'en-AU', localService: true }, { name: 'Lee (Enhanced)', lang: 'en-AU', localService: true }],
+    speak(u) { said.push({ t: 'speak', text: u.text, voice: u.voice?.name || null, rate: u.rate }); if (u.text.trim()) this.current = u; },
+    cancel() { said.push({ t: 'cancel' }); const u = this.current; this.current = null; u?.onerror?.({ error: 'interrupted' }); },
+    pause() {}, resume() {}, addEventListener() {}, removeEventListener() {},
+  };
+  window.__said = said;
+  window.__endSpeech = () => { const u = fake.current; fake.current = null; u?.onend?.({}); return !!u; };
+  window.__speaking = () => fake.current?.text || null;
+  try {
+    Object.defineProperty(window, 'speechSynthesis', { configurable: true, get: () => fake });
+    window.SpeechSynthesisUtterance = function Utterance(text) { this.text = text; this.volume = 1; };
+  } catch { /* no voice */ }
 }, ['99999999-9999-4999-8999-999999999999']);
 const page = await ctx.newPage();
 page.on('pageerror', (e) => fails.push(`page error: ${e}`));
@@ -135,7 +157,11 @@ await page.locator('.rp[data-scene="welcome"]').waitFor({ timeout: 15000 });
 check(true, 'the replay opens on the welcome scene');
 const welcome = await page.locator('.rp-stage').innerText();
 check(/Saturday Stableford/i.test(welcome) && /Cypress Lakes/i.test(welcome) && /21 October 2026/.test(welcome), `welcome shows round, course and date (${welcome.replace(/\s+/g, ' ').slice(0, 90)})`);
-check(await page.getByRole('button', { name: /Sound off/ }).isVisible(), 'a visible mute toggle (sound off to start)');
+check(await page.getByRole('button', { name: /Voice off/ }).isVisible(), 'voice toggle 🔈 shows, and the voice is off to start');
+check((await page.locator('.rp').getAttribute('data-voice')) === '0', 'voice off by default');
+check((await page.locator('.rp').getAttribute('data-speed')) === 'normal', 'plays at Normal by default');
+const speedRow = page.getByRole('group', { name: 'Speed' });
+check(await speedRow.getByRole('button', { name: 'Normal' }).getAttribute('aria-pressed') === 'true' && await speedRow.getByRole('button', { name: /Fast/ }).isVisible() && await speedRow.getByRole('button', { name: /Skip to the end/ }).isVisible(), 'speed control: Normal · Fast · Skip to the end');
 await page.screenshot({ path: `${SHOTS}/2-welcome.png` });
 
 // 3. Hold to pause: nothing moves while held; it carries on when let go.
@@ -145,12 +171,12 @@ await page.mouse.move(box.x + box.width * 0.6, box.y + box.height / 2);
 await page.mouse.down();
 await page.waitForTimeout(500);
 check((await page.locator('.rp').getAttribute('data-paused')) === '1' && await page.getByText('PAUSED').isVisible(), 'holding shows PAUSED');
-await page.waitForTimeout(3600); // longer than the welcome scene
-check((await step()) === before, `held for 4 s: still on step ${before}`);
+await page.waitForTimeout(6000); // longer than the welcome scene
+check((await step()) === before, `held for 6 s: still on step ${before}`);
 await page.mouse.up();
 check((await page.locator('.rp').getAttribute('data-paused')) === '0', 'let go: playing again');
 check((await step()) === before, 'letting go after a hold doesn’t skip');
-await page.waitForFunction((s) => Number(document.querySelector('.rp').dataset.step) > s, before, { timeout: 6000 }).then(() => check(true, 'carries on by itself after the hold'), () => check(false, 'carries on by itself after the hold'));
+await page.waitForFunction((s) => Number(document.querySelector('.rp').dataset.step) > s, before, { timeout: 10000 }).then(() => check(true, 'carries on by itself after the hold'), () => check(false, 'carries on by itself after the hold'));
 
 // 4. Tap right = next, tap left = back. The pause button stops it moving on its own.
 await page.getByRole('button', { name: 'Pause' }).click();
@@ -166,17 +192,20 @@ check((await step()) === s0, 'paused with the button: stays put');
 const shots = {};
 for (let i = 0; i < 40; i++) {
   const sc = await scene();
-  const hole10 = sc === 'race' && /^hole 10$/i.test(await page.locator('.rp-hole .h').innerText());
-  const f = hole10 ? 'race-hole10' : sc;
-  if (!shots[f] && ['field', 'finish', 'winner', 'awards', 'end', 'race-hole10'].includes(f)) {
-    await page.waitForTimeout(sc === 'winner' || sc === 'awards' ? 1600 : 500);
+  const label = sc === 'race' ? await page.getByTestId('replay-beat-label').innerText() : '';
+  const hole10 = sc === 'race' && /^holes? 10\b/i.test(label);
+  const beatType = await page.locator('.rp').getAttribute('data-beat');
+  const f = hole10 ? 'race-hole10' : sc === 'race' && beatType === 'stretch' ? 'race-stretch' : sc === 'race' && beatType === 'finish' ? 'race-finish-hole' : sc;
+  if (!shots[f] && ['field', 'finish', 'winner', 'awards', 'end', 'race-hole10', 'race-stretch', 'race-finish-hole'].includes(f)) {
+    await page.waitForTimeout(sc === 'winner' || sc === 'awards' ? 1600 : 1200);
     shots[f] = true;
     await page.screenshot({ path: `${SHOTS}/3-${f}.png` });
   }
   if (hole10) {
+    await page.waitForTimeout(1200); // the board settles, then the word pops
     const txt = await page.locator('.rp-stage').innerText();
     check(/NEW LEADER/.test(txt), 'hole 10: the lead change pops "NEW LEADER"');
-    check(/Hole 10/i.test(txt), 'hole 10 is labelled');
+    check(/Holes? 10/i.test(txt), `hole 10 is labelled (${label})`);
     const first = await page.locator('.rp-row.lead').getAttribute('data-name');
     check(first === 'Bo', `hole 10: Bo glows as the leader (${first})`);
   }
@@ -186,18 +215,89 @@ for (let i = 0; i < 40; i++) {
 check(await page.getByRole('button', { name: /Watch again/ }).isVisible(), 'end card: Watch again');
 check(await page.getByRole('button', { name: /Share the replay/ }).isVisible(), 'end card: Share');
 
-// 5. Fast mode plays itself all the way through: every scene, and the right winner.
+// 5. Test mode (?quick=1) plays itself all the way through: every scene, grouped beats, and the right winner.
 await page.goto(`${BASE}#/replay/${R2}`); // (somewhere else first, so the next load is fresh)
-await page.goto(`${BASE}#/replay/${R1}?fast=1`);
+await page.goto(`${BASE}#/replay/${R1}?quick=1`);
 await page.reload();
 await page.locator('.rp[data-scene="end"]').waitFor({ timeout: 20000 });
 const scenes = await page.evaluate(() => window.__scenes);
 const winnerName = await page.evaluate(() => window.__winner);
+const labels = await page.evaluate(() => window.__labels);
 console.log('   scenes:', scenes.join(' → '));
+console.log('   beats:', labels.join(' | '));
 for (const s of ['welcome', 'field', 'race', 'finish', 'winner', 'awards', 'end']) check(scenes.includes(s), `auto-advances through "${s}"`);
 check(scenes.indexOf('winner') > scenes.lastIndexOf('race') && scenes.indexOf('finish') < scenes.indexOf('winner'), 'in order: race, finish, … winner');
 check(winnerName === 'Bo', `the winner scene names Bo (${winnerName})`);
 check(scenes[scenes.length - 1] === 'end', 'stops on the end card');
+check(labels.length >= 6 && labels.length < 14, `holes grouped into beats: ${labels.length} beats for 18 holes`);
+check(labels.some((l) => /^Holes \d+–\d+$/.test(l)), 'a quiet stretch shares one beat ("Holes a–b")');
+check(labels.slice(-3).join(',') === 'Hole 16,Hole 17,Hole 18', `the last three holes get a beat each (${labels.slice(-3).join(', ')})`);
+
+// 5b. Normal holds each beat long enough to read; Fast is about twice as quick.
+const durations = async () => page.evaluate(() => window.__steps.slice(0, -1).map((s, i) => ({ scene: s.scene, ms: Math.round(window.__steps[i + 1].t - s.t) })));
+await page.goto(`${BASE}#/replay/${R2}`);
+await page.goto(`${BASE}#/replay/${R1}`);
+await page.reload();
+await page.waitForFunction(() => window.__steps.length >= 4, null, { timeout: 30000 });
+const normal = await durations();
+console.log('   normal:', normal.map((d) => `${d.scene} ${d.ms}`).join(', '));
+check(normal[1]?.ms >= 3800, `Normal: the field holds ~4 s (${normal[1]?.ms} ms)`);
+check(normal[2]?.scene === 'race' && normal[2].ms >= 3800, `Normal: the first beat holds 4 s or more (${normal[2]?.ms} ms)`);
+await page.screenshot({ path: `${SHOTS}/4-normal-first-beat.png` });
+await page.reload();
+await page.locator('.rp[data-scene="welcome"]').waitFor({ timeout: 15000 });
+await page.getByRole('group', { name: 'Speed' }).getByRole('button', { name: /Fast/ }).click();
+check((await page.locator('.rp').getAttribute('data-speed')) === 'fast', 'Fast is picked');
+await page.screenshot({ path: `${SHOTS}/4-fast-picked.png` });
+await page.waitForFunction(() => window.__steps.length >= 4, null, { timeout: 30000 });
+const fast = await durations();
+console.log('   fast:', fast.map((d) => `${d.scene} ${d.ms}`).join(', '));
+check(fast[1].ms < normal[1].ms * 0.7 && fast[2].ms < normal[2].ms * 0.7, `Fast is quicker (field ${fast[1].ms} vs ${normal[1].ms} ms, first beat ${fast[2].ms} vs ${normal[2].ms} ms)`);
+check(await page.evaluate(() => localStorage.getItem('tgt-replay-speed')) === 'fast', 'the speed is remembered on this phone');
+await page.getByRole('group', { name: 'Speed' }).getByRole('button', { name: 'Normal' }).click();
+
+// 5c. Skip to the end goes straight to the result.
+await page.reload();
+await page.locator('.rp[data-scene="welcome"]').waitFor({ timeout: 15000 });
+await page.getByRole('group', { name: 'Speed' }).getByRole('button', { name: /Skip to the end/ }).click();
+await page.locator('.rp[data-scene="winner"]').waitFor({ timeout: 3000 }).then(() => check(true, 'Skip to the end: straight to the winner'), () => check(false, 'Skip to the end: straight to the winner'));
+check((await page.getByTestId('replay-winner').textContent()) === 'Bo', 'Skip: the result is Bo');
+await page.waitForTimeout(1600);
+await page.screenshot({ path: `${SHOTS}/5-skip-winner.png` });
+
+// 5d. The voice (a stand-in for the phone's): off by default; when on, the next beat waits for the line to finish,
+// a new line never starts over the old one, and pause cuts it cleanly.
+await page.goto(`${BASE}#/replay/${R2}`);
+await page.goto(`${BASE}#/replay/${R1}?quick=1`);
+await page.reload();
+await page.locator('.rp[data-scene]').first().waitFor({ timeout: 15000 });
+await page.getByRole('button', { name: 'Pause' }).click();
+check((await page.evaluate(() => window.__said.filter((x) => x.t === 'speak').length)) === 0, 'voice off by default: nothing is said');
+await page.getByRole('button', { name: /Voice off/ }).click();
+await page.getByRole('button', { name: 'Play', exact: true }).click();
+await page.waitForTimeout(300);
+const vStep = await step();
+const vCap = (await page.locator('.rp-caption').innerText()).trim();
+await page.waitForTimeout(1500); // ten steps' worth in test mode
+check((await step()) === vStep, `voice on: the step waits for the line to finish (still step ${vStep} after 1.5 s)`);
+check((await page.evaluate(() => window.__speaking())) === vCap, 'it is reading the caption on screen');
+const lastSpeak = await page.evaluate(() => window.__said.filter((x) => x.t === 'speak' && x.text.trim()).pop());
+check(lastSpeak?.voice === 'Lee (Enhanced)' && lastSpeak.rate < 1, `picks the Australian enhanced voice, slightly slower (${lastSpeak?.voice}, rate ${lastSpeak?.rate})`);
+await page.evaluate(() => window.__endSpeech());
+await page.waitForFunction((s) => Number(document.querySelector('.rp').dataset.step) === s + 1, vStep, { timeout: 3000 }).then(() => check(true, 'line finished: on to the next step'), () => check(false, 'line finished: on to the next step'));
+await page.waitForTimeout(400);
+const said = await page.evaluate(() => window.__said);
+const speaks = said.map((x, i) => ({ ...x, i })).filter((x) => x.t === 'speak' && x.text.trim());
+check(speaks.length >= 2 && speaks.every((x) => said[x.i - 1]?.t === 'cancel'), 'every line clears the last one first (never talks over itself)');
+check((await step()) === vStep + 1, 'and waits again on the next line');
+await page.getByRole('button', { name: 'Pause' }).click();
+check((await page.evaluate(() => window.__speaking())) === null && (await page.evaluate(() => window.__said[window.__said.length - 1].t)) === 'cancel', 'pause stops the voice cleanly');
+await page.getByRole('button', { name: 'Play', exact: true }).click();
+await page.waitForTimeout(300);
+check((await page.evaluate(() => window.__speaking())) === (await page.locator('.rp-caption').innerText()).trim(), 'play again: the line is read from the top');
+await page.screenshot({ path: `${SHOTS}/6-voice-on.png` });
+await page.getByRole('button', { name: /Voice on/ }).click();
+await page.locator('.rp[data-scene="end"]').waitFor({ timeout: 20000 }).then(() => check(true, 'voice off again: plays through to the end'), () => check(false, 'voice off again: plays through to the end'));
 
 // 6. The in-joke (in_jokes switched on) lands on Bo's win; Larrikins style is remembered for the group.
 await page.goto(`${BASE}#/replay/${R1}?fast=1`);

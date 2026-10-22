@@ -771,6 +771,16 @@ phone width `tests/e2e/stage10-test.mjs`.
 ## Later
 - Dinner awards voting, fines.
 
+## Future
+- **A proper broadcast voice for the replay (Josh decides; nothing built, nothing paid for).** Today the replay's voice
+  is the phone's own built-in voice (free, works offline, but it sounds like a phone — "too mechanical"). A natural
+  commentator voice needs a hosted text-to-speech service (for example the big cloud providers or a specialist voice
+  company). What it would take: an account and a key kept on the server (an Edge Function, never in the app), the
+  replay's lines sent there and the audio played back, and saving each round's audio once so it isn't paid for twice.
+  Cost is per character read — a replay is about 1,500–2,500 characters, so roughly cents per replay on most services,
+  more for the premium "actor" voices; it would also need a monthly cap. The replay already waits for each line to
+  finish, so swapping the voice in is a small change in `src/lib/voice.js`.
+
 ## Launch hosting (20 Oct 2026, branch `launch-hosting`, not merged)
 - The app works at any address: `VITE_BASE` (default `/lgc-golf/`, so GitHub Pages is unchanged). `sw.js` and the
   manifest work out their own address. `notify` reads `APP_URL`. There's a safety catch: a non-GitHub build must name
@@ -1204,3 +1214,33 @@ screen, "Viewing as Mike · read only", and Stop.
   new); e2e new `governance-hub-test.mjs` (49 checks); governance, rulebook ×3, dispute, nav, desktop, phone, features
   pass (governance / rulebook / features tests updated for the hub). Note: rulebook, phone and features tests need a
   build with the default database address (their fakes route only that address).
+## ov20 — Round replay: a story, not every hole, branch `ov20-replay-pacing`, 23 Oct 2026
+Front end only; no database change. Josh: "a bit quick… group some holes… more about the key moments… slow down for
+the end… the voice gets cut off."
+- **Beats (`src/lib/replaybeats.js`, new, pure):** quiet holes share a beat (up to 4 holes, split at the turn); key
+  moments get their own — lead changes, eagles and aces always, then (about 2 in 5 holes at most) big swings (the gap
+  moves 3+ on one hole, new in `replay.js`), ties for the lead, blow-ups, climbers, side comp wins and birdies. A lone
+  quiet hole joins the key beat next to it (fewer transitions). The 9th always ends a beat (the turn). The last three
+  holes get a beat each, after the "3 to play" card, then the winner. Every beat ends with the board as it stood after
+  its last hole, so the standings are followed the whole way. An 18-hole round is now ~10–13 beats instead of 18.
+- **Lines:** each beat uses the group's live commentary (`commentary` table, 071) for a hole in it when one was
+  written; otherwise a line made from the beat ("Holes 1–4: a steady start. Josh & Hamish out in front, by 1 shot.").
+  Side comp wins are always mentioned. The round report (when written) is read on the end card. New Broadcast and
+  Larrikins lines for stretches, standings, the turn and the last holes; team names now get "they" verbs ("Josh &
+  Hamish go past").
+- **Pacing:** Normal by default — each step holds long enough to read its line (about 18 letters a second plus a
+  settle; at least 4 s, 5 s for key moments, 5.5 s for the last holes, 7.5 s for the winner); gentle 0.7 s fades and
+  the board rows slide ~0.7 s into the beat. Speed control under the top bar: **Normal · Fast ⏩ (about 2×) · Skip to
+  the end ⏭** (to the winner). Fast is remembered on the phone. Tap right / left, hold or ❚❚ to pause, as before.
+  Reduced-motion phones get no movement. An 18-hole replay is ~1:40 at Normal, ~50 s at Fast.
+- **Voice (`src/lib/voice.js`, new):** off by default (🔈 / 🔊). When on, the next step waits for the line to finish
+  (onend), a new line always cancels the old one first and a late "finished" from an old line never counts, pause /
+  skip stop it cleanly (play again reads the line from the top), and a phone that never says "finished" moves on after
+  a generous wait. Picks the best local voice (en-AU, then en-GB; "enhanced"/"natural" first; never Apple's joke
+  voices), rate 0.92 (1.08 on Fast). A proper broadcast voice is under **Future**.
+- **Removed:** the old per-hole `buildTimeline` / `frameMs` (`replay.js`) and `captionsFor` (`replay-lines.js`) —
+  replaced by `buildStory`. `?quick=1` (or the old `?fast=1`) is the 150 ms test mode.
+- **Tests:** Vitest 1305 pass (new `replaybeats.test.js`, 28: grouping, key beats, turn, last three, side comps, lines,
+  team verbs, timing, speeds, skip, commentary matching, voice pick, never-overlapping speaker). Playwright
+  `replay-test.mjs` 62 checks pass (grouped beats, Normal ≥ 4 s a beat, Fast about half, Skip → winner, pause, voice off
+  by default, stubbed voice waits for onend / never overlaps / pause cuts it). Screenshots at 375 px.

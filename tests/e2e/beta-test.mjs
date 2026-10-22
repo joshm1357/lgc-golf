@@ -271,21 +271,15 @@ for (const w of [768, 1280, 1920]) {
   await ctx.close();
 }
 
-// 8. "Who are you?" (in the group, no player yet): the new app points to the personal link; the live-style build doesn't.
+// 8. "Who are you?" (in the group, no player yet): one line points to the personal link (Josh 22 Oct: the paste box was redundant).
 {
   noPlayer = true;
   const { ctx, page } = await newPage(375, 812, { phone: true });
   await page.goto(SIGNIN + '#/');
   await page.getByText('Who are you?').waitFor({ timeout: 15000 });
-  check(await page.getByText('Got a personal link from your organiser?').isVisible(), 'who are you (new app): points to the personal link');
-  await page.getByLabel('Your personal link').fill('https://staging.thegolftrip.club/#/me/MP4UEPCG88DT');
-  await page.getByRole('button', { name: 'Open', exact: true }).click();
-  await page.waitForTimeout(800);
-  check(await page.evaluate(() => window.location.hash === '#/me/MP4UEPCG88DT'), 'who are you: pasting the link opens it');
+  check(await page.getByText(/Got a personal link from your organiser\? Tap it/).isVisible(), 'who are you: a one-line pointer to the personal link (no paste box)');
+  check(!(await page.getByLabel('Your personal link').count()), 'who are you: no personal-link paste box');
   await page.screenshot({ path: `${SHOTS}/375-who-are-you.png` });
-  await page.goto(LIVE + '#/');
-  await page.getByText('Who are you?').waitFor({ timeout: 15000 });
-  check(!(await page.getByText('Got a personal link from your organiser?').isVisible().catch(() => false)), 'who are you (live-style build): unchanged');
   noPlayer = false;
   await ctx.close();
 }

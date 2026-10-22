@@ -25,6 +25,8 @@ import { CallVoteSheet, callBatch } from '../components/CallVote.jsx';
 import { CallsWho, CourseCall, BestPerDay, TeeGridTable, useSocialTimes } from '../components/TeeCalls.jsx';
 import { windowDates, slotsFor } from '../lib/teegrid.js';
 import { extrasSection } from '../lib/extras.js';
+import { useCourseResearch, AboutForGroups } from '../components/CourseResearch.jsx';
+import { shortFacts } from '../lib/courseresearch.js';
 
 const STAY_LIMITS = [20, 30, 40, 50, 60];
 const FILTERS = [['notPlayed', 'Not played before'], ['favourites', 'Our favourites'], ['stayPlay', 'Stay & play']];
@@ -148,6 +150,8 @@ export default function TripBuilder() {
     setBooking((cur) => ({ ...cur, ...Object.fromEntries((b || []).map((x) => [x.course_id, x])) }));
   }, [bookingKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { loadBooking(); }, [loadBooking]);
+  // Josh's course research (088): facts on each course row, the "About this course for groups" block, the call card.
+  const research = useCourseResearch([...optionIds, ...(open?.id ? [open.id] : [])]);
   const [social, loadSocial] = useSocialTimes(optionIds);
 
   const history = useCallback((id) => TB.playedHistory(id, { courses: data.courses, rounds: data.rounds, trips: data.trips, honour: data.honour_board }), [data]);
@@ -408,7 +412,7 @@ export default function TripBuilder() {
       {!stays.length && <span className="small muted">Pick where you’ll stay first — then each day’s courses show up.</span>}
       {stays.length > 0 && days.map((d) => (
         <DayCard key={d.index} d={d} active={focusDay.index === d.index} onFocus={() => setFocus(d.index)} dates={weekendDates(d.index)}
-          cands={focusDay.index === d.index ? cands : []} courseMap={courseMap} info={st.info || {}} org={org} booking={booking} history={history}
+          cands={focusDay.index === d.index ? cands : []} courseMap={courseMap} info={st.info || {}} org={org} booking={booking} history={history} research={research}
           votes={TB.dayVotes(points, d.index)} onToggle={(c) => toggleOption(d, c)} onOpen={(id) => setOpen({ id, day: d })} />
       ))}
       {org && votesOn && st.region && !st.votes?.v1 && (
@@ -438,7 +442,7 @@ export default function TripBuilder() {
         return (
           <CourseCall key={j.course_id} planId={planId} courseId={j.course_id} name={j.name} job={job} dates={callDates} need={need.needed || 1}
             rows={tees.filter((t) => t.course_id === j.course_id)} social={social[j.course_id] || null} canEdit={org || mine} me={me}
-            groupName={status.group_name || 'our golf group'} booking={booking[j.course_id]} onSaved={() => { loadTees(); loadSocial(); pd.reload(); }}
+            groupName={status.group_name || 'our golf group'} booking={booking[j.course_id]} research={research[j.course_id]} onSaved={() => { loadTees(); loadSocial(); pd.reload(); }}
             owner={job && <JobOwner job={job} org={org} reload={pd.reload} />} />
         );
       })}
@@ -511,7 +515,7 @@ export default function TripBuilder() {
           onCalled={called} onClose={() => setCalling(null)} />
       )}
       {open && (
-        <CourseSheet id={open.id} day={open.day} course={courseMap[open.id]} booking={booking[open.id]} history={history(open.id)} org={org} aiOn={aiOn}
+        <CourseSheet id={open.id} day={open.day} course={courseMap[open.id]} booking={booking[open.id]} research={research[open.id]} history={history(open.id)} org={org} aiOn={aiOn}
           isOption={open.day?.options?.includes(open.id) || days.find((d) => d.index === open.day?.index)?.options.includes(open.id)}
           drive={open.day && courseMap[open.id] && stays.length ? TB.legDrive(open.day.leg, courseMap[open.id], { origin, stays }).text : null}
           onToggle={open.day && org ? () => { toggleOption(days.find((d) => d.index === open.day.index), courseMap[open.id]); setOpen(null); } : null}
@@ -526,7 +530,7 @@ function VoteLink({ planId, title }) {
 }
 
 // ---------------------------------------------------------------- one day: its options and suggestions
-function DayCard({ d, active, onFocus, dates, cands, courseMap, info, org, booking, history, votes, onToggle, onOpen }) {
+function DayCard({ d, active, onFocus, dates, cands, courseMap, info, org, booking, history, votes, onToggle, onOpen, research = {} }) {
   return (
     <div className="card" data-testid="tb-day" data-leg={d.leg} style={{ overflow: 'hidden', borderColor: active ? 'var(--navy)' : undefined }}>
       <button type="button" onClick={onFocus} className="row between" style={{ width: '100%', padding: '10px 12px', background: active ? 'var(--gold-soft)' : 'none', border: 0, textAlign: 'left', color: 'inherit', font: 'inherit' }}>
@@ -544,6 +548,7 @@ function DayCard({ d, active, onFocus, dates, cands, courseMap, info, org, booki
               {votes[id] > 0 && <span className="tb-chip-pts">{votes[id]} pts</span>}
               <div className="small" data-testid="tb-option-drive">{info[`${d.index}:${id}`] || ''}</div>
               <div className="small muted" data-testid="tb-known">{TB.shortKnown(c, history(id))}{b?.phone ? ` · 📞 ${b.phone}` : b?.booking_url ? ' · books online' : ''}{b?.features?.length ? ` · ${b.features.slice(0, 3).join(', ')}` : ''}</div>
+              {research[id] && shortFacts(research[id]) && <div className="small" data-testid="tb-facts">{shortFacts(research[id])}</div>}
             </div>
             {org && <button type="button" className="btn ghost sm" aria-label={`Remove ${c.name}`} onClick={() => onToggle(c)}>✕</button>}
           </div>
@@ -588,7 +593,7 @@ function JobOwner({ job, org, reload }) {
 }
 
 // ---------------------------------------------------------------- one course: what we know, booking info, look it up
-function CourseSheet({ id, day, course, booking, history, org, aiOn, isOption, drive, onToggle, onClose, onSaved }) {
+function CourseSheet({ id, day, course, booking, research, history, org, aiOn, isOption, drive, onToggle, onClose, onSaved }) {
   const { status } = useSession();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(null);
@@ -640,8 +645,9 @@ function CourseSheet({ id, day, course, booking, history, org, aiOn, isOption, d
             .filter(([, v]) => v).map(([k, v]) => <div key={k} className="row between small" style={{ gap: 8 }}><span style={{ fontWeight: 600 }}>{k}</span><span style={{ textAlign: 'right' }}>{String(v)}</span></div>)}
           {b.booking_url && <a className="small" href={b.booking_url} target="_blank" rel="noopener noreferrer">Book online ↗</a>}
           {b.features?.length > 0 && <div className="tb-chips">{b.features.map((f) => <span key={f} className="chip" style={{ minHeight: 28 }}>{f}</span>)}</div>}
-          {!b.course_id && !facts.visitor_times && <span className="small muted">Nothing yet — shared by every group once someone adds it.</span>}
+          {!b.course_id && !facts.visitor_times && <span className="small muted">{research ? 'Nothing added by a group yet — the research is below.' : 'Nothing yet — shared by every group once someone adds it.'}</span>}
         </div>
+        {research && <AboutForGroups r={research} />}
         {warning && <div className="small" style={{ fontWeight: 700, color: '#7A5A00' }} data-testid="tb-ai-warning">{warning}</div>}
         {org && !editing && (
           <div className="row" style={{ gap: 8 }}>

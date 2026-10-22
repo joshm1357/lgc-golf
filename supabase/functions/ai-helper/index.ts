@@ -36,6 +36,7 @@ import { jokesRequest, jokesCap } from './jokes.ts';
 import { abSetup, pickAi } from './abtest.ts';
 import { rulesRequest, rulesDeps } from './rules.ts';
 import { coursebookRequest, coursebookDeps } from './coursebook.ts';
+import { RESEARCH_COLS, withFacts, researchExtras, placeWord, pickGuide } from './research.ts';
 
 const AI = aiConfig((k) => Deno.env.get(k));
 if (!AI.ok) console.warn('ai-helper: AI provider not set up:', AI.reason); // the reason never includes a key
@@ -104,14 +105,39 @@ function makeDeps(db: SupabaseClient, g: string, uid: string, status: Any): Deps
     const by = Object.fromEntries((data || []).map((r: Any) => [r.course_id, [r.weekdays && `weekdays ${clean(r.weekdays, 60)}`, r.weekends && `weekends ${clean(r.weekends, 60)}`, clean(r.price, 30), clean(r.group_size, 40)].filter(Boolean).join(' · ')]));
     return list.map((c) => (by[c.id] ? { ...c, social_times: by[c.id] } : c));
   };
-  // One place → the first library course there that has a location → courses near that point.
+  // Josh's course research (088): read as the person (anyone signed in can). Before 088 is loaded the tables don't
+  // exist; then there's simply no research and the planner works as before.
+  const researchFor = async (ids: string[]) => {
+    if (!ids.length) return [];
+    const { data, error } = await db.from('course_research').select(RESEARCH_COLS).in('library_id', ids);
+    return error ? [] : (data || []) as Any[];
+  };
+  const researchNear = async (place: string) => {
+    const w = placeWord(place).replace(/\s+/g, '%');
+    if (w.length < 3) return [];
+    const { data, error } = await db.from('course_research').select(RESEARCH_COLS).or(`region.ilike.%${w}%,town.ilike.%${w}%`).limit(12);
+    return error ? [] : (data || []) as Any[];
+  };
+  const addFacts = async <T extends { id: string }>(list: T[]) => withFacts(list, await researchFor(list.map((c) => c.id)));
+  let guides: Any[] | null = null;
+  const regionGuides = async () => {
+    if (guides) return guides;
+    const { data, error } = await db.from('region_guides').select('key,kind,title,state,regions,body').eq('active', true).order('sort');
+    return (guides = error ? [] : (data || []) as Any[]);
+  };
+  // One place → the first library course there that has a location → courses near that point, with researched facts;
+  // plus researched courses in that town or region the map search missed (listings with no map position yet).
   const nearOne = async (place: string) => {
     const hits = await searchLibrary(place, null, null, 5);
+    let courses: Any[] = [];
     for (const h of hits.slice(0, 3)) {
       const l = await library(h.id);
-      if (l?.lat != null && l?.lng != null) return { near: place, courses: await withSocial(shapeNear(await searchLibrary('', Number(l.lat), Number(l.lng), 10))) };
+      if (l?.lat != null && l?.lng != null) { courses = shapeNear(await searchLibrary('', Number(l.lat), Number(l.lng), 10)); break; }
     }
-    return hits.length ? { near: place, courses: await withSocial(shapeNear(hits)) } : { near: place, courses: [], note: 'Nothing in the course library there yet — don’t search it again.' };
+    if (!courses.length && hits.length) courses = shapeNear(hits);
+    const extra = researchExtras(await researchNear(place), new Set(courses.map((c) => c.id)));
+    courses = [...(await addFacts(courses)), ...extra];
+    return courses.length ? { near: place, courses: await withSocial(courses) } : { near: place, courses: [], note: 'Nothing in the course library there yet — don’t search it again.' };
   };
   return {
     status: {
@@ -169,7 +195,8 @@ function makeDeps(db: SupabaseClient, g: string, uid: string, status: Any): Deps
         ]);
         return shapePastTrips(trips, plans, rounds, courses);
       }
-      if (name === 'find_course') return shapeNear(await searchLibrary(clean(input?.query, 60)));
+      if (name === 'find_course') return addFacts(shapeNear(await searchLibrary(clean(input?.query, 60))));
+      if (name === 'region_guide') return pickGuide(await regionGuides(), clean(input?.region, 60));
       if (name === 'courses_near') {
         // ov16: several places in one call (up to 4), so the helper doesn't spend a turn on each.
         const many = Array.isArray(input?.places) ? [...new Set((input.places as unknown[]).map((p) => clean(p, 60)).filter(Boolean))].slice(0, 4) : [];

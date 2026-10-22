@@ -1148,3 +1148,19 @@ screen, "Viewing as Mike · read only", and Stop.
   plan-ux, trip-plan, links. Tests that meant "the leaderboard" now open `#/leaderboard`. beta-test's "same as the
   product branch" pixel checks differ by design (new tab bar and first screen). quick, stage9, start and rulebook-v2
   already failed on the base before this change.
+
+## ov17 — Course research (455 courses + region guide), branch `ov17-course-research`, 22 Oct 2026
+- **Data (088, additive):** `course_research` (one row per researched course, linked to `course_library`; typed fees,
+  access type, good-for-groups, drive time, booking / group-enquiry links, phone, sources, last checked; the rest in
+  `details`) and `region_guides` (the guide's sections, replaced by key; a section that's gone is switched off, never
+  deleted). Signed-in users read both; only the service role / platform admin writes (`import_course_research`).
+  Existing `course_facts` (063, organiser tips) is untouched — hence the name `course_research`.
+- **Import:** `node scripts/import-course-research.mjs <csv> <md> [outDir]` → SQL files run in order in the SQL editor.
+  Matching: exact (name + state + town) → near (same name within 40 km; or one name inside the other, same town) →
+  loose (same words in another order/spelling: St/Saint, Mt/Mount, "Public", "& Driving Range") → else a new listing
+  (no holes, no map position); closed / "note only" rows aren't added. Upsert by import key — re-runs change nothing.
+- **Staging load:** 455 rows: 263 exact, 149 near, 36 new listings, 7 unmatched (all closed or note-only); 17 guide
+  sections. 12 duplicate listings made before the loose step existed were re-pointed and hidden on staging.
+- **Used by:** the AI planner (facts in course search, new `region_guide` tool, ask-first rules on member times /
+  access / stay-and-play / deal sites); course page and trip builder "About this course for groups" block; tee-time
+  call job (phone, enquiry/booking links, member-times warning).

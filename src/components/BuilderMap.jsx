@@ -24,15 +24,15 @@ function Frame({ points }) {
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
   return null;
 }
-const stayIcon = (name, on) => L.divIcon({
+const stayIcon = (name, on, sug = false, count = null) => L.divIcon({
   className: '',
-  html: `<div class="tb-stay${on ? ' on' : ''}">🏠 ${String(name).replace(/[<>&"]/g, '')}</div>`,
+  html: `<div class="tb-stay${on ? ' on' : ''}">${sug ? '✨' : '🏠'} ${String(name).replace(/[<>&"]/g, '')}${count != null ? ` · ${Number(count)}⛳` : ''}</div>`,
   iconSize: null, iconAnchor: [14, 14],
 });
 
 /**
- * courses: [{ id, name, lat, lng, on, top, sub }]   on = an option for the day being built; top = most voted
- * stays:   [{ key, name, lat, lng, on }]
+ * courses: [{ id, name, lat, lng, on, top, sub, sug }]   on = an option / on the table; top = most voted; sug = ✨ suggested
+ * stays:   [{ key, name, lat, lng, on, sug, count }]       count = courses on the table within the drive (080)
  * origin:  { lat, lng, label } | null
  */
 export default function BuilderMap({ courses = [], stays = [], origin = null, onCourse, onStay, onTap, frame, className = 'tb-map' }) {
@@ -56,11 +56,11 @@ export default function BuilderMap({ courses = [], stays = [], origin = null, on
           <CircleMarker key={c.id} center={[c.lat, c.lng]} radius={c.on ? 10 : 7}
             eventHandlers={onCourse ? { click: () => onCourse(c) } : undefined}
             pathOptions={{ color: c.on ? '#15202E' : '#fff', weight: c.on ? 3 : 1.5, fillColor: c.top ? PIN.voted : c.on ? PIN.option : PIN.other, fillOpacity: 0.95 }}>
-            <Tooltip direction="top">{c.name}{c.sub ? ` · ${c.sub}` : ''}</Tooltip>
+            <Tooltip direction="top">{c.sug ? '✨ ' : ''}{c.name}{c.sub ? ` · ${c.sub}` : ''}</Tooltip>
           </CircleMarker>
         ))}
         {stays.filter((s) => s.lat != null).map((s) => (
-          <Marker key={s.key} position={[s.lat, s.lng]} icon={stayIcon(s.name, s.on)} eventHandlers={onStay ? { click: () => onStay(s) } : undefined} />
+          <Marker key={s.key} position={[s.lat, s.lng]} icon={stayIcon(s.name, s.on, s.sug, s.count)} eventHandlers={onStay ? { click: () => onStay(s) } : undefined} />
         ))}
       </MapContainer>
     </div>

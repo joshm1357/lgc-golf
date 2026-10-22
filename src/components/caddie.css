@@ -36,4 +36,27 @@ html.has-caddie .page { padding-bottom: calc(150px + var(--safe-bottom)); }
   html.caddie-open .fab { left: calc(248px + (100vw - 248px - 340px) / 2); width: min(868px, calc(100vw - 248px - 340px - 48px)); }
   html.caddie-open .toast { left: calc(248px + (100vw - 248px - 340px) / 2); }
 }
-@media print { .caddie-btn, .caddie-tab, .caddie-panel { display: none !important; } }
+@media print { .caddie-btn, .caddie-tab, .caddie-panel, .caddie-plan-sheet { display: none !important; } }
+
+/* Ask | ✨ Plan a trip (ov16). */
+.caddie-modes { display: flex; gap: 6px; padding: 10px 14px 0; }
+.caddie-modes button { flex: 1; min-height: 40px; border-radius: 999px; border: 1px solid var(--line); background: #fff; font-weight: 700; color: var(--navy); }
+.caddie-modes button.on { background: var(--navy); color: #fff; border-color: var(--navy); }
+.sheet .caddie-modes { padding: 0 0 10px; }
+
+/* The phone's planning sheet: not a modal — the trip screen stays above it, and it folds down to a bar. */
+.caddie-plan-sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; max-height: 62vh; display: flex; flex-direction: column;
+  background: var(--ground); border-top: 2px solid var(--gold); border-radius: 16px 16px 0 0;
+  box-shadow: 0 -10px 28px rgba(28, 43, 63, .22); padding-bottom: var(--safe-bottom);
+}
+.caddie-plan-hdr { display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: var(--navy); color: #fff; border-radius: 14px 14px 0 0; }
+.caddie-plan-grab { display: flex; align-items: center; gap: 8px; min-height: 44px; background: none; border: 0; color: #fff; text-align: left; font: inherit; }
+.caddie-plan-grab .small { margin-left: auto; opacity: .85; }
+.caddie-plan-hdr .btn { color: #fff; background: transparent; border-color: rgba(255, 255, 255, .5); min-width: 44px; min-height: 44px; }
+.caddie-plan-body { overflow-y: auto; padding: 0 14px 14px; }
+.caddie-plan-body .caddie-modes { padding: 10px 0; }
+/* Maps on the trip screen keep their controls inside the map, under the planning sheet. */
+html.caddie-planning .leaflet-container { isolation: isolate; }
+/* Room at the end of the page so the folded bar never sits over the last thing on it. */
+html.caddie-planning .page { padding-bottom: calc(80px + var(--safe-bottom)); }

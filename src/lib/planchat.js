@@ -5,6 +5,8 @@
 // chooses: nothing is ever narrowed to one answer for them. Pure functions, tested (planchat.test.js). The chat UI
 // itself (components/AiChat.jsx) is reusable by the Caddie later.
 
+import { startExtras } from './extras.js';
+
 export const MAX_TURNS = 10;     // questions per planning chat (each one counts as one helper question)
 export const KEEP_TURNS = 12;    // what's sent back to the helper each time (the last 12 messages)
 export const MAX_QUICK = 4;
@@ -84,16 +86,111 @@ export function cleanQuestions(list) {
 export const turnsLeft = (turns) => Math.max(0, MAX_TURNS - (turns || []).filter((t) => t.role === 'user').length);
 
 /** The request for one turn: the latest words, the conversation so far (slimmed) and the current draft. */
-export function chatBody(turns, draft, text) {
+export function chatBody(turns, draft, text, page = null) {
   const messages = (turns || []).slice(-KEEP_TURNS).map((t) => ({ role: t.role === 'user' ? 'user' : 'assistant', text: String(t.text || '').slice(0, 600) }));
-  return { mode: 'plan_chat', text: String(text || '').trim().slice(0, 600), messages, ...(draft ? { draft } : {}) };
+  return { mode: 'plan_chat', text: String(text || '').trim().slice(0, 600), messages, ...(draft ? { draft } : {}), ...(page ? { page } : {}) };
+}
+
+/** Under every helper reply (Josh, 22 Oct): you can stop the questions any time — and "plan it" does just that. */
+export const PLAN_IT_HINT = 'Or just say “plan it” and I’ll put a plan together now.';
+export const PLAN_IT = 'Plan it';
+
+// ------------------------------------------------------------------ the trip screen filling in as you chat (ov16)
+// "Plan it with AI" lives in the Caddie: once there's a draft, a draft trip is made and the trip builder opens beside
+// (laptop) or under (phone) the chat. Each turn the helper's draft is written into the builder's saved state as ✨
+// suggestions; what the organiser kept, added or removed on the page stays theirs. Before each turn, what the page
+// shows is sent back to the helper (pageFromBuild) so it sees their changes.
+
+/** Library course id → name, from the draft's places (address is the names joined " + ", in the same order). */
+export function courseNamesFromDraft(draft) {
+  const out = {};
+  for (const p of draft?.places || []) {
+    const names = String(p.address || '').split(' + ');
+    (p.courses || []).forEach((id, i) => { if (names[i]) out[id] = names[i]; });
+  }
+  return out;
+}
+
+/** "Bus" and "Bus or transfers" are the same extra (the helper's words are looser than the list's). */
+export function sameExtra(a, b) {
+  const x = String(a || '').trim().toLowerCase(); const y = String(b || '').trim().toLowerCase();
+  if (!x || !y) return false;
+  return x === y || x.includes(y) || y.includes(x) || x.split(/[^a-z]+/)[0] === y.split(/[^a-z]+/)[0];
+}
+
+/**
+ * The builder's state with a new AI draft written in. `prev` is the saved state (or null for a new build). The
+ * helper's earlier suggestions (prev.ai) that the organiser hasn't kept are replaced by the new ones; anything the
+ * organiser added or kept stays. The chosen area, stays, days, votes, nights… are never touched.
+ */
+export function mergeDraftIntoBuild(prev, draft, stayAreas = [], { nights = 2 } = {}) {
+  const start = builderStateFromDraft(draft, stayAreas, { nights });
+  const tick = (labels) => (labels.length ? startExtras().map((e) => (labels.some((l) => sameExtra(l, e.label)) ? { ...e, suggested: true } : e)) : null);
+  if (!prev) {
+    const { extrasSuggested, ...rest } = start;
+    return { ...rest, ...(draft?.travel ? { travel: draft.travel } : {}), extras: tick(extrasSuggested), ai: { regions: start.regionOptions, weekends: start.weekends.map((w) => w.start) } };
+  }
+  const ai = prev.ai || { regions: [], weekends: [] };
+  const sugg = { ...(prev.suggested || {}) };
+  // Areas: the organiser's own (never suggested by the helper) stay; the helper's are swapped for its new ones.
+  const own = (prev.regionOptions || []).filter((r) => !(ai.regions || []).includes(r));
+  const regionOptions = [...new Set([...own, ...start.regionOptions, ...(prev.region ? [prev.region] : [])])].slice(0, Math.max(3, own.length));
+  const areaCourses = {};
+  const areaStays = { ...(prev.areaStays || {}) };
+  for (const r of regionOptions) {
+    const before = prev.areaCourses?.[r] || [];
+    const kept = before.filter((id) => !sugg[`course:${r}:${id}`]); // ticked in by the organiser (or added by hand)
+    for (const id of before) if (sugg[`course:${r}:${id}`] && !(start.areaCourses[r] || []).includes(id)) delete sugg[`course:${r}:${id}`];
+    const fresh = (start.areaCourses[r] || []).filter((id) => !kept.includes(id));
+    for (const id of fresh) sugg[`course:${r}:${id}`] = true;
+    areaCourses[r] = [...kept, ...fresh].slice(0, 10);
+    if (!areaStays[r] && start.areaStays[r]) { areaStays[r] = start.areaStays[r]; Object.assign(sugg, Object.fromEntries(Object.keys(start.suggested).filter((k) => k.startsWith(`stay:${r}:`)).map((k) => [k, true]))); }
+  }
+  // Weekends: once the organiser has settled them, they're theirs. Otherwise their own stay and the helper's update.
+  let weekends = prev.weekends || [];
+  let aiWeekends = ai.weekends || [];
+  if (!prev.weekendsSettled) {
+    const mine = weekends.filter((w) => !(ai.weekends || []).includes(w.start));
+    weekends = [...mine, ...start.weekends.filter((w) => !mine.some((m) => m.start === w.start))].slice(0, 4);
+    aiWeekends = weekends.filter((w) => !mine.includes(w)).map((w) => w.start);
+  }
+  // Extras: the list is the organiser's once it exists — the helper's ideas are just marked ✨.
+  let extras = prev.extras ?? tick(start.extrasSuggested);
+  if (Array.isArray(prev.extras) && start.extrasSuggested.length) {
+    extras = extras.map((e) => (start.extrasSuggested.some((l) => sameExtra(l, e.label)) && e.state === 'off' ? { ...e, suggested: true } : e));
+  }
+  return {
+    ...prev, regionOptions, areaCourses, areaStays, suggested: sugg, weekends, extras,
+    // Driving or flying (ov16): flying isn't planned yet — it's kept so the trip screen can say so later.
+    ...(draft?.travel ? { travel: draft.travel } : {}),
+    ai: { regions: start.regionOptions.filter((r) => !own.includes(r)), weekends: aiWeekends },
+  };
+}
+
+/** What the trip screen shows now, small, for the helper (it goes in as data). names: course id → name. */
+export function pageFromBuild(state, names = {}) {
+  if (!state) return null;
+  const sugg = state.suggested || {};
+  const areas = (state.regionOptions || []).slice(0, 4).map((r) => ({
+    area: r,
+    courses: (state.areaCourses?.[r] || []).slice(0, 10).map((id) => `${names[id] || id}${sugg[`course:${r}:${id}`] ? ' (suggested)' : ''}`),
+    stays: (state.areaStays?.[r] || []).slice(0, 6).map((s) => s.name),
+  }));
+  return {
+    areas,
+    chosen_area: state.region || null,
+    weekends: (state.weekends || []).slice(0, 4).map((w) => (w.end && w.end !== w.start ? `${w.start} to ${w.end}` : w.start)),
+    nights: Number.isInteger(state.nights) ? state.nights : null,
+    headcount: Number.isInteger(state.headcount) ? state.headcount : null,
+    extras: (state.extras || []).filter((e) => e.state && e.state !== 'off').map((e) => e.label),
+  };
 }
 
 /** The draft as the plan "Use this plan" sends to plan_apply (same shape the plan mode checks). */
 export function draftToPlan(draft) {
   if (!draft) return null;
   return {
-    name: draft.name, kind: draft.kind || 'trip',
+    name: draft.name, kind: draft.kind || 'trip', ...(draft.travel ? { travel: draft.travel } : {}),
     dates: (draft.dates || []).map((d) => ({ start_date: d.start_date, end_date: d.end_date, note: d.note || '' })),
     places: (draft.places || []).map((p) => ({ place: p.label, courses: p.courses || [], cost_each: p.cost_pp ?? undefined, note: p.notes || '' })),
     jobs: draft.jobs || [], bring: draft.bring || [], costs: draft.costs || [], budget_each: draft.budget_pp ?? undefined, notes: draft.notes || '',
@@ -145,7 +242,7 @@ export function loadChat(groupId, s, now = Date.now()) {
     const v = JSON.parse(st.getItem(STORE_PREFIX + groupId) || 'null');
     if (!v || !Array.isArray(v.turns)) return null;
     if (v.savedAt != null && now - v.savedAt > WEEK) return null;
-    return { turns: v.turns.slice(-30), draft: v.draft || null, savedAt: v.savedAt || null };
+    return { turns: v.turns.slice(-30), draft: v.draft || null, savedAt: v.savedAt || null, planId: typeof v.planId === 'string' ? v.planId : null };
   } catch { return null; }
 }
 export function saveChat(groupId, chat, s, now = Date.now()) {
@@ -154,7 +251,8 @@ export function saveChat(groupId, chat, s, now = Date.now()) {
   const turns = (chat?.turns || []).slice(-30);
   try {
     if (!turns.length && !chat?.draft) { st.removeItem(STORE_PREFIX + groupId); return; }
-    st.setItem(STORE_PREFIX + groupId, JSON.stringify({ turns, draft: chat?.draft || null, savedAt: now }));
+    // planId (ov16): the draft trip the chat is filling in on the trip builder.
+    st.setItem(STORE_PREFIX + groupId, JSON.stringify({ turns, draft: chat?.draft || null, savedAt: now, ...(chat?.planId ? { planId: chat.planId } : {}) }));
   } catch { /* fine */ }
 }
 export function clearChat(groupId, s) {

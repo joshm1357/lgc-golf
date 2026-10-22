@@ -87,6 +87,7 @@ export type TripPlan = {
   notes: string;
   closes_on: string;
   warnings: string[];
+  travel?: 'drive' | 'fly' | null; // ov16: driving (one region, built) or flying (coming soon — kept as a note)
 };
 
 const money = (v: unknown, max = PLAN_LIMITS.maxEach): number | null => {
@@ -195,7 +196,8 @@ export function validateTripPlan(raw: Any, ctx: TripPlanContext, opts: { partial
 
   if (softErrs.length) warnings.push(`Some of the helper’s options didn’t check out, so they were left out (${softErrs.length === 1 ? softErrs[0] : `${softErrs.length} things`}).`);
   if (errors.length) return { ok: false, errors: [...new Set(errors)].slice(0, 12), plan: null };
-  return { ok: true, errors: [], plan: { name, kind, dates, places, jobs, bring, costs, budget_pp: budget, notes: clean(raw.notes, 300), closes_on: closes, warnings } };
+  const travel = raw.travel === 'fly' ? 'fly' : raw.travel === 'drive' ? 'drive' : null;
+  return { ok: true, errors: [], plan: { name, kind, dates, places, jobs, bring, costs, budget_pp: budget, notes: clean(raw.notes, 300), closes_on: closes, warnings, travel } };
 }
 
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -233,6 +235,7 @@ export type PlanApplyDb = {
 export function briefText(plan: TripPlan, tasksOn: boolean): string | null {
   const parts: string[] = [];
   if (plan.notes) parts.push(plan.notes);
+  if (plan.travel === 'fly') parts.push('Travel: the group would like a flying trip (flying and multi-stop trips are coming soon to the planner).');
   if (plan.costs.length) parts.push(`Rough costs each (AI estimate — check before booking):\n${costLines(plan).join('\n')}`);
   if (!tasksOn && plan.places.length > 1) parts.push(`Other places to think about: ${plan.places.slice(1).map((p) => p.label).join(', ')}`);
   if (!tasksOn && plan.jobs.length) parts.push(`Jobs:\n${plan.jobs.map((j) => `• ${j}`).join('\n')}`);
@@ -320,6 +323,7 @@ export const CHAT_TOOL = {
     draft: obj({
       name: { type: 'string', description: 'A working name, e.g. "March Away 2027"' },
       kind: { type: 'string', enum: ['trip', 'round'] },
+      travel: { type: 'string', enum: ['drive', 'fly'], description: 'How they get there: drive (one region within a drive — the default) or fly (not planned yet; kept as a note)' },
       dates: { type: 'array', description: '2 to 4 weekend options (YYYY-MM-DD)', items: obj({ start_date: { type: 'string' }, end_date: { type: 'string' }, note: { type: 'string' } }, ['start_date']) },
       places: { type: 'array', description: '2 to 4 places, each with the library course ids courses_near found (up to 6; fewer is fine)', items: obj({
         place: { type: 'string' }, courses: { type: 'array', items: { type: 'string' } }, cost_each: { type: 'number' }, note: { type: 'string' },
@@ -358,6 +362,9 @@ ASK FIRST. Don't do the whole plan from one vague message. The key facts are:
   1. roughly when (which month or weekends) and how many nights;
   2. roughly where (regions or towns, or how far they'll travel);
   3. how many are coming.
+Also ask early (with the first questions): "Driving or flying?" [Driving] [Flying] [Not sure].
+  - Driving (the default, and "Not sure"): one region within a drive of home — that's what you plan.
+  - Flying: say plainly that flying and multi-stop trips are coming soon to the app, and offer to plan a driving trip now or keep the idea for later. Don't plan flights. Put travel: "fly" on the draft and a short line in its notes (e.g. "Keen on a flying trip — coming soon"); if they then want a driving one, set travel: "drive".
 Budget each and must-haves (one big house, a particular course…) are good to know but not needed to start.
 - If any of 1–3 is still unknown, keep the reply SHORT: message = what you understood so far, in one sentence; questions = 1 to 3 questions about what's missing, each with quick answers; draft = leave it out (or at most a light sketch: a working name and 2–3 town names, no course searches). Don't search for courses yet.
 - Once the key facts are known — or the organiser says "plan it", "just suggest something" or "surprise me" — build the draft (below) straight away, making sensible guesses for anything still unknown (say what you guessed), then ask about what's still open.
@@ -377,7 +384,7 @@ The reply:
 - questions: 1 to 3 short questions about what's still open, each with 2 to 4 quick answers. Examples:
   "How many are coming?" [Under 8] [8–12] [12+]
   "Which month or weekends?" [March] [April] [Other…]
-  "How far will you travel?" [Under 2 hrs] [Up to 3 hrs] [Happy to fly]
+  "How far will you travel?" [Under 2 hrs] [Up to 3 hrs] [Up to 5 hrs]
   "These are the places I'd look at — any others?" [Looks good] [Add another…]
   "Budget about $800 each?" [Yes] [Less] [More]
   A quick answer that needs typing ends with "…".

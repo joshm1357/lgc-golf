@@ -115,6 +115,15 @@ Deno.test('"plan it" stops the questions: the helper is told to build the draft 
   assertMatch(userText(model.calls[0]), /said to plan it now/);
 });
 
+Deno.test('driving or flying: asked early; flying is kept as a note on the draft (not planned yet)', () => {
+  const sys = (CHAT_TOOL.input_schema.properties.draft as Any).properties.travel;
+  assertEquals(sys.enum, ['drive', 'fly']);
+  const v = validatePlanChat({ message: 'Flying trips are coming soon — want a driving one now?', draft: { name: 'Fly away', travel: 'fly', notes: 'Keen on a flying trip — coming soon' }, questions: [{ text: 'Plan a driving trip now?', quick: ['Yes', 'Keep the idea'] }] }, tctx);
+  assert(v.ok, v.errors.join(' '));
+  assertEquals(v.value!.draft!.travel, 'fly');
+  assertEquals(validatePlanChat({ message: 'x', draft: { ...DRAFT, travel: 'boat' }, questions: QUESTIONS }, tctx).value!.draft!.travel, null);
+});
+
 Deno.test('never a dead-end "done": there is always a question to keep refining', () => {
   const v = validatePlanChat({ message: 'Looks good!', draft: DRAFT, questions: [], done: true }, tctx);
   assert(v.ok);

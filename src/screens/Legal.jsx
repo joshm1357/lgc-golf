@@ -56,6 +56,10 @@ export function Privacy() {
         <><strong>Notifications</strong>, if you turn them on: your phone’s notification address, the phone type, your time
           zone and your settings. The text of a notification passes through Apple’s, Google’s or Mozilla’s notification
           service to reach your phone.</>,
+        <><strong>Vote emails</strong>, if you (or your organiser, before you’re on the app) add an email for trip votes: we
+          keep that address, only you can see it, and it’s used for vote emails and nothing else. The emails go through our
+          email service (Resend) and hold just the trip’s name, the questions and your first name. “Stop vote emails” in any
+          email, or removing it in Notifications, stops them.</>,
         <><strong>Trip planning.</strong> Who’s in, polls, jobs, costs, who’s paid whom, rooms, cars and trip chat. Your group
           sees these. The app only keeps track — it never moves money.</>,
       ]} />

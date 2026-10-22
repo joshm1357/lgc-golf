@@ -28,6 +28,7 @@ const STATUS_LABEL = { planning: 'Planning', confirmed: 'Locked in', done: 'Done
 export { useRun, must } from '../lib/run.js';
 import { useRun, must } from '../lib/run.js';
 import { NotifyCard } from '../components/NotifyCard.jsx';
+import { EmailVoteLine } from '../components/VoteEmail.jsx';
 
 export { NotifyCard };
 
@@ -339,6 +340,7 @@ function PollCard({ poll, pd }) {
         );
       })}
       <div className="stack" style={{ padding: '10px 14px', gap: 8 }}>
+        <EmailVoteLine poll={poll} pd={pd} />
         {isOpen && waiting.length > 0 && (
           <div className="small"><strong>Still to vote ({waiting.length}):</strong> <span className="muted">{waiting.map((id) => playerName(data.playersById[id])).join(', ')}</span></div>
         )}

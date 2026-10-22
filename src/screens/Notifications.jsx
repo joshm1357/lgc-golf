@@ -6,6 +6,7 @@ import { Header } from '../components/ui.jsx';
 import { NotifyCard, WhenCard } from '../components/NotifyCard.jsx';
 import { NotifySteps, WhatYouGet, useMyPushState } from '../components/NotifyPrompt.jsx';
 import { previewOf } from '../lib/preview.js';
+import { VoteChannelCard } from '../components/VoteEmail.jsx';
 
 export default function Notifications() {
   const [state, refresh] = useMyPushState();
@@ -37,6 +38,7 @@ export default function Notifications() {
             <div className="small muted">Saved for you in this group — it applies to every phone you turn notifications on.</div>
           </div>
         )}
+        <VoteChannelCard />
         <div className="card pad stack" style={{ gap: 10 }}>
           <strong>What you’ll get</strong>
           <WhatYouGet />

@@ -17,6 +17,7 @@ import { personalLink, personalMessage, signInLine } from '../lib/personal.js';
 import { NEW_GROUPS } from '../lib/beta.js';
 import ForgetJokes from '../components/ForgetJokes.jsx';
 import { GovernanceLink } from './Cases.jsx';
+import { GroupVoteEmailCard } from '../components/VoteEmail.jsx';
 
 export default function Group() {
   const { status } = useSession();
@@ -30,6 +31,7 @@ export default function Group() {
         {status.is_admin && <InviteCard role="guest" />}
         {status.is_admin && SIGN_IN.length > 0 && <PersonalLinksCard />}
         {status.is_admin && <Members />}
+        {status.is_admin && <GroupVoteEmailCard />}
         {status.is_admin && <LookCard />}
         {status.is_admin && <FeaturesCard />}
         {status.is_admin && status.legacy && <AdminPinCard />}

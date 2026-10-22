@@ -17,3 +17,8 @@ verify_jwt = false
 # gateway's token check is off for it too.
 [functions.ai-helper]
 verify_jwt = false
+
+# 079: the one-tap answer links in vote emails. No sign-in: the link's own token (random, stored hashed, one person,
+# one vote, expires when the vote closes) is the check — see supabase/functions/vote-link/logic.ts.
+[functions.vote-link]
+verify_jwt = false

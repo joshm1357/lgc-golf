@@ -11,6 +11,7 @@
 // only important things. Digest messages wait in notify_queue. "The draw room is open" always goes straight away.
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 import webpush from 'npm:web-push@3.6.7';
+import { batchNonVoters, reminderGroups, batchMessage } from './batch.ts';
 
 // The app's web address for links in notifications. Set APP_URL in the function's secrets when the app moves
 // (e.g. https://app.thegolftrip.club/); until then it's the GitHub Pages address.
@@ -284,10 +285,28 @@ async function dailyFor(g: string) {
   const tomorrow = sydneyDate(1);
   const week = sydneyDate(7);
   // Votes closing tomorrow → people who haven't voted.
-  const { data: closing } = await db.from('plan_polls').select('id,plan_id,question').eq('group_id', g).eq('status', 'open').eq('closes_on', tomorrow);
-  for (const p of tasksOn ? closing || [] : []) {
-    if (!(await once(`poll-closing:${p.id}:${today}`))) continue;
-    sent += await send(g, await openPollNonVoters(g, p.plan_id, p.id), { title: '⏰ Vote closes tomorrow', body: p.question, url: planUrl(p.plan_id, 'vote'), tag: `poll-${p.id}` }, null, 'poll_closing');
+  // A combined vote card (077) is reminded once, to people who haven't answered every section.
+  let { data: closing, error: closingErr } = await db.from('plan_polls').select('id,plan_id,question,vote_batch').eq('group_id', g).eq('status', 'open').eq('closes_on', tomorrow);
+  if (closingErr) ({ data: closing } = await db.from('plan_polls').select('id,plan_id,question').eq('group_id', g).eq('status', 'open').eq('closes_on', tomorrow)); // before 077
+  for (const grp of tasksOn ? reminderGroups((closing || []) as { id: string; plan_id: string; question: string; vote_batch?: string | null }[]) : []) {
+    if (!grp.batch) {
+      const p = grp.polls[0];
+      if (!(await once(`poll-closing:${p.id}:${today}`))) continue;
+      sent += await send(g, await openPollNonVoters(g, p.plan_id, p.id), { title: '⏰ Vote closes tomorrow', body: p.question, url: planUrl(p.plan_id, 'vote'), tag: `poll-${p.id}` }, null, 'poll_closing');
+      continue;
+    }
+    if (!(await once(`batch-closing:${grp.batch}:${today}`))) continue;
+    const { data: b } = await db.from('vote_batches').select('id,plan_id,title,keen').eq('id', grp.batch).eq('group_id', g).maybeSingle();
+    if (!b) continue;
+    const { data: all } = await db.from('plan_polls').select('id').eq('vote_batch', b.id).eq('status', 'open');
+    const pollIds = (all || []).map((x) => x.id);
+    const [{ data: votes }, { data: rs }, people] = await Promise.all([
+      db.from('plan_votes').select('poll_id,player_id').in('poll_id', pollIds),
+      db.from('plan_rsvps').select('player_id').eq('plan_id', b.plan_id),
+      players(g),
+    ]);
+    const missing = batchNonVoters({ pollIds, votes: votes || [], rsvps: rs || [], keen: !!b.keen, playerIds: people.map((p) => p.id) });
+    sent += await send(g, missing, { title: '⏰ Vote closes tomorrow', body: b.title, url: planUrl(b.plan_id, 'vote'), tag: `batch-${b.id}` }, null, 'poll_closing');
   }
   // RSVP deadline tomorrow → people who haven't replied.
   const { data: dl } = await db.from('plans').select('*').eq('group_id', g).eq('rsvp_deadline', tomorrow).eq('rsvp_locked', false).eq('proposed', false).neq('status', 'cancelled');
@@ -358,6 +377,17 @@ Deno.serve(async (req) => {
         const p = await mine(g, 'plan_polls', body.poll_id);
         // The admin, or whoever opened this vote (a suggestion opens its own dates and place votes). Once per vote.
         if (!me.is_admin && p.created_by !== from) return json({ error: 'Not your vote' }, 403);
+        if (p.vote_batch) {
+          // A combined vote card (077): one notification for the whole card, however many sections it has.
+          if (!(await once(`batch-open:${p.vote_batch}`))) break;
+          const { data: b } = await db.from('vote_batches').select('id,plan_id,title,keen,closes_on').eq('id', p.vote_batch).eq('group_id', g).maybeSingle();
+          if (!b) break;
+          const { count } = await db.from('plan_polls').select('id', { count: 'exact', head: true }).eq('vote_batch', b.id);
+          const pl = await plan(g, b.plan_id);
+          const m = batchMessage({ title: b.title, planName: pl.name, sections: count || 1, keen: !!b.keen, closes: b.closes_on ? fmt(b.closes_on) : null });
+          sent = await send(g, 'all', { ...m, url: planUrl(pl.id, 'vote'), tag: `batch-${b.id}` }, from, 'poll_open');
+          break;
+        }
         if (!(await once(`poll-open:${p.id}`))) break;
         const pl = await plan(g, p.plan_id);
         sent = await send(g, 'all', { title: `🗳️ Vote: ${p.question}`, body: `${pl.name}${p.closes_on ? ` · closes ${fmt(p.closes_on)}` : ''}`, url: planUrl(pl.id, 'vote'), tag: `poll-${p.id}` }, from, 'poll_open');

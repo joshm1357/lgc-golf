@@ -51,7 +51,7 @@ function OneVote({ v, pd, canVote }) {
       <button type="button" className="row between" aria-expanded={show} onClick={() => setShow(!show)}
         style={{ width: '100%', minHeight: 56, padding: '10px 14px', border: 0, background: '#fff', textAlign: 'left', color: 'inherit', gap: 10 }}>
         <span className="grow"><strong>{v.title}</strong>
-          <div className="small muted">{canVote ? 'You’ve voted ✓ — see results' : 'See how it’s looking'}</div></span>
+          <div className="small muted">{canVote ? (show ? 'Change my votes below — saved as you go' : 'You’ve voted ✓ — see results or change my votes') : 'See how it’s looking'}</div></span>
         <span aria-hidden="true">{show ? '▴' : '▾'}</span>
       </button>
       {show && <div style={{ padding: '0 8px 8px' }}>{body}</div>}

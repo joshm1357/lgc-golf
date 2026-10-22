@@ -35,6 +35,19 @@ const reply = (over: Any = {}) => ({
   ...over,
 });
 
+Deno.test('ov23: how many comes back on the draft; comps / the Ryder Cup are never planning extras; the prompt says so', async () => {
+  const v = validatePlanChat(reply({ draft: { ...reply().draft, headcount: 9, extras: [{ label: 'Ryder Cup format (two teams)' }, { label: 'Bus', pp: 40 }, { label: 'Stableford comp' }] } }), tctx);
+  assert(v.ok, v.errors.join(' '));
+  assertEquals(v.value!.draft!.headcount, 9);
+  assertEquals(v.value!.draft!.extras.map((e) => e.label), ['Bus']);
+  const silly = validatePlanChat(reply({ draft: { ...reply().draft, headcount: 'lots' } }), tctx);
+  assertEquals(silly.value!.draft!.headcount, undefined);
+  const { planChatSystem } = await import('./plan.ts');
+  const sys = planChatSystem('2026-10-23', 'L.G.C');
+  assertMatch(sys, /Ryder Cup[\s\S]*NOT part of planning/);
+  assertMatch(sys, /We'll sort comps and teams closer to the trip/);
+});
+
 Deno.test('a chat reply checks out: draft like a plan, extras de-duplicated, questions and quick answers capped', () => {
   const v = validatePlanChat(reply(), tctx);
   assert(v.ok, v.errors.join(' '));

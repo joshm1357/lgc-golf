@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { organiseSteps, stepOfNext, stepOfJob, primaryFor, STEP_KEYS, TAB_STEP } from './organisesteps.js';
+import * as STEPS_MODULE from './organisesteps.js';
 import { nextStep } from './tripjobs.js';
 import { tripStage } from './trips.js';
 
@@ -49,6 +50,15 @@ describe('organise steps — which step is current', () => {
     const p = primaryFor(r.next, { current: r.current, polls });
     expect(p.label).toBe('Pick the winner');
     expect(p.action).toEqual({ type: 'pick_winner', pollIds: ['w', 'd'] });
+  });
+
+  it('ov23: the steps in Josh’s order, and where the builder’s next steps belong', () => {
+    const { ORGANISE_STEPS } = STEPS_MODULE;
+    expect(ORGANISE_STEPS.map((s) => s.title)).toEqual(['Plan', 'Vote', 'Call the courses', 'Pick & lock in', 'Jobs & money', 'Comps & on the day']);
+    expect(STEP_KEYS).toEqual(['plan', 'vote', 'book', 'lockin', 'money', 'day']); // old ?step= links keep working
+    expect(stepOfNext({ key: 'area-pick' })).toBe('vote');
+    expect(stepOfNext({ key: 'configs' })).toBe('lockin');
+    expect(stepOfNext({ key: 'calls-wait' })).toBe('book');
   });
 
   it('a vote on where to stay belongs to Book, not Vote', () => {

@@ -21,6 +21,7 @@ import { TripSetupCard } from './TripSetup.jsx';
 import TripExtras, { RepeatInfo } from './TripExtras.jsx';
 import { TripBuilderCard } from '../components/TripBuilderCard.jsx';
 import { TripFinderCard } from '../components/TripFinderCard.jsx';
+import RunUp from '../components/RunUp.jsx';
 import { VoteTab, PeopleTab, ChatTab, PollSheet, CloseSheet, ProposalBanner, LockInCard, Checklist, CalledOffBanner } from './Planner.jsx';
 import './organise.css';
 
@@ -238,6 +239,10 @@ function StepBody({ k, pd, ex, stage, trip, isOrg, on, desk, wide, moneyTab, onM
   if (k === 'lockin') {
     return (
       <>
+        {/* ov23: pick the best combination from the tee times first (the trip builder), then lock it in. */}
+        {isOrg && plan.status === 'planning' && on.trip_finder && ex.builder.started && (
+          <Link to={`/plan/${plan.id}/build`} className="small" data-testid="pick-link" style={{ fontWeight: 700 }}>🧩 Pick the trip from the tee times (best per day) →</Link>
+        )}
         {isOrg && plan.status === 'planning' && !plan.proposed && <LockInCard pd={pd} />}
         {plan.repeat_shape && stage !== 'done' && <RepeatInfo pd={pd} />}
         <TripPlanCards pd={pd} only={['budget', 'deposits']} />
@@ -261,9 +266,11 @@ function StepBody({ k, pd, ex, stage, trip, isOrg, on, desk, wide, moneyTab, onM
       </>
     );
   }
-  // On the day
+  // Comps & on the day (ov23): the run-up — what's up for grabs, the rules, the handicaps — then teams and the draw.
   return (
     <>
+      <RunUp pd={pd} trip={trip} isOrg={isOrg} />
+      <span className="label" style={{ marginTop: 4 }} data-testid="teams-draw">👥 Teams and the draw</span>
       <TripSetupCard plan={plan} reload={pd.reload} />
       {wide && isOrg && <LazyArea fallback={null} quiet><DayPanels pd={pd} trip={trip} goTab={onMoneyTab} /></LazyArea>}
       {!wide && isOrg && trip && <Link to="/setup" className="btn ghost block">⛳ Teams, draw and side comps →</Link>}

@@ -17,6 +17,7 @@ import {
 } from '../lib/tripbudget.js';
 import { tripStage } from '../lib/trips.js';
 import StaySearch from '../components/StaySearch.jsx';
+import { tripHeadcount } from '../lib/weekends.js';
 import { CallVoteSheet } from '../components/CallVote.jsx';
 import { useLateJobs, LateBadge, WaiveButton } from '../components/LateJobs.jsx';
 import { lateJobs } from '../lib/latejobs.js';
@@ -57,8 +58,11 @@ export function useTripExtras(pd) {
       builder: {
         weekends: countWeekends(state), areas: stateNames(state), cards,
         weekendList: Array.isArray(state?.weekends) ? state.weekends : [],
-        // Areas on the table with places to stay picked but no accommodation idea or list yet (080).
-        noStayList: Object.entries(state?.areaStays || {}).filter(([area, pins]) => (pins || []).length && (!state.region || state.region === area)
+        // ov23: where the builder is up to (area chosen? primary and backup weekends set?) and how many are coming.
+        started: !!state, region: state?.region || null, weekendsSettled: !!state?.weekendsSettled,
+        headcount: Number(state?.headcount) > 0 ? Number(state.headcount) : null, headcountBy: state?.headcountBy || null, nights: state?.nights ?? null,
+        // The chosen area with places to stay picked but no accommodation idea or list yet (080; ov23: after the area's chosen).
+        noStayList: Object.entries(state?.areaStays || {}).filter(([area, pins]) => (pins || []).length && state.region === area
           && !stays.some((x) => x.area === area || (!x.area && state.region === area))).map(([area]) => area),
         teeOptions: tees.filter((t) => (t.times || []).length || (t.ranges || []).length).length,
         callJobIds: [...new Set([...tees.map((t) => t.job_id), ...Object.values(state?.callJobs || {})].filter(Boolean))],
@@ -71,7 +75,6 @@ export function useTripExtras(pd) {
   return { ...ex, reload: load };
 }
 
-const keenIds = (pd) => pd.rsvps.filter((r) => r.status === 'in' || r.status === 'maybe').map((r) => r.player_id);
 const reserveJob = (pd) => pd.items.find((i) => i.kind === 'job' && i.formula_key === 'reserve_stay');
 const accomTotal = (pd, ex) => {
   const r = reserveJob(pd);
@@ -437,7 +440,8 @@ function StaySheet({ pd, ex, onClose, onTab }) {
   const plan = pd.plan;
   const [v, setV] = useState({});
   const [busy, run] = useRun();
-  const keen = keenIds(pd).length || data.players.filter((p) => p.approved !== false).length;
+  // ov23: the trip's real head count — the number set (organiser / plan chat), else who's in, else the group.
+  const keen = tripHeadcount({ set: ex.builder.headcount, setBy: ex.builder.headcountBy, rsvps: pd.rsvps, players: data.players }).people;
   const towns = ex.builder.areas.length ? ex.builder.areas : [plan.location_name].filter(Boolean);
   const shortlistJob = pd.items.find((i) => i.formula_key === 'shortlist_stay');
   const mayRun = status.is_admin || (me && (plan.organiser_id === me || shortlistJob?.owner_id === me));

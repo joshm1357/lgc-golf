@@ -115,7 +115,8 @@ export function planVoteSends({ players = [], members = [], prefs = [], groupDef
 /** Has this player answered every option of these polls? (Single-choice polls: any one option counts.) */
 export function hasAnswered({ polls = [], options = [], votes = [], playerId }) {
   if (!polls.length) return true;
-  return polls.every((poll) => {
+  // ov23 (092): an optional detail question (an area's courses / places to stay) never holds anyone up.
+  return polls.filter((poll) => poll.optional !== true).every((poll) => {
     const opts = options.filter((o) => o.poll_id === poll.id);
     const mine = votes.filter((v) => v.poll_id === poll.id && v.player_id === playerId);
     if (!opts.length) return true;

@@ -179,7 +179,7 @@ await open('organise');
 await page.getByRole('button', { name: /Where to stay/ }).click();
 await sheet().getByText('The shortlist', { exact: true }).waitFor({ timeout: 5000 });
 const airbnb = await sheet().getByRole('link', { name: /Airbnb/ }).getAttribute('href');
-check(airbnb.includes('Nowra') && airbnb.includes(`checkin=${START}`) && airbnb.includes('adults=4'), 'search links have the town, dates and headcount');
+check(airbnb.includes('Nowra') && airbnb.includes(`checkin=${START}`) && airbnb.includes('adults=3'), 'search links have the town, dates and headcount (ov23: the 3 who said they’re in, not the maybe)');
 for (const [name, cost, sleeps] of [['Beach House', '2400', '12'], ['Farm Stay', '1800', '10']]) {
   await sheet().getByLabel('Name').fill(name);
   await sheet().getByLabel('Rough total $').fill(cost);

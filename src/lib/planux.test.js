@@ -243,9 +243,14 @@ describe('each area has its own course set and places to stay', () => {
     const st = { regionOptions: ['South Coast', 'Hunter'], areaCourses: { 'South Coast': ['near1', 'near2'] }, areaStays: { 'South Coast': towns },
       weekends: [{ start: '2027-03-12', end: '2027-03-14' }, { start: '2027-03-19', end: '2027-03-21' }] };
     const r = TB.startRange(st, { courseMap: map, accom: [{ id: 's1', name: 'Beach house', area: 'South Coast', total_cost: 3000, sleeps: 12 }], extras: EX.extrasSection(EX.setExtraState(EX.startExtras(), 'bus', 'vote')) });
-    expect(r.map((s) => s.question)).toEqual(['Which area?', 'Which weekend?', 'Which town to stay in?', 'South Coast: which courses?', 'Where should we stay?', 'Would you do these?']);
+    // ov23: with 2+ areas, each area's courses and places to stay are its own optional questions (the detail).
+    expect(r.map((s) => s.question)).toEqual(['Which area?', 'Which weekend?', 'South Coast: which courses?', 'South Coast: where to stay?', 'Where should we stay?', 'Would you do these?']);
+    expect(r.filter((s) => s.optional).map((s) => s.area)).toEqual(['South Coast', 'South Coast']);
     expect(r[0].options[0].notes).toBe('Courses: Nowra GC, Shoalhaven Heads · Stay: Nowra');
     expect(r[4].options[0].notes).toBe('South Coast · $3000 total · sleeps 12');
+    // Areas only: just the main questions (no detail, no accommodation ideas).
+    const a = TB.startRange(st, { courseMap: map, accom: [{ id: 's1', name: 'Beach house' }], depth: 'areas', extras: null });
+    expect(a.map((s) => s.question)).toEqual(['Which area?', 'Which weekend?']);
     expect(TB.areaCourseVotes({ 'areacourse:South Coast:near1': 4, 'area:x': 1 }, 'South Coast')).toEqual({ near1: 4 });
   });
 });

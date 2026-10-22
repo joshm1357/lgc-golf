@@ -180,23 +180,26 @@ check(true, 'the trip shows "Build the trip" first');
 await page.locator('[data-testid="tb-link"]').first().click();
 await step('area').waitFor({ timeout: 10000 });
 const stepsText = await page.locator('.tb-steps').innerText();
-check(/Area & weekends[\s\S]*🔒 Stay areas & courses[\s\S]*🔒 Call the courses[\s\S]*🔒 Pick the trip/.test(stepsText), 'steps in Josh’s order; later ones locked');
+check(/Areas & weekends[\s\S]*🔒 Courses & stays[\s\S]*🔒 Call the courses[\s\S]*🔒 Pick & lock in/.test(stepsText), 'steps in Josh’s order; later ones locked');
 await step('courses').getByRole('button').first().click();
-check((await step('courses').innerText()).includes('After: Area & weekends'), 'a locked step says what it comes after');
+check((await step('courses').innerText()).includes('After: the area is chosen'), 'a locked step says what it comes after');
 await step('area').getByRole('button').first().click();
 
 // 2. Area options + weekends → vote 1 "Where and when?" (one card, one notification).
+// ov23: areas go on through "The areas we're considering" (+ Add another area); every weekend in the window is a chip.
 await page.getByLabel('Area').fill('South');
-await page.locator('[data-testid="tb-region-hits"]').getByRole('button', { name: 'South Coast NSW' }).click();
+await page.locator('[data-testid="tb-region-hits"]').getByRole('button', { name: '+ South Coast NSW' }).click();
 await wait();
+await page.getByTestId('add-area').click();
 await page.getByLabel('Area').fill('Hunter');
-await page.locator('[data-testid="tb-region-hits"]').getByRole('button', { name: 'Hunter Valley' }).click();
+await page.locator('[data-testid="tb-region-hits"]').getByRole('button', { name: '+ Hunter Valley' }).click();
 await wait();
-const wk = page.locator('[data-testid="tb-weekend-options"] .chip');
-await wk.nth(0).click(); await wait(400);
-await wk.nth(1).click(); await wait(400);
+await page.locator('[data-testid="area-chip"][data-area="South Coast NSW"]').getByRole('button').first().click(); await wait();
+const wk = page.getByTestId('weekend-chip');
+await wk.nth(3).click(); await wait(400);
+await wk.nth(4).click(); await wait(400);
 check(state().regionOptions?.length === 2 && state().weekends?.length === 2, `two areas and two weekends chosen (${JSON.stringify(state().regionOptions)})`);
-check((await wk.nth(0).innerText()).match(/^Fri \d+/) != null, `weekends are Fri–Sun suggestions (${await wk.nth(0).innerText()})`);
+check((await wk.nth(3).innerText()).match(/^Fri \d+/) != null, `weekends are Fri–Sun (${(await wk.nth(3).innerText()).split('\n')[0]})`);
 // The area map (080): South Coast's courses on the table — several, never one.
 await page.locator('[data-testid="area-courses"]').getByText('Gerringong GC').waitFor({ timeout: 8000 });
 await page.locator('[data-testid="area-courses"]').getByLabel('Gerringong GC').check(); await wait(400);
@@ -213,33 +216,37 @@ const b1 = db.vote_batches[0];
 const v1polls = db.plan_polls.filter((p) => p.vote_batch === b1?.id);
 check(b1 && b1.title === 'Where and when?' && b1.keen === true, 'vote card "Where and when?" made, asking if you’re keen');
 check(v1polls.map((p) => p.question).join('|') === 'Which area?|Which weekend?|South Coast NSW: which courses?', `sections: ${v1polls.map((p) => p.question).join(', ')}`);
-check((db.plan_options.find((o) => o.poll_id === v1polls[0]?.id && o.label === 'South Coast NSW')?.notes || '').startsWith('Courses: Gerringong GC, Kiama GC'), 'the area on the ballot shows its course list');
+check(v1polls[2]?.optional === true && v1polls[2]?.area === 'South Coast NSW', 'the area’s courses are the optional detail (ov23)');
+check((db.plan_options.find((o) => o.poll_id === v1polls[0]?.id && o.label === 'South Coast NSW')?.notes || '').includes('Courses: Gerringong GC, Kiama GC'), 'the area on the ballot shows its course list');
 check(notifyCalls.filter((n) => n.type === 'poll_open').length === 1, `one notification for the whole card (${notifyCalls.filter((n) => n.type === 'poll_open').length})`);
 
 // The card on the trip's Vote tab: sections, keen, still to answer.
 await page.goto(`${BASE}#/plan/${PLAN}?tab=vote`);
 await page.locator('[data-testid="vote-batch"]').waitFor({ timeout: 10000 });
 const card = page.locator('[data-testid="vote-batch"]');
-check(await card.locator('[data-testid="vote-batch-section"]').count() === 3 && await card.locator('[data-testid="vote-batch-keen"]').count() === 1, 'ONE card with three sections and "Are you keen?"');
+check(await card.locator('[data-testid="vote-batch-section"]').count() === 2 && await card.locator('[data-testid="vote-detail-area"]').count() === 1 && await card.locator('[data-testid="vote-batch-keen"]').count() === 1, 'ONE card: area, weekend, the optional detail, "Are you keen?"');
 check(await page.locator('[data-testid="vote-batch"]').count() === 1 && !(await page.getByText('Which area?').count() > 1), 'the sections aren’t shown again as separate votes');
 // The organiser sees the results; "See it as a voter" shows the ballot (areas: Prefer / Option / Don't like).
 await card.getByTestId('see-as-voter').click(); await wait(300);
 await card.locator('[data-testid="vote-batch-section"]').nth(0).getByRole('button', { name: '⭐ Prefer' }).first().click(); await wait(600);
 await card.locator('[data-testid="vote-batch-section"]').nth(1).getByRole('button', { name: '✓ Can' }).first().click(); await wait(600);
-await card.locator('[data-testid="vote-batch-section"]').nth(2).getByRole('button', { name: '👍 Option' }).first().click(); await wait(600);
 await card.locator('[data-testid="vote-batch-keen"]').getByRole('button', { name: '✓ In' }).click(); await wait(600);
-check(await card.getByTestId('voter-thanks').isVisible(), 'answered everything: "Thanks — here’s how it’s looking"');
+check(await card.getByTestId('voter-thanks').isVisible(), 'answered the main questions: "Thanks — here’s how it’s looking" (the detail is optional)');
+await card.getByTestId('vote-detail-area').getByRole('button').first().click(); await wait(300);
+await card.locator('[data-testid="vote-detail-section"]').nth(0).getByRole('button', { name: '👍 Option' }).first().click(); await wait(600);
 await card.getByTestId('see-as-voter').click(); await wait(300);
 let waitingText = await card.locator('[data-testid="vote-batch-waiting"]').innerText();
 check(/Still to answer \(11\)/.test(waitingText) && !waitingText.includes('Josh'), `answered every section → off the "still to answer" list (${waitingText.slice(0, 40)})`);
 await page.screenshot({ path: `${SHOTS}/2-vote-card.png`, fullPage: true });
 
-// 3. The organiser picks: South Coast, the first weekend (settled).
+// 3. The organiser picks: South Coast; the weekends become primary and backup (ov23) — drop the backup here.
 await page.goto(`${BASE}#/plan/${PLAN}/build`);
 await step('area').waitFor({ timeout: 10000 });
 await page.getByTestId('going-here').click(); await wait();
-await page.locator('[data-testid="tb-weekends"] .row').first().getByRole('button', { name: 'Go with this' }).click(); await wait();
-check(state().region === 'South Coast NSW' && state().weekends.length === 1 && state().weekendsSettled === true, 'area decided, one weekend settled');
+check(state().region === 'South Coast NSW' && state().weekends.length === 2 && state().weekendsSettled === true, 'area decided; primary and backup weekends set');
+await step('area').getByRole('button').first().click(); await wait(300);
+await page.getByTestId('settled-weekend').nth(1).getByRole('button', { name: /^Drop/ }).click(); await wait();
+check(state().weekends.length === 1 && state().weekendsSettled === true, 'just the primary weekend now');
 check(state().days?.[1]?.options?.length === 2, `the stay day starts pre-filled from the area’s course set (${JSON.stringify(state().days?.[1]?.options)})`);
 const W = state().weekends[0];
 

@@ -3,17 +3,26 @@
 // summary says what each searches for, and can be tweaked before opening. After a search: "Found a few you like? Save
 // them to a list, tap Share and paste the list link here" — the list goes on the shortlist (and on the ballot with a
 // "View places" link). Links only: nothing is fetched from those sites.
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { stayLinks, bedroomsFor, staySearchLine, LIST_HOWTO, isListLink, cleanStay } from '../lib/tripbudget.js';
+import { headcountLine, weekendRole } from '../lib/weekends.js';
 import { fmtRange } from '../lib/plan.js';
 
 /**
  * places: ['Kiama', …]; weekends: [{ start, end }]; people: head count.
  * onSave({ area, name, link, is_list }) — when someone pastes a list (or a single listing) link. Optional.
  */
-export default function StaySearch({ places = [], weekends = [], people = 0, maxPerNight = null, onSave = null, busy = false }) {
-  const [n, setN] = useState(people || 0);
-  const [beds, setBeds] = useState(bedroomsFor(people || 0) || '');
+// ov23 (Josh: "Make sure the links have the right number of people in the search"): `people` is the trip's real head
+// count (lib/weekends.js tripHeadcount) and the links follow it when it changes. Changing it here calls onPeople(n)
+// so the trip keeps the number (everything else uses it too); bedrooms follow the people unless set by hand.
+export default function StaySearch({ places = [], weekends = [], people = 0, peopleWords = null, maxPerNight = null, onSave = null, onPeople = null, busy = false, roles = null }) {
+  const [own, setOwn] = useState(null); // the number typed here, until the trip's number catches up
+  const [ownBeds, setOwnBeds] = useState(null);
+  const n = own ?? (people || 0);
+  const beds = ownBeds ?? (bedroomsFor(n) || '');
+  const setN = (v) => { setOwn(v); onPeople?.(v); };
+  const setBeds = (v) => setOwnBeds(v === '' ? null : v);
+  useEffect(() => { if (own != null && own === people) setOwn(null); }, [people]); // eslint-disable-line react-hooks/exhaustive-deps
   const [cap, setCap] = useState(maxPerNight || '');
   const [opened, setOpened] = useState(null); // { area, site }
   const [paste, setPaste] = useState('');
@@ -30,19 +39,20 @@ export default function StaySearch({ places = [], weekends = [], people = 0, max
   return (
     <div className="stack" style={{ gap: 8 }} data-testid="stay-search">
       <div className="row between" style={{ gap: 6 }}>
-        <span className="small" style={{ fontWeight: 700 }}>🔎 Search for {n || '?'} people{beds ? ` · ${beds}+ bedrooms` : ''}{cap ? ` · under $${cap}/night` : ''}</span>
+        <span className="small" style={{ fontWeight: 700 }} data-testid="stay-headcount">🔎 Search {headcountLine(n, beds || null)}{cap ? ` · under $${cap}/night` : ''}
+          {peopleWords && own == null && <span className="muted" style={{ fontWeight: 400 }}> ({peopleWords})</span>}</span>
         <button type="button" className="btn ghost sm" onClick={() => setTweak(!tweak)}>{tweak ? 'Done' : 'Change'}</button>
       </div>
       {tweak && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
-          <label className="field"><span>People</span><input className="input" inputMode="numeric" value={n} onChange={(e) => setN(Number(e.target.value.replace(/\D/g, '')) || 0)} /></label>
-          <label className="field"><span>Bedrooms</span><input className="input" inputMode="numeric" value={beds} onChange={(e) => setBeds(e.target.value.replace(/\D/g, ''))} /></label>
+          <label className="field"><span>People</span><input className="input" inputMode="numeric" value={n} aria-label="People for the search" onChange={(e) => setN(Number(e.target.value.replace(/\D/g, '')) || 0)} /></label>
+          <label className="field"><span>Bedrooms</span><input className="input" inputMode="numeric" value={beds} aria-label="Bedrooms for the search" onChange={(e) => setBeds(e.target.value.replace(/\D/g, ''))} /></label>
           <label className="field"><span>Max $/night</span><input className="input" inputMode="numeric" value={cap} onChange={(e) => setCap(e.target.value.replace(/\D/g, ''))} /></label>
         </div>
       )}
       {weekends.length > 1 && (
         <div className="tb-chips" role="group" aria-label="Which weekend to search">
-          {weekends.slice(0, 3).map((w, i) => <button key={w.start} type="button" className="chip" aria-pressed={i === wk} onClick={() => setWk(i)}>{fmtRange(w.start, w.end)}</button>)}
+          {weekends.slice(0, 4).map((w, i) => <button key={w.start} type="button" className="chip" aria-pressed={i === wk} onClick={() => setWk(i)}>{roles ? `${weekendRole(i)}: ` : ''}{fmtRange(w.start, w.end)}</button>)}
         </div>
       )}
       {places.slice(0, 4).map((area) => [weekends[Math.min(wk, weekends.length - 1)]].map((w) => {

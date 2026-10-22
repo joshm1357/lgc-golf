@@ -5,7 +5,7 @@
 // chooses: nothing is ever narrowed to one answer for them. Pure functions, tested (planchat.test.js). The chat UI
 // itself (components/AiChat.jsx) is reusable by the Caddie later.
 
-import { startExtras } from './extras.js';
+import { startExtras, planningExtras } from './extras.js';
 
 export const MAX_TURNS = 10;     // questions per planning chat (each one counts as one helper question)
 export const KEEP_TURNS = 12;    // what's sent back to the helper each time (the last 12 messages)
@@ -126,9 +126,12 @@ export function sameExtra(a, b) {
 export function mergeDraftIntoBuild(prev, draft, stayAreas = [], { nights = 2 } = {}) {
   const start = builderStateFromDraft(draft, stayAreas, { nights });
   const tick = (labels) => (labels.length ? startExtras().map((e) => (labels.some((l) => sameExtra(l, e.label)) ? { ...e, suggested: true } : e)) : null);
+  // How many are coming (ov23): the helper's number, unless the organiser has set their own.
+  const hc = Number.isInteger(draft?.headcount) && draft.headcount > 0 && draft.headcount < 200 && prev?.headcountBy !== 'organiser'
+    ? { headcount: draft.headcount, headcountBy: 'ai' } : {};
   if (!prev) {
     const { extrasSuggested, ...rest } = start;
-    return { ...rest, ...(draft?.travel ? { travel: draft.travel } : {}), extras: tick(extrasSuggested), ai: { regions: start.regionOptions, weekends: start.weekends.map((w) => w.start) } };
+    return { ...rest, ...hc, ...(draft?.travel ? { travel: draft.travel } : {}), extras: tick(extrasSuggested), ai: { regions: start.regionOptions, weekends: start.weekends.map((w) => w.start) } };
   }
   const ai = prev.ai || { regions: [], weekends: [] };
   const sugg = { ...(prev.suggested || {}) };
@@ -151,16 +154,16 @@ export function mergeDraftIntoBuild(prev, draft, stayAreas = [], { nights = 2 } 
   let aiWeekends = ai.weekends || [];
   if (!prev.weekendsSettled) {
     const mine = weekends.filter((w) => !(ai.weekends || []).includes(w.start));
-    weekends = [...mine, ...start.weekends.filter((w) => !mine.some((m) => m.start === w.start))].slice(0, 4);
+    weekends = [...mine, ...start.weekends.filter((w) => !mine.some((m) => m.start === w.start))].slice(0, 26); // ov23: any number
     aiWeekends = weekends.filter((w) => !mine.includes(w)).map((w) => w.start);
   }
   // Extras: the list is the organiser's once it exists — the helper's ideas are just marked ✨.
-  let extras = prev.extras ?? tick(start.extrasSuggested);
+  let extras = planningExtras(prev.extras) ?? tick(start.extrasSuggested);
   if (Array.isArray(prev.extras) && start.extrasSuggested.length) {
     extras = extras.map((e) => (start.extrasSuggested.some((l) => sameExtra(l, e.label)) && e.state === 'off' ? { ...e, suggested: true } : e));
   }
   return {
-    ...prev, regionOptions, areaCourses, areaStays, suggested: sugg, weekends, extras,
+    ...prev, ...hc, regionOptions, areaCourses, areaStays, suggested: sugg, weekends, extras,
     // Driving or flying (ov16): flying isn't planned yet — it's kept so the trip screen can say so later.
     ...(draft?.travel ? { travel: draft.travel } : {}),
     ai: { regions: start.regionOptions.filter((r) => !own.includes(r)), weekends: aiWeekends },

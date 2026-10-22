@@ -6,9 +6,11 @@ import { builderSteps } from '../lib/tripbuilder.js';
 
 // The way into the trip builder (077) on a trip that's still being decided: the first card on its overview, and in
 // Organise. Organisers always see it; players see it once the organiser has started building (read-only + votes).
-export function TripBuilderCard({ pd, first = false }) {
+// viewer (ov23): the Overview — the same card for everyone (read-only wording), even for organisers.
+export function TripBuilderCard({ pd, first = false, viewer = false }) {
   const on = useFeature('trip_finder');
-  const { status } = useSession();
+  const { status: real } = useSession();
+  const status = viewer ? { ...real, is_admin: false } : real;
   const plan = pd?.plan;
   const [build, setBuild] = useState(undefined);
   useEffect(() => {
@@ -29,7 +31,7 @@ export function TripBuilderCard({ pd, first = false }) {
       <span style={{ fontSize: 26 }}>🗺️</span>
       <span className="grow">
         <strong>{status.is_admin ? 'Build the trip' : 'How the trip’s coming together'}</strong>
-        <div className="small muted">{build ? `Step ${at.n} of ${steps.length}: ${at.label}${doneCount ? ` · ${doneCount} done` : ''}` : 'Area and weekends → courses each day → tee times → pick the trip. Minimal typing.'}</div>
+        <div className="small muted">{build ? `Step ${at.n} of ${steps.length}: ${at.label}${doneCount ? ` · ${doneCount} done` : ''}` : 'Areas and weekends → the vote → courses and stays → call the courses → pick & lock in.'}</div>
       </span>
       <span className="btn sm">{status.is_admin ? (build ? 'Open' : 'Start') : 'Look'}</span>
     </Link>

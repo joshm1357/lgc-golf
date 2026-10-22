@@ -61,6 +61,7 @@ check(await page.getByTestId('next-step').isVisible() && await golds() === 1, 'l
 await open('view=overview');
 check(await page.getByTestId('next-step').count() === 0 && await page.getByTestId('tb-link').count() === 0 && await page.getByTestId('primary').count() === 0, 'Overview: no organiser Next step or Build the trip');
 check((await page.getByTestId('overview-stage').innerText()).includes('Still being decided'), 'Overview: a trip being decided doesn’t say "Locked in"');
+check(await page.getByRole('button', { name: /Organise this trip/ }).count() === 0 && await page.getByText('Chat, jobs, kitty and rooms').count() === 0, 'ov23: no "Organise this trip" in the Overview body — the Overview | Organise switch is the way in');
 
 // 2. Planned → put to a vote ("Call a vote yourself" on the Plan step).
 await open();
@@ -157,7 +158,7 @@ await page.reload();
 await page.getByTestId('organise-panels').waitFor({ timeout: 15000 });
 await wait(800);
 check(await page.getByRole('list', { name: 'Organising steps' }).isVisible(), 'laptop: the steps across the top');
-check(await page.locator('.org-strip [aria-current="step"]').innerText().then((t) => t.includes('Lock in')), 'laptop: the strip marks the current step (Lock in, deposits)');
+check(await page.locator('.org-strip [aria-current="step"]').innerText().then((t) => t.includes('Pick & lock in')), 'laptop: the strip marks the current step (Pick & lock in, deposits)');
 check(await golds() === 1, `laptop: one big button (${await golds()})`);
 await page.goto(`${BASE}#/plan/${PC}?view=organise&tab=kitty`);
 await page.getByTestId('costs-table').waitFor({ timeout: 10000 });

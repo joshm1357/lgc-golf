@@ -2,12 +2,14 @@
 // be tested.
 //
 // Plain words: a trip is organised in six steps, in the order the organiser actually works:
-//   1 Plan          where and when (Build the trip, or set them by hand)
-//   2 Vote          put it to the group, then pick the winner
-//   3 Book          call the courses for tee times, find and pick the accommodation
-//   4 Lock in       lock it in, who's in, the deposits
-//   5 Jobs & money  the to-do list, the kitty, rooms and cars
-//   6 On the day    rounds, teams, the draw and side comps
+//   1 Plan               the areas, a shortlist of weekends, how long (Build the trip, or set them by hand)
+//   2 Vote               area + weekends (+ how long; the courses / places in each area are optional detail)
+//   3 Call the courses   only the winning area's courses, about the primary and backup weekends (and where to stay)
+//   4 Pick & lock in     the best combination from the tee times, then lock it in, who's in, the deposits
+//   5 Jobs & money       the to-do list, the kitty, rooms and cars
+//   6 Comps & on the day what's up for grabs, the rules, handicaps, teams and the draw, the rounds
+// ov23 (Josh, 23 Oct): "Decide on the area and weekends and THEN call the courses." The keys stay the same (book,
+// lockin, day) so old ?step= links still open the right step.
 // The step that's open ("current") is the one the Next step (nextStep() in tripjobs.js) belongs to, so there's only
 // ever one big button and it's the same advice as before. Each step also says, from the trip's own data, whether
 // it's done, and a one-line summary ("✓ Hunter Valley · Fri 13 – Sun 15 Mar").
@@ -17,12 +19,12 @@ import { callJobs, jobStage } from './tripjobs.js';
 import { depositStatus } from './tripbudget.js';
 
 export const ORGANISE_STEPS = [
-  { key: 'plan', n: 1, title: 'Plan', blurb: 'Where and when' },
-  { key: 'vote', n: 2, title: 'Vote', blurb: 'Put it to the group' },
-  { key: 'book', n: 3, title: 'Book', blurb: 'Tee times and accommodation' },
-  { key: 'lockin', n: 4, title: 'Lock in', blurb: 'Who’s in and deposits' },
+  { key: 'plan', n: 1, title: 'Plan', blurb: 'Areas, weekends and how long' },
+  { key: 'vote', n: 2, title: 'Vote', blurb: 'Area and weekends (the detail’s optional)' },
+  { key: 'book', n: 3, title: 'Call the courses', blurb: 'Tee times on the primary and backup weekends' },
+  { key: 'lockin', n: 4, title: 'Pick & lock in', blurb: 'Best combination, who’s in, deposits' },
   { key: 'money', n: 5, title: 'Jobs & money', blurb: 'Jobs, kitty, rooms and cars' },
-  { key: 'day', n: 6, title: 'On the day', blurb: 'Teams, draw and comps' },
+  { key: 'day', n: 6, title: 'Comps & on the day', blurb: 'What’s up for grabs, rules, handicaps, teams' },
 ];
 export const STEP_KEYS = ORGANISE_STEPS.map((s) => s.key);
 
@@ -51,7 +53,8 @@ export function stepOfNext(next, { items = [], polls = [], builder = {} } = {}) 
   if (!next) return null;
   const [kind, id] = String(next.key).split(/:(.*)/s);
   if (['idea', 'weekends', 'weekends-wait', 'stay-list'].includes(kind)) return 'plan';
-  if (['configs', 'deciding-wait'].includes(kind)) return 'vote';
+  if (['deciding-wait', 'area-pick'].includes(kind)) return 'vote';
+  if (kind === 'configs') return 'lockin'; // ov23: pick the trip from the tee times, then lock it in
   if (kind === 'vote' || kind === 'vote-me') {
     // A vote on where to stay is part of booking; anything else is the Vote step.
     const ps = polls.filter((p) => p.id === id || p.vote_batch === id);

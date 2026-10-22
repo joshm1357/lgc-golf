@@ -249,7 +249,7 @@ Deno.test('setup: the model finds a course then proposes → a checked plan come
   const first = model.calls[0];
   assertEquals(first.url, 'https://api.anthropic.com/v1/messages');
   assertEquals(first.req.model, 'example-model-id'); // from the AI_MODEL secret, never hard-coded
-  assertEquals(first.req.max_tokens, 1024);
+  assertEquals(first.req.max_tokens, 2048);
   assertEquals((first.headers as Any)['anthropic-version'], '2023-06-01');
   assertEquals(first.req.messages[0].content, '<request>Kurri on Thursday 22 Oct, stableford, ctp on the par 3s</request>');
   // Logged: one row started before the call, finished with token counts (no text).

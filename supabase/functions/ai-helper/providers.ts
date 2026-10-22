@@ -136,6 +136,9 @@ function anthropicImage(url: string) {
 }
 
 /** The request body for one model call, in the provider's own format. */
+/** Is this OpenRouter (it takes a few extra request fields)? */
+export const isOpenRouter = (cfg: AiConfig) => cfg.provider !== 'anthropic' && /openrouter\.ai/i.test(cfg.baseUrl || '');
+
 export function requestBody(cfg: AiConfig, o: { system: string; tools: ToolDef[]; messages: Msg[]; maxTokens: number }) {
   if (cfg.provider === 'anthropic') {
     const messages = o.messages.map((m) => {
@@ -167,6 +170,9 @@ export function requestBody(cfg: AiConfig, o: { system: string; tools: ToolDef[]
     model: cfg.model, max_tokens: o.maxTokens, messages,
     tools: o.tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } })),
     tool_choice: 'auto',
+    // OpenRouter: "thinking" models (e.g. Kimi K2.6) can spend the whole token budget thinking and send back no answer.
+    // Keep thinking short and out of the reply. Only sent to OpenRouter (other OpenAI-style hosts may refuse it).
+    ...(isOpenRouter(cfg) ? { reasoning: { effort: 'low', exclude: true } } : {}),
   };
 }
 
@@ -194,7 +200,9 @@ export function parseReply(cfg: AiConfig, j: Any, sentBody: string): Reply | nul
     inTok = j.usage?.input_tokens ?? null;
     outTok = j.usage?.output_tokens ?? null;
   } else {
-    const m = j.choices?.[0]?.message;
+    const choice = j.choices?.[0];
+    if (choice?.error) return null; // a provider error inside a 200 (OpenRouter) — the caller says "try again"
+    const m = choice?.message;
     if (!m || typeof m !== 'object') return null;
     text = typeof m.content === 'string' ? m.content
       : Array.isArray(m.content) ? m.content.map((p: Any) => (typeof p === 'string' ? p : p?.text || '')).join('\n') : '';

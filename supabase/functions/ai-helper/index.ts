@@ -96,13 +96,14 @@ function makeDeps(db: SupabaseClient, g: string, uid: string, status: Any): Deps
     fetchFn: fetch,
     now: () => new Date(),
     featureOn,
-    // Questions so far (refused ones — cap hits — don't count).
+    // Questions so far. Refused ones (cap hits) and ones the AI failed to answer don't count (Josh, 22 Oct: "it didn't
+    // give an answer and it still took away a question"). Rows still being answered (no error yet) do count.
     usage: async () => {
       const now = new Date();
       const month = await admin.from('helper_log').select('id', { count: 'exact', head: true })
-        .eq('group_id', g).in('mode', ['setup', 'history']).eq('capped', false).gte('created_at', zonedStart(now, 'month', TZ));
+        .eq('group_id', g).in('mode', ['setup', 'history']).eq('capped', false).is('error', null).gte('created_at', zonedStart(now, 'month', TZ));
       const today = await admin.from('helper_log').select('id', { count: 'exact', head: true })
-        .eq('user_id', uid).in('mode', ['setup', 'history']).eq('capped', false).gte('created_at', zonedStart(now, 'day', TZ));
+        .eq('user_id', uid).in('mode', ['setup', 'history']).eq('capped', false).is('error', null).gte('created_at', zonedStart(now, 'day', TZ));
       if (month.error || today.error) throw new Error('Couldn’t check the helper’s limit');
       return { month: month.count || 0, today: today.count || 0 };
     },

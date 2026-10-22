@@ -47,6 +47,8 @@ describe('v2: plans, ratings, where Ask was opened from', () => {
     const r = readReply({ trip_plan, summary: ['Start the trip “March Away”'], remaining: { month: 9, today: 4 }, log_id: 42 });
     expect(r).toEqual({ kind: 'tripplan', plan: trip_plan, summary: ['Start the trip “March Away”'], warnings: ['Only one place option'], notes: 'Two hours away.', remaining: { month: 9, today: 4 }, logId: 42 });
     expect(readReply({ answer: 'Bluey leads.', log_id: 7 }).logId).toBe(7);
+    expect(readReply({ answer: 'Tap Go there.', go: { key: 'admin_teams', label: 'Teams & pairs', round: 'r1' } }).go).toEqual({ key: 'admin_teams', label: 'Teams & pairs', round: 'r1' });
+    expect(readReply({ answer: 'Hi.', go: 'nope' }).go).toBe(undefined);
     expect(readReply({ done: true, plan_id: 'p1', made: ['the votes'] })).toEqual({ kind: 'done', planId: 'p1', made: ['the votes'], remaining: null });
   });
   it('tapping the same thumb clears it', () => {

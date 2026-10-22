@@ -74,6 +74,8 @@ export function readReply(data, error) {
     return { kind: 'tripplan', plan: d.trip_plan, summary: d.summary, warnings: d.trip_plan.warnings || [], notes: d.trip_plan.notes || '', remaining, ...log };
   }
   if (typeof d.message === 'string' && d.message) return { kind: 'message', text: d.message, remaining, ...log };
-  if (typeof d.answer === 'string' && d.answer) return { kind: 'answer', text: d.answer, remaining, ...log };
+  // The Caddie (22 Oct): an answer can come with a place to go (go_to) — { key, label, round?, trip?, plan?, tab? }.
+  const go = d.go && typeof d.go === 'object' && typeof d.go.key === 'string' ? { go: d.go } : {};
+  if (typeof d.answer === 'string' && d.answer) return { kind: 'answer', text: d.answer, remaining, ...log, ...go };
   return { kind: 'error', text: 'The helper didn’t have an answer — try asking another way.', remaining };
 }

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { roundSettingsFromRules } from '../lib/plan.js';
 import { honourOrder } from '../lib/history.js';
 import { formatName } from '../lib/board.js';
@@ -26,8 +26,9 @@ async function run(fn, okMsg) {
   }
 }
 
-function Section({ title, children, open: startOpen = false }) {
-  const [open, setOpen] = useState(startOpen);
+function Section({ title, children, open: startOpen = false, anchor }) {
+  const [params] = useSearchParams(); // ?open=players (the Caddie's "Players & handicaps") opens that section
+  const [open, setOpen] = useState(startOpen || (!!anchor && params.get('open') === anchor));
   return (
     <div className="card" style={{ overflow: 'hidden' }}>
       <button type="button" onClick={() => setOpen(!open)} className="row between" style={{ width: '100%', padding: '14px', background: 'none', border: 0, fontWeight: 700, fontSize: 17 }} aria-expanded={open}>
@@ -215,7 +216,7 @@ function PlayersAdmin() {
   const [hcp, setHcp] = useState('');
   const players = data.players.filter((p) => p.approved !== false).sort((a, b) => a.name.localeCompare(b.name));
   return (
-    <Section title={`3. Players (${players.length})`}>
+    <Section title={`3. Players (${players.length})`} anchor="players">
       <p className="small muted" style={{ margin: 0 }}>Players normally add themselves when they join. Add someone here if they won't have the app.</p>
       {players.map((p) => <PlayerRow key={p.id} p={p} />)}
       <form className="row" onSubmit={async (e) => {

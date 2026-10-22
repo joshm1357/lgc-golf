@@ -13,7 +13,7 @@ export default function More() {
   const data = useData();
   const me = data.playersById[status.player_id];
   const pending = status.is_admin ? data.players.filter((p) => p.approved === false).length : 0;
-  const on = { location: useFeature('location'), rule_voting: useFeature('rule_voting'), trophies: useFeature('trophies'), tribunal: useFeature('tribunal'), notifications: useFeature('notifications'), games: useFeature('games'), ai_helper: useFeature('ai_helper') };
+  const on = { location: useFeature('location'), rule_voting: useFeature('rule_voting'), trophies: useFeature('trophies'), tribunal: useFeature('tribunal'), notifications: useFeature('notifications'), games: useFeature('games') }; // the AI helper's way in is the Caddie button now (components/Caddie.jsx)
   const manyGroups = (status.groups?.length || 0) > 1;
   const platformAdmin = usePlatformAdmin();
   const items = [
@@ -26,7 +26,6 @@ export default function More() {
     on.trophies && { to: '/trophies', icon: Icon.trophy, label: 'The Trophy Room', sub: status.legacy ? 'BD, Putt Buddies, Noodle Cup and the honour boards' : 'Trophies and the honour boards' },
     on.games && { to: '/games', icon: Icon.flag, label: 'Games & side bets', sub: 'Skins, Nassau, pots — and who pays who' },
     on.tribunal && { to: '/tribunal', icon: Icon.gavel, label: 'Handicap Tribunal', sub: 'Lodge a case, vote, see verdicts' },
-    on.ai_helper && { to: '/ask', icon: Icon.feed, label: '✨ Ask the AI helper', sub: 'What’s on, who’s leading, who’s won the most — in plain words' },
     useFeature('stats') && { to: '/stats', icon: Icon.board, label: 'Stats & season ladder', sub: 'Order of merit, records and head-to-heads' },
     { to: '/courses', icon: Icon.map, label: 'Courses', sub: 'Every course and its history' },
     on.notifications && !status.viewing && notifyItem(),

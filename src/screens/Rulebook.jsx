@@ -7,7 +7,7 @@ import { STARTERS } from '../lib/starters.js';
 import { Header, Sheet, Loading, toast } from '../components/ui.jsx';
 import { notify } from '../lib/push.js';
 import { useRun, must } from './Planner.jsx';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useGovernance } from './Cases.jsx';
 import { ruleLine, closesIn } from '../lib/governance.js';
 import { ImportLink } from './AiImport.jsx';
@@ -45,7 +45,9 @@ export default function Rulebook() {
   const g = useGovernance();
   const gov = g?.ok ? g : null;
   const [filter, setFilter] = useState('all');
-  const [editing, setEditing] = useState(null); // {} = new
+  const [params] = useSearchParams();
+  // {} = new. ?propose=1 (the Caddie's "Propose a rule") opens it straight away, for those who may propose.
+  const [editing, setEditing] = useState(() => (params.get('propose') && (status.is_admin || (votingOn && status.role !== 'guest')) ? {} : null));
   if (!rb) return <div className="page"><Header logo title="The Rulebook" /><Loading /></div>;
   const fits = (r) => filter === 'all' || r.applies_to.includes('all') || r.applies_to.includes(filter);
   const active = rb.rules.filter((r) => r.status === 'active' && fits(r));

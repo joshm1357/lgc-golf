@@ -31,6 +31,7 @@ import { shapePastTrips, shapeNear } from './plan.ts';
 import { commentaryRequest, commentaryCap } from './commentary.ts';
 import { importRequest } from './import.ts';
 import { jokesRequest, jokesCap } from './jokes.ts';
+import { rulesRequest, rulesDeps } from './rules.ts';
 
 const AI = aiConfig((k) => Deno.env.get(k));
 if (!AI.ok) console.warn('ai-helper: AI provider not set up:', AI.reason); // the reason never includes a key
@@ -253,6 +254,7 @@ Deno.serve(async (req) => {
   try {
     // "Bring your history" (import.ts): text and photos read into a proposal the organiser confirms in the app.
     if (body.mode === 'import') return json(await importRequest(body, { ...makeDeps(db, status.group_id, who.user.id, status), visionModel: Deno.env.get('AI_VISION_MODEL') || null }));
+    if (/^rules_/.test(String(body.mode))) return json(await rulesRequest(body, rulesDeps(makeDeps(db, status.group_id, who.user.id, status), db))); // The Rulebook's AI jobs (rules.ts)
     return json(await helperRequest(body, makeDeps(db, status.group_id, who.user.id, status)));
   } catch (e) {
     console.error('ai-helper failed:', errorKind(e)); // only the kind of error: never values, text or keys

@@ -22,6 +22,8 @@ import { OrganiseView } from './OrganiseSteps.jsx';
 import { OverviewVotes } from '../components/OverviewVotes.jsx';
 import { defaultView } from '../lib/tripsummary.js';
 import { tripStage, planIsEmpty, canCallOff } from '../lib/trips.js';
+import { RunUp } from '../components/RunUp.jsx';
+import { showRunUp } from '../lib/runup.js';
 
 const PLAN_TABLES = ['plans', 'plan_polls', 'plan_options', 'plan_votes', 'plan_rsvps', 'plan_items', 'plan_costs', 'plan_payments', 'plan_groups', 'plan_group_members', 'plan_transfers', 'plan_comments'];
 const STATUS_LABEL = { planning: 'Planning', confirmed: 'Locked in', done: 'Done', cancelled: 'Called off' };
@@ -196,7 +198,8 @@ export function PlanDetail() {
           <div className="section">
             {plan.proposed && !isAdmin && <div style={{ marginBottom: 12 }}><ProposalBanner plan={plan} reload={pd.reload} /></div>}
             <TripOverview trip={trip} plan={plan} rsvps={pd.rsvps} items={pd.items} stage={stage} onOrganise={(t) => setView('organise', t)}
-              votes={<OverviewVotes pd={pd} />} />
+              votes={showRunUp(stage) ? null : <OverviewVotes pd={pd} />}
+              runUp={showRunUp(stage) ? <RunUp pd={pd} trip={trip} onOrganise={(t) => setView('organise', t)} /> : null} />
             {!isAdmin && plan.status === 'planning' && <div style={{ marginTop: 14 }}><TripBuilderCard pd={pd} /></div>}
             {/* After the trip: rate the course and the dinner awards belong with the summary. */}
             {stage === 'done' && <div className="stack" style={{ marginTop: 14 }}><TripFinderCard pd={pd} /><TripExtras pd={pd} viewer /></div>}

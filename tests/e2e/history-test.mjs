@@ -211,7 +211,7 @@ check(order.join('|') === 'HOLDER · 2025|2023|2019', `Trophy Room: history and 
 check(await page.getByText('+ Add past winners from before the app').isVisible(), 'organiser can add past winners from the Trophy Room');
 await page.screenshot({ path: `${SHOTS}/h3-trophies.png`, fullPage: true });
 await page.goto(`${BASE}#/plan`);
-await page.getByText('Past trips').waitFor({ timeout: 15000 });
+await page.getByTestId('trips-section-done').waitFor({ timeout: 15000 }); // ov25: "Previous"
 check(await page.getByText('Mike Morris', { exact: true }).first().isVisible() && await page.getByText(/🏆 The Cup:/).isVisible(), 'a past trip shows its winners');
 await page.screenshot({ path: `${SHOTS}/h4-past-trip.png`, fullPage: true });
 

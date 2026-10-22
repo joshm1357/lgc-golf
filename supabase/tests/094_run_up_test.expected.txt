@@ -1,0 +1,32 @@
+RESULTS: 1. mike adds an activity → ok Go-karts
+2. mike adds one as josh → refused: new row violates row-level security policy for table "trip_activities"
+3. mike is in → ok 20000000-0000-4000-8000-000000000002
+4. mike puts josh in → refused: new row violates row-level security policy for table "trip_activity_people"
+5. kitty line after mike → ok 40.00 each x 1
+6. mike offers 2 seats → ok true
+7. mike's car → ok Mike’s car, 3 seats, Leichhardt 6:30am Fri
+8. mike needs a lift row → ok saved
+9. mike writes josh's row → refused: new row violates row-level security policy for table "trip_runup_people"
+10. mike tips josh → ok tipped
+11. mike claims the speaker → ok 
+12. mike edits a car directly (rows changed) → ok 0
+13. josh is in → ok 20000000-0000-4000-8000-000000000001
+14. kitty line after josh → ok 40.00 each x 2 paid by mike true
+15. josh hops in mike's car → ok 
+16. car count → ok 2
+17. josh claims mike's speaker → refused: Someone's already bringing that
+18. speaker is mike's → ok true
+19. mike changes tip after first tee → refused: Tipping closed at the first tee
+20. mike stops driving → ok 
+21. josh needs a lift again → ok true
+22. mike is out of go-karts → ok out
+23. kitty line after mike out → ok 40.00 each x 1
+24. guest reads activities → ok 1
+25. guest adds an activity → refused: new row violates row-level security policy "no guest writes (add)" for table "trip_activities"
+26. guest offers seats → refused: Guests can't change the cars
+27. guest claims a thing → refused: Guests can't claim things to bring
+28. other group reads activities → ok 0
+29. other group reads tips → ok 0
+30. other group joins activity → refused: That belongs to another group
+31. other group hops in car → refused: That car's gone
+32. other group offers seats → refused: That trip isn't in your group

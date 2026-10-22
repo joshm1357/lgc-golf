@@ -15,6 +15,9 @@ import webpush from 'npm:web-push@3.6.7';
 import { emailOnlyUsers, emailVoteOpen, emailVoteReminders } from './votemail.ts';
 import { VOTE_KINDS } from '../_shared/emailvotes.js';
 import { batchNonVoters, reminderGroups, batchMessage } from './batch.ts';
+// ov25: the run-up's personal reminders (a week out: "3 things waiting for you"; the day before: your car, room, tee
+// time and what you're bringing). The words are shared with the app's tests.
+import { weekOutMessage, dayBeforeMessage } from '../_shared/runup.js';
 
 // The app's web address for links in notifications. Set APP_URL in the function's secrets when the app moves
 // (e.g. https://app.thegolftrip.club/); until then it's the GitHub Pages address.
@@ -271,6 +274,57 @@ async function kittyOwing(planId: string) {
   }).filter((x) => x.owes > 0.5);
 }
 
+/** ov25: what each person has waiting for a trip, and their day-before bits (car, room, tee time, what to bring).
+ *  Throws on a database without 094 (the caller falls back to the old message). */
+// deno-lint-ignore no-explicit-any
+async function runUpFor(g: string, pl: Record<string, any>, _ins: string[], dayBefore: boolean) {
+  const [{ data: items, error: e1 }, { data: people, error: e2 }, { data: groups }, { data: tr }, { data: rsvpsAll }, { data: tips }, pls] = await Promise.all([
+    db.from('plan_items').select('id,kind,title,owner_id,done,stage,bring_shared').eq('plan_id', pl.id),
+    db.from('trip_runup_people').select('player_id,handicap_checked_at').eq('plan_id', pl.id),
+    db.from('plan_groups').select('id,kind,name,driver_id,pickup_place,pickup_time').eq('plan_id', pl.id),
+    db.from('plan_transfers').select('from_id,to_id,amount,confirmed').eq('plan_id', pl.id),
+    db.from('plan_rsvps').select('player_id,status').eq('plan_id', pl.id),
+    db.from('trip_tips').select('player_id').eq('plan_id', pl.id),
+    players(g),
+  ]);
+  if (e1 || e2) throw new Error('before 094');
+  const byId = new Map(pls.map((p) => [p.id, p]));
+  const groupIds = (groups || []).map((x) => x.id);
+  const { data: members } = groupIds.length ? await db.from('plan_group_members').select('group_id,player_id').in('group_id', groupIds) : { data: [] as { group_id: string; player_id: string }[] };
+  let tees: { player_ids: string[]; tee_time: string }[] = [];
+  if (dayBefore && pl.trip_id) {
+    const { data: rounds } = await db.from('rounds').select('id,play_date').eq('trip_id', pl.trip_id).not('play_date', 'is', null).order('play_date').limit(1);
+    if (rounds?.[0]) tees = ((await db.from('tee_groups').select('player_ids,tee_time').eq('round_id', rounds[0].id)).data || []) as typeof tees;
+  }
+  const deposit = Number(pl.deposit_pp) || 0;
+  const paid = (pid: string) => (tr || []).filter((t) => t.from_id === pid && !t.to_id).reduce((s, t) => s + Number(t.amount || 0), 0);
+  return {
+    waiting(pid: string) {
+      const mine = (items || []).filter((i) => i.owner_id === pid);
+      const r = (rsvpsAll || []).find((x) => x.player_id === pid);
+      return {
+        reply: !r || r.status === 'maybe',
+        deposit: deposit > 0 && paid(pid) < deposit - 0.5 ? `$${deposit}` : null,
+        jobs: mine.filter((i) => i.kind === 'job' && !(i.done || i.stage === 'done')).map((i) => i.title),
+        handicap: !(people || []).some((p) => p.player_id === pid && p.handicap_checked_at),
+        tip: !pl.tipping_off && !(tips || []).some((t) => t.player_id === pid),
+      };
+    },
+    dayBefore(pid: string) {
+      const inGroup = (kind: string) => (groups || []).find((x) => x.kind === kind && (members || []).some((m) => m.group_id === x.id && m.player_id === pid));
+      const car = inGroup('car');
+      const room = inGroup('room');
+      const tee = tees.filter((t) => (t.player_ids || []).includes(pid)).map((t) => t.tee_time).sort()[0] || null;
+      return {
+        car: car ? { name: car.name, driver: byId.get(car.driver_id) || null, driving: car.driver_id === pid, pickup_place: car.pickup_place, pickup_time: car.pickup_time } : null,
+        room: room ? { name: room.name, with: (members || []).filter((m) => m.group_id === room.id && m.player_id !== pid).map((m) => byId.get(m.player_id)).filter(Boolean) } : null,
+        tee,
+        bring: (items || []).filter((i) => i.kind === 'bring' && i.bring_shared && i.owner_id === pid).map((i) => i.title),
+      };
+    },
+  };
+}
+
 /** Only send each daily reminder once. */
 async function once(key: string) {
   const { error } = await db.from('notify_log').insert({ key });
@@ -330,13 +384,27 @@ async function dailyFor(g: string) {
     const missing = (await players(g)).filter((p) => !replied.has(p.id)).map((p) => p.id);
     sent += await send(g, missing, { title: `🙋 Last day: are you in for ${pl.name}?`, body: 'Tap to say In, Maybe or Out.', url: planUrl(pl.id, 'people') }, null, 'rsvp_deadline');
   }
-  // A week out and the day before → everyone who's in.
+  // A week out and the day before → everyone who's in, each with their own message (ov25, the run-up):
+  //   a week out — "3 things waiting for you", only to people with something waiting;
+  //   the day before — "Your car: Josh's, pick-up Leichhardt 6:30am Fri · Room 3 with Hamish · tee time 9:12".
   for (const [day, label] of [[week, 'is a week away'], [tomorrow, 'is tomorrow']] as const) {
     const { data: soon } = await db.from('plans').select('*').eq('group_id', g).eq('start_date', day).neq('status', 'cancelled').eq('proposed', false);
     for (const pl of plannerOn ? soon || [] : []) {
       if (!(await once(`countdown:${pl.id}:${day}:${label}`))) continue;
       const { data: rs } = await db.from('plan_rsvps').select('player_id').eq('plan_id', pl.id).eq('status', 'in');
-      sent += await send(g, (rs || []).map((r) => r.player_id), { title: `⛳ ${pl.name} ${label}`, body: [pl.location_name, 'Check the details and what to bring.'].filter(Boolean).join(' · '), url: planUrl(pl.id, 'details') }, null, day === tomorrow ? 'trip_tomorrow' : 'trip_week');
+      const ins = (rs || []).map((r) => r.player_id);
+      const kind = day === tomorrow ? 'trip_tomorrow' : 'trip_week';
+      const each = await runUpFor(g, pl, ins, day === tomorrow).catch(() => null);
+      if (!each) {
+        // Before 094 (or anything missing): the old message to everyone.
+        sent += await send(g, ins, { title: `⛳ ${pl.name} ${label}`, body: [pl.location_name, 'Check the details and what to bring.'].filter(Boolean).join(' · '), url: planUrl(pl.id, 'details') }, null, kind);
+        continue;
+      }
+      for (const pid of ins) {
+        const msg = day === tomorrow ? dayBeforeMessage(pl.name, pl.location_name, each.dayBefore(pid)) : weekOutMessage(pl.name, each.waiting(pid));
+        if (!msg) continue; // a week out with nothing waiting: no message
+        sent += await send(g, [pid], { title: msg.title, body: msg.body, url: `${APP}#/plan/${pl.id}?view=overview`, tag: `runup-${pl.id}-${pid}` }, null, kind);
+      }
     }
   }
   // Jobs due tomorrow → their owner.

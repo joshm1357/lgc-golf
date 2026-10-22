@@ -1281,3 +1281,22 @@ then have Plan it." And: a live trip ("March") was hard-deleted last night throu
   new `calloff-test` 17 checks pass; `organise-tidy`, `desktop`, `plan-ux` pass. `phone`, `trips`, `features`,
   `signin-home`, `save-spot`, `board-bonus`, `trip-overview` fail at the same step on release-v9 too (stale
   fixtures/env) — their "This trip" references were updated anyway.
+
+## ov25 — The run-up, and trip stages that each look different, branch `ov25-run-up`, 23 Oct 2026 (migration 094)
+- **Trips list by stage:** ⛳ On now (gold) · 🔒 Upcoming (navy, "16 days") · 🧭 Being organised (outline, "voting on
+  dates" / "calling courses") · 💡 Proposed (dashed, "3 keen") · 🏁 Previous (muted, "Oct 2025", winners) · ✖️ Called
+  off (folded). Sidebar sub-items by stage (at most 3) + "All trips →". Looks in `src/lib/runup.js` + `components/runup.css`.
+- **The run-up** (`components/RunUp.jsx`) on an Upcoming trip's Overview: countdown header + your day-before line;
+  your to-dos (reply, deposit, jobs with late warnings, what you're bringing, handicap check, tip); getting there
+  (cars: I need a lift / I've got seats / hop in, driver puts people in, pick-up place + time; rooms); up for a vote
+  (trip votes + open rule cases); what's up for grabs (slots for ov23/ov24 in `components/runupSlots.js`); rules +
+  "Propose a change"; side activities (I'm in, cost each → kitty); what to bring (shared ideas, I'll bring it,
+  📣 Ask the group → one Feed post with "I'll bring it" buttons); form guide; tipping (organiser can turn off; locks
+  at the first tee); trip chat highlights. No car fuel/toll split (Josh 08:46) — normal kitty costs.
+- **Reminders:** a week out, only to people with something waiting ("3 things waiting for you"); the day before,
+  each person's car, room, tee time and what they're bringing. Words in `supabase/functions/_shared/runup.js`.
+- **094 (additive):** plan_groups driver/pick-up; plans.tipping_off; plan_items.bring_shared; plan_costs.activity_id;
+  tables trip_activities, trip_activity_people, trip_runup_people, trip_tips (same-group, no guest writes, planner
+  switch); functions runup_offer_car / join_car / leave_car / claim_bring, tips_close_at. NOT yet applied to staging
+  (the apply needed an approval nobody could give in this run) — checked in PGlite with `supabase/tests/094_run_up_test.sql`.
+- **Tests:** `src/lib/runup.test.js` (32); e2e `runup-test.mjs` new; trips / trip-overview / nav / phone / history updated.

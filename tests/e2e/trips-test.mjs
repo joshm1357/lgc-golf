@@ -137,20 +137,34 @@ const noSideScroll = async (label) => {
 
 // 1. The Trips tab.
 await page.goto(`${BASE}#/plan`);
-await page.getByText(/NEXT (UP|TRIP)/).first().waitFor({ timeout: 15000 });
+await page.getByTestId('trips-next').waitFor({ timeout: 15000 });
 await page.waitForTimeout(600);
-check(await page.getByText('Summer Classic').first().isVisible(), 'now and next: the next locked-in trip is the big card');
-check(await page.getByText('Ideas and voting').isVisible(), 'ideas section shows');
+check(/Summer Classic/.test(await page.getByTestId('trips-next').innerText()), 'Upcoming: the next locked-in trip is the first Upcoming card');
+check(await page.getByTestId('trips-section-idea').isVisible() && /Proposed/i.test(await page.getByTestId('trips-section-idea').innerText()), 'Proposed section shows');
 check(await page.getByText('Dates: 2 options, closes').first().isVisible(), 'idea card says what is still to decide');
-check(await page.getByText('Past trips').isVisible() && await page.getByText('South Coast 2026').isVisible(), 'past trips listed');
+check(await page.getByTestId('trips-section-done').isVisible() && /South Coast 2026/.test(await page.getByTestId('trips-section-done').innerText()), 'Previous trips listed');
+{
+  // ov25: each stage looks different — its own label, icon, class and tag, in order.
+  const order = await page.locator('[data-testid^="trips-section-"], [data-testid="trips-being-planned"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
+  check(order.join(',') === 'trips-section-locked,trips-being-planned,trips-section-idea,trips-section-done', `stage sections in order: Upcoming, Being organised, Proposed, Previous (${order.join(',')})`);
+  const looks = await page.locator('.trip-card').evaluateAll((els) => els.map((e) => ({ stage: e.dataset.stage, cls: e.className, pill: e.querySelector('[data-testid="stage-pill"]')?.textContent, tag: e.querySelector('[data-testid="stage-tag"]')?.textContent })));
+  const of = (st) => looks.find((l) => l.stage === st) || {};
+  check(/🔒 Upcoming/.test(of('locked').pill) && /stage-upcoming/.test(of('locked').cls) && /^(\d+ (days|weeks)|Tomorrow|Today)$/.test(of('locked').tag), `Upcoming: navy, 🔒, a countdown (${of('locked').tag})`);
+  check(/🧭 Being organised/.test(of('deciding').pill) && /stage-organising/.test(of('deciding').cls) && /calling courses|voting|getting started/.test(of('deciding').tag), `Being organised: outline, 🧭, what it's up to (${of('deciding').tag})`);
+  check(/💡 Proposed/.test(of('idea').pill) && /stage-proposed/.test(of('idea').cls) && /keen/.test(of('idea').tag), `Proposed: dashed, 💡, how many are keen (${of('idea').tag})`);
+  check(/🏁 Previous/.test(of('done').pill) && /stage-previous/.test(of('done').cls) && /^[A-Z][a-z]{2} \d{4}$/.test(of('done').tag), `Previous: muted, 🏁, month and year (${of('done').tag})`);
+  const borders = await page.locator('.trip-card').evaluateAll((els) => els.map((e) => `${e.dataset.stage}:${getComputedStyle(e).borderTopStyle}`));
+  check(borders.includes('idea:dashed') && borders.some((b) => /^deciding:solid/.test(b)), `Proposed is dashed, Being organised is a solid outline (${borders.join(' ')})`);
+  check((await page.getByTestId('trips-next').locator('a').first().getAttribute('href')).includes(`/plan/${NEXT}`), 'an Upcoming trip opens its trip page (The run-up)');
+}
 check((await page.locator('nav.tabs').innerText()).includes('Trips'), 'bottom bar says Trips');
 await page.screenshot({ path: `${SHOTS}/t1-trips.png`, fullPage: true });
 await noSideScroll('Trips tab');
 {
   // Finished 4 days ago, trip still 'active' in the app: a past trip, never "On now".
   const tripsText = await page.locator('.page').innerText();
-  const pastPart = tripsText.slice(tripsText.toLowerCase().indexOf('past trips'));
-  check(pastPart.includes('South Coast Trip 2026'), 'a finished trip still marked active is listed with the past trips');
+  const pastPart = await page.getByTestId('trips-section-done').innerText();
+  check(pastPart.includes('South Coast Trip 2026'), 'a finished trip still marked active is listed with the Previous trips');
   check(!/on now/i.test(tripsText), 'nothing says "On now" (the finished trip is done)');
   await page.goto(`${BASE}#/plan/${SC_PLAN}`);
   await page.getByText('South Coast Trip 2026').first().waitFor({ timeout: 10000 });
@@ -159,7 +173,7 @@ await noSideScroll('Trips tab');
   check(!/on now/i.test(planText) && /Done/.test(planText), 'its page says Done, not On now');
   await page.screenshot({ path: `${SHOTS}/t1b-finished-active.png`, fullPage: true });
   await page.goto(`${BASE}#/plan`);
-  await page.getByText(/NEXT (UP|TRIP)/).first().waitFor({ timeout: 15000 });
+  await page.getByTestId('trips-next').waitFor({ timeout: 15000 });
 }
 
 // 2. Suggest a trip: makes the plan, opens its votes.
@@ -244,12 +258,12 @@ await page.screenshot({ path: `${SHOTS}/t6-admin.png` });
     await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (k.startsWith('lgc-cache-')) localStorage.removeItem(k); });
     await page.goto(`${BASE}#/plan`);
     await page.reload();
-    await page.getByText('Past trips').waitFor({ timeout: 15000 });
+    await page.getByTestId('trips-section-done').waitFor({ timeout: 15000 });
     await page.waitForTimeout(500);
     const section = page.getByTestId('trips-being-planned');
-    check(await section.isVisible(), `${who.label}: a "Being planned" section shows`);
+    check(await section.isVisible() && /Being organised/i.test(await section.innerText()), `${who.label}: a "Being organised" section shows`);
     const txt = await section.innerText().catch(() => '');
-    check(/March/.test(txt) && /Blue mountains/.test(txt) && /When: to be voted on/.test(txt), `${who.label}: March (no dates, Blue mountains) is listed under Being planned`);
+    check(/March/.test(txt) && /Blue mountains/.test(txt) && /When: to be voted on/.test(txt), `${who.label}: March (no dates, Blue mountains) is listed under Being organised`);
     check(/organiser Mike/.test(txt), `${who.label}: its organiser is named`);
     check(!(await page.getByText('Nothing locked in yet').isVisible()), `${who.label}: no "Nothing locked in yet" while a trip is being planned`);
     check(await page.getByText('South Coast Trip 2026').isVisible(), `${who.label}: the past South Coast trip still shows`);

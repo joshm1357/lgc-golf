@@ -134,7 +134,7 @@ check(listed.every((f) => cached.includes(`/lgc-golf/${f}`)), `service worker sa
 await page.reload(); // now controlled by the service worker
 await page.getByText('Saturday').first().waitFor();
 await ctx.setOffline(true);
-for (const [hash, text] of [['#/tribunal', 'Tribunal'], ['#/plan', 'Ideas and voting'], [`#/comps?r=${ROUND}`, 'Closest'], ['#/admin', 'Admin']]) {
+for (const [hash, text] of [['#/tribunal', 'Tribunal'], ['#/plan', 'Suggest a trip or round'], [`#/comps?r=${ROUND}`, 'Closest'], ['#/admin', 'Admin']]) {
   await page.evaluate((h) => { window.location.hash = h; }, hash);
   let ok = false;
   // Scoped to the page: on a laptop build the (hidden on phones) sidebar has the same words.

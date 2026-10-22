@@ -6,6 +6,8 @@ import { useData, useRealtime, useSession, playerName } from '../lib/store.jsx';
 import { Header, Avatar, Icon, Sheet, timeAgo, toast, PhotoButtons } from '../components/ui.jsx';
 import { DinnerAwardsLink } from '../components/DinnerAwardsLink.jsx';
 import { isCommentaryPost } from '../lib/commentary.js';
+import { BringAsk } from '../components/BringAsk.jsx';
+import { bringAskPlan } from '../lib/runup.js';
 
 const REACTIONS = ['🔥', '😂', '👏', '🤦', '🍺'];
 
@@ -121,6 +123,7 @@ function Post({ post, me, comments, reactions, onReact, onChanged, isAdmin }) {
       {post.photo_url && <img className="post-photo" src={post.photo_url} alt={post.body || 'Photo from the course'} loading="lazy" />}
       <div className="pad stack" style={{ paddingTop: post.photo_url ? 10 : 0 }}>
         {!auto && post.body && <div style={{ fontSize: 16, lineHeight: 1.4 }}>{post.body}</div>}
+        {bringAskPlan(post.link) && <BringAsk planId={bringAskPlan(post.link)} />}
         <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
           {counts.map((c) => (
             <button key={c.e} type="button" className="react" aria-pressed={c.mine} onClick={() => onReact(c.e)} aria-label={`React ${c.e}`}>

@@ -64,7 +64,9 @@ Deno.test('library courses only; dates must be real and in the future; up to 6 c
 Deno.test('a draft can be partial while it is being asked about; questions are needed unless done', () => {
   const v = validatePlanChat({ message: 'Where are you thinking?', draft: {}, questions: [{ text: 'Roughly where?', quick: ['Hunter', 'South Coast', 'Somewhere else…'] }] }, tctx);
   assert(v.ok, v.errors.join(' '));
-  assertEquals(v.value!.draft.name, 'Golf trip');
+  assertEquals(v.value!.draft, null); // ov16: an empty draft means "still asking" — no draft yet
+  const sketch = validatePlanChat({ message: 'Where?', draft: { places: [{ place: 'Hunter Valley' }] }, questions: [{ text: 'Roughly where?', quick: ['Hunter'] }] }, tctx);
+  assertEquals(sketch.value!.draft!.name, 'Golf trip');
   const none = validatePlanChat({ draft: {}, questions: [] }, tctx);
   assertEquals(none.ok, false);
   assertMatch(none.errors[0], /questions/);

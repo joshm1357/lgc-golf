@@ -77,6 +77,12 @@ export default function TripBuilder() {
   }, [planId]);
   useEffect(() => { loadBuild(); loadTees(); }, [loadBuild, loadTees]);
   useRealtime(['trip_builds', 'trip_tee_options'], () => { loadBuild(); loadTees(); });
+  // The Caddie's ✨ Plan a trip writes the AI's draft here as you chat (ov16): reload straight away (realtime is slower).
+  useEffect(() => {
+    const f = (e) => { if (!e.detail?.planId || e.detail.planId === planId) loadBuild(); };
+    window.addEventListener('tripbuild:changed', f);
+    return () => window.removeEventListener('tripbuild:changed', f);
+  }, [planId, loadBuild]);
   useEffect(() => {
     supabase.from('stay_areas').select('*').order('sort').then(({ data: a }) => setAreas(a || []), () => {});
   }, []);

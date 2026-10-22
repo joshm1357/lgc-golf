@@ -9,9 +9,10 @@ import './planux.css';
 /**
  * turns: [{ role: 'user' | 'assistant', text, questions?: [{ id, text, quick: [] }], card?: node }]
  * onSend(text) → sends one message. busy: waiting for the helper. left: questions left (null = don't show).
- * placeholder: the box's hint. footer: anything under the box (e.g. "Use this plan").
+ * placeholder: the box's hint. footer: anything under the box (e.g. "Use this plan"). hint: a line under the helper's
+ * latest reply (the planning chat's "Or just say 'plan it'…", ov16).
  */
-export default function AiChat({ turns = [], onSend, busy = false, left = null, placeholder = 'Type here…', footer = null, intro = null, maxLength = 600, thinkingSteps = undefined }) {
+export default function AiChat({ turns = [], onSend, busy = false, left = null, placeholder = 'Type here…', footer = null, intro = null, hint = null, maxLength = 600, thinkingSteps = undefined }) {
   const [text, setText] = useState('');
   const box = useRef(null);
   const end = useRef(null);
@@ -44,6 +45,7 @@ export default function AiChat({ turns = [], onSend, busy = false, left = null, 
               </div>
             </div>
           ))}
+          {t === last && t.role === 'assistant' && hint}
         </div>
       ))}
       {busy && <Thinking steps={thinkingSteps} />}

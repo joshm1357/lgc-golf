@@ -96,6 +96,23 @@ function makeDeps(db: SupabaseClient, g: string, uid: string, status: Any): Deps
     if (error) throw new Error('The course library isn’t available just now.');
     return (data || []) as Any[];
   };
+  // The group's own notes on each course's usual social golf times (080), so the helper can mention them.
+  const withSocial = async (list: Any[]) => {
+    const ids = list.map((c) => c.id).filter(Boolean);
+    if (!ids.length) return list;
+    const { data } = await db.from('course_social_times').select('course_id,weekdays,weekends,price,group_size').eq('group_id', g).in('course_id', ids);
+    const by = Object.fromEntries((data || []).map((r: Any) => [r.course_id, [r.weekdays && `weekdays ${clean(r.weekdays, 60)}`, r.weekends && `weekends ${clean(r.weekends, 60)}`, clean(r.price, 30), clean(r.group_size, 40)].filter(Boolean).join(' · ')]));
+    return list.map((c) => (by[c.id] ? { ...c, social_times: by[c.id] } : c));
+  };
+  // One place → the first library course there that has a location → courses near that point.
+  const nearOne = async (place: string) => {
+    const hits = await searchLibrary(place, null, null, 5);
+    for (const h of hits.slice(0, 3)) {
+      const l = await library(h.id);
+      if (l?.lat != null && l?.lng != null) return { near: place, courses: await withSocial(shapeNear(await searchLibrary('', Number(l.lat), Number(l.lng), 10))) };
+    }
+    return hits.length ? { near: place, courses: await withSocial(shapeNear(hits)) } : { near: place, courses: [], note: 'Nothing in the course library there yet — don’t search it again.' };
+  };
   return {
     status: {
       is_member: !!status?.is_member, is_admin: !!status?.is_admin, group_id: status?.group_id || null, group_name: status?.group_name || null,
@@ -154,24 +171,19 @@ function makeDeps(db: SupabaseClient, g: string, uid: string, status: Any): Deps
       }
       if (name === 'find_course') return shapeNear(await searchLibrary(clean(input?.query, 60)));
       if (name === 'courses_near') {
-        // The place → the first library course there that has a location → courses near that point.
-        const place = clean(input?.place, 60);
-        const hits = await searchLibrary(place, null, null, 5);
-        // The group's own notes on each course's usual social golf times (080), so the helper can mention them.
-        const withSocial = async (list: Any[]) => {
-          const ids = list.map((c) => c.id).filter(Boolean);
-          if (!ids.length) return list;
-          const { data } = await db.from('course_social_times').select('course_id,weekdays,weekends,price,group_size').eq('group_id', g).in('course_id', ids);
-          const by = Object.fromEntries((data || []).map((r: Any) => [r.course_id, [r.weekdays && `weekdays ${clean(r.weekdays, 60)}`, r.weekends && `weekends ${clean(r.weekends, 60)}`, clean(r.price, 30), clean(r.group_size, 40)].filter(Boolean).join(' · ')]));
-          return list.map((c) => (by[c.id] ? { ...c, social_times: by[c.id] } : c));
-        };
-        for (const h of hits.slice(0, 3)) {
-          const l = await library(h.id);
-          if (l?.lat != null && l?.lng != null) return { near: place, courses: await withSocial(shapeNear(await searchLibrary('', Number(l.lat), Number(l.lng), 10))) };
+        // ov16: several places in one call (up to 4), so the helper doesn't spend a turn on each.
+        const many = Array.isArray(input?.places) ? [...new Set((input.places as unknown[]).map((p) => clean(p, 60)).filter(Boolean))].slice(0, 4) : [];
+        if (many.length > 1 || (many.length === 1 && !input?.place)) {
+          return { results: await Promise.all(many.map((p) => nearOne(p))) };
         }
-        return hits.length ? { near: place, courses: await withSocial(shapeNear(hits)) } : { near: place, courses: [], note: 'Nothing in the course library there yet.' };
+        return nearOne(clean(input?.place ?? many[0], 60));
       }
       throw new Error('No such tool');
+    },
+    libraryInfo: async () => {
+      // The person's own client: the search hands back at most 50, so "50+" means a big list.
+      const rows = await searchLibrary('', null, null, 50).catch(() => null);
+      return rows ? { courses: rows.length, more: rows.length >= 50 } : null;
     },
     planDb: {
       insertPlan: async (row) => ((await must(db.from('plans').insert(row).select('id').single())) as Any).id,

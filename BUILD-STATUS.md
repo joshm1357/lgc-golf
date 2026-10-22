@@ -1059,3 +1059,30 @@ screen, "Viewing as Mike · read only", and Stop.
 - **Tested:** Vitest 1166 (joinfirst 21 new); SQL on staging 32 checks, rolled back (signed-in user joining via player
   invite, team link → cup_side, organiser link → role + once only, personal link via 046 claim_player_link, taken name,
   used_link_info); e2e signin-first 59, save-spot 89, signin-home 76, links 24, stage2, notify-prompt, beta pass.
+## ov16 — Plan it with AI: ask first, never dead-end, lives in the Caddie, branch `ov16-ai-ask-first`, 22 Oct 2026
+- **Why:** on live "Plan it with AI" twice ended `too_many_rounds` (8 model calls used up: a 3-course library, the
+  helper kept searching). Josh: it should ask questions back, not do the whole thing from one message; and "Plan it
+  with AI" should BE the Caddie, with the real trip screen filling in as you talk.
+- **Ask first (plan_chat):** a vague first message gets a short reply — what it understood + 1–3 questions with quick
+  answers (incl. "Driving or flying?") — and no draft (`draft` is optional in reply_with_draft). It builds once it
+  knows when / where / how many, or when the organiser says "plan it" (detected server-side and in a tappable chip;
+  "Or just say 'plan it'…" shows under every reply). Conversational, local-knowledge tone. "done" always keeps a
+  question to refine. Flying: said to be coming soon; kept as `travel: 'fly'` on the draft (brief note, builder state).
+- **Never dead-end (all modes, logic.ts runLoop):** repeated identical tool calls answered from cache with a note
+  (2 repeats → last round early); the last round (out of rounds, or < 30 s before the deadline) tells the model to
+  answer now and, in plan_chat, forces reply_with_draft (Anthropic tool_choice; OpenAI-style hosts get only that tool);
+  the same validation problems twice, or any on the last round → the reply with the bad parts left out (lenient
+  checks; setup drops rounds on unknown courses); else a server-built "I got stuck finding X — can you tell me …?".
+  plan_chat now gets 10 model calls (still inside the 130 s request deadline).
+- **Fewer wasted rounds:** courses_near takes `places: [...]` (up to 4 in one call); the library's size goes in as data.
+- **Logged why:** helper_log.error (40 chars) e.g. `too_many_rounds r8 past,course m2`, `salvaged r2 past`, `stuck r6 m2`
+  (rescued replies don't use up a question); a counts-only line in the function log. No new columns.
+- **In the Caddie:** a second mode "✨ Plan a trip" (tabs Ask | Plan a trip). Laptop: the side panel. Phone: a
+  non-modal sheet that folds to a bar ("Show the trip ↓"). The first draft makes a draft trip and opens the trip
+  builder; each draft is merged into trip_builds as ✨ suggestions (the organiser's own picks kept); what the page shows
+  goes back with the next question (`page` → `<data source="trip_page">`). Trips' "Plan it with AI" opens it. Without
+  the trip builder feature it shows the draft card + Create it as before.
+- **Files:** `supabase/functions/ai-helper/{logic,plan,providers,index}.ts`, `askfirst.test.ts` (new), `src/components/
+  {Caddie,CaddiePlan (new),AiChat}.jsx`, `caddie.css`, `src/lib/{planchat,aihelper}.js`, `caddieplan.test.js` (new),
+  `src/screens/AiPlanner.jsx`, `TripBuilder.jsx` (one listener to reload), e2e `plan-ux-test.mjs` (section A/G rewritten).
+- **Tested:** Deno 154 (askfirst 16 new); Vitest 1161; e2e plan-ux, ai-helper-v2, ai-helper, caddie, trip-builder pass.

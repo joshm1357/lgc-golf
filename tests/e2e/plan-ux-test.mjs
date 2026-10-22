@@ -1,6 +1,7 @@
 // Planning made clearer (080), 22 Oct 2026. Fake database and fake functions only — nothing real is touched.
-//   A. "✨ Plan it with AI" is a chat: a draft (a shortlist) + 2 questions → tap "Add another…", type Mudgee → the
-//      draft updates with Mudgee highlighted → Use this plan → the confirm card.
+//   A. "✨ Plan it with AI" is the Caddie's ✨ Plan a trip (ov16): a vague message gets questions back (no plan yet);
+//      then the draft makes a draft trip and the trip builder fills in under the chat; "Add another…" Mudgee → the
+//      builder gets the new area, and what the page shows goes with the next question.
 //   B. The trip builder start: one page per region (chips), each with its own map, courses and places to stay, a list
 //      link pasted in; extras; the regions side by side (Compare).
 //   C. Call the vote: the full range with tick boxes; untick one, set the closing date → How it goes out (app and
@@ -181,6 +182,12 @@ async function fake(route) {
     const b = JSON.parse(req.postData() || '{}');
     aiCalls.push(b);
     if (b.mode === 'plan_chat') {
+      // ov16: a vague first message gets questions back (no draft yet).
+      if (/^Golf trip/.test(b.text)) {
+        return json({ chat: { message: 'Love it — a golf trip with the boys. A couple of quick ones first:', draft: null, questions: [
+          { id: 'travel', text: 'Driving or flying?', quick: ['Driving', 'Flying', 'Not sure'] },
+          { id: 'when', text: 'Roughly when, and how many?', quick: ['Next month', 'Spring', 'Other…'] }], done: false, summary: [] }, remaining: { month: 50, today: 9 }, log_id: 6 });
+      }
       const second = /Mudgee/.test(b.text);
       return json({ chat: { message: second ? 'Added Mudgee — here are the options now. Want to add any?' : 'Here are some options — want to add any?', draft: second ? DRAFT2 : DRAFT1, questions: second ? [Q[1]] : Q, done: false,
         summary: ['Start the trip “Spring away”, about $900 each', `Vote on where: ${(second ? DRAFT2 : DRAFT1).places.map((x) => x.label).join(' · ')}`] }, remaining: { month: 50, today: 9 }, log_id: 7 });
@@ -248,39 +255,63 @@ const noSideScroll = async (label) => {
   check(w <= 376, `${label}: no sideways scroll at 375px (${w})`);
 };
 
-// ---------------------------------------------------------------- A. The planning chat
+// ---------------------------------------------------------------- A. ✨ Plan a trip — in the Caddie (ov16)
+// "Plan it with AI" IS the Caddie: a sheet on the phone (not a modal — the trip screen stays above it), and the real
+// trip builder fills in as you talk. It asks first; "plan it" stops the questions; what you change on the page goes
+// back to the helper.
+const CSHOTS = process.env.CADDIE_SHOTS || `${SHOTS}/caddie-plan`;
+fs.mkdirSync(CSHOTS, { recursive: true });
 await page.goto(`${BASE}#/plan`);
-await page.getByRole('button', { name: /✨ (Plan it with AI|Carry on your plan)/ }).click();
-await page.getByLabel('Your message').fill('Weekend away in late Nov or early Dec, 12 of us, within 3.5 hours of Sydney, about $900 each');
+await page.getByTestId('plan-with-ai').click();
+await page.getByTestId('caddie-plan-sheet').waitFor({ timeout: 10000 });
+check(!(await page.locator('.sheet-bg').count()), 'phone: the planning chat is a sheet over the page, not a modal');
+await page.getByLabel('Your message').fill('Golf trip with the boys');
 await page.getByRole('button', { name: 'Send', exact: true }).click();
-await page.locator('.pc-inline-card [data-testid="draft-card"]').waitFor({ timeout: 10000 });
-check((await page.getByTestId('chat-question').count()) === 2, 'the helper replies with a draft and 2 questions');
-check((await page.locator('.pc-inline-card [data-testid="draft-place"]').count()) === 2 && !(await page.locator('.pc-inline-card [data-testid="draft-place"][data-mark]').count()), 'the first draft has 2 places, nothing highlighted');
-check((await page.locator('.pc-inline-card [data-testid="draft-card"]').innerText()).includes('✨ suggested'), 'the draft is marked as suggestions');
-await shot('01-chat');
+await page.getByText('Driving or flying?').waitFor({ timeout: 10000 });
+check(!(await page.getByTestId('draft-card').count()), 'a vague first message: questions back, no plan yet');
+check((await page.getByTestId('chat-question').count()) === 2, 'two short questions with quick answers');
+check((await page.getByTestId('plan-it-hint').innerText()).includes('plan it'), '"Or just say “plan it”…" under the reply');
+const first = aiCalls.filter((c) => c.mode === 'plan_chat')[0];
+check(!first.draft && !first.page, 'the first question carries no draft or page');
+const before = db.plans.length;
+check(true, `nothing made yet (${before} plans)`);
+await page.screenshot({ path: `${CSHOTS}/m-01-asks-first.png` });
+await page.getByLabel('Your message').fill('Driving. Late Nov or early Dec, 12 of us, within 3.5 hours of Sydney, about $900 each');
+await page.getByRole('button', { name: 'Send', exact: true }).click();
+await page.waitForURL(/#\/plan\/[0-9a-f-]{36}\/build/, { timeout: 15000 });
+const newPlan = page.url().match(/plan\/([0-9a-f-]{36})\/build/)[1];
+const build = () => db.trip_builds.find((b) => b.plan_id === newPlan)?.state;
+check(db.plans.some((p) => p.id === newPlan && p.name === 'Spring away'), 'the draft makes a draft trip');
+check(JSON.stringify(build()?.regionOptions) === JSON.stringify(['Hunter Valley', 'South Coast NSW']), 'the AI’s places land on the trip builder as area options');
+check(!build()?.region, 'nothing is picked for the organiser');
+await page.getByTestId('area-tabs').waitFor({ timeout: 15000 });
+check((await page.getByTestId('area-tabs').innerText()).includes('South Coast NSW'), 'the real trip screen shows them');
+check(await page.getByText('Show the chat ↑').isVisible(), 'the chat folds down so the trip shows');
+await page.screenshot({ path: `${CSHOTS}/m-02-trip-filling-in.png` });
+await page.getByText('Show the chat ↑').click();
 await page.getByRole('button', { name: 'Add another…' }).click();
 check((await page.getByLabel('Your message').inputValue()) === 'Add another: ', 'Add another… opens the box to type');
-await wait(100); // the box takes focus with the cursor at the end
+await wait(100);
 await page.getByLabel('Your message').type('Mudgee');
+await page.screenshot({ path: `${CSHOTS}/m-03-sheet-over-trip.png` });
 await page.getByRole('button', { name: 'Send', exact: true }).click();
-await page.locator('.pc-inline-card [data-testid="draft-place"][data-mark="new"]').waitFor({ timeout: 10000 });
-check((await page.locator('.pc-inline-card [data-testid="draft-place"][data-mark="new"]').innerText()).includes('Mudgee'), 'the draft updates with Mudgee highlighted as new');
-const second = aiCalls.filter((c) => c.mode === 'plan_chat')[1];
-check(second?.text === 'Add another: Mudgee' && second.messages.length === 2 && second.draft?.places?.length === 2, 'the conversation so far and the current draft go with each turn');
-check(await page.getByText(/questions? left in this chat/).isVisible(), 'questions left in this chat shows');
-await shot('02-chat-updated');
-// Leaving and coming back keeps the chat (Josh 22 Oct: "I clicked away and it's lost").
-await page.keyboard.press('Escape'); await wait(300);
+for (let i = 0; i < 50 && !(build()?.regionOptions || []).includes('Central West NSW'); i++) await wait(100);
+check((build()?.regionOptions || []).includes('Central West NSW'), 'the next draft (Mudgee) updates the trip builder');
+const third = aiCalls.filter((c) => c.mode === 'plan_chat')[2];
+check(third?.text === 'Add another: Mudgee' && third.messages.length === 4 && third.draft?.places?.length === 2, 'the conversation so far and the current draft go with each turn');
+check(third?.page?.areas?.map((a) => a.area).join() === 'Hunter Valley,South Coast NSW', 'what the trip screen shows goes with the question');
+await page.getByText('Show the trip ↓').click(); await wait(800);
+check((await page.getByTestId('area-tabs').innerText()).includes('Central West NSW'), 'the trip screen shows the new area without a reload');
+await page.screenshot({ path: `${CSHOTS}/m-04-trip-updated.png` });
+// Leaving and coming back keeps the chat.
+await page.getByRole('button', { name: 'Close' }).last().click(); await wait(300);
 await page.goto(`${BASE}#/plan`);
-check(await page.getByRole('button', { name: /✨ Carry on your plan \(4 messages\)/ }).isVisible(), 'closed the chat: Trips offers "Carry on your plan (4 messages)"');
-await page.getByRole('button', { name: /✨ Carry on your plan/ }).click();
-await page.locator('.pc-inline-card [data-testid="draft-place"]').first().waitFor({ timeout: 5000 });
-check((await page.getByTestId('chat-me').count()) === 2 && (await page.locator('.pc-inline-card [data-testid="draft-card"]').innerText()).includes('Mudgee'), 'back in: both messages and the draft (with Mudgee) are still there');
-await page.getByTestId('use-plan').click();
-await page.getByTestId('plan-confirm').waitFor({ timeout: 5000 });
-check((await page.getByTestId('plan-confirm').innerText()).includes('nothing is picked for them'), 'Use this plan → the confirm card (options for the group, nothing picked)');
-await shot('03-confirm');
-await page.keyboard.press('Escape'); await wait(300);
+check(/Carry on your plan \(6 messages\)/.test(await page.getByTestId('plan-with-ai').innerText()), `closed the chat: Trips offers "Carry on your plan (6 messages)" (${await page.getByTestId('plan-with-ai').innerText()})`);
+await page.getByTestId('plan-with-ai').click();
+await page.getByTestId('caddie-plan-sheet').waitFor({ timeout: 5000 });
+check((await page.getByTestId('chat-me').count()) === 3, 'back in: the messages are still there');
+check(await page.getByTestId('open-trip').isVisible(), 'and a button back to the trip it’s filling in');
+await page.getByRole('button', { name: 'Close' }).last().click(); await wait(300);
 
 // ---------------------------------------------------------------- B. A page per region, then side by side
 await page.goto(`${BASE}#/plan/${PLAN}/build`);
@@ -461,13 +492,20 @@ asPlayer = false;
 const vshot = (n) => page.screenshot({ path: `${SHOTS}/${n}.png`, fullPage: false });
 await page.goto(`${BASE}#/plan`);
 await page.reload();
-await page.getByRole('button', { name: /✨ (Plan it with AI|Carry on your plan)/ }).click();
-await page.getByLabel('Your message').fill('Weekend away late Nov, 12 of us, within 3.5 hours of Sydney, about $900 each');
+await page.getByTestId('plan-with-ai').click();
+await page.getByTestId('caddie-panel').waitFor({ timeout: 10000 });
+check((await page.getByTestId('caddie-panel').innerText()).includes('Plan a trip'), 'desktop: Plan it with AI opens the Caddie’s side panel in ✨ Plan a trip');
+await page.getByRole('button', { name: 'Start a new plan' }).click().catch(() => {});
+await page.getByLabel('Your message').fill('Weekend away late Nov, 12 of us, within 3.5 hours of Sydney, about $900 each — plan it');
 await page.getByRole('button', { name: 'Send', exact: true }).click();
-await page.getByTestId('draft-aside').getByTestId('draft-card').waitFor({ timeout: 10000 });
-check(await page.getByTestId('draft-aside').isVisible(), 'desktop: the chat on the left, the draft on the right');
+await page.waitForURL(/#\/plan\/[0-9a-f-]{36}\/build/, { timeout: 15000 });
+await page.getByTestId('area-tabs').waitFor({ timeout: 15000 });
+await wait(800);
+check(await page.getByTestId('caddie-panel').isVisible() && (await page.getByTestId('area-tabs').isVisible()), 'desktop: the chat in the panel, the trip builder filling in beside it');
 await vshot('d-01-chat');
-await page.keyboard.press('Escape'); await wait(300);
+await page.screenshot({ path: `${CSHOTS}/d-01-panel-and-trip.png` });
+await page.getByTestId('caddie-panel').getByRole('tab', { name: 'Ask', exact: true }).click();
+await page.getByRole('button', { name: 'Fold the caddie away' }).click();
 state().votes = {};
 await page.goto(`${BASE}#/plan/${PLAN}/build`);
 await page.getByTestId('area-start').waitFor({ timeout: 15000 });

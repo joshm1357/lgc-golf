@@ -405,13 +405,24 @@ Deno.test('feature off, no key, players setting up, people outside the group →
   assertEquals(model.calls.length, 0);
 });
 
-Deno.test('the loop stops after 6 model calls', async () => {
-  const model = fakeModel([() => [use(`x${Math.random()}`, 'our_courses', {})]]);
+Deno.test('the loop never runs past maxToolRounds, and going round in circles ends in a question, not an error', async () => {
+  // Different searches every time: stops at the limit, and the last call is told it's the last.
+  let n = 0;
+  const model = fakeModel([() => [use(`x${++n}`, 'find_course', { query: `Nowhere ${n}` })]]);
   const { d, log } = fakeDeps({ fetchFn: model.fetchFn });
   const out: Any = await helperRequest({ mode: 'setup', text: 'Something vague' }, d);
   assertEquals(model.calls.length, LIMITS.maxToolRounds);
-  assertMatch(out.error, /couldn’t finish/);
-  assertEquals(log[1].ok, false); // still logged (it cost tokens)
+  assertMatch(JSON.stringify(model.calls[model.calls.length - 1].req.messages.at(-1)), /last turn/);
+  assertMatch(out.message, /^I got stuck finding Nowhere 1, Nowhere 2 or Nowhere 3 in the course list — can you tell me/);
+  assertEquals(out.error, undefined);
+  assertMatch(log[1].error, /^stuck r8/); // why it ended, for Josh (and it doesn't use up a question)
+  // The same call over and over: answered from the first lookup, then the last round comes early.
+  const loop = fakeModel([() => [use(`y${Math.random()}`, 'our_courses', {})]]);
+  const f = fakeDeps({ fetchFn: loop.fetchFn });
+  const out2: Any = await helperRequest({ mode: 'setup', text: 'Something vague' }, f.d);
+  assert(loop.calls.length < LIMITS.maxToolRounds);
+  assertEquals(f.toolCalls.filter((t) => t === 'our_courses').length, 1);
+  assertMatch(out2.message, /^I got stuck putting that together/);
 });
 
 Deno.test('API errors become friendly words', async () => {

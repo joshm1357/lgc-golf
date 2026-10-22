@@ -131,24 +131,38 @@ export function builderStateFromDraft(draft, stayAreas = [], { nights = 2 } = {}
   };
 }
 
-// ------------------------------------------------------------------ keeping the chat for the session
-
-const store = (s) => { try { return s || (typeof sessionStorage !== 'undefined' ? sessionStorage : null); } catch { return null; } };
-/** The planning chat for this group, from this tab's session: { turns, draft } or null. */
-export function loadChat(groupId, s) {
+// ------------------------------------------------------------------ keeping the chat (Josh 22 Oct: "I clicked away and it's lost")
+// Kept on this device for a week (localStorage), not just this tab, so leaving the screen, closing the sheet or the
+// phone dropping the app doesn't lose it. A question still on its way when you leave is finished in the background
+// (see pending below) and its answer is saved, so it's there when you come back.
+const WEEK = 7 * 24 * 3600 * 1000;
+const store = (s) => { try { return s || (typeof localStorage !== 'undefined' ? localStorage : null); } catch { return null; } };
+/** The planning chat for this group on this device: { turns, draft, savedAt } or null (none, or older than a week). */
+export function loadChat(groupId, s, now = Date.now()) {
   const st = store(s);
   if (!st || !groupId) return null;
   try {
     const v = JSON.parse(st.getItem(STORE_PREFIX + groupId) || 'null');
-    return v && Array.isArray(v.turns) ? { turns: v.turns.slice(-30), draft: v.draft || null } : null;
+    if (!v || !Array.isArray(v.turns)) return null;
+    if (v.savedAt != null && now - v.savedAt > WEEK) return null;
+    return { turns: v.turns.slice(-30), draft: v.draft || null, savedAt: v.savedAt || null };
   } catch { return null; }
 }
-export function saveChat(groupId, chat, s) {
+export function saveChat(groupId, chat, s, now = Date.now()) {
   const st = store(s);
   if (!st || !groupId) return;
-  try { st.setItem(STORE_PREFIX + groupId, JSON.stringify({ turns: (chat?.turns || []).slice(-30), draft: chat?.draft || null })); } catch { /* fine */ }
+  const turns = (chat?.turns || []).slice(-30);
+  try {
+    if (!turns.length && !chat?.draft) { st.removeItem(STORE_PREFIX + groupId); return; }
+    st.setItem(STORE_PREFIX + groupId, JSON.stringify({ turns, draft: chat?.draft || null, savedAt: now }));
+  } catch { /* fine */ }
 }
 export function clearChat(groupId, s) {
   const st = store(s);
   try { st?.removeItem(STORE_PREFIX + groupId); } catch { /* fine */ }
 }
+/** How many messages a saved chat has (for "Carry on your plan"). */
+export function chatSize(chat) { return (chat?.turns || []).length; }
+
+/** Questions still on their way, by group: { promise, before, mine } — lives as long as the app is open. */
+export const pending = new Map();

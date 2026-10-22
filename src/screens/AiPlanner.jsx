@@ -16,7 +16,7 @@ import { notify } from '../lib/push.js';
 import { must } from '../lib/run.js';
 import { PLAN_EXAMPLE } from '../lib/aihelper.js';
 import { fmtRange } from '../lib/plan.js';
-import { chatBody, cleanQuestions, diffDraft, markFor, removedNames, turnsLeft, draftToPlan, builderStateFromDraft, loadChat, saveChat, clearChat } from '../lib/planchat.js';
+import { chatBody, cleanQuestions, diffDraft, markFor, removedNames, turnsLeft, draftToPlan, builderStateFromDraft, loadChat, saveChat, clearChat, chatSize, pending } from '../lib/planchat.js';
 import { newState } from '../lib/tripbuilder.js';
 import { startExtras } from '../lib/extras.js';
 import { askHelper, Rate, Remaining } from './AiHelper.jsx';
@@ -30,11 +30,12 @@ export function TripsAi() {
   const { status } = useSession();
   const [open, setOpen] = useState(false);
   if (!on || !planner) return null;
+  const carryOn = open ? 0 : chatSize(loadChat(status?.group_id)) || (pending.has(status?.group_id) ? 1 : 0);
   return (
     <div className="stack" style={{ gap: 8 }}>
       {status?.is_admin && (
         <button type="button" className="btn ghost block" style={{ minHeight: 52, borderColor: 'var(--navy)', fontWeight: 800 }} onClick={() => setOpen(true)}>
-          ✨ Plan it with AI
+          ✨ {carryOn ? `Carry on your plan (${carryOn} messages)` : 'Plan it with AI'}
         </button>
       )}
       <div style={{ textAlign: 'center' }}><AskChip about="trips" inline /></div>
@@ -60,25 +61,53 @@ export function PlanWithAiSheet({ onClose }) {
   const [logId, setLogId] = useState(null);
   useEffect(() => { saveChat(gid, { turns: turns.map(({ card, ...t }) => t), draft }); }, [gid, turns, draft]);
 
+  // A question keeps going if you leave the screen: its answer is saved for this group and shows when you're back.
+  const finish = (r, before, mine) => {
+    if (r.kind === 'chat') {
+      return { turns: [...before, mine, { role: 'assistant', text: r.text, questions: cleanQuestions(r.questions), done: r.done }], draft: r.draft };
+    }
+    if (r.kind === 'message') return { turns: [...before, mine, { role: 'assistant', text: r.text, questions: [] }], draft: null };
+    return null;
+  };
+  const ask = (before, mine) => {
+    const promise = askHelper(chatBody(before, draft, mine.text)).then((r) => {
+      pending.delete(gid);
+      const done = finish(r, before, mine);
+      if (done) saveChat(gid, { turns: done.turns, draft: done.draft || draft });   // saved even if the sheet has closed
+      return r;
+    }, (e) => { pending.delete(gid); throw e; });
+    pending.set(gid, { promise, before, mine });
+    return promise;
+  };
+  const land = (r, before, mine) => {
+    setBusy(false);
+    if (r.remaining) setRemaining(r.remaining);
+    if (r.logId != null) setLogId(r.logId);
+    const done = finish(r, before, mine);
+    if (done && r.kind === 'chat') { setPrev(draft); setDraft(r.draft); setSummary(r.summary || []); }
+    if (done) { setTurns(done.turns); return; }
+    setErr(r.text || 'The helper didn’t answer — try again.');
+  };
+  // Came back while a question was still on its way: wait for it here too.
+  useEffect(() => {
+    const p = pending.get(gid);
+    if (!p) return undefined;
+    let live = true;
+    setBusy(true);
+    p.promise.then((r) => { if (live) land(r, p.before, p.mine); }, () => { if (live) { setBusy(false); setErr('The helper didn’t answer — try again.'); } });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gid]);
+
   const send = async (text) => {
     setErr('');
     const mine = { role: 'user', text };
     const before = turns;
     setTurns([...before, mine]);
     setBusy(true);
-    const r = await askHelper(chatBody(before, draft, text));
-    setBusy(false);
-    if (r.remaining) setRemaining(r.remaining);
-    if (r.logId != null) setLogId(r.logId);
-    if (r.kind === 'chat') {
-      setPrev(draft);
-      setDraft(r.draft);
-      setSummary(r.summary || []);
-      setTurns([...before, mine, { role: 'assistant', text: r.text, questions: cleanQuestions(r.questions), done: r.done }]);
-      return;
-    }
-    if (r.kind === 'message') { setTurns([...before, mine, { role: 'assistant', text: r.text, questions: [] }]); return; }
-    setErr(r.text || 'The helper didn’t answer — try again.');
+    let r;
+    try { r = await ask(before, mine); } catch { setBusy(false); setErr('The helper didn’t answer — try again.'); return; }
+    land(r, before, mine);
   };
   const create = async () => {
     setBusy(true);

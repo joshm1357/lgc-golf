@@ -153,11 +153,11 @@ page.on('dialog', (d) => d.accept());
 
 // 1. Trips tab: Plan it with AI + Ask chip.
 await page.goto(`${BASE}#/plan`);
-await page.getByRole('button', { name: '✨ Plan it with AI' }).waitFor({ timeout: 15000 });
+await page.getByRole('button', { name: /✨ (Plan it with AI|Carry on your plan)/ }).waitFor({ timeout: 15000 });
 check(true, 'organiser sees "✨ Plan it with AI" on the Trips tab');
 check(await page.getByText('✨ Ask about our trips').isVisible(), 'the Ask chip shows on the Trips tab');
 await page.screenshot({ path: `${SHOTS}/1-trips.png`, fullPage: true });
-await page.getByRole('button', { name: '✨ Plan it with AI' }).click();
+await page.getByRole('button', { name: /✨ (Plan it with AI|Carry on your plan)/ }).click();
 const box = page.getByLabel('Your message');
 check((await box.getAttribute('placeholder')).startsWith('Weekend away in March'), 'the example is the placeholder');
 check(await page.getByRole('button', { name: 'Send', exact: true }).isDisabled(), 'Send waits for some words');
@@ -218,7 +218,7 @@ organiser = false;
 await page.goto(`${BASE}#/plan`);
 await page.reload();
 await page.getByText('✨ Ask about our trips').waitFor({ timeout: 15000 });
-check(!(await page.getByRole('button', { name: '✨ Plan it with AI' }).isVisible().catch(() => false)), 'a player doesn’t get "Plan it with AI"');
+check(!(await page.getByRole('button', { name: /✨ (Plan it with AI|Carry on your plan)/ }).isVisible().catch(() => false)), 'a player doesn’t get "Plan it with AI"');
 organiser = true;
 
 // 5. Switched off: hidden everywhere, the function never called.
@@ -228,7 +228,7 @@ await page.goto(`${BASE}#/plan`);
 await page.reload();
 await page.getByText('💡 Suggest a trip or round').waitFor({ timeout: 15000 });
 await page.waitForTimeout(500);
-check(!(await page.getByRole('button', { name: '✨ Plan it with AI' }).isVisible().catch(() => false)), 'switched off: no Plan it with AI');
+check(!(await page.getByRole('button', { name: /✨ (Plan it with AI|Carry on your plan)/ }).isVisible().catch(() => false)), 'switched off: no Plan it with AI');
 check(!(await page.getByText('✨ Ask about our trips').isVisible().catch(() => false)), 'switched off: no Ask chip on Trips');
 await page.goto(`${BASE}#/`);
 await page.getByText('Wednesday — Kurri').first().waitFor({ timeout: 15000 });

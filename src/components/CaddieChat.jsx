@@ -18,6 +18,7 @@ import {
   caddieContext, caddieSuggestions, caddieMode, fallbackIntro, sessionFlag, caddieIds, searchDestinations, goButton,
 } from '../lib/caddie.js';
 import { Rate } from '../screens/AiHelper.jsx';
+import Thinking from './Thinking.jsx';
 
 const FLAG_KEY = 'tgt-caddie-flag'; // 'not_set_up' | 'capped', remembered for this visit
 const readFlag = () => { try { return sessionStorage.getItem(FLAG_KEY); } catch { return null; } };
@@ -134,6 +135,7 @@ export default function CaddieChat({ onGo, ask: askNow }) {
           {busy ? 'Looking it up…' : mode.ai ? 'Ask' : 'Find it'}
         </button>
       </form>
+      {busy && mode.ai && <Thinking steps={['Reading your question', 'Looking it up', 'Writing the answer']} />}
       {remaining && <span className="small muted">{remainingLabel(remaining)}</span>}
       {thread.map((m, i) => (
         <div key={thread.length - i} className="card pad stack" style={{ gap: 8 }} data-testid="caddie-answer">

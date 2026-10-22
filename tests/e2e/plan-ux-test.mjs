@@ -250,7 +250,7 @@ const noSideScroll = async (label) => {
 
 // ---------------------------------------------------------------- A. The planning chat
 await page.goto(`${BASE}#/plan`);
-await page.getByRole('button', { name: '✨ Plan it with AI' }).click();
+await page.getByRole('button', { name: /✨ (Plan it with AI|Carry on your plan)/ }).click();
 await page.getByLabel('Your message').fill('Weekend away in late Nov or early Dec, 12 of us, within 3.5 hours of Sydney, about $900 each');
 await page.getByRole('button', { name: 'Send', exact: true }).click();
 await page.locator('.pc-inline-card [data-testid="draft-card"]').waitFor({ timeout: 10000 });
@@ -269,6 +269,13 @@ const second = aiCalls.filter((c) => c.mode === 'plan_chat')[1];
 check(second?.text === 'Add another: Mudgee' && second.messages.length === 2 && second.draft?.places?.length === 2, 'the conversation so far and the current draft go with each turn');
 check(await page.getByText(/questions? left in this chat/).isVisible(), 'questions left in this chat shows');
 await shot('02-chat-updated');
+// Leaving and coming back keeps the chat (Josh 22 Oct: "I clicked away and it's lost").
+await page.keyboard.press('Escape'); await wait(300);
+await page.goto(`${BASE}#/plan`);
+check(await page.getByRole('button', { name: /✨ Carry on your plan \(4 messages\)/ }).isVisible(), 'closed the chat: Trips offers "Carry on your plan (4 messages)"');
+await page.getByRole('button', { name: /✨ Carry on your plan/ }).click();
+await page.locator('.pc-inline-card [data-testid="draft-place"]').first().waitFor({ timeout: 5000 });
+check((await page.getByTestId('chat-me').count()) === 2 && (await page.locator('.pc-inline-card [data-testid="draft-card"]').innerText()).includes('Mudgee'), 'back in: both messages and the draft (with Mudgee) are still there');
 await page.getByTestId('use-plan').click();
 await page.getByTestId('plan-confirm').waitFor({ timeout: 5000 });
 check((await page.getByTestId('plan-confirm').innerText()).includes('nothing is picked for them'), 'Use this plan → the confirm card (options for the group, nothing picked)');
@@ -454,7 +461,7 @@ asPlayer = false;
 const vshot = (n) => page.screenshot({ path: `${SHOTS}/${n}.png`, fullPage: false });
 await page.goto(`${BASE}#/plan`);
 await page.reload();
-await page.getByRole('button', { name: '✨ Plan it with AI' }).click();
+await page.getByRole('button', { name: /✨ (Plan it with AI|Carry on your plan)/ }).click();
 await page.getByLabel('Your message').fill('Weekend away late Nov, 12 of us, within 3.5 hours of Sydney, about $900 each');
 await page.getByRole('button', { name: 'Send', exact: true }).click();
 await page.getByTestId('draft-aside').getByTestId('draft-card').waitFor({ timeout: 10000 });

@@ -111,7 +111,7 @@ page.on('pageerror', (e) => errors.push(`[${step}] ${String(e)} ${String(e.stack
 const scripts = new Set();
 page.on('request', (r) => { const u = r.url(); if (u.includes('/assets/') && u.endsWith('.js')) scripts.add(u.split('/').pop()); });
 
-// 1. The first screen (This trip since ov15, with today's leaderboard) opens with only the starting file.
+// 1. The first screen (the trip on now — ov15/ov21 — with today's leaderboard) opens with only the starting file.
 await page.goto(BASE);
 await page.getByText('Saturday').first().waitFor({ timeout: 15000 });
 await page.waitForTimeout(800);

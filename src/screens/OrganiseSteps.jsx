@@ -21,7 +21,7 @@ import { TripSetupCard } from './TripSetup.jsx';
 import TripExtras, { RepeatInfo } from './TripExtras.jsx';
 import { TripBuilderCard } from '../components/TripBuilderCard.jsx';
 import { TripFinderCard } from '../components/TripFinderCard.jsx';
-import { VoteTab, PeopleTab, ChatTab, PollSheet, CloseSheet, ProposalBanner, LockInCard, Checklist } from './Planner.jsx';
+import { VoteTab, PeopleTab, ChatTab, PollSheet, CloseSheet, ProposalBanner, LockInCard, Checklist, CalledOffBanner } from './Planner.jsx';
 import './organise.css';
 
 // Laptop-only parts (what was the Trip desk), loaded only on a laptop so phones download nothing new.
@@ -101,7 +101,7 @@ export function OrganiseView({ pd, stage, trip, wide, desk, onEdit }) {
   if (plan.status === 'cancelled') {
     return (
       <div className="section stack">
-        <div className="err">{plan.proposed ? 'The admin passed on this one.' : 'This one’s been called off.'}</div>
+        <CalledOffBanner plan={plan} reload={pd.reload} />
         <More pd={pd} tab={MORE_TABS.includes(tab) ? tab : 'chat'} onTab={openTab} isOrg={isOrg} desk={desk} trip={trip} />
       </div>
     );

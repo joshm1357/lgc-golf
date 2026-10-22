@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { startOutbox, outboxCount, onOutboxChange, onOutboxDrop } from './lib/outbox.js';
 import { HashRouter, Routes, Route, Navigate, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { SessionProvider, DataProvider, useSession, useData, useFeature } from './lib/store.jsx';
-import { TabBar, Toaster, Loading, UpdateBanner, toast } from './components/ui.jsx';
+import { TabBar, Toaster, ConfirmHost, Loading, UpdateBanner, toast } from './components/ui.jsx';
 import { lazyScreen, LazyArea } from './lib/lazy.jsx';
 import { DrawOverlay } from './components/DrawOverlay.jsx';
 import { Sidebar } from './components/Sidebar.jsx';
@@ -30,7 +30,7 @@ import { personalCode } from './lib/personal.js';
 import { takeWelcome, welcomeName } from './lib/joinfirst.js';
 import ProfileSetup, { AwaitingApproval } from './screens/ProfileSetup.jsx';
 import Leaderboard from './screens/Leaderboard.jsx';
-import TripNow from './screens/TripNow.jsx';
+import TripNow, { useTripsMenu } from './screens/TripNow.jsx';
 import { pickActiveTrip } from './lib/activetrip.js';
 import ScoreEntry from './screens/ScoreEntry.jsx';
 import Feed from './screens/Feed.jsx';
@@ -103,12 +103,21 @@ function JoinInsideRoute({ code: given }) {
   );
 }
 
-// The first tab (ov15): This trip. A round's leaderboard is #/?r=<round> — every recap link already in a group chat
-// still lands on it. A quick round (one round, no trip) keeps its leaderboard here.
+// Home (#/). A round's leaderboard is #/?r=<round> — every recap link already in a group chat still lands on it. A
+// quick round (one round, no trip) keeps its leaderboard here. Otherwise (ov21, 23 Oct): the On now / Next trip's
+// status page if there is one, else the Trips screen (or the "no trip on" card when the planner is switched off).
 function Home() {
   const [params] = useSearchParams();
   const { status } = useSession();
-  return params.get('r') || status?.quick ? <Leaderboard /> : <TripNow />;
+  if (params.get('r') || status?.quick) return <Leaderboard />;
+  return <HomeTrip />;
+}
+function HomeTrip() {
+  const menu = useTripsMenu();
+  const plannerOn = useFeature('planner');
+  if (!menu.ready) return <Loading />;
+  if (menu.now || !plannerOn) return <TripNow menu={menu} />;
+  return <Planner />;
 }
 
 // The old Comps tab (#/comps): with a round it's that round's side comps (links from posts and awards). Without one:
@@ -285,6 +294,7 @@ function Inside() {
         <Route path="/notifications" element={<FeatureRoute feature="notifications" label="Phone notifications"><Notifications /></FeatureRoute>} />
         <Route path="/comps-board" element={<CompsBoard />} />
         <Route path="/trip/:tripId" element={<TripOverviewScreen />} />
+        <Route path="/trip-now/:tripId" element={<TripNow />} />
         <Route path="/ask" element={<FeatureRoute feature="ai_helper" label="The AI helper"><Ask /></FeatureRoute>} />
         <Route path="/import" element={<FeatureRoute feature="ai_helper" label="The AI helper"><AiImport /></FeatureRoute>} />
         <Route path="/cup" element={<FeatureRoute feature="cup" label="The Cup"><Cup /></FeatureRoute>} />
@@ -341,6 +351,7 @@ function Inside() {
       <SaveSpotPrompt />
       <Caddie />
       <Toaster />
+      <ConfirmHost />
     </div>
   );
 }

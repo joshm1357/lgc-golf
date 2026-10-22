@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pickActiveTrip, tripSpan, tripDayWords, focusRound, tripPath } from './activetrip.js';
+import { pickActiveTrip, tripSpan, tripDayWords, focusRound, tripPath, tripsMenu, menuLabel, liveTrips, tripNowPath } from './activetrip.js';
 
 const T = (id, start, end, extra = {}) => ({ id, name: id, start_date: start, end_date: end, status: 'active', created_at: '2026-01-01', ...extra });
 const R = (id, trip_id, play_date, status = 'setup') => ({ id, trip_id, play_date, status, created_at: '2026-01-01' });
@@ -116,5 +116,58 @@ describe('tripPath', () => {
     expect(tripPath({ id: 't' }, [{ id: 'p', trip_id: 't', status: 'confirmed' }])).toBe('/plan/p?view=overview');
     expect(tripPath({ id: 't' }, [{ id: 'p', trip_id: 't', status: 'cancelled' }])).toBe('/trip/t');
     expect(tripPath(null)).toBe('/plan');
+  });
+});
+
+describe('tripsMenu (ov21: the sub-items under Trips)', () => {
+  const today = '2026-12-05';
+  const past = T('South Coast 2026', '2026-10-16', '2026-10-18', { status: 'locked' });
+  const older = T('Autumn 2026', '2026-04-10', '2026-04-12', { status: 'locked' });
+  it('a trip on right now: On now, plus the last finished one', () => {
+    const on = T('March', '2026-12-04', '2026-12-06');
+    const m = tripsMenu({ trips: [older, on, past], rounds: [], today });
+    expect(m.now).toEqual({ trip: on, on: true });
+    expect(m.last).toBe(past);
+    expect(m.planIt).toBe(false);
+    expect(menuLabel('on', m.now.trip)).toBe('On now: March');
+  });
+  it('a live round makes it On now even outside its dates', () => {
+    const t = T('Ambrose day', '2026-12-20', '2026-12-20');
+    expect(tripsMenu({ trips: [t, past], rounds: [R('r', t.id, '2026-12-20', 'live')], today }).now).toEqual({ trip: t, on: true });
+  });
+  it('nothing on: Next is the soonest still to come', () => {
+    const soon = T('March', '2027-03-19', '2027-03-21');
+    const far = T('Spring', '2027-09-01', '2027-09-03');
+    const m = tripsMenu({ trips: [far, past, soon], rounds: [], today });
+    expect(m.now).toEqual({ trip: soon, on: false });
+    expect(m.last).toBe(past);
+    expect(menuLabel('next', soon)).toBe('Next: March');
+    expect(menuLabel('last', past)).toBe('Last: South Coast 2026');
+  });
+  it('only past trips: no next — Plan a trip — and the last one (never the 7-day "recent" fallback as next)', () => {
+    const lastWeek = T('Last week', '2026-11-30', '2026-12-01', { status: 'locked' });
+    const m = tripsMenu({ trips: [past, lastWeek], rounds: [], today });
+    expect(m.now).toBe(null);
+    expect(m.planIt).toBe(true);
+    expect(m.last).toBe(lastWeek);
+  });
+  it('no trips at all: Plan a trip and no last', () => {
+    expect(tripsMenu({ trips: [], rounds: [], today })).toEqual({ now: null, last: null, planIt: true });
+  });
+  it('a called-off plan’s trip is neither next nor last', () => {
+    const off = T('March', '2027-03-19', '2027-03-21');
+    const m = tripsMenu({ trips: [off, past], rounds: [], plans: [{ id: 'p', trip_id: off.id, status: 'cancelled' }], today });
+    expect(m.now).toBe(null);
+    expect(m.planIt).toBe(true);
+    expect(m.last).toBe(past);
+    expect(liveTrips([off, past], [{ id: 'p', trip_id: off.id, status: 'cancelled' }])).toEqual([past]);
+  });
+  it('a past trip known only by its rounds still counts as last', () => {
+    const t = T('Round only', null, null, { status: 'locked' });
+    expect(tripsMenu({ trips: [t], rounds: [R('r', t.id, '2026-11-01', 'locked')], today }).last).toBe(t);
+  });
+  it('sub-items open the trip’s status page', () => {
+    expect(tripNowPath({ id: 'x' })).toBe('/trip-now/x');
+    expect(tripNowPath(null)).toBe('/plan');
   });
 });

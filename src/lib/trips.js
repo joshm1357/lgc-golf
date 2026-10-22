@@ -124,6 +124,30 @@ export function stillToDecide(plan, polls = [], options = [], today = todayISO()
   return out;
 }
 
+/**
+ * ov21 (23 Oct): can this plan really be deleted? Only when nothing's been put into it: nobody but its creator has
+ * replied, and there are no votes, jobs, costs, payments, chat or rounds (vote options with no votes don't count).
+ * Anything else gets "Call it off" (keeps everything). The database checks the same (091 plan_is_empty).
+ * pd: the plan's data (Planner.jsx usePlanData); rounds: every round (data.rounds).
+ */
+export function planIsEmpty(pd, rounds = []) {
+  const plan = pd?.plan;
+  if (!plan) return false;
+  const others = (pd.rsvps || []).filter((r) => r.player_id !== plan.created_by);
+  const played = plan.trip_id ? (rounds || []).filter((r) => r.trip_id === plan.trip_id) : [];
+  return !others.length && !(pd.votes || []).length && !(pd.items || []).length && !(pd.costs || []).length
+    && !(pd.payments || []).length && !(pd.transfers || []).length && !(pd.comments || []).length && !played.length;
+}
+
+/** Who can call a trip off or bring it back: an organiser of the group, the trip's own organiser, or whoever
+ *  suggested an idea that hasn't been approved yet (091 call_off_plan checks the same). */
+export function canCallOff({ isAdmin, me, plan }) {
+  if (!plan) return false;
+  if (isAdmin) return true;
+  if (!me) return false;
+  return plan.organiser_id === me || (!!plan.proposed && plan.created_by === me);
+}
+
 /** Who can pick the winner of this trip's votes: the admin, or its organiser if the group allows it. */
 export function canDecide({ isAdmin, me, plan, voteDecider }) {
   if (isAdmin) return true;

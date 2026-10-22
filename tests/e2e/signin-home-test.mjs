@@ -78,7 +78,7 @@ async function fake(route) {
 
 const fails = [];
 // "Inside a group" checked positively: the tab bar is there (not just "the list isn't").
-const insideNow = async (page) => page.getByRole('link', { name: 'This trip' }).first().isVisible().catch(() => false);
+const insideNow = async (page) => page.getByRole('link', { name: 'Trips', exact: true }).first().isVisible().catch(() => false);
 const check = (ok, msg) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${msg}`); if (!ok) fails.push(msg); };
 const browser = await chromium.launch();
 

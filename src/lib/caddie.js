@@ -13,8 +13,8 @@ const D = (key, label, o = {}) => ({ key, label, needs: [], takes: [], organiser
 
 /** The places the caddie can take you. Keys, ids, organiser-only and features match the function's routes.ts. */
 export const DESTINATIONS = [
-  D('trip_now', 'This trip', { path: () => '/',
-    words: ['this trip', 'home', 'trip status', 'today', 'whats happening', 'what is happening', 'trip feed'] }),
+  D('trip_now', 'Trip status', { path: () => '/', // ov21: home — the On now / Next trip's status page
+    words: ['this trip', 'next trip', 'on now', 'home', 'trip status', 'today', 'whats happening', 'what is happening', 'trip feed'] }),
   D('leaderboard', 'Leaderboard', { takes: ['round'], path: (i) => (i.round ? `/?r=${i.round}` : '/leaderboard'),
     words: ['leaderboard', 'leading', 'leader', 'winning', 'standings', 'board', 'results', 'whos winning', 'who is winning'] }),
   D('score', 'Enter scores', { needs: ['round'], path: (i) => `/score/${i.round}`,
@@ -36,7 +36,7 @@ export const DESTINATIONS = [
     words: ['player', 'players', 'add player', 'add a player', 'handicap', 'handicaps', 'approve', 'remove player'] }),
   D('setup_trip', 'Set up your trip', { takes: ['trip'], organiser: true, path: (i) => (i.trip ? `/setup?trip=${i.trip}` : '/setup'),
     words: ['set up', 'setup', 'set up trip', 'set up the trip', 'add round', 'add a round', 'add course', 'add a course', 'courses'] }),
-  D('trips', 'Trips', { feature: 'planner', path: () => '/plan', words: ['trips', 'trip', 'next trip', 'plan a trip', 'new trip', 'plans'] }),
+  D('trips', 'Trips', { feature: 'planner', path: () => '/plan', words: ['trips', 'trip', 'last trip', 'past trips', 'plan a trip', 'new trip', 'plans'] }),
   D('trip_overview', 'Trip overview', { needs: ['plan'], feature: 'planner', path: (i) => `/plan/${i.plan}?view=overview`,
     words: ['trip overview', 'overview', 'itinerary', 'schedule', 'whats on', 'what is on', 'when', 'where are we'] }),
   D('trip_organise', 'Organise the trip', { needs: ['plan'], feature: 'planner',
@@ -91,7 +91,7 @@ export function caddieContext(pathname = '/', search = '', defaults = {}) {
   const q = new URLSearchParams(search || '');
   const seg = pathname.split('/').filter(Boolean);
   const [a, b] = seg;
-  // ov15: "/" is This trip; "/?r=<round>" (and /leaderboard) is a round's leaderboard.
+  // ov15/ov21: "/" is the trip status (On now / Next trip); "/?r=<round>" (and /leaderboard) is a round's leaderboard.
   if (!a) return q.get('r') ? tidy({ screen: 'leaderboard', round_id: id(q.get('r')) }) : tidy({ screen: 'trip_now', round_id: id(defaults.round) });
   if (a === 'leaderboard') return tidy({ screen: 'leaderboard', round_id: id(defaults.round) });
   switch (a) {
@@ -104,6 +104,7 @@ export function caddieContext(pathname = '/', search = '', defaults = {}) {
     case 'admin': return tidy({ screen: 'admin', round_id: id(q.get('round')) });
     case 'setup': return tidy({ screen: 'setup', trip_id: id(q.get('trip')) });
     case 'trip': return tidy({ screen: 'trip', trip_id: id(b) });
+    case 'trip-now': return tidy({ screen: 'trip_now', trip_id: id(b) }); // ov21: a trip's status page
     case 'plan': {
       if (!b) return { screen: 'trips' };
       const view = ['organise', 'overview'].includes(q.get('view')) ? q.get('view') : undefined;

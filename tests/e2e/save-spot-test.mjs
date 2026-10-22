@@ -338,7 +338,7 @@ async function joinAsKurt(page, base) {
   await page.getByLabel('Password', { exact: true }).fill('fairway123');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.getByRole('link', { name: 'Leaderboard' }).first().waitFor({ timeout: 10000 }).catch(() => null);
-  check(await page.getByRole('link', { name: 'This trip' }).first().isVisible().catch(() => false), 'signed in: straight back into the group');
+  check(await page.getByRole('link', { name: 'Trips', exact: true }).first().isVisible().catch(() => false), 'signed in: straight back into the group');
   const st = S.calls.filter((c) => c.p === '/rest/v1/rpc/my_status').pop();
   check(st?.sub === UID, 'same user id on the new phone, so the same group and player');
   await page.goto(`${PW}#/more`);
@@ -368,7 +368,7 @@ async function joinAsKurt(page, base) {
   const v = S.calls.find((c) => c.p === '/auth/v1/verify');
   check(v?.body.type === 'recovery', 'the code is checked as a password reset');
   check(S.user.password === 'newpass123', 'the new password is saved');
-  check(await page.getByRole('link', { name: 'This trip' }).first().isVisible().catch(() => false), 'and they’re in');
+  check(await page.getByRole('link', { name: 'Trips', exact: true }).first().isVisible().catch(() => false), 'and they’re in');
   await ctx.close();
 }
 

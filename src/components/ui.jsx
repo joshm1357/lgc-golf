@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { NavLink, Link, useNavigate } from 'react-router-dom';
+import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom';
 import { GroupCrest } from './Logo.jsx';
 import { useFeature, useSession } from '../lib/store.jsx';
 import { SIGN_IN } from '../lib/auth.js';
@@ -96,12 +96,15 @@ export function Seg({ options, value, onChange, light }) {
 }
 
 export function TabBar() {
-  // ov15: the trip comes first (its leaderboards, comps and feed live inside it), then the Feed, Trips and the players.
+  // ov21 (23 Oct): Trips first — no "This trip" tab. The top of Trips has the On now / Next trip and Last trip cards,
+  // and home (#/) opens on the On now / Next trip's status page. Then Feed · Players · More (Governance is in More).
   const on = { feed: useFeature('feed'), planner: useFeature('planner') };
+  const loc = useLocation();
+  const p = loc.pathname;
+  const tripsLit = p === '/' || p === '/plan' || p.startsWith('/plan/') || p.startsWith('/trip/') || p.startsWith('/trip-now/');
   const tabs = [
-    { to: '/', label: 'This trip', icon: Icon.board, end: true },
+    { to: on.planner ? '/plan' : '/', label: 'Trips', icon: Icon.calendar, lit: tripsLit },
     { to: '/feed', label: 'Feed', icon: Icon.feed, feature: 'feed' },
-    { to: '/plan', label: 'Trips', icon: Icon.calendar, feature: 'planner' },
     { to: '/group', label: 'Players', icon: Icon.user },
     { to: '/more', label: 'More', icon: Icon.more },
   ].filter((t) => !t.feature || on[t.feature]);
@@ -109,7 +112,7 @@ export function TabBar() {
     <nav className="tabs" aria-label="Main">
       <div className="tabs-in" style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}>
         {tabs.map((t) => (
-          <NavLink key={t.to} to={t.to} end={t.end} className={({ isActive }) => 'tab' + (isActive ? ' active' : '')}>
+          <NavLink key={t.to} to={t.to} end={t.end} className={({ isActive }) => 'tab' + ((t.lit ?? isActive) ? ' active' : '')}>
             {t.icon()}
             <span>{t.label}</span>
           </NavLink>
@@ -160,6 +163,43 @@ export function Toaster() {
 }
 export function toast(m) {
   toastSet?.(m);
+}
+
+// ---------- In-app "are you sure?" (ov21, 23 Oct 2026) ----------
+// Replaces window.confirm for anything that removes something: a plain browser "OK" box is one stray tap from
+// deleting a live trip (that's how "March" went). askConfirm({ title, body, yes, typeName }) → Promise<boolean>.
+// typeName: the person has to type it (e.g. the trip's name) before the button works.
+let confirmSet = null;
+export function askConfirm(o) {
+  if (!confirmSet) return Promise.resolve(false); // nothing mounted (shouldn't happen): never delete without asking
+  return new Promise((resolve) => confirmSet({ ...o, resolve }));
+}
+export function ConfirmHost() {
+  const [ask, setAsk] = useState(null);
+  const [typed, setTyped] = useState('');
+  useEffect(() => {
+    confirmSet = (o) => { setTyped(''); setAsk(o); };
+    return () => { confirmSet = null; };
+  }, []);
+  if (!ask) return null;
+  const done = (yes) => { ask.resolve(yes); setAsk(null); };
+  const want = ask.typeName ? String(ask.typeName).trim().toLowerCase() : null;
+  const ok = !want || typed.trim().toLowerCase() === want;
+  return (
+    <Sheet title={ask.title || 'Are you sure?'} onClose={() => done(false)}>
+      <div className="stack" data-testid="confirm-sheet">
+        {ask.body && <div style={{ whiteSpace: 'pre-line' }}>{ask.body}</div>}
+        {want && (
+          <label className="field"><span>Type <strong>{ask.typeName}</strong> to confirm</span>
+            <input className="input" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" autoCapitalize="off" spellCheck={false} data-testid="confirm-type" aria-label="Type the name to confirm" />
+          </label>
+        )}
+        <button type="button" className="btn block" data-testid="confirm-yes" disabled={!ok} onClick={() => done(true)}
+          style={{ background: 'var(--under)', borderColor: 'var(--under)', color: '#fff' }}>{ask.yes || 'Yes, remove it'}</button>
+        <button type="button" className="btn ghost block" data-testid="confirm-no" onClick={() => done(false)}>{ask.no || 'Cancel'}</button>
+      </div>
+    </Sheet>
+  );
 }
 
 export function timeAgo(iso) {

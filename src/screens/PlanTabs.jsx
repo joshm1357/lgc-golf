@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { useData, useSession, playerName, useFeature } from '../lib/store.jsx';
-import { Avatar, Sheet, Icon, toast } from '../components/ui.jsx';
+import { Avatar, Sheet, Icon, toast, askConfirm } from '../components/ui.jsx';
 import { fmtRange, countdown, icsFor, nudgeText, mapsLink, kitty, money, DEFAULT_BRING, todayISO, daysUntil } from '../lib/plan.js';
 import { REVEAL_MS } from '../lib/draw.js';
 import { notify, appLink, downloadFile } from '../lib/push.js';
@@ -337,7 +337,7 @@ export function KittyTab({ pd, table = false }) {
           <div><strong>{who(t.from_id)}</strong> says they paid {t.to_id ? 'you' : 'into the kitty'} <strong>{money(t.amount)}</strong>.</div>
           <div className="row" style={{ gap: 8 }}>
             <button type="button" className="btn gold sm" disabled={busy} onClick={() => run(async () => { await must(supabase.from('plan_transfers').update({ confirmed: true }).eq('id', t.id)); pd.reload(); }, 'Confirmed ✓')}>✓ Got it</button>
-            <button type="button" className="btn ghost sm" disabled={busy} onClick={() => { if (window.confirm('Remove this payment? Their balance goes back up.')) run(async () => { await must(supabase.from('plan_transfers').delete().eq('id', t.id)); pd.reload(); }, 'Removed'); }}>Not received</button>
+            <button type="button" className="btn ghost sm" disabled={busy} onClick={async () => { if (await askConfirm({ title: 'Remove this payment? Their balance goes back up.', yes: 'Remove it' })) run(async () => { await must(supabase.from('plan_transfers').delete().eq('id', t.id)); pd.reload(); }, 'Removed'); }}>Not received</button>
           </div>
         </div>
       ))}
@@ -422,7 +422,7 @@ export function KittyTab({ pd, table = false }) {
                 <span className="small"><strong>{who(t.from_id)}</strong> → {t.to_id ? who(t.to_id) : 'the kitty'} · {t.confirmed ? '✓ confirmed' : 'waiting to be confirmed'}</span>
                 <span className="row" style={{ gap: 6 }}>
                   <span className="num">{money(t.amount)}</span>
-                  {(status.is_admin || t.created_by === me || t.to_id === me) && <button type="button" className="btn ghost sm" aria-label="Remove payment" onClick={() => { if (window.confirm('Remove this payment?')) run(async () => { await must(supabase.from('plan_transfers').delete().eq('id', t.id)); pd.reload(); }); }}>{Icon.x(14)}</button>}
+                  {(status.is_admin || t.created_by === me || t.to_id === me) && <button type="button" className="btn ghost sm" aria-label="Remove payment" onClick={async () => { if (await askConfirm({ title: 'Remove this payment?', yes: 'Remove it' })) run(async () => { await must(supabase.from('plan_transfers').delete().eq('id', t.id)); pd.reload(); }); }}>{Icon.x(14)}</button>}
                 </span>
               </div>
             ))}
@@ -524,7 +524,7 @@ function CostSheet({ pd, inIds, cost, onClose }) {
           else await must(supabase.from('plan_costs').insert(row));
           pd.reload(); onClose();
         }, 'Saved')}>Save</button>
-        {cost && <button type="button" className="btn ghost block" onClick={() => { if (window.confirm('Remove this cost?')) run(async () => { await must(supabase.from('plan_costs').delete().eq('id', cost.id)); pd.reload(); onClose(); }, 'Removed'); }}>Remove</button>}
+        {cost && <button type="button" className="btn ghost block" onClick={async () => { if (await askConfirm({ title: 'Remove this cost?', yes: 'Remove it' })) run(async () => { await must(supabase.from('plan_costs').delete().eq('id', cost.id)); pd.reload(); onClose(); }, 'Removed'); }}>Remove</button>}
       </div>
     </Sheet>
   );
@@ -669,7 +669,7 @@ function GroupSheet({ pd, kind, group, groups, members, inIds, onClose }) {
           </div>
         )}
         <button type="button" className="btn gold block" disabled={busy || !v.name?.trim()} onClick={save}>Save</button>
-        {group && <button type="button" className="btn ghost block" disabled={busy} onClick={() => { if (window.confirm(`Remove ${group.name}?`)) run(async () => { await must(supabase.from('plan_groups').delete().eq('id', group.id)); pd.reload(); onClose(); }, 'Removed'); }}>Remove</button>}
+        {group && <button type="button" className="btn ghost block" disabled={busy} onClick={async () => { if (await askConfirm({ title: `Remove ${group.name}?`, yes: 'Remove it' })) run(async () => { await must(supabase.from('plan_groups').delete().eq('id', group.id)); pd.reload(); onClose(); }, 'Removed'); }}>Remove</button>}
       </div>
     </Sheet>
   );

@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { NavLink, Link } from 'react-router-dom';
+import { NavLink, Link, useLocation } from 'react-router-dom';
 import { useFeature, useSession } from '../lib/store.jsx';
 import { GroupCrest } from './Logo.jsx';
 import { Icon } from './ui.jsx';
 import { openFeedback } from './Feedback.jsx';
 import { DESKTOP } from '../lib/beta.js';
+import { useTripsMenu } from '../screens/TripNow.jsx';
+import { menuLabel, tripNowPath } from '../lib/activetrip.js';
+import { openPlanner } from './Caddie.jsx';
 
 /** Is the screen laptop-wide? Follows the window as it's resized. */
 export function useDesktop() {
@@ -33,11 +36,10 @@ function SidebarNav() {
     feed: useFeature('feed'), planner: useFeature('planner'), trophies: useFeature('trophies'), tribunal: useFeature('tribunal'),
   };
   const look = status?.look || (status && status.legacy !== false ? { crest_url: 'builtin:lgc' } : null);
-  // ov15: This trip first (leaderboards, comps, the Cup and the trip's feed are inside it), then the Feed.
+  // ov21 (23 Oct): no "This trip" item. Trips is a group with its sub-items underneath: On now / Next trip (or
+  // ✨ Plan a trip when nothing's coming up) and Last trip — each opens that trip's status page.
   const items = [
-    { to: '/', label: 'This trip', icon: Icon.board, end: true },
     on.feed && { to: '/feed', label: 'Feed', icon: Icon.feed },
-    on.planner && { to: '/plan', label: 'Trips', icon: Icon.calendar },
     { to: '/group', label: 'Players & group', icon: Icon.user },
     on.trophies && { to: '/trophies', label: 'Trophy Room', icon: Icon.trophy },
     // ov19: the Rulebook, Tribunal and Committees are one place — Governance, with tabs.
@@ -55,6 +57,7 @@ function SidebarNav() {
         </span>
       </Link>
       <div className="side-links">
+        <TripsGroup planner={on.planner} />
         {items.map((t) => (
           <NavLink key={t.to} to={t.to} end={t.end} className={({ isActive }) => 'side-link' + (isActive ? ' active' : '')}>
             {t.icon(20)}<span>{t.label}</span>
@@ -65,5 +68,37 @@ function SidebarNav() {
         {Icon.feed(20)}<span>Tell Josh</span>
       </button>
     </nav>
+  );
+}
+
+/** Trips, with its sub-items (ov21). */
+function TripsGroup({ planner }) {
+  const menu = useTripsMenu();
+  const loc = useLocation();
+  const p = loc.pathname;
+  // Trips is lit on its own screens; a sub-item is lit when its trip's status page is open (or home shows it).
+  const homeTrip = p === '/' && !new URLSearchParams(loc.search).get('r') ? menu.now?.trip.id : null;
+  const openTrip = p.startsWith('/trip-now/') ? p.slice('/trip-now/'.length) : homeTrip;
+  const tripsLit = !openTrip && (p === '/plan' || p.startsWith('/plan/') || p.startsWith('/trip/') || (p === '/' && menu.ready && !menu.now));
+  const sub = (trip, kind) => (
+    <Link key={kind} to={tripNowPath(trip)} data-testid={`side-${kind}`}
+      className={'side-link side-subitem' + (openTrip === trip.id ? ' active' : '') + (kind === 'on' ? ' side-on' : '')}
+      aria-current={openTrip === trip.id ? 'page' : undefined} title={menuLabel(kind, trip)}>
+      <span className="ellipsis">{menuLabel(kind, trip)}</span>
+    </Link>
+  );
+  return (
+    <div className="side-group" data-testid="side-trips">
+      <Link to={planner ? '/plan' : '/'} className={'side-link' + (tripsLit ? ' active' : '')} aria-current={tripsLit ? 'page' : undefined}>
+        {Icon.calendar(20)}<span>Trips</span>
+      </Link>
+      {menu.now && sub(menu.now.trip, menu.now.on ? 'on' : 'next')}
+      {!menu.now && menu.ready && (
+        <button type="button" className="side-link side-subitem" data-testid="side-plan" onClick={openPlanner}>
+          <span>✨ Plan a trip</span>
+        </button>
+      )}
+      {menu.last && sub(menu.last, 'last')}
+    </div>
   );
 }

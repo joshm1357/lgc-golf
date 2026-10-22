@@ -263,6 +263,13 @@ img { max-width: 100%; }
   .side-link { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 0 12px; border: 0; border-radius: 10px; background: none; color: var(--on-navy-muted); font-size: 15px; font-weight: 600; text-align: left; text-decoration: none; }
   .side-link:hover { background: var(--navy-2); color: #fff; }
   .side-link.active { background: var(--navy-2); color: #fff; box-shadow: inset 3px 0 0 var(--gold); }
+  /* ov21: Trips' sub-items (On now / Next / Last / Plan a trip), indented under it like a submenu. */
+  .side-group { display: flex; flex-direction: column; gap: 2px; }
+  .side-subitem { min-height: 40px; padding-left: 44px; font-size: 14px; font-weight: 600; min-width: 0; position: relative; }
+  .side-subitem::before { content: ''; position: absolute; left: 21px; top: 0; bottom: 0; border-left: 1px solid rgba(255,255,255,.18); }
+  .side-subitem .ellipsis { min-width: 0; }
+  .side-subitem.side-on { color: var(--gold); font-weight: 800; }
+  .side-subitem.side-on.active, .side-subitem.side-on:hover { color: var(--gold); }
   .side-feedback { border: 1px solid rgba(255, 255, 255, .22); }
 }
 

@@ -1244,3 +1244,40 @@ the end… the voice gets cut off."
   team verbs, timing, speeds, skip, commentary matching, voice pick, never-overlapping speaker). Playwright
   `replay-test.mjs` 62 checks pass (grouped beats, Normal ≥ 4 s a beat, Fast about half, Skip → winner, pause, voice off
   by default, stubbed voice waits for onend / never overlaps / pause cuts it). Screenshots at 375 px.
+
+## ov21 — Trips menu (no "This trip" item) and "Call it off" instead of delete, branch `ov21-trips-menu`, 23 Oct 2026
+Josh: "I don't know why it has 'This trip' as a menu item … under Trips … Last trip and Next trip; if no next trip
+then have Plan it." And: a live trip ("March") was hard-deleted last night through a plain browser "OK" box.
+- **Which trip is which (`src/lib/activetrip.js`):** `tripsMenu()` → `now` (On now: a round live or today, or between
+  its first and last day; else the soonest still to come = Next), `last` (most recent finished), `planIt` (no next).
+  Trips whose plan was called off never count (`liveTrips`). `menuLabel` → "On now: …", "Next: …", "Last: …".
+- **Laptop sidebar:** no top-level "This trip". **Trips** with indented sub-items: On now / Next (gold when on now),
+  Last, or **✨ Plan a trip** (opens the Caddie in plan mode) when nothing's coming up.
+- **Phone tabs:** **Trips · Feed · Players · More** (Trips first; Governance stays in More). Trips is lit on home,
+  Trips, a trip's pages and its status page.
+- **Top of Trips:** big On now / Next trip card, Last trip card, then ✨ Plan a trip if there's no next trip, then
+  Being planned, ideas, past trips — and a folded **Called off** section.
+- **Home (#/):** the On now / Next trip's status page if there is one, else Trips (planner off: the "No trip on"
+  card). `#/?r=<round>` recap links unchanged. A trip's status page is `#/trip-now/<trip>` (TripNow.jsx). The round
+  leaderboard's back link goes to its trip's status page.
+- **Call it off (Planner):** Edit → **✋ Call it off** (in-app sheet: everything kept) → "Called off by Josh ·
+  Bring it back". Organisers (or the trip's organiser / the suggester of an unapproved idea) can bring it back. The
+  Status picker no longer offers "Called off" (so who called it off is always recorded). **Delete for good** only
+  for an EMPTY plan (no replies but the creator's own, votes, jobs, costs, payments, chat or rounds —
+  `planIsEmpty` in trips.js), after typing the trip's name. A plan with anything in it shows why it can't be deleted.
+- **No browser OK boxes for removals in the planner:** new `askConfirm()` / `ConfirmHost` (ui.jsx) replaces
+  window.confirm on: delete plan, pass on an idea, delete a chat message, remove a payment (×2), a cost, a room/car,
+  a vote option. (Lock-it-in confirms are left; other screens' confirms are out of scope.)
+- **Migration 091 (`091_call_off_plan.sql`, additive):** `plans.cancelled_by / cancelled_at / cancelled_from`;
+  `call_off_plan(plan, off)`, `delete_empty_plan(plan)`, `plan_is_empty(plan)`; a `plans_delete_guard` trigger that
+  refuses an app user's direct delete of a non-empty plan (any app version). Deletes inside database functions, by
+  the service key, or cascades from deleting a group aren't affected. **NOT yet applied to staging** — the apply was
+  stopped at the approval step. The app works without it (falls back to the old admin update/delete, minus "by
+  <name>"), so it's safe either way.
+- **Also:** shortcuts ("g h" = home), Caddie go_to `trip_now` is now "Trip status" (+ `#/trip-now/<id>` context;
+  routes.ts label edited — redeploy ai-helper whenever convenient, nothing breaks before), What's new text, Guide.
+- **Tests:** Vitest 1353 pass (new tripsMenu ×8, planIsEmpty/canCallOff ×4). Playwright: `nav-test` all pass
+  (rewritten for Trips first, sidebar sub-items On now / Next / Last / Plan a trip, home route, Trips top cards);
+  new `calloff-test` 17 checks pass; `organise-tidy`, `desktop`, `plan-ux` pass. `phone`, `trips`, `features`,
+  `signin-home`, `save-spot`, `board-bonus`, `trip-overview` fail at the same step on release-v9 too (stale
+  fixtures/env) — their "This trip" references were updated anyway.

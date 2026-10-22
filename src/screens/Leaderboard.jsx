@@ -156,7 +156,7 @@ export default function Leaderboard() {
         )}
       </Header>
       <SaveSpotBanner />
-      {trip && !status?.quick && <div className="section" style={{ paddingBottom: 0 }}><Link to="/" className="small" style={{ fontWeight: 700 }} data-testid="back-to-trip">‹ This trip</Link></div>}
+      {trip && !status?.quick && <div className="section" style={{ paddingBottom: 0 }}><Link to={`/trip-now/${trip.id}`} className="small" style={{ fontWeight: 700 }} data-testid="back-to-trip">‹ {trip.name}</Link></div>}
       <RoundChips round={round} onChoose={choose} />
       <CompChips round={round} />
       <RulesTodayChip round={round} />

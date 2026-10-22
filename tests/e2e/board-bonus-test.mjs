@@ -1,6 +1,6 @@
 // v8 fix (23 Oct 2026): Sunday Ambrose (comp_bonus 2, LD on 9, CTP on 6) showed Josh & Hamish −9, then −7, then −9.
 // The board was drawn from the phone's saved scores before the side comp entries had loaded. This checks that the
-// un-bonused total is never on screen — on This trip's short leaderboard or the full one — whether the side entries
+// un-bonused total is never on screen — on the trip status page's short leaderboard or the full one — whether the side entries
 // are slow, saved on the phone, or not saved yet while the scores are.
 // No real database is touched: every request to Supabase is answered here (side entries answer 1.5 s late).
 // Usage: node board-bonus-test.mjs <baseUrl> <shotDir>
@@ -120,14 +120,14 @@ async function visit(path, label, prep) {
 }
 
 await page.goto(`${BASE}#/`);
-// 1. This trip's short leaderboard, nothing saved on the phone yet.
-await visit('#/', 'This trip, first visit');
+// 1. The trip status page's short leaderboard, nothing saved on the phone yet.
+await visit('#/', 'Trip status, first visit');
 await page.screenshot({ path: `${SHOTS}/bb1-this-trip.png`, fullPage: true });
 // 2. Again, with scores and side entries saved on the phone.
-await visit('#/', 'This trip, from the phone’s copy');
+await visit('#/', 'Trip status, from the phone’s copy');
 // 3. Scores saved on the phone but no copy of the side entries (the case that flickered on Sunday).
 const dropSide = () => { for (const k of Object.keys(localStorage)) if (k.startsWith('lgc-cache-side-')) localStorage.removeItem(k); };
-await visit('#/', 'This trip, scores saved but side entries not', dropSide);
+await visit('#/', 'Trip status, scores saved but side entries not', dropSide);
 // 4. The full leaderboard, same three ways.
 await visit(`#/?r=${ROUND}`, 'Full leaderboard, side entries not saved', dropSide);
 await page.screenshot({ path: `${SHOTS}/bb2-full-board.png`, fullPage: true });

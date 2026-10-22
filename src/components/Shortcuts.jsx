@@ -76,7 +76,7 @@ function Finder({ onClose }) {
     tribunal: useFeature('tribunal'), cup: useFeature('cup'),
   };
   const items = useMemo(() => [
-    { label: 'This trip', to: '/', kind: 'Screen', words: ['trip', 'home', 'status', 'today'] },
+    { label: 'Trip status (on now or next)', to: '/', kind: 'Screen', words: ['trip', 'this trip', 'next trip', 'on now', 'home', 'status', 'today'] },
     { label: 'Leaderboard', to: '/leaderboard', kind: 'Screen', words: ['scores'] },
     on.planner && { label: 'Trips', to: '/plan', kind: 'Screen', words: ['organise', 'costs', 'votes', 'jobs', 'trip desk', 'desk'] },
     { label: 'Players table', to: '/group/players', kind: 'Screen', words: ['handicap', 'players & handicaps'] },

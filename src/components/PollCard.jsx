@@ -10,7 +10,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { useData, useSession, playerName } from '../lib/store.jsx';
-import { Icon, toast } from './ui.jsx';
+import { Icon, toast, askConfirm } from './ui.jsx';
 import { useRun, must } from '../lib/run.js';
 import { notify, appLink } from '../lib/push.js';
 import { tallyPoll, nonVoters, nudgeText, todayISO } from '../lib/plan.js';
@@ -94,7 +94,7 @@ export function PollCard({ poll, pd, inCard = false, asVoter = false }) {
                 style={{ minHeight: big ? 48 : 40, fontSize: 14, padding: '6px 4px', ...(mine === v ? { background: TONE[v], borderColor: TONE[v], color: '#fff' } : {}) }} onClick={() => respond(o, v)}>{words[v]}</button>
             ))}
             {canRemove && !big && (
-              <button type="button" className="btn ghost sm" aria-label="Remove option" onClick={() => { if (window.confirm('Remove this option and its votes?')) run(async () => { await must(supabase.from('plan_options').delete().eq('id', o.id)); pd.reload(); }); }}>{Icon.x(14)}</button>
+              <button type="button" className="btn ghost sm" aria-label="Remove option" onClick={async () => { if (await askConfirm({ title: 'Remove this option and its votes?', yes: 'Remove it' })) run(async () => { await must(supabase.from('plan_options').delete().eq('id', o.id)); pd.reload(); }); }}>{Icon.x(14)}</button>
             )}
           </div>
         )}

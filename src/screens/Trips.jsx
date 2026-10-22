@@ -12,6 +12,8 @@ import { useRun, must } from '../lib/run.js';
 import { NotifyCard } from '../components/NotifyCard.jsx';
 import { TripsAi } from './AiPlanner.jsx';
 import { ReplayChips } from '../components/ReplayChips.jsx';
+import { tripsMenu, tripNowPath, tripPath, tripDayWords } from '../lib/activetrip.js';
+import { openPlanner } from '../components/Caddie.jsx';
 
 const TABLES = ['plans', 'plan_rsvps', 'plan_polls', 'plan_options'];
 
@@ -58,10 +60,19 @@ export default function Trips() {
   // Trips added in Admin → Trips (no plan behind them) still belong in the list.
   const sorted = useMemo(() => (rows ? sortTrips([...rows.plans, ...tripsWithoutPlan(data.trips, rows.plans)], data.trips, today) : null), [rows, data.trips, today]);
   const photos = usePastPhotos(sorted?.past);
+  // ov21: the top of Trips — On now / Next trip and Last trip (the same as the sidebar's sub-items), or ✨ Plan a trip.
+  const menu = useMemo(() => tripsMenu({ trips: data.trips, rounds: data.rounds, plans: rows?.plans || [], today }), [data.trips, data.rounds, rows, today]);
 
   if (!rows) return <div className="page"><Header logo title="Trips" /><Loading /></div>;
   const rsvpsOf = (id) => rows.rsvps.filter((r) => r.plan_id === id);
-  const { now, later, planning, suggested, past } = sorted;
+  const { now, later: lockedLater, planning, suggested, past: allPast } = sorted;
+  const nowTripId = menu.now?.trip.id;
+  // The Next / On now card covers its plan; a locked-in plan with no trip in the app yet keeps the old card.
+  const nowPlan = nowTripId ? null : now;
+  const later = nowTripId ? [now, ...lockedLater].filter((x) => x && x.plan.trip_id !== nowTripId) : lockedLater;
+  // Called off: tucked into its own folded section, so it isn't mistaken for a past trip — or lost.
+  const calledOff = allPast.filter((x) => x.stage === 'cancelled');
+  const past = allPast.filter((x) => x.stage !== 'cancelled');
 
   return (
     <div className="page">
@@ -71,8 +82,19 @@ export default function Trips() {
         {rows.offline && <div className="small muted">No signal — showing the list from last time.</div>}
         {rows.failed && <div className="err">Couldn’t load the trips — check your signal and open Trips again.</div>}
 
-        {now ? <NowCard plan={now.plan} stage={now.stage} rsvps={rsvpsOf(now.plan.id)} me={status.player_id} />
-          : !planning.length && <div className="empty">Nothing locked in yet. Suggest a trip below and let everyone vote on when and where.</div>}
+        <div className="trips-top stack" data-testid="trips-top" style={{ gap: 10 }}>
+          {menu.now && <MenuCard kind={menu.now.on ? 'on' : 'next'} trip={menu.now.trip} plans={rows.plans} rounds={data.rounds} />}
+          {nowPlan && <NowCard plan={nowPlan.plan} stage={nowPlan.stage} rsvps={rsvpsOf(nowPlan.plan.id)} me={status.player_id} />}
+          {menu.last && <MenuCard kind="last" trip={menu.last} plans={rows.plans} rounds={data.rounds} />}
+          {!menu.now && !nowPlan && (
+            <button type="button" className="card pad row" data-testid="trips-plan-it" onClick={openPlanner}
+              style={{ gap: 12, textAlign: 'left', width: '100%', borderColor: 'var(--gold)', background: 'var(--gold-soft)', color: 'inherit' }}>
+              <span style={{ fontSize: 28 }} aria-hidden="true">✨</span>
+              <span className="grow"><strong style={{ fontSize: 18 }}>Plan a trip</strong>
+                <div className="small muted">No trip coming up. The caddie helps you pick when and where, then puts it to the group.</div></span>
+            </button>
+          )}
+        </div>
         {later.map((x) => <TripCard key={x.plan.id} plan={x.plan} stage={x.stage} rsvps={rsvpsOf(x.plan.id)} me={status.player_id} />)}
 
         {planning.length > 0 && (
@@ -94,6 +116,15 @@ export default function Trips() {
         <button type="button" className="btn gold block" style={{ minHeight: 56 }} onClick={() => setSuggesting(true)}>💡 Suggest a trip or round</button>
         <span className="small muted" style={{ textAlign: 'center' }}>{votesOn ? 'Everyone votes on when and where; ' : 'Everyone says if they’re in; '}{status.is_admin ? 'you lock it in' : 'the admin locks it in'}.</span>
         <TripsAi />
+
+        {calledOff.length > 0 && (
+          <details className="card" data-testid="called-off" style={{ padding: '10px 14px' }}>
+            <summary style={{ fontWeight: 700, cursor: 'pointer', minHeight: 32 }}>Called off · {calledOff.length}</summary>
+            <div className="stack" style={{ gap: 8, marginTop: 8 }}>
+              {calledOff.map((x) => <PastCard key={x.plan.id} plan={x.plan} stage={x.stage} by={data.playersById[x.plan.cancelled_by]} />)}
+            </div>
+          </details>
+        )}
 
         {past.length > 0 && <span className="label" style={{ marginTop: 6 }}>Past trips</span>}
         {past.map((x) => <PastCard key={x.plan.id} plan={x.plan} stage={x.stage} photo={photos[x.plan.trip_id]} rounds={data.rounds.filter((r) => x.plan.trip_id && r.trip_id === x.plan.trip_id)}
@@ -131,6 +162,29 @@ function Chip({ children, strong }) {
   );
 }
 
+/** ov21: a big card at the top of Trips — On now / Next trip (navy) or Last trip — opening the trip's status page. */
+function MenuCard({ kind, trip, plans, rounds }) {
+  const navy = kind !== 'last';
+  const label = kind === 'on' ? '⛳ ON NOW' : kind === 'next' ? '🔒 NEXT TRIP' : '🏁 LAST TRIP';
+  const muted = navy ? 'var(--on-navy-muted)' : 'var(--muted)';
+  return (
+    <div className="card" data-testid={`trips-${kind}`} style={{ overflow: 'hidden', borderColor: navy ? 'var(--navy)' : undefined }}>
+      <Link to={tripNowPath(trip)} className="stack" style={{ gap: 4, padding: 16, textDecoration: 'none', color: navy ? '#fff' : 'inherit', background: navy ? 'var(--navy)' : '#fff' }}>
+        <div className="row between" style={{ alignItems: 'flex-start', gap: 8 }}>
+          <span className="small" style={{ fontWeight: 800, letterSpacing: '.04em', color: navy ? 'var(--gold)' : 'var(--muted)' }}>{label}</span>
+          <Chip strong={navy}>{tripDayWords(trip, rounds)}</Chip>
+        </div>
+        <div style={{ fontSize: navy ? 24 : 20, fontWeight: 800, lineHeight: 1.15 }}>{trip.name}</div>
+        <div className="small" style={{ color: muted }}>{tripWhen(trip, 'Dates to come')} · leaderboards, comps and posts</div>
+      </Link>
+      <div className="row" style={{ gap: 8, padding: '8px 10px' }}>
+        <Link to={tripNowPath(trip)} className={navy ? 'btn gold sm grow' : 'btn ghost sm grow'} style={{ textAlign: 'center' }}>Trip status</Link>
+        <Link to={tripPath(trip, plans)} className="btn ghost sm grow" style={{ textAlign: 'center' }}>Trip page</Link>
+      </div>
+    </div>
+  );
+}
+
 function NowCard({ plan, stage, rsvps, me }) {
   const data = useData();
   const ins = rsvps.filter((r) => r.status === 'in');
@@ -152,7 +206,7 @@ function NowCard({ plan, stage, rsvps, me }) {
       </Link>
       {on && (
         <div className="row" style={{ gap: 8, padding: 10 }}>
-          <Link to="/" className="btn gold sm grow" style={{ textAlign: 'center' }}>This trip</Link>
+          <Link to={plan.trip_id ? tripNowPath({ id: plan.trip_id }) : '/'} className="btn gold sm grow" style={{ textAlign: 'center' }}>Trip status</Link>
           <Link to={`/plan/${plan.id}?tab=details`} className="btn ghost sm grow" style={{ textAlign: 'center' }}>Details</Link>
         </div>
       )}
@@ -198,7 +252,7 @@ export function tripsWithoutPlan(trips, plans) {
   }));
 }
 
-function PastCard({ plan, stage, photo, rounds: roundList = [], winners = [] }) {
+function PastCard({ plan, stage, photo, rounds: roundList = [], winners = [], by }) {
   const cancelled = stage === 'cancelled';
   const rounds = roundList.length;
   return (
@@ -209,7 +263,7 @@ function PastCard({ plan, stage, photo, rounds: roundList = [], winners = [] }) 
       </div>
       <div className="grow" style={{ minWidth: 0 }}>
         <div style={{ fontWeight: 800, fontSize: 17 }}>{plan.name}</div>
-        <div className="small muted">{cancelled ? (plan.proposed ? 'Idea passed on' : 'Called off') : [plan.start_date ? tripWhen(plan.tripOnly ? { ...plan, status: plan.trip_status } : plan) : null, plan.location_name].filter(Boolean).join(' · ') || 'Done'}</div>
+        <div className="small muted">{cancelled ? (plan.proposed ? 'Idea passed on' : `Called off${by ? ` by ${playerName(by)}` : ''}`) : [plan.start_date ? tripWhen(plan.tripOnly ? { ...plan, status: plan.trip_status } : plan) : null, plan.location_name].filter(Boolean).join(' · ') || 'Done'}</div>
         {!cancelled && rounds > 0 && <div className="small" style={{ fontWeight: 700 }}>{rounds} round{rounds === 1 ? '' : 's'} played</div>}
         {winners.slice(0, 3).map((h) => <div key={h.id} className="small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>🏆 {h.trophy_name}: <strong>{h.winner_names}</strong></div>)}
         {winners.length > 3 && <div className="small muted">+{winners.length - 3} more in the Trophy Room</div>}

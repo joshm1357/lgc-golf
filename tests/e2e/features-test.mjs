@@ -147,7 +147,7 @@ await page.goto(`${BASE}#/more`);
 await page.getByText('Players & group').waitFor({ timeout: 15000 });
 await page.waitForTimeout(800);
 const tabs = await page.locator('nav.tabs a').allInnerTexts();
-check(JSON.stringify(tabs) === JSON.stringify(['This trip', 'Players', 'More']), `feed and trips off: bottom bar is ${tabs.join(' / ')}`);
+check(JSON.stringify(tabs) === JSON.stringify(['Trips', 'Players', 'More']), `feed and trips off: bottom bar is ${tabs.join(' / ')}`);
 check(!(await page.getByText('Handicap Tribunal').count()), 'tribunal off: not in More');
 check(await page.getByText('⚖️ Governance').isVisible(), 'rulebook still there (ov19: inside ⚖️ Governance)');
 const w = await page.evaluate(() => document.scrollingElement.scrollWidth);

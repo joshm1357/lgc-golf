@@ -20,7 +20,7 @@ const D = (key: string, label: string, o: Partial<Destination> = {}): Destinatio
   ({ key, label, needs: [], takes: [], organiser: false, feature: null, ...o });
 
 export const DESTINATIONS: Destination[] = [
-  D('trip_now', 'This trip'),
+  D('trip_now', 'Trip status'),
   D('leaderboard', 'Leaderboard', { takes: ['round'] }),
   D('score', 'Enter scores', { needs: ['round'] }),
   D('comps_board', 'What we’re playing for'),

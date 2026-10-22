@@ -137,6 +137,13 @@ export function fakeSupabase(db, who = () => ({ id: K, admin: true })) {
       }
       return null;
     }
+    if (name === 'call_off_plan') { // 091 (ov21)
+      const plan = db.plans.find((p) => p.id === body.p_plan);
+      if (plan && body.p_off && plan.status !== 'cancelled') Object.assign(plan, { cancelled_from: plan.status, status: 'cancelled', cancelled_by: me.id, cancelled_at: new Date().toISOString() });
+      else if (plan && !body.p_off && plan.status === 'cancelled') Object.assign(plan, { status: plan.cancelled_from || 'planning', cancelled_by: null, cancelled_at: null, cancelled_from: null });
+      return null;
+    }
+    if (name === 'delete_empty_plan') { db.plans = db.plans.filter((p) => p.id !== body.p_plan); return null; }
     if (name === 'vote_channels') return db.players.map((p) => ({ player_id: p.id, on_app: true, choice: 'app', has_email: false, source: 'own' }));
     if (name === 'group_invite') return 'ABCDEFGH2345';
     if (name === 'trip_finder_courses') return [];

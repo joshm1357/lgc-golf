@@ -60,3 +60,36 @@ in on a second phone, and only then ask about live.
   `https://thegolftrip.club/privacy.html`, authorised domain `thegolftrip.club`. Then submit for brand verification
   (a few business days). After that, Google shows "The Golf Trip" and the logo.
 - **Later, only if still needed:** a Supabase custom domain such as `auth.thegolftrip.club` (US$10/month on Pro).
+
+## 6. Email + password and "Save your spot" (22 Oct) — what each database needs
+The app now asks everyone, once after they join, to **save their spot**: Google, or an email and password, added to
+the phone-only user they already are (same group, same name). On a new phone they tap **Sign in**. Build setting:
+`"sign_in": {"live": "google,password"}` in `infra/cloudflare.json` (staging can stay `google,email` — a code each
+time — until its templates below are done, then switch it to `google,password` too).
+
+In Supabase → the project → **Authentication**:
+1. **Sign In / Providers**
+   - **Allow anonymous sign-ins:** on (joining from a link still makes a phone-only user first).
+   - **Allow manual linking:** on — without it, Save your spot fails ("isn't switched on yet").
+   - **Email** provider: on. **Confirm email:** on is recommended (they type a 6-digit code once; stops someone
+     claiming an address that isn't theirs). Off also works: the email is saved straight away, no code.
+   - **Secure email change:** either. A phone-only user has no old address, so only the new one gets a code.
+   - **Minimum password length:** 8 (the app's own rule says 8). Password requirements: "no required characters"
+     (the app doesn't explain extra rules). **Prevent use of leaked passwords** (Pro plan) is fine — the app explains it.
+   - **Secure password change:** off (people set a password straight after confirming).
+   - **Email OTP length:** 6. **Email OTP expiration:** 3600 seconds (an hour) is fine.
+   - **Google:** on, with the live database's own client ID/secret; the Google Cloud client's redirect URI
+     `https://luogyzvrbedmicjejilr.supabase.co/auth/v1/callback`. Put the client ID in `google.client_id.live`;
+     `app.thegolftrip.club` must be in the client's **Authorised JavaScript origins** (it's already in
+     `google.button_hosts`) so Google's own button is used there — no trip away from the iPhone Home Screen app.
+2. **URL Configuration:** Site URL `https://app.thegolftrip.club/`; Redirect URLs `https://app.thegolftrip.club/**`.
+3. **Emails → SMTP:** a real sender (Resend on thegolftrip.club). Supabase's built-in sender only mails the team, a
+   few an hour, and templates can't be edited without custom SMTP.
+4. **Emails → Templates** — each shows `{{ .Token }}` big and says "type this code into the app" (a link would open
+   Safari, not the Home Screen app):
+   - **Change email address** — Save your spot with an email (`verifyOtp type email_change`). The important new one.
+   - **Confirm sign up** — a new organiser making an account (`type signup`).
+   - **Reset password** — Forgot password? (`type recovery`).
+   - **Magic link** — only for `google,email` builds and "email me a code instead"; give it `{{ .Token }}` too.
+5. **Edge Functions:** redeploy `notify` (adds `nudge_signin` for the organiser's Remind button). Until then, Remind
+   copies a chat message instead.

@@ -4,7 +4,9 @@ import { useSession } from '../lib/store.jsx';
 import { setCurrentGroup } from '../lib/group.js';
 import { inviteCode } from '../lib/invite.js';
 import { linkTarget, inviteNext, readLink, pageToKeep, targetQuery } from '../lib/links.js';
-import { SIGN_IN, signInWith, signInWithEmail, verifyEmailCode } from '../lib/auth.js';
+import { SIGN_IN, signInWith, signInWithEmail, verifyEmailCode, linkProvider, linkGoogleToken } from '../lib/auth.js';
+import { signInModes } from '../lib/savespot.js';
+import { EmailPasswordSignIn } from '../components/SignInForms.jsx';
 import { cleanEmailCode, looksLikeEmail, clearFreshSignIn, markFreshSignIn, rememberReturn, takeReturn } from '../lib/home.js';
 import { GOOGLE_CLIENT_ID, googleButtonHere, loadGoogle, makeNonce } from '../lib/google.js';
 import { GroupCrest } from '../components/Logo.jsx';
@@ -181,6 +183,7 @@ function FrontDoor() {
       </div>
       {signInOn && (
         <>
+          <div style={{ fontSize: 20, fontWeight: 700, textAlign: 'center' }}>Been here before? Sign in</div>
           <SignInButtons returnHash={kept || ''} />
           <div role="separator" style={{ width: '100%', maxWidth: 340, display: 'flex', alignItems: 'center', gap: 10, color: 'var(--on-navy-muted)' }} className="small">
             <span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.2)' }} />or<span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.2)' }} />
@@ -188,7 +191,7 @@ function FrontDoor() {
         </>
       )}
       <div style={{ textAlign: 'center', maxWidth: 340 }} data-testid="link-first">
-        <div style={{ fontSize: 20, fontWeight: 700 }}>Open the link from your group chat</div>
+        <div style={{ fontSize: 20, fontWeight: 700 }}>{signInOn ? 'New here? Open the link from your group chat' : 'Open the link from your group chat'}</div>
         <div className="small" style={{ color: 'var(--on-navy-muted)', marginTop: 4 }}>
           {kept ? 'Open your group’s link and you’ll land on the page you opened.' : 'Tap it in the chat. On an iPhone Home Screen app, copy it and paste it here.'}
         </div>
@@ -204,6 +207,7 @@ function FrontDoor() {
 /** Sign in with Google, or have a 6-digit code emailed. Makes an account if there isn't one. */
 export function SignInButtons({ returnHash = '', quiet = false }) {
   const { refresh } = useSession();
+  const modes = signInModes(SIGN_IN);
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [codeIn, setCodeIn] = useState('');
@@ -221,7 +225,9 @@ export function SignInButtons({ returnHash = '', quiet = false }) {
     <div className="stack" style={{ width: '100%', maxWidth: 340, gap: 10 }}>
       {SIGN_IN.includes('google') && <GoogleSignIn returnHash={returnHash} quiet={quiet} busy={busy} onError={(x) => setErr(friendlyError(x))} />}
       {SIGN_IN.includes('facebook') && <button type="button" className="btn ghost block" style={ON_NAVY_GHOST} disabled={busy} onClick={go(() => signInWith('facebook', returnHash))}>Sign in with Facebook</button>}
-      {SIGN_IN.includes('email') && (sent
+      {/* Email + password (22 Oct): Sign in, Forgot password? (an emailed code), Create an account. */}
+      {modes.password && <EmailPasswordSignIn />}
+      {modes.emailCode && (sent
         ? (
           // A 6-digit code, typed here — an emailed link would open Safari, not the Home Screen app.
           <form className="stack" style={{ gap: 8 }} onSubmit={go(async () => {
@@ -252,7 +258,7 @@ export function SignInButtons({ returnHash = '', quiet = false }) {
  * Sign in with Google. Where Google knows this address, Google's own button: Google shows our app, and the sign-in
  * happens without leaving the app. Anywhere else (or if Google's script won't load): the redirect via Supabase.
  */
-function GoogleSignIn({ returnHash, quiet, busy, onError }) {
+export function GoogleSignIn({ returnHash, quiet, busy, onError, link = false, onLinked, onLeaving, light = false }) {
   const { refresh } = useSession();
   const [mode, setMode] = useState(() => (googleButtonHere() ? 'loading' : 'redirect'));
   const [working, setWorking] = useState(false);
@@ -270,13 +276,20 @@ function GoogleSignIn({ returnHash, quiet, busy, onError }) {
           callback: async (resp) => {
             setWorking(true);
             try {
+              if (link) {
+                // Save your spot: Google joins the SAME (phone-only) user, so the group and name stay.
+                await linkGoogleToken(resp.credential, raw);
+                await refresh();
+                onLinked?.();
+                return;
+              }
               setCurrentGroup(null); // whoever used this phone before: don't carry their group across
               markFreshSignIn();
               const { error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: resp.credential, nonce: raw });
               if (error) throw error;
               await refresh();
             } catch (e) {
-              clearFreshSignIn();
+              if (!link) clearFreshSignIn();
               onError(e);
               if (box.current) box.current.innerHTML = '';
               setMode('loading'); // draw the button again with a new one-time value
@@ -285,7 +298,7 @@ function GoogleSignIn({ returnHash, quiet, busy, onError }) {
             }
           },
         });
-        id.renderButton(box.current, { type: 'standard', theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill',
+        id.renderButton(box.current, { type: 'standard', theme: 'outline', size: 'large', text: link ? 'continue_with' : 'signin_with', shape: 'pill',
           logo_alignment: 'center', width: Math.min(340, Math.max(200, box.current.offsetWidth || 300)) });
         setMode('google');
       } catch { if (live) setMode('redirect'); }
@@ -293,11 +306,15 @@ function GoogleSignIn({ returnHash, quiet, busy, onError }) {
     return () => { live = false; };
   }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
   if (mode === 'redirect') {
-    const cls = quiet ? 'btn ghost block' : 'btn gold block';
+    const cls = quiet ? 'btn ghost block' : light ? 'btn block' : 'btn gold block';
     return (
       <button type="button" className={cls} style={quiet ? ON_NAVY_GHOST : undefined} disabled={busy}
-        onClick={() => signInWith('google', returnHash).catch(onError)}>
-        <GoogleG /> Sign in with Google
+        onClick={() => {
+          if (!link) { signInWith('google', returnHash).catch(onError); return; }
+          onLeaving?.(); // the app remembers it's gone to Google, to say "Done" when it's back
+          linkProvider('google', returnHash).catch(onError);
+        }}>
+        <GoogleG /> {link ? 'Continue with Google' : 'Sign in with Google'}
       </button>
     );
   }

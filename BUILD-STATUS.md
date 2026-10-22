@@ -991,3 +991,28 @@ screen, "Viewing as Mike · read only", and Stop.
   claim_player_link), `create_my_player_link()`.
 - **Tested:** Vitest 1073 (`links.test.js` 23 new); SQL `supabase/tests/links_not_pins.sql` 24 checks on staging,
   rolled back; e2e `links-test.mjs` 24 checks; stage2, signin-home, plan-ux, trips, replay, notify-prompt, phone pass.
+
+## Save your spot — sign in once (ov11), branch `ov11-signin-once`, 22 Oct 2026
+- **Why:** Josh: "It should have a reminder to log in via Google or email once when the link is opened. Then that's
+  how they log in." and "They need to be able to sign up with email and password." The group moves to
+  app.thegolftrip.club and everyone picks their name again from a join link.
+- **Save your spot:** after join → name → notifications pop-up, a one-time sheet: "Sign in once so the app knows it's
+  you on any phone or laptop." Continue with Google (`linkIdentity`, same user — Google's own button on known hosts,
+  so no trip away from the iPhone Home Screen app; the redirect elsewhere, coming back to the page they were on) or
+  Use my email (email + password: `updateUser({email})` → 6-digit code `verifyOtp type email_change` if the project
+  confirms emails, straight through if not → `updateUser({password})`). Not now → a small banner on Home and More;
+  closed once it comes back three days later, closed twice it's gone. Always in Group & invites. Only on builds
+  with `VITE_SIGN_IN` set.
+- **Front door (sign-in builds):** "Been here before? Sign in" first (Google; email + password with Show/Hide,
+  "Forgot password?" → emailed code → new password, "Create an account"), then "New here? Open the link from your
+  group chat". `VITE_SIGN_IN=google,password`; `google,email` still means a code every time (staging today).
+- **Errors in plain words** (`lib/savespot.js authProblem`): Google already used by someone else, email already has an
+  account (→ Sign in instead), wrong password (→ Reset it), not confirmed (→ code), weak/leaked password, expired code.
+- **Organisers:** Personal links shows ✓ signed in vs not; "🔔 Remind" for someone on the app but not signed in sends
+  a `nudge_signin` notification (one new case in the notify function — needs a deploy); if none can be sent, a chat
+  message is copied instead.
+- **Files:** `src/lib/savespot.js` (+test), `src/lib/auth.js`, `src/components/SaveSpot.jsx`,
+  `src/components/SignInForms.jsx`, `src/screens/Join.jsx`, `Group.jsx`, `More.jsx`, `Leaderboard.jsx`, `App.jsx`,
+  `supabase/functions/notify/index.ts`, `docs/SIGN-IN-SETUP.md`, `tests/e2e/save-spot-test.mjs`.
+- **Tested:** Vitest 1145 (savespot 27 new); e2e `save-spot-test.mjs` 89 checks; signin-home 71, links 24, stage2 19,
+  beta 46, phone 17, notify-prompt 31 pass.

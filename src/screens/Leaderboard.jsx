@@ -21,6 +21,7 @@ import { CourseGuideChip } from '../components/CourseGuideLink.jsx';
 import { WeatherChip } from '../components/Weather.jsx';
 import { AskChip } from '../components/AskChip.jsx';
 import { RoundTools } from '../components/RoundTools.jsx';
+import { SaveSpotBanner } from '../components/SaveSpot.jsx';
 
 const DrawSetup = lazyScreen(() => import('../components/DrawSetup.jsx'), 'default', { inline: true });
 
@@ -100,6 +101,7 @@ export default function Leaderboard() {
     return (
       <div className="page">
         <Header logo title={trip?.name || (status?.legacy ? 'L.G.C Golf' : status?.group_name) || 'The Golf Trip'} sub="No rounds set up yet" />
+        <SaveSpotBanner />
         {status?.is_admin && !status?.viewing ? (
           <div className="section">
             <Link to="/setup" className="card pad row" style={{ gap: 12, textDecoration: 'none', color: 'inherit', borderColor: 'var(--navy)' }}>
@@ -142,6 +144,7 @@ export default function Leaderboard() {
           <Seg value={mode} onChange={setMode} options={[{ value: 'live', label: 'Live' }, { value: 'proj', label: 'Projected' }]} />
         )}
       </Header>
+      <SaveSpotBanner />
       <RoundChips round={round} onChoose={choose} />
       <CompChips round={round} />
       <RulesTodayChip round={round} />

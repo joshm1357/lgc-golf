@@ -4,6 +4,7 @@ import { useData, useSession, playerName, useFeature } from '../lib/store.jsx';
 import { Header, Icon, Avatar } from '../components/ui.jsx';
 import { notifyItem } from '../components/NotifyPrompt.jsx';
 import { SIGN_IN } from '../lib/auth.js';
+import { SaveSpotBanner } from '../components/SaveSpot.jsx';
 import { NEW_GROUPS } from '../lib/beta.js';
 import { BetaCard, InstallCard } from '../components/Feedback.jsx';
 import { usePlatformAdmin, wishesItem } from '../components/WishesLink.jsx';
@@ -40,6 +41,7 @@ export default function More() {
   return (
     <div className="page">
       <Header logo title="More" sub={me ? `Signed in as ${playerName(me)}` : ''} right={me && <Link to={`/player/${me.id}`} aria-label="My profile"><Avatar player={me} size={40} /></Link>} />
+      <SaveSpotBanner />
       <div className="section">
         <div style={{ marginBottom: 12 }}><BetaCard /></div>
         <div className="card">

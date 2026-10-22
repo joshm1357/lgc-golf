@@ -370,7 +370,7 @@ Deno.serve(async (req) => {
     if (!m) return json({ error: 'Join the group first' }, 403);
     const g = m.group_id as string;
     const me = { player_id: m.player_id as string | null, is_admin: m.role === 'organiser' };
-    const adminOnly = ['plan_new', 'trip_locked', 'rsvp_locked', 'nudge_votes', 'nudge_rsvp', 'nudge_kitty', 'groups_set', 'draw_open', 'deposit_ask', 'nudge_deposit'];
+    const adminOnly = ['plan_new', 'trip_locked', 'rsvp_locked', 'nudge_votes', 'nudge_rsvp', 'nudge_kitty', 'groups_set', 'draw_open', 'deposit_ask', 'nudge_deposit', 'nudge_signin'];
     if (adminOnly.includes(body.type) && !me.is_admin) return json({ error: 'Admin only' }, 403);
     const from = me.player_id as string | null;
     // Someone who hasn't picked their name yet can't send anything to others (only the test buzz to themselves).
@@ -454,6 +454,13 @@ Deno.serve(async (req) => {
         const { data: rs } = await db.from('plan_rsvps').select('player_id').eq('plan_id', pl.id);
         const replied = new Set((rs || []).map((r) => r.player_id));
         sent = await send(g, (await players(g)).filter((p) => !replied.has(p.id)).map((p) => p.id), { title: `🙋 Are you in for ${pl.name}?`, body: 'Tap to say In, Maybe or Out.', url: planUrl(pl.id, 'people') }, from, 'nudge_rsvp');
+        break;
+      }
+      case 'nudge_signin': {
+        // 22 Oct: an organiser's "Remind" — one player, to save their spot (sign in once). send() only reaches people
+        // in this group, so a player id from another group sends nothing.
+        if (typeof body.player_id !== 'string') return json({ error: 'Which player?' }, 400);
+        sent = await send(g, [body.player_id], { title: '🔐 Save your spot', body: 'Sign in once so the app knows it’s you on any phone or laptop.', url: `${APP}#/group` }, from, 'nudge_signin');
         break;
       }
       case 'nudge_kitty': {

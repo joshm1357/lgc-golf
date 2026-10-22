@@ -7,8 +7,10 @@ import { Header, Avatar, Loading, toast } from '../components/ui.jsx';
 import { setCurrentGroup } from '../lib/group.js';
 import { inviteLink, ROLE_LABEL, ROLE_HELP } from '../lib/invite.js';
 import { readLink } from '../lib/links.js';
-import { SIGN_IN, linkProvider, linkEmail } from '../lib/auth.js';
-import { shareText } from '../lib/push.js';
+import { SIGN_IN } from '../lib/auth.js';
+import { SaveSpotPanel } from '../components/SaveSpot.jsx';
+import { signInReminder, organiserAction } from '../lib/savespot.js';
+import { shareText, notify } from '../lib/push.js';
 import { FEATURES, featureOn, children } from '../lib/features.js';
 import { FONTS, DEFAULT_LOOK, LGC_LOOK, lookProblems, themeVars, applyLook } from '../lib/theme.js';
 import { uploadPhoto } from '../lib/images.js';
@@ -87,22 +89,16 @@ function MyGroups() {
 
 export function SignInCard({ returnHash = '' } = {}) {
   const { status } = useSession();
-  const [email, setEmail] = useState('');
-  const [busy, run] = useRun();
+  const [done, setDone] = useState(false);
+  if (done) return <div className="card pad" role="status"><strong>Done ✓</strong><div className="small muted">Next time just tap Sign in — on this phone, a new one or a laptop.</div></div>;
   if (status.signed_in) return <div className="small muted">✅ You’re signed in properly — you can use this account on any phone.</div>;
   if (!SIGN_IN.length) return null; // providers not set up yet
+  // Save your spot (22 Oct): Google, or an email and password, added to this same phone-only user.
   return (
-    <div className="card pad stack" style={{ gap: 8, borderColor: 'var(--gold)' }}>
-      <strong>🔐 Keep your scores if you change phones</strong>
-      <span className="small">Right now you’re only signed in on this phone. Add a sign-in and everything stays with you — same name, same scores.</span>
-      {SIGN_IN.includes('google') && <button type="button" className="btn block" disabled={busy} onClick={() => run(() => linkProvider('google', returnHash))}>Add Google sign-in</button>}
-      {SIGN_IN.includes('facebook') && <button type="button" className="btn block" disabled={busy} onClick={() => run(() => linkProvider('facebook', returnHash))}>Add Facebook sign-in</button>}
-      {SIGN_IN.includes('email') && (
-        <form className="row" style={{ gap: 6 }} onSubmit={(e) => { e.preventDefault(); run(() => linkEmail(email, returnHash), 'Check your email to confirm'); }}>
-          <input className="input grow" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Your email" />
-          <button className="btn" disabled={busy || !email.includes('@')}>Add email</button>
-        </form>
-      )}
+    <div className="card pad stack" style={{ gap: 8, borderColor: 'var(--gold)' }} data-testid="sign-in-card">
+      <strong>🔐 Save your spot</strong>
+      <span className="small">Right now you’re only signed in on this phone. Sign in once so the app knows it’s you on any phone or laptop — same name, same scores.</span>
+      <SaveSpotPanel returnHash={returnHash || undefined} onDone={() => setDone(true)} />
     </div>
   );
 }
@@ -249,6 +245,16 @@ function PersonalLinksCard() {
     if (r === 'copied') toast(`${playerName(p)}'s link copied — paste it in a message to them`);
     else if (r === 'failed') { window.prompt(`Copy ${playerName(p)}'s link and send it to them:`, link); }
   });
+  // Remind: a phone notification to that player ("Save your spot"); if none can be sent (notifications off, or the
+  // server hasn't got this kind yet), a message for the chat instead.
+  const remind = (p) => run(async () => {
+    const r = await notify('nudge_signin', { player_id: p.id });
+    if (!r?.error && r?.sent > 0) { toast(`Reminder sent to ${playerName(p)}’s phone`); return; }
+    const msg = signInReminder(playerName(p), status.group_name, `${window.location.origin}${import.meta.env.BASE_URL}`);
+    const s = await shareText(msg, `Remind ${playerName(p)}`);
+    if (s === 'copied') toast(`No phone notification for ${playerName(p)} — a message is copied, paste it to them`);
+    else if (s === 'failed') window.prompt(`Send ${playerName(p)} this:`, msg);
+  });
   return (
     <div className="card">
       <div style={{ padding: '12px 14px 4px' }}>
@@ -256,7 +262,7 @@ function PersonalLinksCard() {
         <div className="small muted">{signInOn
           ? 'Send each player their own link. They sign in, and they keep their name, scores and history on any phone. Each link works once and lasts 14 days.'
           : 'Send a player their own link to get them in on a new phone — it opens the app as them, no name to pick. Each link works once and lasts 14 days.'}</div>
-        {rows && signInOn && <div className="small" style={{ marginTop: 6, fontWeight: 700 }}>{done} of {players.length} signed in</div>}
+        {rows && signInOn && <div className="small" style={{ marginTop: 6, fontWeight: 700 }}>{done} of {players.length} signed in{done < players.length ? ' — “Remind” nudges someone on the app to save their spot' : ''}</div>}
       </div>
       {!rows ? <Loading /> : players.map((p) => {
         const line = signInOn ? signInLine(rows[p.id]) : phoneLine(rows[p.id]);
@@ -268,10 +274,17 @@ function PersonalLinksCard() {
               <span className="small" style={{ color: line.done ? 'var(--up)' : 'var(--muted)' }}>{line.done ? '✓ ' : ''}{line.word}</span>
             </span>
             {!line.done && (
-              <button type="button" className="btn ghost sm" disabled={busy} style={{ minHeight: 48, flex: 'none' }} onClick={() => send(p)}
-                aria-label={`${line.waiting ? 'Send a new link to' : 'Send a link to'} ${playerName(p)}`}>
-                {line.waiting ? 'Send again' : 'Send link'}
-              </button>
+              <span className="stack" style={{ gap: 4, flex: 'none' }}>
+                {/* On the app on a phone but not signed in: a nudge to "Save your spot" (22 Oct). */}
+                {signInOn && organiserAction(rows[p.id]) === 'remind' && (
+                  <button type="button" className="btn sm" disabled={busy} style={{ minHeight: 44 }} onClick={() => remind(p)}
+                    aria-label={`Remind ${playerName(p)} to save their spot`}>🔔 Remind</button>
+                )}
+                <button type="button" className="btn ghost sm" disabled={busy} style={{ minHeight: 44 }} onClick={() => send(p)}
+                  aria-label={`${line.waiting ? 'Send a new link to' : 'Send a link to'} ${playerName(p)}`}>
+                  {line.waiting ? 'Send again' : 'Send link'}
+                </button>
+              </span>
             )}
           </div>
         );

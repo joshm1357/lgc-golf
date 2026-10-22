@@ -13,6 +13,7 @@ import { AwardWatcher } from './components/Awards.jsx';
 import { CommentaryWatcher } from './components/Commentary.jsx';
 import { Shortcuts } from './components/Shortcuts.jsx';
 import { NotifyPrompt } from './components/NotifyPrompt.jsx';
+import { SaveSpotPrompt } from './components/SaveSpot.jsx';
 import { Caddie } from './components/Caddie.jsx';
 import { NEW_GROUPS } from './lib/beta.js';
 import { supabase } from './lib/supabase.js';
@@ -289,6 +290,7 @@ function Inside() {
       <WhatsNew />
       <Shortcuts />
       <NotifyPrompt />
+      <SaveSpotPrompt />
       <Caddie />
       <Toaster />
     </div>

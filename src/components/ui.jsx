@@ -3,6 +3,7 @@ import { NavLink, Link, useNavigate } from 'react-router-dom';
 import { GroupCrest } from './Logo.jsx';
 import { useFeature, useSession } from '../lib/store.jsx';
 import { SIGN_IN } from '../lib/auth.js';
+import { updateNow, watchTyping } from '../lib/unsaved.js';
 
 // ---------- Icons (simple stroke icons) ----------
 const P = { fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' };
@@ -196,9 +197,11 @@ export function Loading({ text = 'Loading…' }) {
   return <div className="loading">{text}</div>;
 }
 
-/** Checks for a newer version of the app every minute and offers a one-tap update. */
+/** Checks for a newer version of the app every minute and offers a one-tap update. It never reloads by itself;
+ *  with a sheet open or something typed it asks first (lib/unsaved.js). */
 export function UpdateBanner() {
   const [ready, setReady] = useState(false);
+  useEffect(() => watchTyping(), []);
   useEffect(() => {
     const current = [...document.scripts].map((s) => s.src).find((src) => /\/assets\/index-.*\.js/.test(src));
     if (!current) return undefined;
@@ -219,7 +222,7 @@ export function UpdateBanner() {
   }, []);
   if (!ready) return null;
   return (
-    <button type="button" onClick={() => window.location.reload()} style={{ position: 'fixed', top: 'calc(8px + env(safe-area-inset-top, 0px))', left: '50%', transform: 'translateX(-50%)', zIndex: 70, border: 0, borderRadius: 999, padding: '10px 16px', background: 'var(--gold)', color: 'var(--text)', fontWeight: 800, fontSize: 14, boxShadow: '0 4px 14px rgba(0,0,0,.3)' }}>
+    <button type="button" onClick={() => updateNow()} style={{ position: 'fixed', top: 'calc(8px + env(safe-area-inset-top, 0px))', left: '50%', transform: 'translateX(-50%)', zIndex: 70, border: 0, borderRadius: 999, padding: '10px 16px', background: 'var(--gold)', color: 'var(--text)', fontWeight: 800, fontSize: 14, boxShadow: '0 4px 14px rgba(0,0,0,.3)' }}>
       New version ready — tap to update
     </button>
   );

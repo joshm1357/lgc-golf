@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { isDisputable, refKey, openCasesFor, disputeState, disputeTitle, valueWords, refForServer, subjectLine, ruleForSetting, DISPUTABLE } from './disputes.js';
+import {
+  isDisputable, refKey, openCasesFor, disputeState, disputeTitle, valueWords, refForServer, subjectLine, ruleForSetting, DISPUTABLE,
+  canApplyVerdict, parseApplyValue, suggestedValue, appliedLine, applySpec,
+} from './disputes.js';
 
 const R = '00000000-0000-4000-8000-0000000d0c03';
 const RULE = '00000000-0000-4000-8000-0000000d0c04';
@@ -119,5 +122,43 @@ describe('the Rulebook rule behind a round setting', () => {
     expect(ruleForSetting(rules, 'ambrose', 'min_drives')?.id).toBe('r2');
     expect(ruleForSetting(rules, 'stableford', 'comp_bonus')).toBe(null);
     expect(ruleForSetting(rules, 'ambrose', 'rules')).toBe(null);
+  });
+});
+
+describe('applying an upheld verdict (084)', () => {
+  const upheld = { id: 'c', kind: 'ruling', subject_kind: 'setting', status: 'passed', subject_ref: bonus, proposal: { answer: '1 stroke, not 2' } };
+  it('only organisers, only upheld setting disputes, only once', () => {
+    expect(canApplyVerdict(upheld, 'organiser')).toBe(true);
+    expect(canApplyVerdict(upheld, 'player')).toBe(false);
+    expect(canApplyVerdict(upheld, 'guest')).toBe(false);
+    expect(canApplyVerdict({ ...upheld, status: 'failed' }, 'organiser')).toBe(false);
+    expect(canApplyVerdict({ ...upheld, status: 'open' }, 'organiser')).toBe(false);
+    expect(canApplyVerdict({ ...upheld, setting_applied_at: '2026-10-22T04:41:00Z' }, 'organiser')).toBe(false);
+    expect(canApplyVerdict({ ...upheld, subject_kind: 'standard', subject_ref: { table: 'standard', field: 'rule', key: 'a.b' } }, 'organiser')).toBe(false);
+    expect(canApplyVerdict({ ...upheld, subject_ref: { table: 'comps', id: R, field: 'settings' } }, 'organiser')).toBe(false);
+  });
+  it('checks the value against the field', () => {
+    expect(parseApplyValue(bonus, '1')).toEqual({ ok: true, value: 1 });
+    expect(parseApplyValue(bonus, '1.5').ok).toBe(false);
+    expect(parseApplyValue(bonus, '25').ok).toBe(false);
+    expect(parseApplyValue(bonus, 'one').ok).toBe(false);
+    expect(parseApplyValue({ table: 'round_games', id: R, field: 'stake' }, '$2.50')).toEqual({ ok: true, value: 2.5 });
+    expect(parseApplyValue({ table: 'round_games', id: R, field: 'stake' }, '2.555').ok).toBe(false);
+    expect(parseApplyValue({ table: 'rounds', id: R, field: 'min_drives' }, '')).toEqual({ ok: true, value: null });
+    expect(parseApplyValue({ table: 'rounds', id: R, field: 'ctp_holes' }, '15, 6, 6')).toEqual({ ok: true, value: [6, 15] });
+    expect(parseApplyValue({ table: 'rounds', id: R, field: 'ctp_holes' }, '19').ok).toBe(false);
+    expect(parseApplyValue({ table: 'side_comp_defs', id: R, field: 'how' }, 'pick')).toEqual({ ok: true, value: 'pick' });
+    expect(parseApplyValue({ table: 'side_comp_defs', id: R, field: 'how' }, 'closest').ok).toBe(false);
+    expect(applySpec({ table: 'rules', id: R, field: 'value' })).toBe(null);
+  });
+  it('starts from "What it should be"', () => {
+    expect(suggestedValue(upheld)).toBe('1');
+    expect(suggestedValue({ ...upheld, subject_ref: { table: 'rounds', id: R, field: 'ctp_holes' }, proposal: { answer: 'Holes 6 and 15' } })).toBe('6, 15');
+    expect(suggestedValue({ ...upheld, proposal: {} })).toBe('');
+  });
+  it('says who applied it and what changed', () => {
+    const line = appliedLine({ setting_applied_at: '2026-10-22T03:41:00Z', setting_change: { old: 2, new: 1 } }, 'Josh');
+    expect(line).toMatch(/^Applied by Josh, .+: 2 → 1$/);
+    expect(appliedLine({}, 'Josh')).toBe(null);
   });
 });

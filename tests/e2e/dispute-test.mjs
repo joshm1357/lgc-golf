@@ -67,7 +67,7 @@ async function fake(route) {
   if (method === 'OPTIONS') return json({});
   const p = url.pathname;
   if (p.startsWith('/rest/v1/rpc/my_status')) {
-    return json({ is_member: true, is_admin: role === 'organiser', player_id: role === 'guest' ? G : A, group_name: 'Hunter Weekend', group_id: GROUP, role, legacy: false, groups: [{ id: GROUP, name: 'Hunter Weekend', slug: 'hunter', role }] });
+    return json({ is_member: true, is_admin: role === 'organiser', player_id: role === 'guest' ? G : role === 'organiser' ? K : A, group_name: 'Hunter Weekend', group_id: GROUP, role, legacy: false, groups: [{ id: GROUP, name: 'Hunter Weekend', slug: 'hunter', role }] });
   }
   if (p.startsWith('/rest/v1/rpc/')) {
     const fn = p.split('/').pop();
@@ -80,6 +80,15 @@ async function fake(route) {
         stage: 'voting', status: 'open', closes_at: '2026-10-24T08:00:00.000Z', hidden: false, created_at: new Date().toISOString(),
         subject_kind: 'setting', subject_ref: { ...body.p_ref, value: r ? r[body.p_ref.field] : null } });
       return json(NEW_CASE);
+    }
+    if (fn === 'apply_dispute_verdict') {
+      const c = db.cases.find((x) => x.id === body.p_case);
+      const r = db.rounds.find((x) => x.id === c.subject_ref.id);
+      const now = r[c.subject_ref.field];
+      if (now !== c.subject_ref.value && !body.p_force) return json({ status: 'changed', now, raised: c.subject_ref.value });
+      r[c.subject_ref.field] = body.p_value;
+      Object.assign(c, { setting_applied_by: K, setting_applied_at: '2026-10-22T03:41:00.000Z', setting_change: { field: c.subject_ref.field, old: now, new: body.p_value } });
+      return json({ status: 'applied', old: now, new: body.p_value });
     }
     return json(fn === 'governance_tick' ? 0 : null);
   }
@@ -196,6 +205,57 @@ const md = page.getByTestId('min-drives');
 const mdOk = await md.waitFor({ timeout: 10000 }).then(() => true, () => false);
 check(mdOk, 'score entry: minimum drives is a rule chip');
 if (mdOk) await page.screenshot({ path: `${SHOTS}/7-min-drives.png` });
+
+// 9. The verdict is upheld: an organiser applies it ("change Worth 2 strokes from 2 to 1").
+const upheld = (id, field, label, value, answer) => ({ id, group_id: GROUP, kind: 'ruling', title: `Is “${label}” right?`, body: null, rule_id: null,
+  proposal: { answer }, raised_by: A, raised_via: 'app', settings: { decides: 'organiser' }, stage: 'organiser', status: 'passed', verdict: 'Upheld.',
+  votes_for: 3, votes_against: 1, votes_abstain: 0, decided_at: now, apply_state: null, hidden: false, created_at: now,
+  subject_kind: 'setting', subject_ref: { table: 'rounds', id: R2, field, label, value, where: { round_id: R2, path: `/comps?r=${R2}` } } });
+db.cases = [upheld(NEW_CASE, 'comp_bonus', 'Worth 2 strokes', 2, '1 stroke, not 2')];
+role = 'player';
+await page.goto(`${BASE}#/tribunal/case/${NEW_CASE}`);
+await page.reload();
+await page.getByTestId('disputed-thing').waitFor({ timeout: 15000 });
+check(!(await page.getByTestId('apply-verdict').isVisible().catch(() => false)), 'a player doesn’t get "Apply the verdict"');
+role = 'organiser';
+await page.reload();
+const ap = page.getByTestId('apply-verdict');
+await ap.waitFor({ timeout: 15000 });
+check(await page.getByTestId('apply-value').inputValue() === '1', 'organiser: "Change it to" starts from the case’s "What it should be" (1)');
+check((await page.getByTestId('apply-go').innerText()).includes('Apply the verdict: change Worth 2 strokes from 2 to 1'), 'button: "Apply the verdict: change Worth 2 strokes from 2 to 1"');
+await page.getByTestId('apply-value').fill('25');
+check(await page.getByTestId('apply-go').isDisabled(), 'an out-of-range value can’t be applied');
+await page.getByTestId('apply-value').fill('1');
+await ap.scrollIntoViewIfNeeded();
+await page.screenshot({ path: `${SHOTS}/8-apply.png` });
+await page.getByTestId('apply-go').click();
+const applied = page.getByTestId('verdict-applied');
+await applied.waitFor({ timeout: 10000 });
+const call = writes.find((w) => w.table === 'apply_dispute_verdict');
+check(call && call.body.p_case === NEW_CASE && call.body.p_value === 1 && call.body.p_force === false, 'apply_dispute_verdict gets the case and 1 (no force)');
+check(/Applied by Kurt, .+: 2 → 1/.test(await applied.innerText()), 'case shows "Applied by Kurt, <time>: 2 → 1"');
+check(!(await page.getByTestId('apply-verdict').isVisible().catch(() => false)), 'the button is gone once applied');
+await page.screenshot({ path: `${SHOTS}/9-applied.png` });
+await page.goto(`${BASE}#/comps?r=${R2}`);
+await page.getByTestId('worth-strokes').waitFor({ timeout: 15000 });
+await page.waitForTimeout(600);
+const after = await page.getByTestId('worth-strokes').innerText();
+check(after.includes('Worth 1 stroke.') && !after.includes('⚖️'), 'side comps now says worth 1, and the ⚖️ has cleared');
+
+// 10. Changed since the case was raised: refused, then "Apply anyway".
+const DRV = 'eeeeeeee-0000-4000-8000-0000000000d2';
+db.cases = [upheld(DRV, 'min_drives', 'Minimum 3 drives each', 3, '2 drives')];
+db.rounds[0].min_drives = 4;
+writes.length = 0;
+await page.goto(`${BASE}#/tribunal/case/${DRV}`);
+await page.getByTestId('apply-go').waitFor({ timeout: 15000 });
+await page.getByTestId('apply-go').click();
+await page.getByTestId('apply-changed').waitFor({ timeout: 10000 });
+check((await page.getByTestId('apply-changed').innerText()).includes('It’s changed since — now 4. Apply anyway?'), 'changed since: "It’s changed since — now 4. Apply anyway?"');
+check(db.rounds[0].min_drives === 4, 'changed since: nothing written yet');
+await page.getByTestId('apply-go').click();
+await page.getByTestId('verdict-applied').waitFor({ timeout: 10000 });
+check(writes.filter((w) => w.table === 'apply_dispute_verdict').at(-1)?.body.p_force === true && db.rounds[0].min_drives === 2, '"Apply anyway" sends force and applies 4 → 2');
 
 await browser.close();
 if (fails.length) { console.log(`\n${fails.length} FAILED`); for (const f of fails) console.log(` - ${f}`); process.exit(1); }

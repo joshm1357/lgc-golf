@@ -120,3 +120,78 @@ export function subjectLine(c) {
   if (!r) return null;
   return { label: r.label || `${SOURCE[r.table] || 'Setting'}`, source: SOURCE[r.table] || 'Setting', value: valueWords(r.value), path: r.where?.path || null, ruleId: r.rule_id || (r.table === 'rules' ? r.id : null) };
 }
+
+// ------------------------------------------------------------------ applying an upheld verdict (migration 084)
+// The settings an organiser can change straight from the case, with the same limits as the database
+// (private.dispute_value). Anything else (whole settings objects, Rulebook rules, standard rules) is changed where it's set.
+const NUM = (min, max, { whole = false, cents = false, blank = false, msg } = {}) => ({ type: 'number', min, max, whole, cents, blank, msg });
+const WORDS = (max, { oneOf = null, msg } = {}) => ({ type: 'words', max, oneOf, msg });
+export const APPLY_SPEC = {
+  'rounds.comp_bonus': NUM(0, 10, { whole: true, msg: 'Side comp strokes: a whole number from 0 to 10' }),
+  'rounds.min_drives': NUM(0, 9, { whole: true, blank: true, msg: 'Minimum drives: a whole number from 0 to 9' }),
+  'teams.handicap': NUM(-10, 54, { msg: 'A team handicap is between −10 and 54' }),
+  'round_games.stake': NUM(0, 1000, { cents: true, msg: 'A stake is dollars and cents, up to $1000' }),
+  'cup_matches.points': NUM(0.01, 10, { msg: 'A match is worth more than 0 and up to 10 points' }),
+  'cup_matches.a_hcp': NUM(-10, 54, { msg: 'A handicap is between −10 and 54' }),
+  'cup_matches.b_hcp': NUM(-10, 54, { msg: 'A handicap is between −10 and 54' }),
+  'trips.cup_points': NUM(0, 200, { blank: true, msg: 'The Cup is worth 0 to 200 points' }),
+  'rounds.ctp_holes': { type: 'holes' },
+  'rounds.ld_holes': { type: 'holes' },
+  'rounds.rules': WORDS(1000),
+  'side_comp_defs.how': WORDS(12, { oneOf: ['lowest', 'highest', 'pick'], msg: 'How it’s won: lowest, highest or pick' }),
+  'side_comp_defs.unit': WORDS(12),
+  'trophies.description': WORDS(500),
+  'custom_games.rules_text': WORDS(2000),
+};
+export function applySpec(ref) {
+  if (!ref || ref.key) return null;
+  return APPLY_SPEC[`${ref.table}.${ref.field}`] || null;
+}
+
+/** Can this person apply this case's verdict to the setting now? (Organisers; an upheld dispute about a setting; once.) */
+export function canApplyVerdict(c, role) {
+  return !!c && role === 'organiser' && c.kind === 'ruling' && c.subject_kind === 'setting' && c.status === 'passed'
+    && !c.setting_applied_at && !!applySpec(c.subject_ref);
+}
+
+/** Typed words → the value to send, or an error. */
+export function parseApplyValue(ref, text) {
+  const spec = applySpec(ref);
+  if (!spec) return { ok: false, error: 'Change this one where it’s set' };
+  const t = String(text ?? '').trim();
+  if (spec.type === 'number') {
+    if (!t && spec.blank) return { ok: true, value: null };
+    const m = t.replace(/[$,\s]/g, '').replace('−', '-').match(/^-?\d+(\.\d+)?$/);
+    const n = m ? Number(m[0]) : NaN;
+    if (!Number.isFinite(n) || n < spec.min || n > spec.max || (spec.whole && !Number.isInteger(n))
+      || (spec.cents && Math.abs(Math.round(n * 100) - n * 100) > 1e-9)) return { ok: false, error: spec.msg || 'That needs to be a number' };
+    return { ok: true, value: n };
+  }
+  if (spec.type === 'holes') {
+    const parts = t.split(/[\s,]+/).filter(Boolean);
+    if (parts.some((p) => !/^([1-9]|1[0-8])$/.test(p))) return { ok: false, error: 'Holes are 1 to 18, e.g. 6, 15' };
+    return { ok: true, value: [...new Set(parts.map(Number))].sort((a, b) => a - b) };
+  }
+  if (spec.oneOf && !spec.oneOf.includes(t)) return { ok: false, error: spec.msg };
+  if (t.length > spec.max) return { ok: false, error: `Up to ${spec.max} letters` };
+  return { ok: true, value: t || null };
+}
+
+/** A starting value from the case's "What it should be" ("1 stroke, not 2" → 1; "6 and 15" → "6, 15"). */
+export function suggestedValue(c) {
+  const spec = applySpec(c?.subject_ref);
+  const a = String(c?.proposal?.answer || '').trim();
+  if (!spec || !a) return '';
+  if (spec.type === 'number') { const m = a.replace('−', '-').match(/-?\d+(\.\d+)?/); return m ? m[0] : ''; }
+  if (spec.type === 'holes') return (a.match(/\b([1-9]|1[0-8])\b/g) || []).join(', ');
+  if (spec.oneOf) return spec.oneOf.find((o) => a.toLowerCase().includes(o)) || '';
+  return a;
+}
+
+/** "Applied by Josh, 2:41 pm: 2 → 1". */
+export function appliedLine(c, name) {
+  if (!c?.setting_applied_at) return null;
+  const ch = c.setting_change || {};
+  const time = new Date(c.setting_applied_at).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' });
+  return `Applied by ${name || 'an organiser'}, ${time}: ${valueWords(ch.old)} → ${valueWords(ch.new)}`;
+}

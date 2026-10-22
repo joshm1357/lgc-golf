@@ -17,7 +17,7 @@ function ChannelPicker({ value, onPick, busy, name, extra }) {
       {CHANNELS.map((c) => (
         <button key={c} type="button" className="chip" role="radio" aria-checked={value === c} aria-pressed={value === c} disabled={busy}
           data-channel={c} style={{ textAlign: 'left', whiteSpace: 'normal', minHeight: 48, display: 'block' }} onClick={() => onPick(c)}>
-          <strong>{value === c ? '● ' : '○ '}{CHANNEL_LABEL[c]}</strong>{extra?.(c)}<div className="small muted">{CHANNEL_HELP[c]}</div>
+          <strong>{value === c ? '● ' : '○ '}{CHANNEL_LABEL[c]}</strong>{extra?.(c)}<div className="small muted" style={value === c ? { color: 'inherit', opacity: 0.85 } : undefined}>{CHANNEL_HELP[c]}</div>
         </button>
       ))}
     </div>

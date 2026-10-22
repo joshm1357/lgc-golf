@@ -12,6 +12,7 @@ import { paintLook, DEFAULT_LOOK } from '../lib/theme.js';
 import { GolfTripCrest } from '../components/Logo.jsx';
 import { Toaster, toast, Sheet } from '../components/ui.jsx';
 import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
+import { AboutForGroups } from '../components/CourseResearch.jsx';
 
 // Stage 7b: the public course page (#/c/<course>) — works without signing in — and the quick round.
 // Scan or tap → "Start a round with your mates" → your name, the format, the side comps → playing in under 2 minutes.
@@ -160,6 +161,7 @@ function Course({ slug }) {
               </LazyArea>
             )}
             {course.club && <PartnerCard club={course.club} course={course} />}
+            <AboutForGroups libraryId={course.id} />
             <Scorecard holes={course.holes} />
             {course.verified && <span className="small muted">✓ Hole data checked by the club.</span>}
             {course.osm && <span className="small muted">Course details © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors.</span>}
@@ -180,6 +182,7 @@ function ListedOnly({ course }) {
       <Top title={course.name} sub={course.area || 'Golf course'} />
       <div className="stack" style={{ maxWidth: 520, margin: '0 auto', padding: 16, gap: 12 }}>
         {course.club && <PartnerCard club={course.club} course={course} />}
+        <AboutForGroups libraryId={course.id} />
         <div className="card pad stack" style={{ gap: 6 }}>
           <strong>No scorecard yet</strong>
           <span className="small">This course is listed, but nobody has added its pars yet, so rounds can’t start from here.</span>

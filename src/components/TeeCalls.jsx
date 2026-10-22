@@ -16,6 +16,7 @@ import { notify } from '../lib/push.js';
 import { callProgress, canFinishCall, callChecklist, callScript, parseRanges, dayShort, bestPerDay, socialLine, slotsFor } from '../lib/teegrid.js';
 import { bestBlock } from '../lib/tripbuilder.js';
 import { bulkAllocate, callMode, jobStage, stagePatch } from '../lib/tripjobs.js';
+import { memberWarning, contactLinks } from '../lib/courseresearch.js';
 import './planux.css';
 
 /** The group's usual social times for these courses: { course_id: row }. */
@@ -157,7 +158,7 @@ export function SocialTimes({ courseId, row, canEdit, onSaved }) {
 }
 
 /** One course's call: who's on it, the checklist, a script, every day in the window, social times, done. */
-export function CourseCall({ planId, courseId, name, job, dates, need, rows, social, canEdit, me, groupName, onSaved, owner, booking }) {
+export function CourseCall({ planId, courseId, name, job, dates, need, rows, social, canEdit, me, groupName, onSaved, owner, booking, research }) {
   const [busy, run] = useRun();
   const [script, setScript] = useState(false);
   const [gapsMsg, setGapsMsg] = useState('');
@@ -172,24 +173,32 @@ export function CourseCall({ planId, courseId, name, job, dates, need, rows, soc
     }).then((m) => m && toast(m));
   };
   const done = job && jobStage(job) === 'done';
+  // ov17: the researched phone, group enquiry and booking links, and what members have on the trip's days.
+  const rc = contactLinks(research);
+  const warn = memberWarning(research, dates);
+  const phone = booking?.phone || rc.phone;
+  const tel = booking?.phone ? booking.phone.replace(/[^0-9+]/g, '') : rc.tel;
+  const bookUrl = booking?.booking_url || rc.booking;
   return (
     <div className="card pad stack" style={{ gap: 6 }} data-testid="tb-call" data-course={courseId}>
       <div className="row between" style={{ gap: 6 }}>
         <strong>{name}</strong>
         <span className="small" style={{ fontWeight: 700 }} data-testid="call-progress">{p.line}</span>
       </div>
-      {booking?.phone && <a className="small" href={`tel:${booking.phone.replace(/[^0-9+]/g, '')}`}>📞 {booking.phone}</a>}
-      {booking?.booking_url && <a className="small" href={booking.booking_url} target="_blank" rel="noopener noreferrer">Book online ↗</a>}
+      {phone && (tel ? <a className="small" href={`tel:${tel}`} data-testid="call-phone">📞 {phone}</a> : <span className="small" data-testid="call-phone">📞 {phone}</span>)}
+      {rc.enquiry && <a className="small" href={rc.enquiry} target="_blank" rel="noopener noreferrer" data-testid="call-enquiry">Group enquiry form ↗</a>}
+      {bookUrl && <a className="small" href={bookUrl} target="_blank" rel="noopener noreferrer" data-testid="call-booking">Book online ↗</a>}
+      {warn && <span className="small" style={{ fontWeight: 700, color: '#7A5A00' }} data-testid="call-member-warning">⚠️ {warn.text}</span>}
       {owner}
       {canEdit && !done && (
         <details className="small">
           <summary style={{ fontWeight: 700, cursor: 'pointer' }}>Ask about</summary>
-          <ul style={{ margin: '4px 0', paddingLeft: 18 }} data-testid="call-checklist">{callChecklist(dates, { need }).map((x) => <li key={x}>{x}</li>)}</ul>
+          <ul style={{ margin: '4px 0', paddingLeft: 18 }} data-testid="call-checklist">{[...callChecklist(dates, { need }), ...(warn?.days.length ? [`Times outside members’ ${warn.days.join(' and ')} comps`] : [])].map((x) => <li key={x}>{x}</li>)}</ul>
         </details>
       )}
       {canEdit && !done && (
         script
-          ? <div className="small" style={{ background: 'var(--ground)', borderRadius: 10, padding: 8 }} data-testid="call-script">“{callScript({ course: name, group: groupName, need, dates })}” <button type="button" className="btn ghost sm" onClick={() => setScript(false)}>Hide</button></div>
+          ? <div className="small" style={{ background: 'var(--ground)', borderRadius: 10, padding: 8 }} data-testid="call-script">“{callScript({ course: name, group: groupName, need, dates, memberDays: warn?.days || [] })}” <button type="button" className="btn ghost sm" onClick={() => setScript(false)}>Hide</button></div>
           : <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={() => setScript(true)}>📜 What to say</button>
       )}
       {dates.map((d) => (

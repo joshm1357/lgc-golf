@@ -5,6 +5,7 @@
 // planner tables the Trips screens use (plans, start_trip_votes → plan_polls/plan_options, plan_items, plan_rsvps,
 // posts). Nothing is saved before that, and the plan is checked again on the server before anything is made.
 import { clean, isUuid, isoDate, dayNumber, addDays, longDate } from './util.ts';
+import { REGION_TOOL, RESEARCH_RULES } from './research.ts';
 
 // deno-lint-ignore no-explicit-any
 type Any = any;
@@ -17,8 +18,10 @@ export const PLAN_TOOLS = [
   { name: 'our_players', description: 'How many players the group has and their names.', input_schema: obj({}) },
   { name: 'past_trips', description: 'The group\'s past and planned trips: name, dates, where, courses played, rough budget. Use it to suggest places they like (or haven\'t been).', input_schema: obj({}) },
   // ov16: several places in one call (one round instead of four), so the helper doesn't use up its turns searching.
-  { name: 'courses_near', description: 'Golf courses in the shared course library near one or more towns or areas, closest first, with distance in km. Look up ALL the places you have in mind in ONE call with "places" (up to 4), e.g. ["Port Stephens", "Hunter Valley", "Bowral"]. An empty list means the library has nothing there yet — don\'t search that place again.', input_schema: obj({ places: { type: 'array', items: { type: 'string' }, description: 'Up to 4 towns or areas' }, place: { type: 'string', description: 'One town (older form; use places)' } }) },
-  { name: 'find_course', description: 'Search the course library by course name or town.', input_schema: obj({ query: { type: 'string' } }, ['query']) },
+  { name: 'courses_near', description: 'Golf courses in the shared course library near one or more towns or areas, closest first, with distance in km. Look up ALL the places you have in mind in ONE call with "places" (up to 4), e.g. ["Port Stephens", "Hunter Valley", "Bowral"]. Each course comes with its researched "facts" when we have them (access, visitor/member times, fees, booking, stay-and-play, good for groups). An empty list means the library has nothing there yet — don\'t search that place again.', input_schema: obj({ places: { type: 'array', items: { type: 'string' }, description: 'Up to 4 towns or areas' }, place: { type: 'string', description: 'One town (older form; use places)' } }) },
+  { name: 'find_course', description: 'Search the course library by course name or town (with researched facts where we have them).', input_schema: obj({ query: { type: 'string' } }, ['query']) },
+  // ov17: Josh's region notes (088 region_guides).
+  REGION_TOOL,
   {
     name: 'propose_trip_plan',
     description: 'Propose the trip plan. Nothing is saved: the app checks it and shows it to the organiser to confirm. If there are problems you get them back to fix.',
@@ -64,6 +67,8 @@ How to plan:
 - You can't save anything. The organiser checks your plan and taps "Create it".
 - Only plan golf trips for this group. Politely decline anything else in one sentence.
 - Notes: at most two short sentences, plain Australian English.
+
+${RESEARCH_RULES}
 
 ${GUARD}`;
 }
@@ -394,6 +399,8 @@ The reply:
 The conversation so far, the current draft and the size of the course library come inside <data> tags; the organiser's latest words are inside <request> tags.
 Only plan golf trips for this group. Politely decline anything else in one sentence (still call reply_with_draft, with the current draft if there is one).
 Plain Australian English, short.
+
+${RESEARCH_RULES}
 
 ${GUARD}`;
 }

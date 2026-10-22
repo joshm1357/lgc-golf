@@ -11,7 +11,9 @@ import crypto from 'node:crypto';
 
 const BASE = process.argv[2] || 'http://localhost:4389/lgc-golf/';
 const SHOTS = process.argv[3] || './shots-trip-builder';
+const RSHOTS = process.argv[4] || SHOTS; // ov17: the course research screenshots
 fs.mkdirSync(SHOTS, { recursive: true });
+fs.mkdirSync(RSHOTS, { recursive: true });
 
 const GROUP = 'a0a0a0a0-0000-4000-8000-00000000000f';
 const PLAN = 'eeeeeeee-0000-4000-8000-000000000001';
@@ -55,6 +57,15 @@ const db = {
   trip_start_points: [{ id: crypto.randomUUID(), group_id: GROUP, plan_id: PLAN, label: 'Inner West', lat: -33.88, lng: 151.16, headcount: 12, leave_after: '06:00', finish_by: '17:00', sort: 0 }],
   trip_finds: [], course_notes: [], course_ratings: [], stay_areas: stayAreas, trip_builds: [], trip_tee_options: [], course_booking_info: [], vote_batches: [],
   group_features: ['feed', 'planner', 'planner_tasks', 'trip_finder', 'ai_helper'].map((k) => ({ group_id: GROUP, feature_key: k, enabled: true })),
+  // ov17 (088): Josh's course research, shared reference data read straight from the table.
+  course_research: [
+    { library_id: L(2), name: 'Nowra Golf Club', town: 'North Nowra', state: 'NSW', fee_weekday: 45, fee_weekend: 50, access_type: 'public', good_for_groups: 4,
+      booking_url: 'https://nowra.miclub.com.au/cms/public-bookings/', group_enquiry_url: 'https://nowragolf.example/groups', phone: '02 4421 0000 (pro shop)',
+      email: 'golf@nowragolf.example', last_checked: '2026-10-01', sources: ['https://www.golfnsw.org.au/golf-clubs/nowra-golf-club/'],
+      details: { style: 'parkland', members_times: 'Wed and Sat mornings are member comps (club site, Oct 2026)', visitor_times: 'Sat after 12pm; Sun after 11am',
+        stay_and_play: 'Partner motels in Nowra', good_for_groups: '4 - cheap, close to Jervis Bay', group_bookings_how: 'Golf shop for 12+' } },
+    { library_id: L(4), name: 'Worrigee Links', town: 'Worrigee', state: 'NSW', fee_weekday: 44, access_type: 'public', good_for_groups: 3, last_checked: '2026-10-01', details: {} },
+  ],
 };
 let asPlayer = false;
 const rpcCalls = [];
@@ -261,7 +272,12 @@ const known = await days.nth(1).locator('[data-testid="tb-option"]', { hasText: 
 check(known.startsWith('Played 2023 · ★4.5'), `course card: "${known}"`);
 const range = await days.nth(1).locator('[data-testid="tb-option"]', { hasText: 'Worrigee' }).first().locator('[data-testid="tb-option-drive"]').innerText();
 check(/^1\d–3\d min$/.test(range), `Worrigee: "${range}" from where we stay`);
+check((await days.nth(1).locator('[data-testid="tb-option"]', { hasText: 'Nowra GC' }).first().locator('[data-testid="tb-facts"]').innerText()) === 'Public · $45–50 · groups ★★★★☆ · stay & play',
+  'ov17: the course row carries its researched facts');
+check((await days.nth(1).locator('[data-testid="tb-option"]', { hasText: 'Worrigee' }).first().locator('[data-testid="tb-facts"]').innerText()) === 'Public · $44 · groups ★★★☆☆', 'ov17: Worrigee’s facts');
+check(await days.nth(0).locator('[data-testid="tb-facts"]').count() === 0, 'ov17: no research → no facts line (nothing made up)');
 await page.screenshot({ path: `${SHOTS}/3-stay-day.png`, fullPage: true });
+await page.screenshot({ path: `${RSHOTS}/trip-builder-rows-375.png`, fullPage: true });
 
 // The course sheet: history, booking info, "✨ Look it up" as a draft.
 await days.nth(1).getByRole('button', { name: 'Nowra GC', exact: true }).click();
@@ -269,6 +285,15 @@ const sheet = page.locator('[data-testid="tb-course"]');
 await sheet.waitFor({ timeout: 5000 });
 const sheetText = await sheet.innerText();
 check(sheetText.includes('Played 2023 South Coast trip') && sheetText.includes('BD won by Kurt') && sheetText.includes('Your group: ★4.5'), 'course sheet: played when, who won, the group’s rating');
+const about = sheet.locator('[data-testid="about-groups"]');
+const aboutText = await about.innerText();
+check(aboutText.includes('About this course for groups') && aboutText.includes('Members have: Wed and Sat mornings are member comps') && !aboutText.includes('club site, Oct 2026')
+  && aboutText.includes('Good for groups: ★★★★☆ cheap, close to Jervis Bay') && aboutText.includes('Researched Oct 2026 — check with the club'), `ov17: the course sheet has "About this course for groups" (${aboutText.replace(/\s+/g, ' ').slice(0, 120)})`);
+check(await about.getByRole('link', { name: 'Group enquiry ↗' }).getAttribute('href') === 'https://nowragolf.example/groups', 'ov17: the group enquiry link');
+await about.getByTestId('about-sources-btn').click();
+check((await about.getByTestId('about-sources').innerText()).includes('golfnsw.org.au'), 'ov17: the sources list');
+await about.scrollIntoViewIfNeeded();
+await page.screenshot({ path: `${RSHOTS}/trip-builder-course-sheet-375.png` });
 await sheet.getByRole('button', { name: '✨ Look it up' }).click();
 await page.locator('[data-testid="tb-booking-form"]').waitFor({ timeout: 5000 });
 check(aiCalls[0]?.mode === 'course_lookup' && aiCalls[0]?.course_id === L(2), 'Look it up asks the AI helper for this course');
@@ -315,6 +340,16 @@ await enter('Kiama GC', 2, '9:10-9:30');
 check(db.trip_tee_options.length === 5 && db.trip_tee_options.every((t) => /^\d{4}-\d\d-\d\d$/.test(t.play_date) && t.job_id), 'tee times stored per course per DATE, linked to the job');
 check((await tee('Worrigee Links', dateOf(1)).locator('[data-testid="tee-day-status"]').innerText()).includes('not enough in a row'), 'a course with only 2 times says so');
 check((await tee('Nowra GC', dateOf(1)).locator('[data-testid="tee-day-status"]').innerText()) === '✓ 3 in a row 8:00–8:20', 'a course with enough says the block');
+const ngCall = page.locator('[data-testid="tb-call"]', { hasText: 'Nowra GC' });
+const warn = await ngCall.getByTestId('call-member-warning').innerText();
+check(/Members have: Wed and Sat mornings are member comps — that touches your Sat: ask for times outside it\./.test(warn), `ov17: the call warns about members’ times on the trip’s Saturday (${warn})`);
+check(await ngCall.getByTestId('call-enquiry').getAttribute('href') === 'https://nowragolf.example/groups' && (await ngCall.getByTestId('call-phone').count()) === 1, 'ov17: the call has the group enquiry link and the phone');
+await ngCall.locator('summary', { hasText: 'Ask about' }).click();
+check((await ngCall.getByTestId('call-checklist').innerText()).includes('Times outside members’ Sat comps'), 'ov17: the checklist asks for times outside the members’ Saturday');
+await ngCall.getByRole('button', { name: '📜 What to say' }).click();
+check((await ngCall.getByTestId('call-script').innerText()).includes('members have the course on Sat'), 'ov17: the script asks around the members’ day');
+await ngCall.scrollIntoViewIfNeeded();
+await page.screenshot({ path: `${RSHOTS}/trip-builder-call-375.png` });
 await page.screenshot({ path: `${SHOTS}/5-calls.png`, fullPage: true });
 
 // 9. Configurations: only workable ones (Worrigee and Gerringong left out), ranked; pick one.

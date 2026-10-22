@@ -1,9 +1,18 @@
 // Turns raw scores into leaderboards (pure functions — no screen code).
 import {
   ambroseStatus, stablefordStatus, countbackKey, compareCountback, stablefordCountback,
-  rankRows, recentForm,
+  rankRows, recentForm, strokeStatus, strokeCountback, fourballStatus,
 } from './scoring.js';
 import { project, needToTie } from './projection.js';
+
+/** A format's name for people. */
+export const FORMAT_NAMES = { stableford: 'Stableford', ambrose: 'Ambrose', stroke: 'Stroke play', fourball: '4BBB' };
+export const formatName = (format) => FORMAT_NAMES[format] || format;
+
+/** Formats scored as net to par (lower better); the rest are Stableford points (higher better). */
+export const isNetFormat = (format) => format === 'ambrose' || format === 'stroke';
+/** Formats played in teams (Ambrose teams, 4BBB pairs). */
+export const isTeamFormat = (format) => format === 'ambrose' || format === 'fourball';
 
 export function courseHoles(course) {
   return [...(course?.holes || [])].sort((a, b) => a.n - b.n);
@@ -73,6 +82,52 @@ export function roundBoard({ round, course, teams = [], roundPlayers = [], playe
       : [];
     return { format: 'ambrose', holes, rows: ranked, projection: attachProjection(ranked, proj, false), higherBetter: false };
   }
+  if (round.format === 'fourball') {
+    // 4BBB: one row per pair; each player plays off their own handicap (the round's playing handicap if set).
+    const hcpOf = Object.fromEntries(roundPlayers.map((rp) => [rp.player_id, rp.playing_handicap]));
+    const rows = teams.map((t) => {
+      const members = (t.players || []).map((p) => ({ id: p.id, hcp: hcpOf[p.id] ?? Number(p.handicap ?? 0), scores: scores[p.id] || {} }));
+      const st = fourballStatus(holes, members);
+      const sc = {};
+      for (const n of Object.keys(st.perHole)) sc[n] = { updated_at: members.map((m) => m.scores[n]?.updated_at || '').sort().pop() };
+      return {
+        id: t.id, name: t.name, players: t.players || [], members, handicap: null, scores: sc, ...st,
+        sortValue: st.thru ? st.vsExpected : -999,
+        cb: st.finished ? stablefordCountback(holes, st.perHole) : null,
+        form3: recentForm(st.perHole, sc, 3, 2),
+      };
+    });
+    const ranked = rankRows(rows, {
+      key: 'sortValue', higherBetter: true,
+      tiebreak: (a, b) => (a.cb && b.cb ? compareCountback(b.cb, a.cb) : 0),
+    });
+    const proj = holes.length
+      ? project(rows.map((r) => ({ id: r.id, perHole: r.perHole })), nums, { higherBetter: true, defaultValue: 2 })
+      : [];
+    return { format: 'fourball', holes, rows: ranked, projection: attachProjection(ranked, proj, true), higherBetter: true };
+  }
+  if (round.format === 'stroke') {
+    // Stroke play: one row per player, net to par through the holes played (lower better).
+    const rows = roundPlayers.map((rp) => {
+      const p = playersById[rp.player_id];
+      const sc = scores[rp.player_id] || {};
+      const st = strokeStatus(holes, sc, rp.playing_handicap);
+      return {
+        id: rp.player_id, name: p ? p.nickname || p.name : '?', players: p ? [p] : [], handicap: rp.playing_handicap,
+        scores: sc, ...st, sortValue: st.thru ? st.netToPar : 999,
+        cb: st.finished ? strokeCountback(holes, st.perHole) : null,
+        form3: recentForm(st.perHole, sc, 3, 0),
+      };
+    });
+    const ranked = rankRows(rows, {
+      key: 'sortValue',
+      tiebreak: (a, b) => (a.cb && b.cb ? compareCountback(a.cb, b.cb) : 0),
+    });
+    const proj = holes.length
+      ? project(rows.map((r) => ({ id: r.id, perHole: r.perHole })), nums, { higherBetter: false, defaultValue: 0 })
+      : [];
+    return { format: 'stroke', holes, rows: ranked, projection: attachProjection(ranked, proj, false), higherBetter: false };
+  }
   // Stableford
   const qrBy = Object.fromEntries(quickResults.filter((q) => q.round_id === round.id).map((q) => [q.player_id, q]));
   const rows = roundPlayers.map((rp) => {
@@ -120,7 +175,8 @@ function attachProjection(rows, proj, higherBetter) {
 export function headlines(board, prevRanks, { projected = false } = {}) {
   const out = [];
   if (!board.rows.length) return out;
-  const isA = board.format === 'ambrose';
+  // Ambrose and stroke play are net to par (lower better); Stableford is points (higher better).
+  const isA = isNetFormat(board.format);
   if (projected) {
     const p = board.projection;
     const top = p[0];

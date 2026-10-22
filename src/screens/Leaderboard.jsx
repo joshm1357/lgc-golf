@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { useData, useScores, useSession, useSideEntries, useFeature } from '../lib/store.jsx';
-import { roundBoard, headlines, compBonuses } from '../lib/board.js';
-import { formatToPar, strokesReceived, stablefordPoints } from '../lib/scoring.js';
+import { useData, useScores, useSession, useSideEntries, useFeature, playerName } from '../lib/store.jsx';
+import { roundBoard, headlines, compBonuses, isNetFormat, isTeamFormat } from '../lib/board.js';
+import { formatToPar, strokesReceived, stablefordPoints, strokeHoleNet } from '../lib/scoring.js';
 import { Header, Seg, AvatarStack, Icon, Sheet, Loading, toast } from '../components/ui.jsx';
 import { supabase, friendlyError } from '../lib/supabase.js';
 import { TrophyArt } from '../components/TrophyArt.jsx';
@@ -10,7 +10,15 @@ import { QuickRoundDone } from './QuickRound.jsx';
 import SharePicture from '../components/SharePicture.jsx';
 import { boardCard } from '../lib/shareCard.js';
 import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
+import { GamesChip } from '../components/GamesChip.jsx';
+import { CompChips } from '../components/CompsChip.jsx';
+import { RulesTodayChip } from '../components/RulesLinks.jsx';
+import { TeeGroupsBoard } from './TeeGroups.jsx';
+import { AwardCards } from '../components/Awards.jsx';
 import RoundRecap from '../components/RoundRecap.jsx';
+import { CourseGuideChip } from '../components/CourseGuideLink.jsx';
+import { WeatherChip } from '../components/Weather.jsx';
+import { AskChip } from '../components/AskChip.jsx';
 
 const DrawSetup = lazyScreen(() => import('../components/DrawSetup.jsx'), 'default', { inline: true });
 
@@ -90,23 +98,35 @@ export default function Leaderboard() {
     return (
       <div className="page">
         <Header logo title={trip?.name || (status?.legacy ? 'L.G.C Golf' : status?.group_name) || 'The Golf Trip'} sub="No rounds set up yet" />
-        <div className="empty">
-          Nothing to show yet.{status?.is_admin ? <> Set up the course, teams and round in <Link to="/admin">Admin</Link>.</> : ' The admin is setting things up.'}
-        </div>
+        {status?.is_admin && !status?.viewing ? (
+          <div className="section">
+            <Link to="/setup" className="card pad row" style={{ gap: 12, textDecoration: 'none', color: 'inherit', borderColor: 'var(--navy)' }}>
+              <span style={{ fontSize: 30 }} aria-hidden="true">🏌️</span>
+              <span className="grow"><strong style={{ fontSize: 18 }}>Set up your trip</strong><div className="small muted">5 quick steps: trip, courses, rounds, players, side comps.</div></span>
+              <span className="btn gold sm">Start</span>
+            </Link>
+          </div>
+        ) : (
+          <div className="empty">Nothing to show yet. The organiser is setting things up.</div>
+        )}
       </div>
     );
   }
 
   const isA = board.format === 'ambrose';
+  const isNet = isNetFormat(board.format); // Ambrose and stroke play: net to par, lower better
+  const isTeams = isTeamFormat(board.format); // Ambrose teams, 4BBB pairs
+  const isStroke = board.format === 'stroke';
+  const isFour = board.format === 'fourball';
   const projected = mode === 'proj';
   const rows = projected ? board.projection : board.rows;
   const heads = headlines(board, prevRanks, { projected });
   const me = status?.player_id;
-  const myTeam = isA ? (data.teamsByRound[round.id] || []).find((t) => t.players.some((p) => p.id === me)) : null;
-  const imPlaying = isA ? !!myTeam : (data.roundPlayers[round.id] || []).some((rp) => rp.player_id === me);
+  const myTeam = isTeams ? (data.teamsByRound[round.id] || []).find((t) => t.players.some((p) => p.id === me)) : null;
+  const imPlaying = isTeams ? !!myTeam : (data.roundPlayers[round.id] || []).some((rp) => rp.player_id === me);
   const canScore = round.status === 'live' && (imPlaying || status?.is_admin);
   const winner = round.status === 'locked' ? board.rows[0] : null;
-  const trophy = data.trophies.find((t) => t.trip_id === round.trip_id && t.type === (isA ? 'ambrose' : 'stableford_total'));
+  const trophy = data.trophies.find((t) => t.trip_id === round.trip_id && t.type === (isA ? 'ambrose' : isStroke || isFour ? 'none' : 'stableford_total'));
 
   return (
     <div className="page">
@@ -121,14 +141,20 @@ export default function Leaderboard() {
         )}
       </Header>
       <RoundChips round={round} onChoose={choose} />
+      <CompChips round={round} />
+      <RulesTodayChip round={round} />
+      <TeeGroupsBoard round={round} />
+      <AwardCards />
+      <CourseGuideChip course={course} round={round} />
+      {!status?.quick && <AskChip about="round" />}
 
       {winner && (
         <div className="winner">
           <TrophyArt name={trophy?.name} type={trophy?.type} size={72} />
           <div className="grow">
-            <div className="label">{trophy ? trophy.name : 'Winner'}{isA ? '' : ' · this round'}</div>
+            <div className="label">{trophy ? trophy.name : 'Winner'}{isTeams ? '' : ' · this round'}</div>
             <div className="t">{winner.name}</div>
-            <div className="hdr-sub">{isA ? `${formatToPar(winner.netToPar, 1)} net` : `${winner.points} points`}</div>
+            <div className="hdr-sub">{isA ? `${formatToPar(winner.netToPar, 1)} net` : isStroke ? `${formatToPar(winner.netToPar)} net · ${winner.gross} gross` : `${winner.points} points`}</div>
           </div>
           <AvatarStack players={winner.players} size={30} />
         </div>
@@ -137,7 +163,7 @@ export default function Leaderboard() {
       {winner && !status?.quick && (
         <div className="section row" style={{ gap: 8 }}>
           <SharePicture className="btn ghost sm grow" label="🖼️ Winner picture" kind="winner"
-            data={{ name: winner.name, score: isA ? `${formatToPar(winner.netToPar, 1)} net` : `${winner.points} points`, roundName: trophy?.name || round.name, courseName: course?.name,
+            data={{ name: winner.name, score: isA ? `${formatToPar(winner.netToPar, 1)} net` : isStroke ? `${formatToPar(winner.netToPar)} net` : `${winner.points} points`, roundName: trophy?.name || round.name, courseName: course?.name,
               date: round.play_date ? new Date(`${round.play_date}T00:00:00`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '' }}
             text={`🏆 ${winner.name} wins ${trophy?.name || round.name}!`} />
           <SharePicture className="btn ghost sm grow" label="🖼️ Leaderboard picture" kind="leaderboard"
@@ -161,6 +187,8 @@ export default function Leaderboard() {
           </Link>
         </div>
       )}
+      <GamesChip round={round} />
+      <WeatherChip round={round} course={course} />
       {round.rules && round.status !== 'locked' && (
         <div className="section"><div className="card pad small" style={{ lineHeight: 1.45 }}><strong>Today's rules:</strong> {round.rules}{status?.legacy && <> <a href="?guide" style={{ fontWeight: 700 }}>How it works</a></>}</div></div>
       )}
@@ -178,10 +206,10 @@ export default function Leaderboard() {
 
       <div className="lb-cols">
         <span style={{ textAlign: 'center' }}>#</span>
-        <span>{isA ? 'Team' : 'Player'}</span>
+        <span>{isA ? 'Team' : isFour ? 'Pair' : 'Player'}</span>
         <span style={{ textAlign: 'center' }}>Thru</span>
-        <span style={{ textAlign: 'right' }}>{projected ? 'Proj.' : isA ? 'Net' : 'Pts'}</span>
-        <span style={{ textAlign: 'right' }}>{projected ? 'Win' : isA ? 'Move' : '+/−'}</span>
+        <span style={{ textAlign: 'right' }}>{projected ? 'Proj.' : isNet ? 'Net' : 'Pts'}</span>
+        <span style={{ textAlign: 'right' }}>{projected ? 'Win' : isA ? 'Move' : isStroke ? 'Gross' : '+/−'}</span>
       </div>
       <div className="card lb">
         {rows.length === 0 && (
@@ -192,24 +220,24 @@ export default function Leaderboard() {
                 {drawOn && <button type="button" className="btn gold" onClick={() => setDrawing(true)}>🎲 Random draw — live for everyone</button>}
                 <Link to="/admin" className="btn ghost">Pick the teams myself</Link>
               </div>
-            ) : (drawOn ? 'Teams come out of the draw — keep the app open and it will pop up.' : 'Teams aren’t set yet.')) : 'No players in this round yet.'}
+            ) : (drawOn ? 'Teams come out of the draw — keep the app open and it will pop up.' : 'Teams aren’t set yet.')) : isFour ? (status?.is_admin ? <Link to="/admin" className="btn ghost">Pick the pairs in Admin</Link> : 'The pairs aren’t set yet.') : 'No players in this round yet.'}
           </div>
         )}
         {rows.map((r, i) => {
           const prev = prevRanks?.[r.id];
           const mv = prev ? prev - r.rank : 0;
-          const mainVal = projected ? r.proj?.projected : isA ? r.netToPar : r.points;
+          const mainVal = projected ? r.proj?.projected : isNet ? r.netToPar : r.points;
           const main = projected
-            ? (r.proj ? (isA ? formatToPar(r.proj.projected, 1) : r.proj.projected.toFixed(1)) : '–')
-            : r.thru === 0 ? '–' : isA ? formatToPar(r.netToPar, r.finished && r.netToPar % 1 ? 1 : 0) : String(r.points);
-          const under = isA && mainVal < 0 && r.thru > 0;
+            ? (r.proj ? (isNet ? formatToPar(r.proj.projected, 1) : r.proj.projected.toFixed(1)) : '–')
+            : r.thru === 0 ? '–' : isNet ? formatToPar(r.netToPar, r.finished && r.netToPar % 1 ? 1 : 0) : String(r.points);
+          const under = isNet && mainVal < 0 && r.thru > 0;
           return (
             <button key={r.id} type="button" className={'lb-row' + (i === 0 && (r.thru > 0 || projected) ? ' lead' : '')} onClick={() => setOpen(r)}>
               <span className="lb-rank">{projected ? i + 1 : r.rankLabel}</span>
               <span className="stack" style={{ gap: 5, minWidth: 0 }}>
                 <span className="lb-name ellipsis">{r.name}</span>
                 <span className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-                  <AvatarStack players={r.players} size={isA ? 26 : 22} />
+                  <AvatarStack players={r.players} size={isTeams ? 26 : 22} />
                   {(r.bonusWins || []).map((w) => (
                     <span key={w} title={`${w}: −${round.comp_bonus} strokes`} style={{ marginLeft: 8, display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 7px', borderRadius: 999, background: 'var(--gold)', color: 'var(--text)', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap' }}>
                       {w.split(' ')[0]} {w.split(' ')[1]} −{round.comp_bonus}
@@ -225,6 +253,8 @@ export default function Leaderboard() {
                     <span>{r.proj?.winPct ?? 0}%</span>
                     <span className="bar"><i style={{ width: `${r.proj?.winPct ?? 0}%` }} /></span>
                   </>
+                ) : isStroke ? (
+                  <span className="mv-same">{r.thru ? r.gross : '—'}</span>
                 ) : isA ? (
                   <span className={mv > 0 ? 'mv-up' : mv < 0 ? 'mv-down' : 'mv-same'}>{mv > 0 ? `▲ ${mv}` : mv < 0 ? `▼ ${-mv}` : '—'}</span>
                 ) : (
@@ -238,6 +268,10 @@ export default function Leaderboard() {
       <p className="note">
         {projected
           ? 'Projected = score so far + expected score on the holes left, based on how the groups ahead played them, adjusted for each team’s form. Win % comes from 2,000 simulated finishes. Early on, with few holes played, treat it as banter.'
+          : isFour
+            ? '4BBB: each pair scores the better Stableford points on every hole (a hole counts once both have a score). +/− is against the expected 2 points a hole. Tap a pair for both cards.'
+          : isStroke
+            ? 'Stroke play: net to par for the holes each player has played, so players on different holes compare fairly. Gross is the total strokes so far; a pick-up counts as net double bogey. Tap a player for their card.'
           : isA
             ? `Net to par for the holes each team has played, so teams on different holes compare fairly.${round.comp_bonus ? ` Gold tags = side comp won (−${round.comp_bonus} strokes, already in the score).` : ''} Arrows show movement since you last looked. Tap a team for its card.`
             : 'Points, and +/− against the expected 2 points a hole, so players on different holes compare fairly. * = typed in from a paper card.'}
@@ -260,7 +294,10 @@ export default function Leaderboard() {
 }
 
 export function Scorecard({ row, board }) {
+  if (board.format === 'fourball') return <FourballCard row={row} board={board} />;
   const isA = board.format === 'ambrose';
+  const isNet = isNetFormat(board.format);
+  const isStroke = board.format === 'stroke';
   const holes = board.holes;
   const tot = { par: 0, s: 0, x: 0 };
   return (
@@ -276,7 +313,7 @@ export function Scorecard({ row, board }) {
         <div className="card" style={{ overflow: 'hidden' }}>
           <table className="sc">
             <thead>
-              <tr><th>Hole</th><th>Par</th><th>SI</th><th>Shots</th><th>Score</th><th>{isA ? 'Net' : 'Pts'}</th></tr>
+              <tr><th>Hole</th><th>Par</th><th>SI</th><th>Shots</th><th>Score</th><th>{isNet ? 'Net' : 'Pts'}</th></tr>
             </thead>
             <tbody>
               {holes.map((h) => {
@@ -287,8 +324,8 @@ export function Scorecard({ row, board }) {
                 if (strokes != null) tot.s += strokes;
                 let x = '';
                 if (s) {
-                  x = isA ? formatToPar(strokes - h.par - recv) : String(stablefordPoints(h, strokes, row.handicap, s.picked_up));
-                  if (!isA) tot.x += stablefordPoints(h, strokes, row.handicap, s.picked_up);
+                  x = isStroke ? formatToPar(strokeHoleNet(h, s, row.handicap)) : isA ? formatToPar(strokes - h.par - recv) : String(stablefordPoints(h, strokes, row.handicap, s.picked_up));
+                  if (!isNet) tot.x += stablefordPoints(h, strokes, row.handicap, s.picked_up);
                 }
                 return (
                   <tr key={h.n}>
@@ -299,8 +336,8 @@ export function Scorecard({ row, board }) {
                 );
               })}
               <tr>
-                <td><strong>Tot</strong></td><td>{tot.par}</td><td /><td /><td><strong>{tot.s || ''}</strong></td>
-                <td><strong>{isA ? formatToPar(row.netToPar, row.finished ? 1 : 0) : tot.x}</strong></td>
+                <td><strong>Tot</strong></td><td>{tot.par}</td><td /><td /><td><strong>{isStroke ? row.gross || '' : tot.s || ''}</strong></td>
+                <td><strong>{isNet ? formatToPar(row.netToPar, isA && row.finished ? 1 : 0) : tot.x}</strong></td>
               </tr>
             </tbody>
           </table>
@@ -326,6 +363,41 @@ function TvToggle({ round }) {
         <span className="small"><strong>📺 Show on the clubhouse TV</strong><div className="muted">On the club’s TV screen today — first names only, no photos. Anyone with the club’s TV link can see it.</div></span>
         <input type="checkbox" checked={!!round.tv} disabled={busy} onChange={(e) => flip(e.target.checked)} style={{ width: 24, height: 24, flex: 'none' }} aria-label="Show on the clubhouse TV" />
       </label>
+    </div>
+  );
+}
+
+/** A 4BBB pair's card: both players' scores and points, and the better ball that counted. */
+function FourballCard({ row, board }) {
+  const holes = board.holes;
+  const m = row.members || [];
+  const name = (id) => playerName(row.players.find((p) => p.id === id));
+  const tot = Object.fromEntries(m.map((x) => [x.id, 0]));
+  return (
+    <div className="stack">
+      <div className="row"><AvatarStack players={row.players} size={34} /><span className="muted small">{m.map((x) => `${name(x.id)} off ${Math.round(x.hcp)}`).join(' · ')}</span></div>
+      <div className="card" style={{ overflowX: 'auto' }}>
+        <table className="sc">
+          <thead><tr><th>Hole</th><th>Par</th><th>SI</th>{m.map((x) => <th key={x.id}>{name(x.id).split(' ')[0]}</th>)}<th>Best</th></tr></thead>
+          <tbody>
+            {holes.map((h) => (
+              <tr key={h.n}>
+                <td><strong>{h.n}</strong></td><td>{h.par}</td><td>{h.si}</td>
+                {m.map((x) => {
+                  const s = x.scores[h.n];
+                  const pts = s ? stablefordPoints(h, s.strokes, x.hcp, s.picked_up) : null;
+                  if (pts != null) tot[x.id] += pts;
+                  const counts = (row.counted?.[h.n] || []).includes(x.id);
+                  return <td key={x.id} style={counts ? { fontWeight: 800, background: 'var(--gold-soft)' } : undefined}>{s ? `${s.picked_up ? 'P' : s.strokes}·${pts}` : ''}</td>;
+                })}
+                <td><strong>{row.perHole[h.n] ?? ''}</strong></td>
+              </tr>
+            ))}
+            <tr><td><strong>Tot</strong></td><td /><td />{m.map((x) => <td key={x.id}>{tot[x.id]}</td>)}<td><strong>{row.points}</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <span className="small muted">Each box: strokes · points. Gold = the points that counted.</span>
     </div>
   );
 }

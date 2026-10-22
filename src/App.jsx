@@ -9,6 +9,11 @@ import { Sidebar } from './components/Sidebar.jsx';
 import { FeedbackHost } from './components/Feedback.jsx';
 import { WhatsNew } from './components/WhatsNew.jsx';
 import { ViewingBar, StopViewing } from './components/Viewing.jsx';
+import { AwardWatcher } from './components/Awards.jsx';
+import { CommentaryWatcher } from './components/Commentary.jsx';
+import { Shortcuts } from './components/Shortcuts.jsx';
+import { NotifyPrompt } from './components/NotifyPrompt.jsx';
+import { Caddie } from './components/Caddie.jsx';
 import { NEW_GROUPS } from './lib/beta.js';
 import { supabase } from './lib/supabase.js';
 import { sourceFrom, countScan } from './lib/quick.js';
@@ -28,8 +33,10 @@ import More from './screens/More.jsx';
 
 // Loaded when first opened (the service worker saves them all for offline use in the background).
 const Admin = lazyScreen(() => import('./screens/Admin.jsx'));
+const SetupGuide = lazyScreen(() => import('./screens/SetupGuide.jsx'));
 const Privacy = lazyScreen(() => import('./screens/Legal.jsx'), 'Privacy');
 const Terms = lazyScreen(() => import('./screens/Legal.jsx'), 'Terms');
+const VoteLink = lazyScreen(() => import('./screens/VoteLink.jsx'));
 const Profile = lazyScreen(() => import('./screens/Profile.jsx'));
 const Comps = lazyScreen(() => import('./screens/Comps.jsx'));
 const MapScreen = lazyScreen(() => import('./screens/MapScreen.jsx'));
@@ -40,6 +47,9 @@ const Courses = lazyScreen(() => import('./screens/Courses.jsx'));
 const Planner = lazyScreen(() => import('./screens/Trips.jsx'));
 const PlanDetail = lazyScreen(() => import('./screens/Planner.jsx'), 'PlanDetail');
 const Rulebook = lazyScreen(() => import('./screens/Rulebook.jsx'));
+const RulePage = lazyScreen(() => import('./screens/RulePage.jsx'));
+const CaseHearing = lazyScreen(() => import('./screens/Cases.jsx'), 'CaseHearing');
+const Governance = lazyScreen(() => import('./screens/Cases.jsx'), 'Governance');
 const GreenMapper = lazyScreen(() => import('./screens/GreenMapper.jsx'));
 const Group = lazyScreen(() => import('./screens/Group.jsx'));
 const History = lazyScreen(() => import('./screens/History.jsx'));
@@ -50,6 +60,20 @@ const TvBoard = lazyScreen(() => import('./screens/TvBoard.jsx'));
 const RoundReady = lazyScreen(() => import('./screens/QuickRound.jsx'), 'RoundReady');
 const Cup = lazyScreen(() => import('./screens/Cup.jsx'));
 const CupMatch = lazyScreen(() => import('./screens/Cup.jsx'), 'CupMatch');
+const Wishes = lazyScreen(() => import('./screens/Wishes.jsx'));
+const Games = lazyScreen(() => import('./screens/Games.jsx'));
+const Replay = lazyScreen(() => import('./screens/Replay.jsx'));
+const CourseGuide = lazyScreen(() => import('./screens/CourseGuide.jsx'));
+const Ask = lazyScreen(() => import('./screens/AiHelper.jsx'));
+const AiImport = lazyScreen(() => import('./screens/AiImport.jsx'));
+const Stats = lazyScreen(() => import('./screens/Stats.jsx'));
+const DinnerAwards = lazyScreen(() => import('./screens/DinnerAwards.jsx'));
+const Desk = lazyScreen(() => import('./screens/Desk.jsx')); // Stage 11c: the full desktop (Trip desk, tables, paper cards)
+const TripFinder = lazyScreen(() => import('./screens/TripFinder.jsx'));
+const TripBuilder = lazyScreen(() => import('./screens/TripBuilder.jsx'));
+const Notifications = lazyScreen(() => import('./screens/Notifications.jsx'));
+const CompsBoard = lazyScreen(() => import('./screens/CompsBoard.jsx'));
+const TripOverviewScreen = lazyScreen(() => import('./screens/TripOverview.jsx')); // a trip's overview (trips with no plan)
 
 // A fresh plan screen per plan, so nothing carries over when a notification jumps to another one.
 function PlanDetailRoute() {
@@ -126,6 +150,7 @@ function Gate() {
   if (loc.pathname === '/start' || loc.pathname.startsWith('/start/')) return <StartOrClosed />;
   // Privacy and terms (drafts): anyone can read them.
   if (loc.pathname === '/privacy') return <LazyArea resetKey="privacy" fallback={<Loading />}><Privacy /></LazyArea>;
+  if (loc.pathname.startsWith('/v/')) return <LazyArea resetKey="vote-link" fallback={<Loading />}><Routes><Route path="/v/:token" element={<VoteLink />} /></Routes></LazyArea>; // 079: vote email answers, no sign-in
   if (loc.pathname === '/terms') return <LazyArea resetKey="terms" fallback={<Loading />}><Terms /></LazyArea>;
   // The clubhouse TV: read-only, no sign-in.
   if (loc.pathname.startsWith('/tv/')) return <LazyArea resetKey="tv" fallback={<Loading />}><Routes><Route path="/tv/:slug" element={<TvBoard />} /></Routes></LazyArea>;
@@ -188,6 +213,8 @@ function Inside() {
     <div className="app with-side">
       <Sidebar />
       <ViewingBar />
+      <AwardWatcher />
+      <CommentaryWatcher />
       {waiting > 0 && !offline && <div className="sync" role="status">📤 {waiting} post{waiting === 1 ? '' : 's'} or entr{waiting === 1 ? 'y' : 'ies'} waiting to send…</div>}
       {offline && <div className="sync" role="status">📵 No signal — showing the copy saved on this phone.{status.viewing ? '' : ' Scores you enter are kept and sent when signal comes back.'}</div>}
       <LazyArea resetKey={loc.pathname} fallback={<Loading />}>
@@ -198,23 +225,41 @@ function Inside() {
         <Route path="/comps" element={<FeatureRoute feature="side_comps" label="Side comps"><Comps /></FeatureRoute>} />
         <Route path="/map" element={<FeatureRoute feature="location" label="Where’s everyone"><MapScreen /></FeatureRoute>} />
         <Route path="/more" element={<More />} />
+        <Route path="/notifications" element={<FeatureRoute feature="notifications" label="Phone notifications"><Notifications /></FeatureRoute>} />
+        <Route path="/comps-board" element={<CompsBoard />} />
+        <Route path="/trip/:tripId" element={<TripOverviewScreen />} />
+        <Route path="/ask" element={<FeatureRoute feature="ai_helper" label="The AI helper"><Ask /></FeatureRoute>} />
+        <Route path="/import" element={<FeatureRoute feature="ai_helper" label="The AI helper"><AiImport /></FeatureRoute>} />
         <Route path="/cup" element={<FeatureRoute feature="cup" label="The Cup"><Cup /></FeatureRoute>} />
         <Route path="/cup/:matchId" element={<FeatureRoute feature="cup" label="The Cup"><CupMatch /></FeatureRoute>} />
+        <Route path="/games" element={<FeatureRoute feature="games" label="Games and side bets"><Games /></FeatureRoute>} />
+        <Route path="/replay/:roundId" element={<FeatureRoute feature="replay" label="Round replay"><Replay /></FeatureRoute>} />
         <Route path="/trophies" element={<FeatureRoute feature="trophies" label="The Trophy Room"><Trophies /></FeatureRoute>} />
         <Route path="/tribunal" element={<FeatureRoute feature="tribunal" label="The Handicap Tribunal"><Tribunal /></FeatureRoute>} />
         <Route path="/tribunal/:caseId" element={<FeatureRoute feature="tribunal" label="The Handicap Tribunal"><TribunalCase /></FeatureRoute>} />
+        <Route path="/stats" element={<FeatureRoute feature="stats" label="Player stats"><Stats /></FeatureRoute>} />
+        <Route path="/dinner/:tripId?" element={<FeatureRoute feature="dinner_awards" label="Fines and dinner awards"><DinnerAwards /></FeatureRoute>} />
+        <Route path="/tribunal/case/:caseId" element={<FeatureRoute feature="tribunal" label="The Tribunal"><CaseHearing /></FeatureRoute>} />
+        <Route path="/governance" element={<FeatureRoute feature="tribunal" label="The Tribunal"><Governance /></FeatureRoute>} />
         <Route path="/player/:playerId" element={<Profile />} />
         <Route path="/courses" element={<Courses />} />
         <Route path="/admin" element={<Admin />} />
+        <Route path="/setup" element={<SetupGuide />} />
         <Route path="/plan" element={<FeatureRoute feature="planner" label="The Trips planner"><Planner /></FeatureRoute>} />
         <Route path="/plan/:planId" element={<FeatureRoute feature="planner" label="The Trips planner"><PlanDetailRoute /></FeatureRoute>} />
+        <Route path="/plan/:planId/find" element={<FeatureRoute feature="trip_finder" label="The trip finder"><TripFinder /></FeatureRoute>} />
+        <Route path="/plan/:planId/build" element={<FeatureRoute feature="trip_finder" label="The trip builder"><TripBuilder /></FeatureRoute>} />
         <Route path="/rules" element={<Rulebook />} />
+        <Route path="/rules/:ruleId" element={<RulePage />} />
         <Route path="/courses/:courseId/greens" element={<GreenMapper />} />
+        <Route path="/guide/:courseId/:hole?" element={<FeatureRoute feature="gps" label="The course guide"><CourseGuide /></FeatureRoute>} />
         <Route path="/group" element={<Group />} />
         <Route path="/groups" element={<YourGroupsInside />} />
         <Route path="/history" element={<History />} />
         <Route path="/round-ready" element={<RoundReady />} />
+        <Route path="/wishes" element={<Wishes />} />
         <Route path="/join/:code" element={<JoinInsideRoute />} />
+        <Route path="/desk/*" element={<Desk />} />
         <Route path="*" element={<Leaderboard />} />
       </Routes>
       </LazyArea>
@@ -223,6 +268,9 @@ function Inside() {
       <UpdateBanner />
       <FeedbackHost />
       <WhatsNew />
+      <Shortcuts />
+      <NotifyPrompt />
+      <Caddie />
       <Toaster />
     </div>
   );

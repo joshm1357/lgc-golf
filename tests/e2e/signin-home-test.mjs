@@ -85,7 +85,7 @@ const browser = await chromium.launch();
 async function phone({ session } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   // The beta's one-time What's new note (beta-test.mjs checks it) would cover these screens: mark it seen.
-  await ctx.addInitScript(() => { try { localStorage.setItem('tgt-whats-new', 'beta-1'); } catch { /* fine */ } });
+  await ctx.addInitScript(() => { try { localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-notify-prompt', String(Date.now())); } catch { /* fine */ } });
   await ctx.route(STAGING, fake);
   await ctx.route(LIVEDB, fake);
   // A stand-in for Google's sign-in page, so tapping "Sign in with Google" never leaves this test.

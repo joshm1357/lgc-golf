@@ -158,6 +158,7 @@ await ctx.addInitScript(([uid]) => {
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
   if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated', is_anonymous: true } }));
+  try { localStorage.setItem('tgt-notify-prompt', String(Date.now())); } catch {}
 }, ['99999999-9999-4999-8999-999999999999']);
 const page = await ctx.newPage();
 let dialogs = 0;
@@ -211,7 +212,7 @@ CLUB.v = { signed_in: true, platform_admin: false, claims: [], club: { id: 'c100
 PAGE.v = { id: LIB[0].id, slug: LIB[0].slug, name: LIB[0].name, area: 'Bowral NSW', osm: false, verified: false, club: null, holes: H };
 await page.goto(`${BASE}#/club`);
 await page.reload();
-await page.getByText('Your course page').waitFor({ timeout: 15000 });
+await page.getByText('Your course page', { exact: true }).waitFor({ timeout: 15000 });
 await page.getByLabel('Group bookings email').fill('bookings@bowral.example');
 await page.getByLabel('Offers for visiting groups').fill('Stay and play from $99');
 await page.getByRole('button', { name: 'Save', exact: true }).click();

@@ -10,6 +10,8 @@ const namedIn = (winners, name) => winnerNames(winners).some((w) => w.toLowerCas
 import { uploadPhoto } from '../lib/images.js';
 import { Header, Avatar, Icon, Loading, toast, PhotoButtons } from '../components/ui.jsx';
 import { ViewAsButton } from '../components/Viewing.jsx';
+import { PlayerStatsCard } from '../components/PlayerStats.jsx';
+import { HomeArea } from '../components/HomeArea.jsx';
 
 /** Everything we know about a player: Stableford rounds, Ambrose results, trophies, comps, Tribunal, handicap. */
 export function usePlayerHistory(playerId) {
@@ -36,7 +38,7 @@ export function usePlayerHistory(playerId) {
         const b = roundBoard({ round: r, course, roundPlayers: data.roundPlayers[r.id] || [], playersById: data.playersById, scoresIdx: scores.index, quickResults: data.quick_results });
         const row = b.rows.find((x) => x.id === playerId);
         if (row && row.thru > 0) stableford.push({ round: r, course, points: row.points, finished: row.finished, rank: row.rankLabel, of: b.rows.length });
-      } else {
+      } else if (r.format === 'ambrose') {
         const team = (data.teamsByRound[r.id] || []).find((t) => t.players.some((p) => p.id === playerId));
         if (!team) continue;
         const b = roundBoard({ round: r, course, teams: data.teamsByRound[r.id], playersById: data.playersById, scoresIdx: scores.index });
@@ -142,6 +144,7 @@ export default function Profile() {
           <button type="button" className="btn ghost" onClick={() => { setName(p.name); setNick(p.nickname || ''); setEdit(true); }}>Edit name / nickname</button>
         ))}
 
+        {isMe && <HomeArea player={p} />}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}>
           {[['Rounds', h.stableford.length + h.ambrose.length], ['Avg pts', h.avg != null ? h.avg.toFixed(1) : '–'], ['Best', h.best ?? '–'], ['Comp wins', h.sideWins]].map(([k, v]) => (
             <div key={k} className="card" style={{ padding: '10px 6px', textAlign: 'center' }}>
@@ -150,6 +153,8 @@ export default function Profile() {
             </div>
           ))}
         </div>
+
+        <PlayerStatsCard playerId={playerId} />
 
         {h.honours.length > 0 && (
           <div className="card pad stack">

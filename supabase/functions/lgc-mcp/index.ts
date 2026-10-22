@@ -7,8 +7,14 @@
 // (connector_keys, stored as a SHA-256 hash) and can only see and change that group. Anyone with
 // the link acts as that group's organiser, so keep it private; delete its row to cut it off.
 //
+// Learning loop (057): every tool call is logged as counts only (group, tool, worked or not, time, a short error
+// kind — never what was asked), and suggest_feature saves a one-line job no tool can do yet. Josh sees both on the
+// Wishes screen (platform admins only).
+//
 // Protocol: MCP over plain HTTP (JSON-RPC 2.0, JSON responses — no streaming needed).
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
+// Trip finder (Stage 16): the same ranking the app uses (pure maths, shared with the app and its tests).
+import { searchBox, findCourses, pickFacts, factLine, startsText, defaultDay, FACTS } from '../../../src/lib/tripfinder.js';
 
 const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
   auth: { persistSession: false, autoRefreshToken: false },
@@ -47,9 +53,47 @@ type P = { id: string; name: string; nickname?: string; handicap?: number; appro
 const fail = (msg: string) => { throw new Error(msg); };
 const must = async <T>(q: PromiseLike<{ data: T; error: unknown }>) => {
   const { data, error } = await q;
-  if (error) fail((error as { message?: string }).message || 'Database error');
+  if (error) throw Object.assign(new Error((error as { message?: string }).message || 'Database error'), { kind: 'database' });
   return data;
 };
+
+// ---------- the learning loop (057): which tools organisers use, and what they wish they could do ----------
+// Each tool call is logged as group + tool + worked or not + how long + a short error KIND. Never the arguments, never
+// the error's wording (it can name players), never any chat text. Logging is fire-and-forget: it can't slow or break
+// a call, and an older database without the table just doesn't log.
+/** A short, name-free label for why a tool call failed. */
+function errorKind(e: unknown): string {
+  const kind = (e as { kind?: string })?.kind;
+  if (kind) return kind;
+  const m = String((e as Error)?.message || e || '');
+  if (/^No (such|player|team|rounds)|isn't in /i.test(m)) return 'not_found';
+  if (/could be|matches .* and |more specific/i.test(m)) return 'ambiguous';
+  if (/is locked/i.test(m)) return 'locked';
+  if (/isn't 1–18|doesn't look right|^Say which|^No scores given|^Amount must|^Nothing to|^Describe the job/i.test(m)) return 'bad_input';
+  return 'other';
+}
+function logCall(c: Ctx, tool: string, ok: boolean, started: number, error: string | null = null) {
+  try {
+    const p = db.from('connector_calls').insert({
+      group_id: c.g, tool: tool.slice(0, 60), ok, ms: Math.max(0, Math.round(performance.now() - started)),
+      error: ok ? null : (error || 'other').slice(0, 40),
+    }).then(() => {}, () => {});
+    // Keep the function alive until the row is written, even after the answer has gone back.
+    (globalThis as { EdgeRuntime?: { waitUntil?: (p: PromiseLike<unknown>) => void } }).EdgeRuntime?.waitUntil?.(p);
+  } catch { /* logging never breaks a call */ }
+}
+/** The wish as one plain line: no email addresses, phone numbers or links, at most 200 characters. */
+function cleanJob(text: unknown): string {
+  return String(text ?? '')
+    .replace(/https?:\/\/\S+/gi, '')
+    .replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, '')
+    .replace(/\+?\d[\d\s()-]{6,}\d/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 200)
+    .trim();
+}
+const WISHES_PER_DAY = 50; // per group: a runaway assistant can't flood the list
 async function players(c: Ctx): Promise<P[]> {
   return ((await must(db.from('players').select('id,name,nickname,handicap,approved').eq('group_id', c.g))) as P[]).filter((p) => p.approved !== false);
 }
@@ -90,6 +134,15 @@ async function subjectsOf(round: Record<string, unknown>, all: P[]) {
     return teams.map((t) => ({ id: t.id, type: 'team', name: t.name, handicap: Number(t.handicap), members: t.team_players.map((x) => all.find((p) => p.id === x.player_id)).filter(Boolean) as P[] }));
   }
   const rps = (await must(db.from('round_players').select('*').eq('round_id', round.id))) as { player_id: string; playing_handicap: number }[];
+  if (round.format === 'fourball') {
+    // 4BBB: each player in each pair scores their own ball, off the round's playing handicap (else their handicap).
+    const hcp = Object.fromEntries(rps.map((rp) => [rp.player_id, Number(rp.playing_handicap)]));
+    const teams = (await must(db.from('teams').select('*, team_players(player_id)').eq('round_id', round.id))) as { id: string; name: string; team_players: { player_id: string }[] }[];
+    return teams.flatMap((t) => t.team_players.map((x) => {
+      const p = all.find((y) => y.id === x.player_id);
+      return { id: x.player_id, type: 'player', name: pname(p), handicap: hcp[x.player_id] ?? Math.round(Number(p?.handicap || 0)), members: p ? [p] : [], pair: t.name, pairId: t.id };
+    }));
+  }
   return rps.map((rp) => { const p = all.find((x) => x.id === rp.player_id); return { id: rp.player_id, type: 'player', name: pname(p), handicap: Number(rp.playing_handicap), members: p ? [p] : [] }; });
 }
 function findSubject(subs: Awaited<ReturnType<typeof subjectsOf>>, who: string) {
@@ -109,6 +162,8 @@ async function featureOn(c: Ctx, key: string) {
 const TOOL_FEATURE: Record<string, string> = {
   confirm_side_comp: 'side_comps', post_to_feed: 'feed', plan_details: 'planner', set_rsvp: 'planner',
   add_job: 'planner_tasks', create_poll: 'planner_tasks', add_cost: 'planner_costs',
+  find_courses: 'trip_finder', get_course_facts: 'trip_finder', propose_course_fact: 'trip_finder',
+  raise_case: 'tribunal', list_cases: 'tribunal', read_verdict: 'tribunal',
 };
 async function post(c: Ctx, text: string) {
   if (!(await featureOn(c, 'feed'))) return; // no feed: nothing to post to
@@ -134,7 +189,7 @@ const TOOLS: Tool[] = [
       for (const r of rounds) {
         const subs = await subjectsOf(r, all);
         lines.push(`- Round "${r.name}" id=${r.id} · ${r.courses?.name} · ${r.format} · ${r.status} · ${r.play_date || ''}${r.comp_bonus ? ` · side comps −${r.comp_bonus}` : ''}${r.ctp_holes?.length ? ` · CTP ${r.ctp_holes.join(',')}` : ''}${r.ld_holes?.length ? ` · LD ${r.ld_holes.join(',')}` : ''}`);
-        for (const s of subs) lines.push(`    ${s.name} (hcp ${s.handicap})${s.type === 'team' ? `: ${s.members.map(pname).join(', ')}` : ''}`);
+        for (const s of subs as any[]) lines.push(`    ${s.name} (hcp ${s.handicap})${s.type === 'team' ? `: ${s.members.map(pname).join(', ')}` : s.pair ? ` — pair ${s.pair}` : ''}`);
       }
       const plans = await must(db.from('plans').select('id,name,kind,status,start_date,end_date,location_name,proposed').eq('group_id', c.g).neq('status', 'cancelled').order('start_date', { nullsFirst: false })) as Record<string, any>[];
       lines.push('Trips (ideas, being decided, locked in, past):');
@@ -145,7 +200,7 @@ const TOOLS: Tool[] = [
   },
   {
     name: 'get_leaderboard',
-    description: 'The scores for a round (default: the live round, else the latest). Gross, holes played, handicap and net (Ambrose) or Stableford points.',
+    description: 'The scores for a round (default: the live round, else the latest). Gross, holes played, handicap and net (Ambrose), net to par (stroke play), Stableford points, or better-ball points per pair (4BBB).',
     inputSchema: { type: 'object', properties: { round_id: str('Round id (optional)') } },
     async run(a, c) {
       const round = await currentRound(c, a.round_id);
@@ -166,6 +221,28 @@ const TOOLS: Tool[] = [
           }
         }
       }
+      const stab = (h: { par: number; si: number }, x: Record<string, any>, hcp: number) =>
+        (x.picked_up || x.strokes == null ? 0 : Math.max(0, 2 + h.par + strokesReceived(hcp, h.si) - x.strokes));
+      if (round.format === 'fourball') {
+        // 4BBB: per pair, the better points on each hole once both have a score (or picked up).
+        const pairs = new Map<string, { name: string; members: typeof subs }>();
+        for (const sub of subs as any[]) {
+          if (!pairs.has(sub.pairId)) pairs.set(sub.pairId, { name: sub.pair, members: [] });
+          pairs.get(sub.pairId)!.members.push(sub);
+        }
+        const prow = [...pairs.values()].map((pr) => {
+          let pts = 0; let thru = 0;
+          for (const h of holes) {
+            const each = pr.members.map((m) => scores.find((x) => x.subject_id === m.id && x.hole === h.n));
+            if (each.some((x) => !x || (x.strokes == null && !x.picked_up))) continue;
+            pts += Math.max(...each.map((x, i) => stab(h, x!, pr.members[i].handicap)));
+            thru += 1;
+          }
+          return { pr, pts, thru };
+        }).sort((x, y) => y.pts - 2 * y.thru - (x.pts - 2 * x.thru));
+        return [`${round.name} (4BBB, better-ball Stableford, ${round.status}) at ${course.name}`,
+          ...prow.map((r, i) => `${i + 1}. ${r.pr.name} (${r.pr.members.map((m) => `${m.name} off ${m.handicap}`).join(', ')}) — thru ${r.thru} · ${r.pts} pts (${r.pts - 2 * r.thru >= 0 ? '+' : ''}${r.pts - 2 * r.thru} on 2 a hole)`)].join('\n');
+      }
       const rows = subs.map((s) => {
         const mine = scores.filter((x) => x.subject_id === s.id);
         const played = mine.filter((x) => x.strokes != null || x.picked_up);
@@ -177,6 +254,18 @@ const TOOLS: Tool[] = [
           const net = (played.length === holes.length ? gross - s.handicap : gross - recv) - off;
           return { s, played: played.length, gross, toPar: gross - par, net, sort: net - par, comps: bonus[s.id] || [] };
         }
+        if (round.format === 'stroke') {
+          // Stroke play: net to par through the holes played; a pick-up counts as net double bogey.
+          let netToPar = 0; let g = 0;
+          for (const x of played) {
+            const h = holes.find((hh) => hh.n === x.hole);
+            if (!h) continue;
+            const recv = strokesReceived(s.handicap, h.si);
+            netToPar += x.picked_up ? 2 : x.strokes - h.par - recv;
+            g += x.picked_up ? h.par + 2 + recv : x.strokes;
+          }
+          return { s, played: played.length, gross: g, toPar: g - par, netToPar, sort: netToPar };
+        }
         const pts = mine.reduce((t, x) => {
           const h = holes.find((hh) => hh.n === x.hole);
           if (!h || x.strokes == null) return t;
@@ -185,18 +274,18 @@ const TOOLS: Tool[] = [
         return { s, played: played.length, gross, toPar: gross - par, points: pts, sort: -pts };
       }).sort((x, y) => x.sort - y.sort);
       const head = `${round.name} (${round.format}, ${round.status}) at ${course.name}, par ${holes.reduce((t, h) => t + h.par, 0)}${round.comp_bonus ? `. Side comps worth −${round.comp_bonus}, already taken off the net below` : ''}`;
-      return [head, ...rows.map((r, i) => `${i + 1}. ${r.s.name} — thru ${r.played} · gross ${r.gross} (${r.toPar >= 0 ? '+' : ''}${r.toPar}) · hcp ${r.s.handicap} · ${'points' in r ? `${r.points} pts` : `net ${Math.round((r.net as number) * 10) / 10}${(r as any).comps?.length ? ` (incl. ${(r as any).comps.join(', ')})` : ''}`}`)].join('\n');
+      return [head, ...rows.map((r, i) => `${i + 1}. ${r.s.name} — thru ${r.played} · gross ${r.gross} (${r.toPar >= 0 ? '+' : ''}${r.toPar}) · hcp ${r.s.handicap} · ${'netToPar' in r ? `net ${(r as any).netToPar > 0 ? '+' : ''}${(r as any).netToPar === 0 ? 'E' : (r as any).netToPar} to par` : 'points' in r ? `${r.points} pts` : `net ${Math.round((r.net as number) * 10) / 10}${(r as any).comps?.length ? ` (incl. ${(r as any).comps.join(', ')})` : ''}`}`)].join('\n');
     },
   },
   {
     name: 'enter_scores',
-    description: 'Enter or correct hole scores for one team (Ambrose) or player (Stableford), e.g. from a photo of a scorecard. Overwrites those holes. Optionally who drove (Ambrose minimum-drives rule).',
+    description: 'Enter or correct hole scores for one team (Ambrose) or player (Stableford, stroke play, or one player of a 4BBB pair), e.g. from a photo of a scorecard. Overwrites those holes. Optionally who drove (Ambrose minimum-drives rule).',
     inputSchema: {
       type: 'object', required: ['who', 'scores'],
       properties: {
         round_id: str('Round id (optional: the live round)'),
         who: str('Team name (Ambrose) or player name (Stableford)'),
-        scores: { type: 'array', items: { type: 'object', required: ['hole', 'strokes'], properties: { hole: num('1–18'), strokes: num('Strokes, 1–15; 0 = picked up (Stableford)'), drive_by: str('Ambrose: player whose tee shot was used (optional)') } } },
+        scores: { type: 'array', items: { type: 'object', required: ['hole', 'strokes'], properties: { hole: num('1–18'), strokes: num('Strokes, 1–15; 0 = picked up (Stableford, 4BBB; in stroke play it counts as net double bogey)'), drive_by: str('Ambrose: player whose tee shot was used (optional)') } } },
       },
     },
     async run(a, c) {
@@ -332,6 +421,79 @@ const TOOLS: Tool[] = [
       return `Vote "${a.question}" is up with ${opts.length} options (id=${poll.id}) and posted to the feed. Push notifications go out when the admin opens votes from the app.`;
     },
   },
+  // ---------- Trip finder (Stage 16): the organiser's own assistant researches for free; facts it finds stay pending ----------
+  {
+    name: 'find_courses',
+    description: "Trip finder: the courses that suit a planned trip, ranked, each with why (tee-time window, longest drive, price, rating). Uses the trip's starting areas (set in the app: Trips → the trip → Find a course). Drive times are estimates (straight line × 1.3 at 80 km/h). Courses marked CHECK have unknown facts — research them (club website, booking page) and save what you find with propose_course_fact.",
+    inputSchema: {
+      type: 'object', required: ['trip_id'],
+      properties: {
+        trip_id: str('Plan id (a planned trip or round) from lgc_overview'),
+        preset: { type: 'string', enum: ['fair', 'cheap', 'best'], description: 'Ranking: fair drive (default), cheapest, or best course' },
+        limit: num('How many to list (default 10, up to 30)'),
+      },
+    },
+    async run(a, c) {
+      let pl: Record<string, any> | null = null;
+      const { data: byPlan } = await db.from('plans').select('*').eq('id', a.trip_id).eq('group_id', c.g).maybeSingle();
+      pl = byPlan as Record<string, any> | null;
+      if (!pl) {
+        const { data: byTrip } = await db.from('plans').select('*').eq('trip_id', a.trip_id).eq('group_id', c.g).limit(1);
+        pl = (byTrip as Record<string, any>[] | null)?.[0] || fail('No such trip in this group — check the id with lgc_overview.');
+      }
+      const [{ data: sp }, { data: find }] = await Promise.all([
+        db.from('trip_start_points').select('*').eq('plan_id', pl!.id).order('sort'),
+        db.from('trip_finds').select('*').eq('plan_id', pl!.id).maybeSingle(),
+      ]);
+      const starts = ((sp || []) as Record<string, any>[]).map((r) => ({ label: r.label, lat: r.lat, lng: r.lng, count: r.headcount, leave: r.leave_after, finish: r.finish_by }));
+      if (!starts.length) fail('No starting areas on this trip yet — the organiser adds them in the app (Trips → the trip → Find a course), e.g. "Inner West ×8, Newcastle ×2".');
+      const f = (find || {}) as Record<string, any>;
+      const maxDrive = f.max_drive_min || 180;
+      const box = searchBox(starts, maxDrive)!;
+      const rows = await must(db.rpc('trip_finder_courses', { p_south: box.south, p_west: box.west, p_north: box.north, p_east: box.east, p_lat: box.lat, p_lng: box.lng, p_limit: 300, p_group: c.g })) as Record<string, any>[];
+      const players = f.players ?? starts.reduce((n, x) => n + x.count, 0);
+      const day = f.day || defaultDay(pl);
+      const ranked = findCourses(rows || [], { starts, players, holes: f.holes || 18, day, maxDriveMin: maxDrive, now: new Date() }, a.preset || f.preset || 'fair', f.filters || {});
+      const n = Math.max(1, Math.min(30, Number(a.limit) || 10));
+      const word: Record<string, string> = { fits: 'FITS', check: 'CHECK', no: "DOESN'T FIT" };
+      const lines = [`${pl!.name} · ${day} · ${players} players · ${f.holes || 18} holes · coming from ${startsText(starts)} · longest drive up to about ${Math.round(maxDrive / 6) / 10} h`];
+      ranked.slice(0, n).forEach((r: any, i: number) => lines.push(`${i + 1}. ${r.course.name}${r.course.area ? ` (${r.course.area})` : ''} [${word[r.status]}] course_id=${r.course.id} — ${r.why}`));
+      if (!ranked.length) lines.push('No courses in reach — try a longer drive in the app.');
+      lines.push('Put options to the group from the app (Find a course → tick up to 3 → Put to the group).');
+      return lines.join('\n');
+    },
+  },
+  {
+    name: 'get_course_facts',
+    description: "What's known about a course (shared by every group): visitor times, members-only times, largest group, prices, booking ahead, start interval, carts, stay and play — with where each fact came from and when it was checked (never who). Plus this group's own private notes on it.",
+    inputSchema: { type: 'object', required: ['course_id'], properties: { course_id: str('course_id from find_courses') } },
+    async run(a, c) {
+      const rows = await must(db.rpc('course_facts_for', { p_course: a.course_id })) as Record<string, any>[];
+      const best = pickFacts(rows || [], new Date()) as Record<string, any>;
+      const lines = FACTS.map((d: { key: string; label: string }) => `${d.label}: ${best[d.key] ? factLine(best[d.key]) : 'not known yet'}${best[d.key]?.source_link ? ` (${best[d.key].source_link})` : ''}`);
+      const { data: notes } = await db.from('course_notes').select('body').eq('group_id', c.g).eq('course_id', a.course_id).order('created_at', { ascending: false }).limit(10);
+      if (notes?.length) lines.push(`Your group's notes: ${(notes as { body: string }[]).map((x) => `"${x.body}"`).join('; ')}`);
+      return lines.join('\n');
+    },
+  },
+  {
+    name: 'propose_course_fact',
+    description: 'Save a fact you found about a course (from the club website, booking page or an email). It is saved as PENDING ("not confirmed yet") until the club or the app team confirms it. Facts: visitor_times and member_times like "Sat 7:00-12:00; Sun 9:00-13:00"; max_group, start_interval, round_length (minutes) as numbers; price_18 / price_9 as dollars each; book_ahead, carts as short text; stay_play as "Yes — …" or "No". Always include the source link if there is one.',
+    inputSchema: {
+      type: 'object', required: ['course_id', 'fact', 'value'],
+      properties: {
+        course_id: str('course_id from find_courses'),
+        fact: { type: 'string', enum: FACTS.map((d: { key: string }) => d.key) },
+        value: str('The fact, short (up to 200 characters)'),
+        source_link: str('Where it came from (https://…), if any'),
+        checked_on: str('YYYY-MM-DD the source says or was read (default today)'),
+      },
+    },
+    async run(a, c) {
+      await must(db.rpc('propose_course_fact', { p_course: a.course_id, p_fact: a.fact, p_value: String(a.value ?? ''), p_source: 'research', p_link: a.source_link || null, p_checked: a.checked_on || null, p_group: c.g }));
+      return `Saved as pending: ${a.fact} = ${a.value}. It shows as "not confirmed yet" for every group until it's checked.`;
+    },
+  },
   {
     name: 'list_rules',
     description: 'The Rulebook: rules in force and rules up for a vote.',
@@ -339,6 +501,88 @@ const TOOLS: Tool[] = [
     async run(_a, c) {
       const rules = await must(db.from('rules').select('*').eq('group_id', c.g).in('status', ['active', 'proposed']).order('sort')) as Record<string, any>[];
       return rules.map((r) => `${r.status === 'proposed' ? '[up for a vote] ' : ''}${r.title}${r.value ? ` (${r.value})` : ''} — applies to ${r.applies_to.join(', ')}${r.detail ? `: ${r.detail}` : ''}`).join('\n') || 'No rules yet.';
+    },
+  },
+  // ---------- the Tribunal (Stage 11b, migration 061). Assistants raise cases and read verdicts; they never vote,
+  // decide or approve (the database refuses the service role those functions, and there's no tool for them).
+  {
+    name: 'raise_case',
+    description: "Raise a case with the group's Tribunal. kind: 'other' (anything else, e.g. a silly charge about a player, optional penalty in words), 'ruling' (a question about a rule), 'change_rule' / 'scrap_rule' (challenge a rule in force), or 'new_rule'. The group's own decision rules decide it — you can't vote. Keep it friendly: roast the golf and the mates, never who someone is. Handicap cases go through the app.",
+    inputSchema: {
+      type: 'object', required: ['kind', 'title'],
+      properties: {
+        kind: { type: 'string', enum: ['other', 'ruling', 'change_rule', 'scrap_rule', 'new_rule'] },
+        title: str('The charge, question or rule (3–140 characters)'), body: str('The case (optional)'),
+        about: str('Player it is about (name; optional)'), rule: str('Rule title (for ruling / change_rule / scrap_rule)'),
+        new_title: str('change_rule / new_rule: what the rule should say'), new_value: str('Worth / amount (optional)'), new_detail: str('Details (optional)'),
+        answer: str('ruling: suggested ruling (optional)'), penalty: str('other: penalty in words if guilty (optional) — never money'),
+      },
+    },
+    async run(a, c) {
+      const subject = a.about ? findPlayer(await players(c), a.about) : null;
+      let ruleId: string | null = null;
+      if (['ruling', 'change_rule', 'scrap_rule'].includes(a.kind)) {
+        const rules = await must(db.from('rules').select('id,title').eq('group_id', c.g).eq('status', 'active')) as { id: string; title: string }[];
+        const w = String(a.rule || '').trim().toLowerCase();
+        const hit = rules.filter((r) => r.id === a.rule || r.title.toLowerCase() === w || (w && r.title.toLowerCase().includes(w)));
+        if (hit.length !== 1) fail(hit.length ? `"${a.rule}" matches ${hit.map((r) => r.title).join(' and ')} — be more specific.` : `No rule in force called "${a.rule}". Use list_rules.`);
+        ruleId = hit[0].id;
+      }
+      const proposal = a.kind === 'change_rule' ? { title: a.new_title || '', value: a.new_value || '', detail: a.new_detail || '' }
+        : a.kind === 'new_rule' ? { detail: a.new_detail || a.body || '', value: a.new_value || '' }
+          : a.kind === 'ruling' ? { answer: a.answer || null } : {};
+      const id = await must(db.rpc('connector_raise_case', {
+        p_group: c.g, p_author: c.author, p_kind: a.kind, p_title: a.kind === 'new_rule' ? (a.new_title || a.title) : a.title,
+        p_body: a.kind === 'new_rule' ? null : a.body || null, p_subject: subject?.id || null, p_rule: ruleId, p_proposal: proposal,
+        p_penalty: a.kind === 'other' ? a.penalty || null : null,
+      }));
+      return `Case raised (id=${id}). The group decides it by its own rules in the app's Tribunal — read_verdict tells you how it went.`;
+    },
+  },
+  {
+    name: 'list_cases',
+    description: "The Tribunal's open cases and recent verdicts (handicap cases too).",
+    inputSchema: { type: 'object', properties: {} },
+    async run(_a, c) {
+      const all = await players(c);
+      const [cs, hc] = await Promise.all([
+        must(db.from('cases').select('id,kind,title,status,stage,subject_id,votes_for,votes_against,closes_at,created_at').eq('group_id', c.g).eq('hidden', false).order('created_at', { ascending: false }).limit(20)),
+        must(db.from('tribunal_cases').select('id,accused_id,proposed_change,status,verdict,guilty_votes,not_guilty_votes,created_at').eq('group_id', c.g).order('created_at', { ascending: false }).limit(10)),
+      ]) as [Record<string, any>[], Record<string, any>[]];
+      const who = (id: string) => pname(all.find((p) => p.id === id));
+      const lines = [
+        ...cs.map((x) => `[${x.status}] ${x.kind}: ${x.title}${x.subject_id ? ` (about ${who(x.subject_id)})` : ''}${x.status === 'open' ? (x.stage === 'voting' ? ` — voting closes ${String(x.closes_at).slice(0, 16).replace('T', ' ')}` : ' — with the organisers') : ` — ${x.votes_for ?? 0}–${x.votes_against ?? 0}`} (id=${x.id})`),
+        ...hc.map((x) => `[${x.status}] handicap: The Lads v ${who(x.accused_id)} (proposed ${x.proposed_change > 0 ? '+' : ''}${x.proposed_change})${x.verdict ? ` — ${x.verdict === 'upheld' ? 'GUILTY' : 'NOT GUILTY'} ${x.guilty_votes}–${x.not_guilty_votes}` : ''}`),
+      ];
+      return lines.join('\n') || 'No cases yet.';
+    },
+  },
+  {
+    name: 'read_verdict',
+    description: 'Read one case: where it stands, the verdict, any penalty (in words) and whether a change waits for the next trip. Pass the id from list_cases or raise_case.',
+    inputSchema: { type: 'object', required: ['case_id'], properties: { case_id: str('Case id') } },
+    async run(a, c) {
+      const x = await must(db.from('cases').select('*').eq('id', a.case_id).eq('group_id', c.g).eq('hidden', false).maybeSingle()) as Record<string, any> | null;
+      if (!x) return fail('No such case in this group — check the id with list_cases.');
+      const all = await players(c);
+      const subject = x.subject_id ? pname(all.find((p) => p.id === x.subject_id)) : null;
+      if (x.status === 'open') return `${x.title}: still being heard (${x.stage === 'voting' ? `voting closes ${String(x.closes_at).slice(0, 16).replace('T', ' ')}` : 'an organiser decides'}).`;
+      const word = x.kind === 'other' ? (x.status === 'passed' ? 'GUILTY' : 'NOT GUILTY') : x.status === 'passed' ? 'Passed' : x.status === 'failed' ? 'Failed' : 'Withdrawn';
+      const wait = x.apply_state === 'waiting_next_trip' ? ' It takes effect from the next trip.' : x.apply_state === 'next_round' ? ' Approved mid-trip: it starts from the next round.' : '';
+      return `${x.title}${subject ? ` (about ${subject})` : ''}: ${word} ${x.votes_for ?? 0}–${x.votes_against ?? 0}. ${x.reason || ''}${x.verdict ? ` Verdict: ${x.verdict}.` : ''}${x.status === 'passed' && x.penalty ? ` Penalty: ${x.penalty}.` : ''}${wait}`;
+    },
+  },
+  {
+    name: 'suggest_feature',
+    description: "Call this when the organiser asks for something that none of the other tools can do (for example: \"remind everyone who hasn't paid\" or \"book us a tee time\"). Describe the job in ONE short plain line — what they wanted done, not who it was for. Never include names, nicknames, phone numbers, emails, amounts owed or any other personal details. Don't call it for things another tool already does. Afterwards, tell the organiser it's been passed on and help them as best you can with the tools there are.",
+    inputSchema: { type: 'object', required: ['job'], properties: { job: str('The job in one plain line, 3–200 characters, no names or personal details, e.g. "Remind players who haven\'t paid the kitty"') } },
+    async run(a, c) {
+      const job = cleanJob(a.job);
+      if (job.length < 3) fail('Describe the job in a few words (no names).');
+      const since = new Date(Date.now() - 86400000).toISOString();
+      const { count } = await db.from('feature_wishes').select('id', { count: 'exact', head: true }).eq('group_id', c.g).gte('created_at', since);
+      if ((count ?? 0) < WISHES_PER_DAY) await must(db.from('feature_wishes').insert({ group_id: c.g, job, source: 'connector' }));
+      return "Noted — thanks. That's passed on to the people who build The Golf Trip; the most-asked-for jobs get built first.";
     },
   },
 ];
@@ -352,7 +596,7 @@ async function handle(msg: Record<string, any>, c: Ctx) {
   switch (method) {
     case 'initialize': {
       const v = VERSIONS.includes(params?.protocolVersion) ? params.protocolVersion : VERSIONS[0];
-      return ok({ protocolVersion: v, capabilities: { tools: {} }, serverInfo: { name: 'lgc-golf', version: '1.0.0' }, instructions: `${c.groupName} golf app (The Golf Trip). Everything here is this group only. Call lgc_overview first to get round, team and plan ids. Scores go in with enter_scores; check names against lgc_overview.` });
+      return ok({ protocolVersion: v, capabilities: { tools: {} }, serverInfo: { name: 'lgc-golf', version: '1.0.0' }, instructions: `${c.groupName} golf app (The Golf Trip). Everything here is this group only. Call lgc_overview first to get round, team and plan ids. Scores go in with enter_scores; check names against lgc_overview. If the organiser asks for something no tool can do, call suggest_feature with a one-line description of the job (no names or personal details).` });
     }
     case 'ping': return ok({});
     case 'tools/list': {
@@ -361,14 +605,20 @@ async function handle(msg: Record<string, any>, c: Ctx) {
       return ok({ tools: offered.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })) });
     }
     case 'tools/call': {
+      const started = performance.now();
       const tool = TOOLS.find((t) => t.name === params?.name);
-      if (!tool) return err(-32602, `Unknown tool ${params?.name}`);
+      // Only our own tool names are logged — an unknown name could be anything the assistant typed.
+      if (!tool) { logCall(c, 'unknown', false, started, 'unknown_tool'); return err(-32602, `Unknown tool ${params?.name}`); }
       if (TOOL_FEATURE[tool.name] && !(await featureOn(c, TOOL_FEATURE[tool.name]))) {
+        logCall(c, tool.name, false, started, 'switched_off');
         return ok({ content: [{ type: 'text', text: `That's switched off for ${c.groupName} (Group & invites → Features).` }], isError: true });
       }
       try {
-        return ok({ content: [{ type: 'text', text: await tool.run(params?.arguments || {}, c) }] });
+        const text = await tool.run(params?.arguments || {}, c);
+        logCall(c, tool.name, true, started);
+        return ok({ content: [{ type: 'text', text }] });
       } catch (e) {
+        logCall(c, tool.name, false, started, errorKind(e));
         return ok({ content: [{ type: 'text', text: String((e as Error)?.message || e) }], isError: true });
       }
     }

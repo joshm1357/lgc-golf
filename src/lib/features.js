@@ -10,6 +10,7 @@
 // newGroup   — default for a new group
 // tier       — 'free' for everything now; a later premium plan can check it
 // soon       — not built yet: shown as "coming soon", can't be switched on
+// hidden     — switched on and off by the app itself (e.g. 'cup' by adding a Cup comp): not in the Features list
 
 export const FEATURES = [
   { key: 'feed', name: 'Feed, photos and auto-posts', description: 'The Feed tab: posts, photos, comments and the automatic birdie/result posts.', newGroup: true },
@@ -30,7 +31,22 @@ export const FEATURES = [
   { key: 'scorecard_photo', name: 'Scorecard photo reading', description: 'Read a photo of a scorecard into scores (needs an API key).', newGroup: false, soon: true },
   { key: 'booking_links', name: 'Booking links', description: 'Buttons on a trip to find accommodation, a course and directions, with your place and dates filled in.', newGroup: false },
   { key: 'clubhouse_tv', name: 'Clubhouse TV leaderboard', description: 'Show your round on the clubhouse TV — first names only, and only for rounds you choose.', newGroup: false },
-  { key: 'cup', name: 'Team match play (Ryder Cup)', description: 'Two teams, match play matches (singles or Ambrose pairs) scored hole by hole, and a live team points board.', newGroup: false },
+  // Managed automatically (hidden from the Features list): adding a Cup comp switches it on (migration 067).
+  { key: 'cup', name: 'Team match play (Ryder Cup)', description: 'Two teams, match play matches (singles or Ambrose pairs) scored hole by hole, and a live team points board.', newGroup: false, hidden: true },
+  { key: 'awards', name: 'Award moments', description: 'When a round, side comp or trophy is decided: a winner card, the winner’s photo, a pinned post and a buzz.', newGroup: false },
+  { key: 'games', name: 'Games and side bets', description: 'Skins, Nassau and other games worked out from the scores, with a running tally.', newGroup: false },
+  { key: 'tee_groups', name: 'Tee groups', description: 'Fair groups of four for each round — new partners each day, handicaps mixed.', newGroup: false },
+  { key: 'replay', name: 'Round replay', description: 'Watch a finished round as a 60-second animated replay.', newGroup: true },
+  { key: 'in_jokes', name: 'Running jokes', description: 'The AI quietly picks up running jokes from the feed and trip chat to use in commentary and the replay. They’re never shown as a list.', newGroup: false },
+  { key: 'ai_helper', name: 'AI helper', description: 'Ask the app in plain words: set up a trip for you, or answer questions about your group’s history.', newGroup: true },
+  { key: 'rule_challenges', name: 'Rule challenges', description: 'Anyone can challenge a rule: change it, scrap it or ask for a ruling.', parent: 'tribunal', newGroup: true },
+  { key: 'other_cases', name: '“Anything else” cases', description: 'Raise anything with the Tribunal — that shirt on day 2.', parent: 'tribunal', newGroup: true },
+  { key: 'committees', name: 'Committees and terms', description: 'Named committees (e.g. Handicap Committee) with seats and terms.', parent: 'tribunal', newGroup: false },
+  { key: 'stats', name: 'Player stats and season ladder', description: 'Each player’s scoring, best and worst holes, head-to-heads, and an order of merit across trips.', newGroup: true },
+  { key: 'trip_finder', name: 'Trip finder', description: 'Which courses suit the group: tee-time windows, drive times and course facts, ranked on a map.', parent: 'planner', newGroup: false },
+  { key: 'weather', name: 'Weather on the trip', description: 'The forecast for the trip’s place in the week before.', parent: 'planner', newGroup: true },
+  { key: 'dinner_awards', name: 'Fines and dinner awards', description: 'Nominate and vote for the trip’s awards and fines at dinner.', newGroup: false },
+  { key: 'commentary', name: 'Live commentary', description: 'A short line in the Feed (and the odd buzz) as the round goes on: lead changes, birdie runs, aces, the Cup — plus a round report.', parent: 'awards', newGroup: true },
 ].map((f) => ({ parent: null, tier: 'free', ...f }));
 
 export const FEATURE_BY_KEY = Object.fromEntries(FEATURES.map((f) => [f.key, f]));
@@ -67,7 +83,7 @@ export const PRESETS = [
     key: 'full_trip',
     name: 'Full trip',
     blurb: 'Plus the feed, side comps, trophies, the Tribunal, the draw, the Trips planner and rule votes.',
-    switches: { ...ALL_OFF, ...Object.fromEntries(FEATURES.filter((f) => f.newGroup).map((f) => [f.key, true])), planner_rooms: true },
+    switches: { ...ALL_OFF, ...Object.fromEntries(FEATURES.filter((f) => f.newGroup && (!f.parent || FEATURE_BY_KEY[f.parent].newGroup)).map((f) => [f.key, true])), planner_rooms: true },
   },
   {
     key: 'everything',

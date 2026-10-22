@@ -23,3 +23,14 @@ describe('share cards', () => {
     expect(cardContent('verdict', { accused: 'Mike', verdict: 'dismissed' }).big).toBe('NOT GUILTY');
   });
 });
+
+describe('dinner awards card', () => {
+  it('a label, winner and votes per award, at most 6', () => {
+    const rows = Array.from({ length: 8 }, (_, i) => ({ label: `AWARD · ${i}`, name: `Name ${i}`, line: '2 votes' }));
+    const c = cardContent('awards', { title: 'Hunter 2026', sub: '8 decided', rows });
+    expect(c.eyebrow).toBe('🍽️ FINES AND DINNER AWARDS');
+    expect(c.title).toBe('Hunter 2026');
+    expect(c.rows).toHaveLength(6);
+    expect(c.rows[0]).toEqual({ label: 'AWARD · 0', name: 'Name 0', line: '2 votes' });
+  });
+});

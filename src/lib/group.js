@@ -8,6 +8,7 @@
 // Words: a "group" is a golf group (L.G.C is one). The planner's plan_groups / plan_group_members
 // are rooms and cars — not groups — and are never filtered here.
 
+import { clearAsk } from './aihelper.js';
 const KEY = 'lgc-group';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -20,10 +21,39 @@ export const GROUP_TABLES = new Set([
   'plan_payments', 'plan_groups', 'plan_transfers', 'rule_votes',
   // Stage 1b (migration 025)
   'plan_comments', 'notify_prefs',
+  // Votes by email (migration 079)
+  'vote_emails',
   // Stage 3 (migration 029)
   'group_features',
   // Team match play (migration 050)
   'cup_sides', 'cup_matches',
+  // A group's own side comps (migration 051)
+  'side_comp_defs', 'side_comp_entries',
+  // Overnight build (054 award moments, 056 tee groups, 058 in-jokes)
+  'award_moments', 'tee_groups', 'in_jokes',
+  // Games and side bets (migration 055)
+  'round_games',
+  // The AI helper's usage log (migration 059; only the edge function reads it)
+  'helper_log',
+  // The season ladder's settings (migration 062)
+  'season_settings',
+  // Fines and dinner awards (migration 064)
+  'dinner_awards', 'dinner_award_nominations', 'dinner_award_votes',
+  // Trip finder (migration 063)
+  'player_home_areas', 'trip_finds', 'trip_start_points', 'course_notes', 'course_ratings',
+  // The trip plan: accommodation shortlist and the tick-list budget (migration 078)
+  'plan_stays', 'plan_budget_items',
+  // Trip builder (migration 077) — stay_areas and course_booking_info are shared by every group, so not here
+  'trip_builds', 'trip_tee_options', 'vote_batches',
+  // Comps — what you're playing for (migration 067)
+  'comps',
+  // Governance and the Tribunal (migration 061)
+  'governance_group', 'governance_settings', 'committees', 'committee_seats', 'cases', 'case_votes', 'case_posts',
+  'rule_versions', 'round_rule_versions',
+  // Live commentary (migration 071)
+  'commentary', 'commentary_settings',
+  // Custom games and closest-to-pin / longest-drive conditions (migration 073)
+  'custom_games', 'side_comp_conditions',
 ]);
 
 let current = (() => {
@@ -40,6 +70,7 @@ export function setCurrentGroup(id) {
   const next = id && UUID.test(id) ? id : null;
   if (next === current) return false;
   current = next;
+  clearAsk(); // the Ask conversation belongs to the group (and the person) it was asked in
   try {
     if (next) localStorage.setItem(KEY, next); else localStorage.removeItem(KEY);
   } catch { /* the app still works; it just asks the database again next time */ }

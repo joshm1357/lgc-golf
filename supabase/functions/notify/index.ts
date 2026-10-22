@@ -11,6 +11,10 @@
 // only important things. Digest messages wait in notify_queue. "The draw room is open" always goes straight away.
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 import webpush from 'npm:web-push@3.6.7';
+// 079: votes by email (each person: in the app, by email or both).
+import { emailOnlyUsers, emailVoteOpen, emailVoteReminders } from './votemail.ts';
+import { VOTE_KINDS } from '../_shared/emailvotes.js';
+import { batchNonVoters, reminderGroups, batchMessage } from './batch.ts';
 
 // The app's web address for links in notifications. Set APP_URL in the function's secrets when the app moves
 // (e.g. https://app.thegolftrip.club/); until then it's the GitHub Pages address.
@@ -43,7 +47,12 @@ type Msg = { title: string; body: string; url: string; tag?: string };
 /** Always straight away, whatever someone picked. */
 const ALWAYS_NOW = new Set(['draw_open', 'test']);
 /** What "only important" people still get: the draw room, a job given to them or due, money, their trip tomorrow. */
-const IMPORTANT = new Set(['draw_open', 'test', 'job_assigned', 'job_due', 'payment_recorded', 'nudge_kitty', 'trip_tomorrow']);
+// 'award': a round, trophy or Cup match decided (054/054b queue these; they go out with the hourly send).
+// 'award_minor': closest to the pin / longest drive — not "important".
+// Tribunal (061, queued from the database): a case about you, your committee's case, a case over to the organisers or
+// needing a casting vote, a report, a term ending, and "voting closes tomorrow".
+const IMPORTANT = new Set(['draw_open', 'test', 'job_assigned', 'job_due', 'payment_recorded', 'nudge_kitty', 'deposit_ask', 'nudge_deposit', 'trip_tomorrow', 'award',
+  'case_about_you', 'case_committee', 'case_fallback', 'case_casting', 'case_report', 'case_closing', 'term_ending']);
 
 /** Which feature each kind of message belongs to (Stage 3): nothing goes out for a switched-off feature. */
 const KIND_FEATURE: Record<string, string> = {
@@ -52,7 +61,10 @@ const KIND_FEATURE: Record<string, string> = {
   plan_new: 'planner', plan_proposed: 'planner', trip_locked: 'planner', rsvp_locked: 'planner', rsvp_deadline: 'planner',
   nudge_rsvp: 'planner', trip_week: 'planner', trip_tomorrow: 'planner', comment: 'planner',
   nudge_kitty: 'planner_costs', payment_recorded: 'planner_costs', groups_set: 'planner_rooms',
-  rule_proposed: 'rule_voting', draw_open: 'draw',
+  deposit_ask: 'planner_costs', nudge_deposit: 'planner_costs',
+  rule_proposed: 'rule_voting', draw_open: 'draw', award: 'awards', award_minor: 'awards', commentary: 'commentary',
+  case_new: 'tribunal', case_about_you: 'tribunal', case_committee: 'tribunal', case_fallback: 'tribunal', case_casting: 'tribunal',
+  case_report: 'tribunal', case_closing: 'tribunal', case_verdict: 'tribunal', term_ending: 'committees',
   // rule_decided: not tied to voting — organisers deciding rules is part of the Rulebook itself.
 };
 /** Is a feature on for group g? (An older database without switches: everything on.) */
@@ -92,7 +104,12 @@ async function send(g: string, to: string[] | 'all', msg: Msg, except: string | 
     mq = mq.in('player_id', ids);
   }
   const { data: people } = await mq;
-  const users = [...new Set((people || []).filter((m) => !except || m.player_id !== except).map((m) => m.user_id))];
+  let users = [...new Set((people || []).filter((m) => !except || m.player_id !== except).map((m) => m.user_id))];
+  // 079: people who chose "By email" (and have an address) get votes by email instead of a notification.
+  if (VOTE_KINDS.has(kind)) {
+    const skip = await emailOnlyUsers(db, g);
+    users = users.filter((u) => !skip.has(u));
+  }
   if (!users.length) return 0;
   const { data: prefs } = await db.from('notify_prefs').select('user_id,mode').eq('group_id', g).in('user_id', users);
   const mode = new Map((prefs || []).map((p) => [p.user_id, p.mode as string]));
@@ -144,6 +161,8 @@ async function digest() {
     const notifOn = await featureOn(g, 'notifications');
     const kept = [];
     for (const i of all) if (notifOn && (!KIND_FEATURE[i.kind] || await featureOn(g, KIND_FEATURE[i.kind]))) kept.push(i);
+    // 071: a live commentary line is stale after 30 minutes — it's in the Feed; don't put it in an update.
+    for (let k = kept.length - 1; k >= 0; k--) if (kept[k].kind === 'commentary' && Date.now() - new Date(kept[k].created_at).getTime() > 30 * 60000) kept.splice(k, 1);
     const items = p?.mode === 'important' ? kept.filter((i) => IMPORTANT.has(i.kind)) : kept;
     if (p?.mode === 'digest' && local.hour !== p.digest_hour) continue;
     if (p?.mode === 'digest' && !(await once(`digest:${g}:${user}:${local.date}:${local.hour}`))) continue;
@@ -152,12 +171,31 @@ async function digest() {
     const more = items.length > 3 ? ` · +${items.length - 3} more` : '';
     const msg = items.length === 1
       ? { title: items[0].title, body: gname, url: items[0].url || APP }
-      : { title: `📬 ${gname}: ${items.length} things since your last update`, body: shown + more, url: `${APP}#/plan`, tag: `digest-${g}` };
+      // Only winners in it (054 awards): open the leaderboard, not the planner.
+      : { title: `📬 ${gname}: ${items.length} things since your last update`, body: shown + more, url: items.every((i) => i.kind === 'award' || i.kind === 'award_minor' || i.kind === 'commentary') ? `${APP}#/` : `${APP}#/plan`, tag: `digest-${g}` };
     if (items.length) sent += await pushTo([user], msg);
     await db.from('notify_queue').update({ sent_at: new Date().toISOString() }).in('id', all.map((i) => i.id));
   }
   // Keep the queue small: forget what went out more than a month ago.
   await db.from('notify_queue').delete().lt('sent_at', new Date(Date.now() - 30 * 86400000).toISOString());
+  return sent;
+}
+
+/** 071: live commentary buzzes, sent as soon as the line is written (the ai-helper and the every-minute job call
+ *  this with the cron secret). The database only queued them for people on "straight away", already rate-limited.
+ *  Older than 30 minutes: dropped (the line is in the Feed). Each person gets their newest line for each group. */
+async function commentaryNow() {
+  const { data: waiting } = await db.from('notify_queue').select('id,group_id,user_id,title,body,created_at')
+    .eq('kind', 'commentary').is('sent_at', null).order('created_at').limit(2000);
+  if (!waiting?.length) return 0;
+  let sent = 0;
+  const fresh = waiting.filter((w) => Date.now() - new Date(w.created_at).getTime() <= 30 * 60000);
+  const on = new Map<string, boolean>();
+  for (const g of new Set(fresh.map((w) => w.group_id))) on.set(g, (await featureOn(g, 'notifications')) && (await featureOn(g, 'commentary')));
+  const newest = new Map<string, (typeof waiting)[number]>();
+  for (const w of fresh) if (on.get(w.group_id)) newest.set(`${w.group_id}|${w.user_id}`, w);
+  for (const w of newest.values()) sent += await pushTo([w.user_id], { title: w.title, body: w.body || '', url: `${APP}#/feed`, tag: `commentary-${w.group_id}` });
+  await db.from('notify_queue').update({ sent_at: new Date().toISOString() }).in('id', waiting.map((w) => w.id));
   return sent;
 }
 
@@ -256,10 +294,32 @@ async function dailyFor(g: string) {
   const tomorrow = sydneyDate(1);
   const week = sydneyDate(7);
   // Votes closing tomorrow → people who haven't voted.
-  const { data: closing } = await db.from('plan_polls').select('id,plan_id,question').eq('group_id', g).eq('status', 'open').eq('closes_on', tomorrow);
-  for (const p of tasksOn ? closing || [] : []) {
-    if (!(await once(`poll-closing:${p.id}:${today}`))) continue;
-    sent += await send(g, await openPollNonVoters(g, p.plan_id, p.id), { title: '⏰ Vote closes tomorrow', body: p.question, url: planUrl(p.plan_id, 'vote'), tag: `poll-${p.id}` }, null, 'poll_closing');
+  // A combined vote card (077) is reminded once, to people who haven't answered every section.
+  let { data: closing, error: closingErr }: { data: any[] | null; error: unknown } = await db.from('plan_polls').select('id,plan_id,question,vote_batch').eq('group_id', g).eq('status', 'open').eq('closes_on', tomorrow);
+  if (closingErr) ({ data: closing } = await db.from('plan_polls').select('id,plan_id,question').eq('group_id', g).eq('status', 'open').eq('closes_on', tomorrow)); // before 077
+  for (const grp of tasksOn ? reminderGroups((closing || []) as { id: string; plan_id: string; question: string; vote_batch?: string | null }[]) : []) {
+    if (!grp.batch) {
+      const p = grp.polls[0];
+      if (!(await once(`poll-closing:${p.id}:${today}`))) continue;
+      sent += await send(g, await openPollNonVoters(g, p.plan_id, p.id), { title: '⏰ Vote closes tomorrow', body: p.question, url: planUrl(p.plan_id, 'vote'), tag: `poll-${p.id}` }, null, 'poll_closing');
+      // 079: one reminder email (at most) to people on email who haven't answered.
+      await emailVoteReminders(db, APP, g, p.plan_id, p.id).catch(() => 0);
+      continue;
+    }
+    if (!(await once(`batch-closing:${grp.batch}:${today}`))) continue;
+    const { data: b } = await db.from('vote_batches').select('id,plan_id,title,keen').eq('id', grp.batch).eq('group_id', g).maybeSingle();
+    if (!b) continue;
+    const { data: all } = await db.from('plan_polls').select('id').eq('vote_batch', b.id).eq('status', 'open');
+    const pollIds = (all || []).map((x) => x.id);
+    const [{ data: votes }, { data: rs }, people] = await Promise.all([
+      db.from('plan_votes').select('poll_id,player_id').in('poll_id', pollIds),
+      db.from('plan_rsvps').select('player_id').eq('plan_id', b.plan_id),
+      players(g),
+    ]);
+    const missing = batchNonVoters({ pollIds, votes: votes || [], rsvps: rs || [], keen: !!b.keen, playerIds: people.map((p) => p.id) });
+    sent += await send(g, missing, { title: '⏰ Vote closes tomorrow', body: b.title, url: planUrl(b.plan_id, 'vote'), tag: `batch-${b.id}` }, null, 'poll_closing');
+    // 079: the card's one reminder email (its polls ride along in the batch email).
+    if (pollIds[0]) await emailVoteReminders(db, APP, g, b.plan_id, pollIds[0]).catch(() => 0);
   }
   // RSVP deadline tomorrow → people who haven't replied.
   const { data: dl } = await db.from('plans').select('*').eq('group_id', g).eq('rsvp_deadline', tomorrow).eq('rsvp_locked', false).eq('proposed', false).neq('status', 'cancelled');
@@ -294,9 +354,9 @@ Deno.serve(async (req) => {
     await loadKeys();
     const body = await req.json().catch(() => ({}));
 
-    if (body.type === 'daily' || body.type === 'digest') {
+    if (body.type === 'daily' || body.type === 'digest' || body.type === 'commentary') {
       if (!cronSecret || req.headers.get('x-cron-secret') !== cronSecret) return json({ error: 'Not allowed' }, 401);
-      return json({ sent: body.type === 'daily' ? await daily() : await digest() });
+      return json({ sent: body.type === 'daily' ? await daily() : body.type === 'commentary' ? await commentaryNow() : await digest() });
     }
 
     // Everyone else must be a signed-in member of the group.
@@ -310,13 +370,17 @@ Deno.serve(async (req) => {
     if (!m) return json({ error: 'Join the group first' }, 403);
     const g = m.group_id as string;
     const me = { player_id: m.player_id as string | null, is_admin: m.role === 'organiser' };
-    const adminOnly = ['plan_new', 'trip_locked', 'rsvp_locked', 'nudge_votes', 'nudge_rsvp', 'nudge_kitty', 'groups_set', 'draw_open'];
+    const adminOnly = ['plan_new', 'trip_locked', 'rsvp_locked', 'nudge_votes', 'nudge_rsvp', 'nudge_kitty', 'groups_set', 'draw_open', 'deposit_ask', 'nudge_deposit'];
     if (adminOnly.includes(body.type) && !me.is_admin) return json({ error: 'Admin only' }, 403);
     const from = me.player_id as string | null;
     // Someone who hasn't picked their name yet can't send anything to others (only the test buzz to themselves).
     if (!from && !me.is_admin && body.type !== 'test') return json({ error: 'Pick your name first' }, 403);
 
     let sent = 0;
+    let emailed = 0;
+    let emailNote = '';
+    /** 079: vote emails go with the same switches as vote notifications. */
+    const votesOn = async () => (await featureOn(g, 'notifications')) && (await featureOn(g, 'planner_tasks'));
     switch (body.type) {
       case 'test':
         sent = await send(g, [from!], { title: '🔔 Notifications are on', body: 'You’ll get trip votes, reminders and jobs here.', url: `${APP}#/plan` }, null, 'test');
@@ -330,9 +394,24 @@ Deno.serve(async (req) => {
         const p = await mine(g, 'plan_polls', body.poll_id);
         // The admin, or whoever opened this vote (a suggestion opens its own dates and place votes). Once per vote.
         if (!me.is_admin && p.created_by !== from) return json({ error: 'Not your vote' }, 403);
+        if (p.vote_batch) {
+          // A combined vote card (077): one notification for the whole card, however many sections it has.
+          if (!(await once(`batch-open:${p.vote_batch}`))) break;
+          const { data: b } = await db.from('vote_batches').select('id,plan_id,title,keen,closes_on').eq('id', p.vote_batch).eq('group_id', g).maybeSingle();
+          if (!b) break;
+          const { count } = await db.from('plan_polls').select('id', { count: 'exact', head: true }).eq('vote_batch', b.id);
+          const pl = await plan(g, b.plan_id);
+          const m = batchMessage({ title: b.title, planName: pl.name, sections: count || 1, keen: !!b.keen, closes: b.closes_on ? fmt(b.closes_on) : null });
+          sent = await send(g, 'all', { ...m, url: planUrl(pl.id, 'vote'), tag: `batch-${b.id}` }, from, 'poll_open');
+          // 079: one email for the whole card for people on email.
+          if (await votesOn()) ({ emailed, note: emailNote } = await emailVoteOpen(db, APP, g, p, from));
+          break;
+        }
         if (!(await once(`poll-open:${p.id}`))) break;
         const pl = await plan(g, p.plan_id);
         sent = await send(g, 'all', { title: `🗳️ Vote: ${p.question}`, body: `${pl.name}${p.closes_on ? ` · closes ${fmt(p.closes_on)}` : ''}`, url: planUrl(pl.id, 'vote'), tag: `poll-${p.id}` }, from, 'poll_open');
+        // 079: one email per batch for people on email (a combined vote card's other polls ride along).
+        if (await votesOn()) ({ emailed, note: emailNote } = await emailVoteOpen(db, APP, g, p, from));
         break;
       }
       case 'poll_decided': {
@@ -367,6 +446,7 @@ Deno.serve(async (req) => {
       case 'nudge_votes': {
         const pl = await plan(g, body.plan_id);
         sent = await send(g, await openPollNonVoters(g, pl.id), { title: '🗳️ Still need your vote', body: pl.name, url: planUrl(pl.id, 'vote') }, from, 'nudge_votes');
+        if (await votesOn()) emailed = await emailVoteReminders(db, APP, g, pl.id);
         break;
       }
       case 'nudge_rsvp': {
@@ -393,12 +473,30 @@ Deno.serve(async (req) => {
       case 'job_assigned': {
         const j = await mine(g, 'plan_items', body.item_id);
         if (!j?.owner_id) break;
-        // Only whoever made the job (or the admin) can send this, and only once per job and owner.
-        if (j.created_by !== from && !me.is_admin) return json({ error: 'Not your job' }, 403);
+        // Only whoever made the job, whoever just handed it on (078: handed_by), or the admin can send this, once per job and owner.
+        if (j.created_by !== from && j.handed_by !== from && !me.is_admin) return json({ error: 'Not your job' }, 403);
         if (!(await once(`job-assigned:${j.id}:${j.owner_id}`))) break;
         const pl = await plan(g, j.plan_id);
         const ppl = await players(g);
         sent = await send(g, [j.owner_id], { title: `📋 New job: ${j.title}`, body: `${pl.name} — from ${name(ppl.find((p) => p.id === from))}`, url: planUrl(pl.id, 'jobs') }, from, 'job_assigned');
+        break;
+      }
+      // 078: the organiser asks everyone keen to confirm and pay the deposit (once per trip), and nudges who hasn't.
+      case 'deposit_ask':
+      case 'nudge_deposit': {
+        const pl = await plan(g, body.plan_id);
+        const dep = Number(pl.deposit_pp || 0);
+        if (!dep || !pl.deposit_asked_at) break;
+        if (body.type === 'deposit_ask' && !(await once(`deposit-ask:${pl.id}`))) break;
+        if (body.type === 'nudge_deposit' && !(await once(`deposit-nudge:${pl.id}:${sydneyDate(0)}`))) break;
+        const [{ data: rs }, { data: ts }] = await Promise.all([
+          db.from('plan_rsvps').select('player_id,status').eq('plan_id', pl.id).in('status', ['in', 'maybe']),
+          db.from('plan_transfers').select('from_id,amount').eq('plan_id', pl.id).is('to_id', null),
+        ]);
+        const paid = (pid: string) => (ts || []).filter((t) => t.from_id === pid).reduce((s, t) => s + Number(t.amount), 0);
+        const owe = (rs || []).filter((r) => paid(r.player_id) < dep - 0.5).map((r) => r.player_id);
+        const amt = `$${dep.toFixed(2).replace(/\.00$/, '')}`;
+        sent = await send(g, owe, { title: body.type === 'deposit_ask' ? `🏠 ${pl.name}: accommodation’s booked` : `💳 ${pl.name}: deposit reminder`, body: `Confirm you’re in and pay your ${amt} deposit.`, url: planUrl(pl.id) }, from, body.type);
         break;
       }
       case 'plan_proposed': {
@@ -467,7 +565,7 @@ Deno.serve(async (req) => {
       default:
         return json({ error: 'Unknown notification' }, 400);
     }
-    return json({ sent });
+    return json(emailed || emailNote ? { sent, emailed, ...(emailNote ? { email_note: emailNote } : {}) } : { sent });
   } catch (e) {
     if (e instanceof NotYours) return json({ error: 'Not in your group' }, 403);
     return json({ error: String((e as Error)?.message || e) }, 500);

@@ -6,10 +6,12 @@ import { supabase } from '../lib/supabase.js';
 import { useData, useRealtime, useSession, playerName, cacheGet, cacheSet, useFeature } from '../lib/store.jsx';
 import { Header, AvatarStack, Sheet, Loading, toast } from '../components/ui.jsx';
 import { fmtRange, countdown, RSVP_LABEL, todayISO, money } from '../lib/plan.js';
-import { STAGE_LABEL, sortTrips, stillToDecide, suggestionOptions, defaultCloses } from '../lib/trips.js';
+import { STAGE_LABEL, sortTrips, stillToDecide, suggestionOptions, defaultCloses, tripWhen } from '../lib/trips.js';
 import { notify, shareText } from '../lib/push.js';
 import { useRun, must } from '../lib/run.js';
 import { NotifyCard } from '../components/NotifyCard.jsx';
+import { TripsAi } from './AiPlanner.jsx';
+import { ReplayChips } from '../components/ReplayChips.jsx';
 
 const TABLES = ['plans', 'plan_rsvps', 'plan_polls', 'plan_options'];
 
@@ -81,9 +83,10 @@ export default function Trips() {
         ))}
         <button type="button" className="btn gold block" style={{ minHeight: 56 }} onClick={() => setSuggesting(true)}>💡 Suggest a trip or round</button>
         <span className="small muted" style={{ textAlign: 'center' }}>{votesOn ? 'Everyone votes on when and where; ' : 'Everyone says if they’re in; '}{status.is_admin ? 'you lock it in' : 'the admin locks it in'}.</span>
+        <TripsAi />
 
         {past.length > 0 && <span className="label" style={{ marginTop: 6 }}>Past trips</span>}
-        {past.map((x) => <PastCard key={x.plan.id} plan={x.plan} stage={x.stage} photo={photos[x.plan.trip_id]} rounds={data.rounds.filter((r) => x.plan.trip_id && r.trip_id === x.plan.trip_id).length}
+        {past.map((x) => <PastCard key={x.plan.id} plan={x.plan} stage={x.stage} photo={photos[x.plan.trip_id]} rounds={data.rounds.filter((r) => x.plan.trip_id && r.trip_id === x.plan.trip_id)}
           winners={trophiesOn && x.plan.trip_id ? data.honour_board.filter((h) => h.trip_id === x.plan.trip_id).sort((a, b) => a.trophy_name.localeCompare(b.trophy_name)) : []} />)}
       </div>
       {suggesting && <SuggestSheet initial={typeof suggesting === 'object' ? suggesting : null} onClose={() => setSuggesting(false)} onSaved={(p) => nav(`/plan/${p.id}`)} />}
@@ -125,7 +128,7 @@ function NowCard({ plan, stage, rsvps, me }) {
   const on = stage === 'on';
   return (
     <div className="card" style={{ overflow: 'hidden', borderColor: 'var(--navy)' }}>
-      <Link to={plan.tripOnly ? '/' : `/plan/${plan.id}`} className="stack" style={{ gap: 6, padding: 16, textDecoration: 'none', color: '#fff', background: 'var(--navy)' }}>
+      <Link to={plan.tripOnly ? `/trip/${plan.trip_id}` : `/plan/${plan.id}`} className="stack" style={{ gap: 6, padding: 16, textDecoration: 'none', color: '#fff', background: 'var(--navy)' }}>
         <div className="row between" style={{ alignItems: 'flex-start' }}>
           <span className="small" style={{ fontWeight: 800, letterSpacing: '.04em', color: 'var(--gold)' }}>{on ? '⛳ ON NOW' : '🔒 NEXT UP'} · {plan.kind === 'round' ? 'ONE-DAY ROUND' : 'TRIP'}</span>
           {plan.start_date && !on && <Chip strong>{countdown(plan.start_date)}</Chip>}
@@ -152,7 +155,7 @@ function TripCard({ plan, stage, rsvps, me, decide, suggestedBy }) {
   const ins = rsvps.filter((r) => r.status === 'in');
   const mine = rsvps.find((r) => r.player_id === me);
   return (
-    <Link to={plan.tripOnly ? '/' : `/plan/${plan.id}`} className="card pad stack" style={{ gap: 6, textDecoration: 'none', color: 'inherit' }}>
+    <Link to={plan.tripOnly ? `/trip/${plan.trip_id}` : `/plan/${plan.id}`} className="card pad stack" style={{ gap: 6, textDecoration: 'none', color: 'inherit' }}>
       <div className="row between" style={{ alignItems: 'flex-start', gap: 8 }}>
         <div>
           <div className="small muted" style={{ fontWeight: 700 }}>{STAGE_LABEL[stage]} · {plan.kind === 'round' ? 'One-day round' : 'Trip'}{suggestedBy && stage === 'idea' ? ` · from ${playerName(suggestedBy)}` : ''}</div>
@@ -180,26 +183,30 @@ export function tripsWithoutPlan(trips, plans) {
   const today = todayISO();
   return (trips || []).filter((t) => !linked.has(t.id)).map((t) => ({
     id: `trip-${t.id}`, tripOnly: true, kind: 'trip', name: t.name, start_date: t.start_date, end_date: t.end_date, trip_id: t.id,
-    proposed: false, created_at: t.created_at,
+    proposed: false, created_at: t.created_at, trip_status: t.status,
     status: t.status === 'active' || ((t.end_date || t.start_date) && (t.end_date || t.start_date) >= today) ? 'confirmed' : 'done',
   }));
 }
 
-function PastCard({ plan, stage, photo, rounds, winners = [] }) {
+function PastCard({ plan, stage, photo, rounds: roundList = [], winners = [] }) {
   const cancelled = stage === 'cancelled';
+  const rounds = roundList.length;
   return (
-    <Link to={plan.tripOnly ? '/trophies' : `/plan/${plan.id}`} className="card row" style={{ gap: 12, padding: 10, textDecoration: 'none', color: 'inherit', opacity: cancelled ? 0.55 : 1 }}>
+    <div className="card" style={{ padding: 0, opacity: cancelled ? 0.55 : 1 }}>
+    <Link to={plan.tripOnly ? `/trip/${plan.trip_id}` : `/plan/${plan.id}`} className="row" style={{ gap: 12, padding: 10, textDecoration: 'none', color: 'inherit' }}>
       <div style={{ width: 64, height: 64, flex: 'none', borderRadius: 10, overflow: 'hidden', background: 'var(--gold-soft)', display: 'grid', placeItems: 'center', fontSize: 26 }}>
         {photo ? <img src={photo} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (cancelled ? '✖️' : '⛳')}
       </div>
       <div className="grow" style={{ minWidth: 0 }}>
         <div style={{ fontWeight: 800, fontSize: 17 }}>{plan.name}</div>
-        <div className="small muted">{cancelled ? (plan.proposed ? 'Idea passed on' : 'Called off') : [plan.start_date ? fmtRange(plan.start_date, plan.end_date) : null, plan.location_name].filter(Boolean).join(' · ') || 'Done'}</div>
+        <div className="small muted">{cancelled ? (plan.proposed ? 'Idea passed on' : 'Called off') : [plan.start_date ? tripWhen(plan.tripOnly ? { ...plan, status: plan.trip_status } : plan) : null, plan.location_name].filter(Boolean).join(' · ') || 'Done'}</div>
         {!cancelled && rounds > 0 && <div className="small" style={{ fontWeight: 700 }}>{rounds} round{rounds === 1 ? '' : 's'} played</div>}
         {winners.slice(0, 3).map((h) => <div key={h.id} className="small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>🏆 {h.trophy_name}: <strong>{h.winner_names}</strong></div>)}
         {winners.length > 3 && <div className="small muted">+{winners.length - 3} more in the Trophy Room</div>}
       </div>
     </Link>
+    {!cancelled && <ReplayChips rounds={roundList} style={{ padding: '0 10px 10px' }} />}
+    </div>
   );
 }
 

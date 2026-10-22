@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { roundRecap, recapText, scoreWords } from './roundrecap.js';
+import { roundRecap, recapText, scoreWords, recapShare } from './roundrecap.js';
 
 const holes = Array.from({ length: 18 }, (_, i) => ({ n: i + 1, par: 4, si: i + 1 }));
 const card = (strokes, over = {}) => Object.fromEntries(holes.map((h) => [h.n, { strokes: over[h.n] ?? strokes, picked_up: false }]));
@@ -59,5 +59,15 @@ describe('roundRecap — Stableford', () => {
   it('scoreWords', () => {
     expect(scoreWords({ format: 'stroke' }, { netToPar: 2 })).toBe('+2 net');
     expect(scoreWords({ format: 'fourball' }, { points: 44 })).toBe('44 pts');
+  });
+});
+
+describe('recapShare', () => {
+  it('adds the leaderboard and the join link', () => {
+    expect(recapShare('📝 Sunday', { boardLink: 'https://x/#/?r=1', joinLink: 'https://x/#/join/ABC', groupName: 'L.G.C' }))
+      .toBe('📝 Sunday\n\n📊 Full leaderboard: https://x/#/?r=1\n🙋 Not on the app yet? Join L.G.C: https://x/#/join/ABC');
+  });
+  it('no join link for players (only organisers can make one)', () => {
+    expect(recapShare('📝 Sunday', { boardLink: 'https://x/#/?r=1' })).toBe('📝 Sunday\n\n📊 Full leaderboard: https://x/#/?r=1');
   });
 });

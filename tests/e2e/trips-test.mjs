@@ -23,6 +23,10 @@ const POLL1 = 'abababab-0000-4000-8000-000000000001';
 const POLL2 = 'abababab-0000-4000-8000-000000000002';
 const now = new Date().toISOString();
 const today = now.slice(0, 10);
+// 22 Oct: a trip that finished days ago but whose trip in the app is still 'active' must say Done, not On now.
+const daysAgo = (n) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+const SC_TRIP = 'eeeeeeee-0000-4000-8000-0000000000sc'.replace('sc', '05');
+const SC_PLAN = 'eeeeeeee-0000-4000-8000-000000000006';
 const holes = Array.from({ length: 18 }, (_, i) => ({ n: i + 1, par: 4, si: i + 1, green: { lat: -35.0 + i * 0.001, lng: 150.5 } }));
 
 const db = {
@@ -31,7 +35,10 @@ const db = {
     { id: P2, name: 'Mike Morris', nickname: 'Mike', handicap: 18, approved: true, created_at: now },
     { id: P3, name: 'Adam H', nickname: 'Adam', handicap: 22, approved: true, created_at: now },
   ],
-  trips: [{ id: TRIP, name: 'Test Trip', start_date: today, end_date: today, status: 'active', created_at: now }],
+  trips: [
+    { id: TRIP, name: 'Test Trip', start_date: today, end_date: today, status: 'active', created_at: now },
+    { id: SC_TRIP, name: 'South Coast Trip', start_date: daysAgo(6), end_date: daysAgo(4), status: 'active', created_at: now },
+  ],
   trophies: [], teams: [], team_players: [], quick_results: [], honour_board: [],
   courses: [{ id: COURSE, name: 'Test Links', holes, created_at: now }],
   rounds: [{ id: ROUND, trip_id: TRIP, course_id: COURSE, name: 'Saturday', play_date: today, format: 'stableford', status: 'live', ld_holes: [], ctp_holes: [], comp_bonus: 0, created_at: now }],
@@ -42,6 +49,7 @@ const db = {
     { id: PLAN, kind: 'trip', name: 'Spring Trip', status: 'planning', start_date: '2026-11-20', end_date: '2026-11-22', location_name: 'Bowral', proposed: false, rsvp_locked: false, created_by: P1, organiser_id: P1, created_at: now },
     { id: NEXT, kind: 'trip', name: 'Summer Classic', status: 'confirmed', start_date: '2027-01-15', end_date: '2027-01-18', location_name: 'Port Macquarie', proposed: false, rsvp_locked: false, created_by: P1, organiser_id: P1, created_at: now },
     { id: IDEA, kind: 'trip', name: 'Autumn Idea', status: 'planning', proposed: true, rsvp_locked: false, created_by: P2, organiser_id: P2, budget_pp: 600, created_at: now },
+    { id: SC_PLAN, kind: 'trip', name: 'South Coast Trip 2026', status: 'confirmed', start_date: daysAgo(6), end_date: daysAgo(4), location_name: 'Narooma', trip_id: SC_TRIP, proposed: false, rsvp_locked: false, created_by: P1, organiser_id: P1, created_at: now },
     { id: PAST, kind: 'trip', name: 'South Coast 2026', status: 'done', start_date: '2026-03-06', end_date: '2026-03-09', location_name: 'Mollymook', trip_id: TRIP, proposed: false, created_at: now },
   ],
   plan_polls: [
@@ -115,6 +123,7 @@ await ctx.addInitScript(([uid]) => {
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
   if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated', is_anonymous: true } }));
+  try { localStorage.setItem('tgt-notify-prompt', String(Date.now())); } catch {}
 }, ['99999999-9999-4999-8999-999999999999']);
 const page = await ctx.newPage();
 page.on('dialog', (d) => d.accept());
@@ -136,6 +145,21 @@ check(await page.getByText('Past trips').isVisible() && await page.getByText('So
 check((await page.locator('nav.tabs').innerText()).includes('Trips'), 'bottom bar says Trips');
 await page.screenshot({ path: `${SHOTS}/t1-trips.png`, fullPage: true });
 await noSideScroll('Trips tab');
+{
+  // Finished 4 days ago, trip still 'active' in the app: a past trip, never "On now".
+  const tripsText = await page.locator('.page').innerText();
+  const pastPart = tripsText.slice(tripsText.toLowerCase().indexOf('past trips'));
+  check(pastPart.includes('South Coast Trip 2026'), 'a finished trip still marked active is listed with the past trips');
+  check(!/on now/i.test(tripsText), 'nothing says "On now" (the finished trip is done)');
+  await page.goto(`${BASE}#/plan/${SC_PLAN}`);
+  await page.getByText('South Coast Trip 2026').first().waitFor({ timeout: 10000 });
+  await page.waitForTimeout(500);
+  const planText = await page.locator('.page').innerText();
+  check(!/on now/i.test(planText) && /Done/.test(planText), 'its page says Done, not On now');
+  await page.screenshot({ path: `${SHOTS}/t1b-finished-active.png`, fullPage: true });
+  await page.goto(`${BASE}#/plan`);
+  await page.getByText('NEXT UP').first().waitFor({ timeout: 15000 });
+}
 
 // 2. Suggest a trip: makes the plan, opens its votes.
 await page.getByRole('button', { name: /Suggest a trip or round/ }).click();

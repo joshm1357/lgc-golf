@@ -6,3 +6,5 @@ dist
 .env
 .env.*
 !.env.example
+.claude/
+dist-flags/

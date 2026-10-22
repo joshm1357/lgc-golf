@@ -1,5 +1,7 @@
 // Stage 9: share cards — a winner, a final leaderboard or a Tribunal verdict as a picture for the group chat, with a
 // small "Made with The Golf Trip". Drawn on the phone (no outside service, nothing to install).
+import { isNetFormat } from './board.js';
+import { verdictCard } from './governance.js';
 
 const W = 1080;
 const H = 1350;
@@ -28,6 +30,13 @@ export function cardContent(kind, d = {}) {
       sub: d.votes ? `Vote ${d.votes}${d.overruled ? ' · chair overruled' : ''}` : '',
     };
   }
+  if (kind === 'awards') {
+    // Fines and dinner awards (lib/dinnerawards.js resultsCard): a label, the winner and the votes, per award.
+    const rows = (d.rows || []).slice(0, 6).map((r) => ({ label: String(r.label || '').slice(0, 44), name: String(r.name || '').slice(0, 34), line: String(r.line || '').slice(0, 50) }));
+    return { eyebrow: '🍽️ FINES AND DINNER AWARDS', title: d.title || 'Dinner awards', sub: d.sub || '', rows };
+  }
+  // Any Tribunal case (Stage 11b): the verdict only, never the discussion.
+  if (kind === 'case') return verdictCard(d.case || {}, d.subject || '', d.tally || '');
   return { eyebrow: '', title: '' };
 }
 
@@ -63,6 +72,15 @@ export async function drawCard(kind, data, look = {}) {
       ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.font = '600 44px Barlow, system-ui, sans-serif'; ctx.fillText(r.pos, 80, y);
       ctx.fillStyle = '#fff'; fitText(ctx, r.name, W - 400, 50); ctx.fillText(r.name, 170, y);
       ctx.fillStyle = gold; ctx.font = '800 54px Barlow, system-ui, sans-serif'; ctx.textAlign = 'right'; ctx.fillText(r.score, W - 80, y); ctx.textAlign = 'left';
+    });
+  } else if (kind === 'awards') {
+    ctx.fillStyle = '#fff'; fitText(ctx, c.title, W - 160, 76); ctx.fillText(c.title, 80, 245);
+    ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.font = '500 36px Barlow, system-ui, sans-serif'; ctx.fillText(c.sub, 80, 300);
+    c.rows.forEach((r, i) => {
+      const y = 400 + i * 132;
+      ctx.fillStyle = gold; ctx.font = '700 28px Barlow, system-ui, sans-serif'; ctx.fillText(r.label, 80, y);
+      ctx.fillStyle = '#fff'; fitText(ctx, r.name, W - 160, 52, 800); ctx.fillText(r.name, 80, y + 58);
+      ctx.fillStyle = 'rgba(255,255,255,0.7)'; fitText(ctx, r.line, W - 160, 30, 500); ctx.fillText(r.line, 80, y + 98);
     });
   } else {
     ctx.textAlign = 'center';
@@ -101,7 +119,7 @@ export async function sharePicture(file, text) {
 
 /** A round's board as card data (top 8). */
 export function boardCard(board, { roundName, courseName, playDate, final } = {}) {
-  const isA = board?.format === 'ambrose';
+  const isA = isNetFormat(board?.format); // net to par
   const fmt = (n) => (n > 0 ? `+${n}` : n === 0 ? 'E' : String(n));
   const date = playDate ? new Date(`${playDate}T00:00:00`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
   return {

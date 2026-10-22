@@ -1,0 +1,39 @@
+/* The Caddie (components/Caddie.jsx). Phone: a round button bottom-right above the tab bar. Laptop: a panel down
+   the right (folds to a slim tab). */
+.caddie-btn {
+  position: fixed; right: 16px; bottom: calc(84px + var(--safe-bottom)); z-index: 25;
+  width: 56px; height: 56px; border-radius: 50%; border: 2px solid var(--gold); padding: 0;
+  background: var(--navy); color: #fff; display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 6px 18px rgba(28, 43, 63, .3); transition: bottom .15s ease;
+}
+.caddie-btn:active { transform: scale(.96); }
+/* Room at the end of every page so the button never sits over the last thing on it. */
+html.has-caddie .page { padding-bottom: calc(150px + var(--safe-bottom)); }
+
+.caddie-why { background: var(--gold-soft); border: 1px solid var(--gold); border-radius: 10px; padding: 10px 12px; line-height: 1.4; }
+.caddie-go { justify-content: space-between; min-height: 48px; text-align: left; }
+.caddie-chat .chip { white-space: normal; text-align: left; min-height: 40px; padding: 6px 14px; }
+
+.caddie-tab {
+  position: fixed; right: 0; top: 50%; transform: translateY(-50%); z-index: 35;
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 8px; min-width: 48px;
+  border: 0; border-radius: 12px 0 0 12px; background: var(--navy); color: #fff; font-weight: 700; font-size: 13px;
+  box-shadow: -4px 4px 16px rgba(28, 43, 63, .25);
+}
+.caddie-tab span { writing-mode: vertical-rl; transform: rotate(180deg); letter-spacing: .04em; }
+.caddie-panel {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 340px; z-index: 35; display: flex; flex-direction: column;
+  background: var(--ground); border-left: 1px solid var(--line); box-shadow: -8px 0 28px rgba(0, 0, 0, .08);
+}
+.caddie-panel-hdr { display: flex; align-items: center; gap: 10px; padding: 14px 14px 12px; background: var(--navy); color: #fff; }
+.caddie-panel-hdr strong { font-family: var(--display); font-size: 22px; }
+.caddie-face { width: 38px; height: 38px; border-radius: 50%; border: 2px solid var(--gold); display: inline-flex; align-items: center; justify-content: center; }
+.caddie-panel-body { flex: 1; overflow-y: auto; padding: 14px; }
+
+/* Laptop: the page makes room for the open panel. */
+@media (min-width: 1024px) {
+  html.caddie-open .app.with-side { margin-right: 340px; }
+  html.caddie-open .fab { left: calc(248px + (100vw - 248px - 340px) / 2); width: min(868px, calc(100vw - 248px - 340px - 48px)); }
+  html.caddie-open .toast { left: calc(248px + (100vw - 248px - 340px) / 2); }
+}
+@media print { .caddie-btn, .caddie-tab, .caddie-panel { display: none !important; } }

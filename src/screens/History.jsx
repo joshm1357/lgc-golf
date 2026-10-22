@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase.js';
 import { useData, useSession, useFeature } from '../lib/store.jsx';
 import { useRun, must } from '../lib/run.js';
 import { Header, Seg, toast } from '../components/ui.jsx';
+import { ImportLink } from './AiImport.jsx';
 import { parseHonours, parseHandicaps, honourOrder, matchPlayers, matchTrip, parseDate, yearOf, readHandicap, localToday, sameHonour } from '../lib/history.js';
 
 const EACH_LINE = '__each_line__';
@@ -25,6 +26,7 @@ export default function History() {
     <div className="page">
       <Header back title="History" sub="Winners and handicaps from before the app" />
       <div className="section stack" style={{ paddingBottom: 24 }}>
+        <ImportLink />
         {trophiesOn && (
           <Seg light value={tab} onChange={setTab} options={[{ value: 'winners', label: 'Past winners' }, { value: 'handicaps', label: 'Past handicaps' }]} />
         )}

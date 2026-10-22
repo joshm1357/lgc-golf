@@ -8,6 +8,9 @@ import { Sheet, toast } from '../components/ui.jsx';
 import { FindCourse } from '../components/CourseLibrary.jsx';
 import { fmtRange, parseDate, daysUntil, roundSettingsFromRules } from '../lib/plan.js';
 import { useRun, must, feedPost } from './Planner.jsx';
+import { formatName } from '../lib/board.js';
+import { setupRoundsFromShape } from '../lib/repeat.js';
+import { applyRepeatExtras } from './TripExtras.jsx';
 
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const DOW = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -47,16 +50,18 @@ function TripSetupSheet({ plan, onClose, onDone }) {
   const data = useData();
   const bonusOn = useFeature('comp_bonus');
   const trophiesOn = useFeature('trophies');
+  const gamesOn = useFeature('games');
   const { status } = useSession();
   const [busy, run] = useRun();
   const days = useMemo(() => planDays(plan), [plan]);
   const lastTrip = data.trips.find((t) => t.id !== plan.trip_id && data.trophies.some((x) => x.trip_id === t.id));
-  const lastTrophies = lastTrip ? data.trophies.filter((x) => x.trip_id === lastTrip.id) : [];
+  // A trip copied from last time ("Same as last time") plays for that trip's trophies.
+  const lastTrophies = plan.repeat_shape?.trophies?.length ? plan.repeat_shape.trophies : lastTrip ? data.trophies.filter((x) => x.trip_id === lastTrip.id) : [];
   const soon = daysUntil(plan.start_date) <= 7;
   const [name, setName] = useState(plan.name);
   const [copyTrophies, setCopyTrophies] = useState(plan.kind === 'trip' && lastTrophies.length > 0);
   const [current, setCurrent] = useState(soon);
-  const [rounds, setRounds] = useState(() => days.map((d, i) => ({ date: d, course_id: '', format: plan.kind === 'trip' && i === days.length - 1 && days.length > 1 ? 'ambrose' : 'stableford' })));
+  const [rounds, setRounds] = useState(() => setupRoundsFromShape(plan.repeat_shape, days.map((d, i) => ({ date: d, course_id: '', format: plan.kind === 'trip' && i === days.length - 1 && days.length > 1 ? 'ambrose' : 'stableford' })), data.coursesById));
   const set = (i, patch) => setRounds(rounds.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const chosen = rounds.filter((r) => r.course_id);
   const [finding, setFinding] = useState(false);
@@ -80,17 +85,18 @@ function TripSetupSheet({ plan, onClose, onDone }) {
       if (error) problems.push('the trophies');
     }
     if (chosen.length) {
-      const { error } = await supabase.from('rounds').insert(chosen.map((r) => {
+      const { data: made, error } = await supabase.from('rounds').insert(chosen.map((r) => {
         const course = data.coursesById[r.course_id];
         const s = roundSettingsFromRules(rules || [], r.format);
         return {
           trip_id: trip.id, course_id: r.course_id, play_date: r.date, format: r.format, status: 'setup',
-          name: `${DOW[parseDate(r.date).getDay()]} ${r.format === 'ambrose' ? 'Ambrose' : 'Stableford'} — ${course?.name || ''}`.trim(),
+          name: `${DOW[parseDate(r.date).getDay()]} ${formatName(r.format)} — ${course?.name || ''}`.trim(),
           ...(r.format === 'ambrose' ? { comp_bonus: bonusOn ? s.comp_bonus ?? 0 : 0, min_drives: s.min_drives } : {}),
           rules: s.text || null,
         };
-      }));
+      })).select('id,play_date,course_id,format');
       if (error) problems.push('the rounds');
+      else if (await applyRepeatExtras(plan, made, { gamesOn })) problems.push('some side comps or games from last time');
     }
     // 2. Only now close the old trip (and any round still live in it), so there's never no current trip.
     if (current) {
@@ -124,6 +130,8 @@ function TripSetupSheet({ plan, onClose, onDone }) {
               <select className="select" value={r.format} onChange={(e) => set(i, { format: e.target.value })} aria-label="Format">
                 <option value="stableford">Stableford</option>
                 <option value="ambrose">Ambrose</option>
+                <option value="stroke">Stroke play</option>
+                <option value="fourball">4BBB (pairs)</option>
               </select>
             </div>
           </div>

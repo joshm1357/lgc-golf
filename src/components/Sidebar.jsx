@@ -30,21 +30,19 @@ export function Sidebar() {
 function SidebarNav() {
   const { status } = useSession();
   const on = {
-    feed: useFeature('feed'), side_comps: useFeature('side_comps'), planner: useFeature('planner'),
-    trophies: useFeature('trophies'), tribunal: useFeature('tribunal'), cup: useFeature('cup'),
+    feed: useFeature('feed'), planner: useFeature('planner'), trophies: useFeature('trophies'), tribunal: useFeature('tribunal'),
   };
   const look = status?.look || (status && status.legacy !== false ? { crest_url: 'builtin:lgc' } : null);
+  // ov15: This trip first (leaderboards, comps, the Cup and the trip's feed are inside it), then the Feed.
   const items = [
-    { to: '/', label: 'Leaderboard', icon: Icon.board, end: true },
-    on.cup && { to: '/cup', label: 'The Cup', icon: Icon.trophy },
+    { to: '/', label: 'This trip', icon: Icon.board, end: true },
     on.feed && { to: '/feed', label: 'Feed', icon: Icon.feed },
-    on.side_comps && { to: '/comps', label: 'Comps', icon: Icon.flag },
     on.planner && { to: '/plan', label: 'Trips', icon: Icon.calendar },
+    { to: '/group', label: 'Players & group', icon: Icon.user },
     on.trophies && { to: '/trophies', label: 'Trophy Room', icon: Icon.trophy },
     on.tribunal && { to: '/tribunal', label: 'Tribunal', icon: Icon.gavel },
     { to: '/rules', label: 'Rulebook', icon: Icon.book },
     { to: '/courses', label: 'Courses', icon: Icon.map },
-    { to: '/group', label: 'Group & invites', icon: Icon.user },
     { to: '/more', label: 'More', icon: Icon.more },
   ].filter(Boolean);
   return (

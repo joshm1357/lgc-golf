@@ -97,7 +97,7 @@ export function YourGroupsInside() {
             </div>
           )
           : <button type="button" className="btn ghost block" onClick={() => setShowPin(true)}>Join another with its link</button>}
-        {!status?.signed_in && <p className="note">On a new phone? Open your personal link there (your profile → Copy my link){SIGN_IN.length > 0 ? <>, or add a sign-in in <Link to="/group">Group & invites</Link></> : null}.</p>}
+        {!status?.signed_in && <p className="note">On a new phone? Open your personal link there (your profile → Copy my link){SIGN_IN.length > 0 ? <>, or add a sign-in on <Link to={`/player/${status.player_id}`}>your profile</Link></> : null}.</p>}
       </div>
     </div>
   );

@@ -142,7 +142,7 @@ function NowCard({ plan, stage, rsvps, me }) {
       </Link>
       {on && (
         <div className="row" style={{ gap: 8, padding: 10 }}>
-          <Link to="/" className="btn gold sm grow" style={{ textAlign: 'center' }}>Leaderboard</Link>
+          <Link to="/" className="btn gold sm grow" style={{ textAlign: 'center' }}>This trip</Link>
           <Link to={`/plan/${plan.id}?tab=details`} className="btn ghost sm grow" style={{ textAlign: 'center' }}>Details</Link>
         </div>
       )}

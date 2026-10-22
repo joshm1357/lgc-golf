@@ -80,15 +80,12 @@ export function VoteChannelCard() {
   );
 }
 
-/** Group & invites (organisers): the group's default, and emails for people who aren't on the app yet. */
+/** Players & group (organisers): the group's default, and how many are on email (counts only). */
 export function GroupVoteEmailCard() {
   const { status } = useSession();
-  const data = useData();
   const tasksOn = useFeature('planner_tasks');
   const [def, setDef] = useState(null);
   const [rows, setRows] = useState(null);
-  const [editing, setEditing] = useState(null);
-  const [draft, setDraft] = useState('');
   const [busy, run] = useRun();
   const load = useCallback(async () => {
     const [{ data: gr, error: e1 }, { data: ch, error: e2 }] = await Promise.all([
@@ -101,54 +98,21 @@ export function GroupVoteEmailCard() {
   }, [status.group_id]);
   useEffect(() => { load(); }, [load]);
   if (!status.is_admin || !tasksOn || !def || !rows) return null;
+  // ov15: counts only — who's on email, and anyone's address, isn't listed for the group. A player not on the app is
+  // given an email from their card in the players list (components/PlayersList.jsx).
   const sum = channelSummary(rows);
-  const names = (ids) => ids.map((id) => playerName(data.playersById[id])).filter(Boolean).join(', ');
-  const offApp = rows.filter((r) => !r.on_app).sort((a, b) => playerName(data.playersById[a.player_id]).localeCompare(playerName(data.playersById[b.player_id])));
-  const saveInvite = (pid, e) => run(async () => {
-    await must(supabase.rpc('set_invited_vote_email', { p_player: pid, p_email: e }));
-    setEditing(null); setDraft(''); await load();
-  }, e ? 'Email added' : 'Email removed');
+  const n = (k) => sum[k].length;
+  const offApp = rows.filter((r) => !r.on_app).length;
   return (
     <div className="card pad stack" style={{ gap: 10 }} data-testid="group-vote-email">
       <strong>🗳️ Votes by email</strong>
-      <div className="small muted">How your group gets votes and trip questions, unless someone picks for themselves in Notifications.</div>
+      <div className="small muted">How your group gets votes and trip questions, unless someone picks for themselves on their profile.</div>
       <ChannelPicker value={def} busy={busy} name="Group default for votes"
         onPick={(c) => run(async () => { await must(supabase.rpc('set_vote_channel', { p_group: status.group_id, p_value: c })); await load(); }, 'Saved')} />
       <div className="small" data-testid="channel-summary">
-        {sum.email.length > 0 && <div><strong>📧 Email:</strong> {names(sum.email)}</div>}
-        {sum.both.length > 0 && <div><strong>📧+🔔 Both:</strong> {names(sum.both)}</div>}
-        {sum.app.length > 0 && <div><strong>🔔 App:</strong> {names(sum.app)}</div>}
-        {sum.none.length > 0 && <div className="muted"><strong>Not reached:</strong> {names(sum.none)} — not on the app and no email.</div>}
+        📧 {n('email')} on email · 📧+🔔 {n('both')} on both · 🔔 {n('app')} in the app{n('none') > 0 ? ` · ${n('none')} not reached (not on the app, no email)` : ''}
       </div>
-      {offApp.length > 0 && (
-        <>
-          <span className="label">Not on the app yet</span>
-          <div className="small muted">Type in their email and they’ll get trip votes by email with one-tap answers. Only used for trip emails; they can remove it.</div>
-          {offApp.map((r) => {
-            const p = data.playersById[r.player_id];
-            return (
-              <div key={r.player_id} className="stack" style={{ gap: 6, borderTop: '1px solid var(--line-soft)', paddingTop: 8 }}>
-                <div className="row between" style={{ gap: 8, alignItems: 'center' }}>
-                  <span><strong>{playerName(p)}</strong>{r.has_email && <span className="small muted"> · {r.email_hint}</span>}</span>
-                  {editing !== r.player_id && (
-                    <span className="row" style={{ gap: 6 }}>
-                      <button type="button" className="btn ghost sm" disabled={busy} onClick={() => { setEditing(r.player_id); setDraft(''); }}>{r.has_email ? 'Change' : 'Add email'}</button>
-                      {r.has_email && r.source === 'invited' && <button type="button" className="btn ghost sm" disabled={busy} aria-label={`Remove ${playerName(p)}'s email`} onClick={() => saveInvite(r.player_id, '')}>✕</button>}
-                    </span>
-                  )}
-                </div>
-                {editing === r.player_id && (
-                  <div className="row" style={{ gap: 6 }}>
-                    <input className="input grow" type="email" inputMode="email" placeholder="their@email.com" aria-label={`${playerName(p)}'s email`} value={draft} onChange={(e) => setDraft(e.target.value)} />
-                    <button type="button" className="btn sm" disabled={busy || !isEmail(draft)} onClick={() => saveInvite(r.player_id, cleanEmail(draft))}>Save</button>
-                    <button type="button" className="btn ghost sm" onClick={() => setEditing(null)}>Cancel</button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </>
-      )}
+      {offApp > 0 && <div className="small muted">{offApp} not on the app yet — open their card in the players list above to add an email for trip votes.</div>}
     </div>
   );
 }

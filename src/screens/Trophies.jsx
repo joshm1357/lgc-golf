@@ -101,6 +101,8 @@ export default function Trophies() {
               <TrophyArt name={t.name} type={t.type} size={104} />
               <div className="plate"><div className="t">{t.name}</div>{holder && <div className="s">HELD BY {holder.winner_names.toUpperCase()}</div>}</div>
               {lead && <div className="small" style={{ color: '#EBD496', fontWeight: 600 }}>{lead}</div>}
+              {/* ov15: the comp that decides it (tap the case for its standings). */}
+              {!t.historyOnly && <div className="small" data-testid="decided-by" style={{ color: '#C9B48A' }}>Decided by: {compOf(t)?.name && compOf(t).name !== t.name ? compOf(t).name : ({ stableford_total: 'Stableford points over the trip', ambrose: 'the Ambrose round', manual: 'the group’s pick' }[t.type] || 'the group')}</div>}
             </button>
           );
         })}
@@ -119,6 +121,7 @@ export default function Trophies() {
             )}
           </div>
 
+          {trip && !trophy.historyOnly && <Link to={`/comps-board?trip=${trip.id}${compOf(trophy) ? `&c=${encodeURIComponent(compOf(trophy).id)}` : ''}`} className="small" style={{ color: '#EBD496', fontWeight: 700 }}>The standings, with this trip’s other comps →</Link>}
           {general && (
             <>
               <CompStandingsView comp={general.c} st={general.st} data={cd} />

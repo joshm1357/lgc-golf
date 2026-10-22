@@ -14,6 +14,9 @@ import { PlayerStatsCard } from '../components/PlayerStats.jsx';
 import { HomeArea } from '../components/HomeArea.jsx';
 import { personalLink, myLinkMessage } from '../lib/personal.js';
 import { shareText } from '../lib/push.js';
+import RuleTag from '../components/RuleTag.jsx';
+import { SignInCard } from './Group.jsx';
+import { VoteChannelCard } from '../components/VoteEmail.jsx';
 
 /** Everything we know about a player: Stableford rounds, Ambrose results, trophies, comps, Tribunal, handicap. */
 export function usePlayerHistory(playerId) {
@@ -130,8 +133,11 @@ export default function Profile() {
           </div>
           <div className="grow">
             <div className="label">Handicap</div>
-            <div className="num" style={{ fontSize: 44, lineHeight: 1 }}>{Number(p.handicap)}</div>
-            <div className="small muted">Changes only via the admin or the Tribunal</div>
+            <div className="num" style={{ fontSize: 44, lineHeight: 1 }}>{status.is_admin ? Number(p.handicap) : (
+              <RuleTag testId="profile-hcp" rule={{ table: 'players', id: p.id, field: 'handicap', label: `${playerName(p)}’s handicap`, value: Number(p.handicap), where: { path: `/player/${p.id}` } }}
+                explain="Handicaps are set by an organiser. If you think one’s wrong, dispute it: the group decides at the Tribunal, and if the verdict says change it, an organiser applies it.">{Number(p.handicap)}</RuleTag>
+            )}</div>
+            <div className="small muted">{status.is_admin ? 'Change it in Players & group' : 'Set by an organiser — tap it to dispute'}</div>
           </div>
         </div>
         <ViewAsButton player={p} />
@@ -204,8 +210,16 @@ export default function Profile() {
             </Link>
           )) : <span className="muted small">Clean record. For now.</span>}
         </div>
-        {isMe && <p className="note">Signed in as {playerName(p)} on this phone.</p>}
-        {isMe && !status.viewing && p.approved !== false && <MyLinkCard />}
+        {isMe && !status.viewing && (
+          // Your own settings (ov15: moved here from Players & group — they're yours, not the group's).
+          <div className="stack" data-testid="my-settings" style={{ gap: 10 }}>
+            <span className="label" style={{ marginTop: 6 }}>Your settings</span>
+            <p className="note" style={{ margin: 0 }}>Signed in as {playerName(p)} on this phone.</p>
+            <SignInCard returnHash={`#/player/${p.id}`} />
+            <VoteChannelCard />
+            {p.approved !== false && <MyLinkCard />}
+          </div>
+        )}
       </div>
     </div>
   );

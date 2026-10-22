@@ -183,7 +183,7 @@ const noSideScroll = async (label) => {
 };
 
 // 1. Leaderboard: "Today at Cypress Lakes" during the live round.
-await page.goto(`${BASE}#/`);
+await page.goto(`${BASE}#/leaderboard`);
 const chip = page.getByTestId('weather-chip');
 await chip.waitFor({ timeout: 15000 });
 const chipText = (await chip.innerText()).replace(/\s+/g, ' ');
@@ -298,7 +298,7 @@ await page.getByText(/Tie — Al Blue & Bo Red \(1 vote each\) — fine: buys th
 
 // 5. Switches off: hidden everywhere.
 db.group_features = feats({ weather: false, dinner: false });
-await page.goto(`${BASE}#/`);
+await page.goto(`${BASE}#/leaderboard`);
 await page.reload();
 await page.locator('.lb').first().waitFor({ timeout: 15000 });
 await page.waitForTimeout(1200);

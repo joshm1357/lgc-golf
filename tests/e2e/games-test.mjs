@@ -114,7 +114,7 @@ page.on('dialog', (d) => d.accept());
 const clean = (arr) => arr.map((t) => t.replace(/\s+/g, ' ').trim());
 
 // 1. The leaderboard has a small Games link for the live round.
-await page.goto(`${BASE}#/`);
+await page.goto(`${BASE}#/leaderboard`);
 const chip = page.getByRole('link', { name: /Games today/ });
 await chip.waitFor({ timeout: 15000 });
 check((await chip.innerText()).includes('Skins · Nassau'), 'leaderboard shows "Games today: Skins · Nassau"');
@@ -190,7 +190,7 @@ await page.screenshot({ path: `${SHOTS}/5-setup.png`, fullPage: true });
 
 // 6. Feature off: hidden everywhere.
 db.group_features = feats(false);
-await page.goto(`${BASE}#/`);
+await page.goto(`${BASE}#/leaderboard`);
 await page.reload();
 await page.locator('.lb').first().waitFor({ timeout: 15000 });
 await page.waitForTimeout(1200);

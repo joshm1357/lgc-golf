@@ -120,7 +120,7 @@ const { ctx, page } = await newCtx({ width: 375, height: 812 });
 const caddie = page.getByTestId('caddie');
 
 // 1. Leaderboard: there, clear of "Enter score".
-await page.goto(`${BASE}#/`);
+await page.goto(`${BASE}#/leaderboard`);
 await page.getByText('Enter score').waitFor({ timeout: 15000 });
 await caddie.waitFor({ timeout: 10000 });
 await page.waitForTimeout(500);
@@ -149,7 +149,7 @@ const goBtn = page.getByRole('button', { name: /Teams & pairs.*Go there/ });
 check(await visible(goBtn), '"Go there →" shows under the answer');
 check(await visible(page.getByRole('button', { name: 'Helpful', exact: true })), '👍 / 👎 still there');
 await page.screenshot({ path: `${SHOTS}/3-answer-go.png` });
-check(/#\/\??$/.test(page.url()), 'nothing moves until you tap');
+check(/#\/leaderboard$/.test(page.url()), 'nothing moves until you tap');
 await goBtn.click();
 await page.waitForURL(new RegExp(`#/admin\\?round=${R1}`), { timeout: 10000 });
 check(true, 'tapping it opens the round’s admin setup');

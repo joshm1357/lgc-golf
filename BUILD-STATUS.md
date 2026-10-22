@@ -1016,3 +1016,31 @@ screen, "Viewing as Mike · read only", and Stop.
   `supabase/functions/notify/index.ts`, `docs/SIGN-IN-SETUP.md`, `tests/e2e/save-spot-test.mjs`.
 - **Tested:** Vitest 1145 (savespot 27 new); e2e `save-spot-test.mjs` 89 checks; signin-home 71, links 24, stage2 19,
   beta 46, phone 17, notify-prompt 31 pass.
+
+## Trip-centred navigation (ov15), branch `ov15-trip-centred`, 22 Oct 2026
+- **Why (Josh):** "The comps should just be part of the trip and the trophy room." "Leaderboard is part of a trip …
+  have an 'active or upcoming' trip … above Feed." "There should be a group list that has the players, handicaps (only
+  editable by admin, but disputable) … the players table, which is the most important, is hidden."
+- **Tabs (phone):** This trip · Feed · Trips · Players · More. **Sidebar (laptop):** This trip, Feed, Trips, Players &
+  group, Trophy Room, Tribunal, Rulebook, Courses, More. No Leaderboard, Comps or Cup tab any more.
+- **This trip (`#/`):** the trip with a live round or a round today, else on today, else the soonest coming, else one
+  finished in the last 7 days (`lib/activetrip.js`). Card: name, dates, "Day 2 of 3" / "In 12 days". Then its status
+  (`components/TripStatus.jsx`): today's round as a short leaderboard (→ full one), side comps to record, what we're
+  playing for (each comp with its leader → standings; Cup; games), the trip's feed, and its rounds (each → its
+  leaderboard). Nothing on: "No trip on — plan one". Loads from the one starting file (offline rule kept).
+- **Links kept:** `#/?r=<round>` is still that round's leaderboard (recaps in group chats); `#/leaderboard` = the
+  current round's; `#/comps?r=…` still the side comps screen; bare `#/comps` → the live round's side comps if any today,
+  else `#/comps-board?trip=<trip>`. `#/comps-board` and `#/feed` take `?trip=`. A trip's Overview mounts TripStatus
+  (one line in TripOverview.jsx) so past trips' leaderboards are Trips → past trip → Rounds.
+- **Players & group (`#/group`):** opens on the players list (`components/PlayersList.jsx`): photo, name, nickname,
+  role, on the app ✓ (organisers also: signed in ✓), handicap and last change. Organisers change it in place; others
+  tap → "⚖️ Dispute this" (players.handicap). Then invite links, then organiser settings. No email addresses anywhere
+  on it (personal links show "✓ Signed in", votes by email shows counts only; a player's card says "✓ has an email").
+- **Your profile** now holds your own settings: Save your spot, how you get votes + your vote email, Copy my link.
+- **Trophy Room:** each trophy says what decides it, with a link to the standings. (Every comp has a trip, so nothing
+  moved to History.)
+- **Migration 087** (`087_dispute_player_handicap.sql`, additive — three functions replaced with one more case each):
+  players.handicap can be disputed, checked −10 to 54, and an upheld verdict applied by an organiser is recorded in
+  the handicap history as "Tribunal verdict (dispute)". **Applied on staging only.**
+- **Also:** shortcuts `g h` This trip, `g l` → `#/leaderboard`; Caddie `trip_now` destination and "Players & group"
+  (routes.ts too — the ai-helper function needs a deploy for the new key); What's new; wording.

@@ -724,7 +724,7 @@ export function Governance() {
         ))}
 
         {committeesOn && <Committees g={g} direct={direct} />}
-        {!committeesOn && organiser && <div className="small muted">Committees and terms are switched off (Group & invites → Features), or pick Club style above.</div>}
+        {!committeesOn && organiser && <div className="small muted">Committees and terms are switched off (Players & group → Features), or pick Club style above.</div>}
 
         {organiser && (
           <label className="row card pad" style={{ gap: 10 }}>

@@ -144,17 +144,17 @@ const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
 
 await page.goto(`${BASE}#/more`);
-await page.getByText('Group & invites').waitFor({ timeout: 15000 });
+await page.getByText('Players & group').waitFor({ timeout: 15000 });
 await page.waitForTimeout(800);
 const tabs = await page.locator('nav.tabs a').allInnerTexts();
-check(JSON.stringify(tabs) === JSON.stringify(['Leaderboard', 'Comps', 'More']), `feed and trips off: bottom bar is ${tabs.join(' / ')}`);
+check(JSON.stringify(tabs) === JSON.stringify(['This trip', 'Players', 'More']), `feed and trips off: bottom bar is ${tabs.join(' / ')}`);
 check(!(await page.getByText('Handicap Tribunal').count()), 'tribunal off: not in More');
 check(await page.getByText('The Rulebook').isVisible(), 'rulebook still there');
 const w = await page.evaluate(() => document.scrollingElement.scrollWidth);
 check(w <= 375, `More: no sideways scroll (${w}px)`);
 await page.screenshot({ path: `${SHOTS}/f1-more.png` });
 
-await page.getByText('Group & invites').click();
+await page.getByText('Players & group').click();
 await page.getByText('Features', { exact: true }).waitFor({ timeout: 10000 });
 check(await page.getByRole('switch', { name: 'Shared costs' }).isDisabled(), 'shared costs greyed out while the planner is off');
 check(!(await page.getByRole('switch', { name: 'Feed, photos and auto-posts' }).isChecked()), 'feed shows off');

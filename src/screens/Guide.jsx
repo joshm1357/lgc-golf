@@ -83,7 +83,7 @@ export default function Guide() {
 
       <div className="section stack">
         <span className="label">Scoring on the course</span>
-        <Step n="1" title="One person per team enters scores">Tap the gold <strong>Enter score</strong> button at the bottom of the Leaderboard.</Step>
+        <Step n="1" title="One person per team enters scores">Tap the gold <strong>Enter score</strong> button on <strong>This trip</strong> or at the bottom of the round’s leaderboard.</Step>
         <Step n="2" title="Set the team score">Big <strong>− / +</strong> buttons, starting at par.</Step>
         <Step n="3" title="Tap whose drive you used">Each name shows a counter, e.g. <strong>Josh 3/6</strong>. It goes red if someone's running out of holes to get their 6.</Step>
         <Step n="4" title="Save & next hole">No signal? It saves on your phone and sends itself when you're back in range. Got it wrong? Tap the hole number and fix it.</Step>

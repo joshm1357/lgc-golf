@@ -146,7 +146,7 @@ check(await page.getByText('54 questions left this month for the group · 6 for 
 await page.screenshot({ path: `${SHOTS}/3-ask.png`, fullPage: true });
 // The conversation is still there after leaving the page (kept for the session).
 await page.goto(`${BASE}#/more`);
-await page.getByText('Group & invites').waitFor({ timeout: 10000 });
+await page.getByText('Players & group').waitFor({ timeout: 10000 });
 check(await page.getByText('📜 History and import').isVisible(), 'More has "📜 History and import" for organisers');
 await page.goto(`${BASE}#/ask`);
 await page.getByText(/Bluey’s 44 points at Kurri/).waitFor({ timeout: 10000 });
@@ -177,7 +177,7 @@ await page.getByText('Set up your trip').first().waitFor({ timeout: 15000 });
 await page.waitForTimeout(500);
 check(!(await page.getByText('✨ Set it up for me').isVisible().catch(() => false)), 'switched off: no "Set it up for me" box');
 await page.goto(`${BASE}#/more`);
-await page.getByText('Group & invites').waitFor({ timeout: 10000 });
+await page.getByText('Players & group').waitFor({ timeout: 10000 });
 check(!(await page.getByText('✨ Ask the AI helper').isVisible().catch(() => false)), 'no Ask in More (the Caddie button is the way in)');
 await page.goto(`${BASE}#/ask`);
 await page.getByText('The AI helper is switched off for this group.').waitFor({ timeout: 10000 });

@@ -7,7 +7,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
 import { useData, useScores, useSession, useRealtime, useFeature, playerName } from '../lib/store.jsx';
 import { useRoundGames } from '../components/GamesChip.jsx';
-import { useTripComps } from '../components/CompsChip.jsx';
+import { useTripComps, useCompData } from '../components/CompsChip.jsx';
 import { Header, AvatarStack, Loading } from '../components/ui.jsx';
 import { useRun, must } from '../lib/run.js';
 import {
@@ -18,40 +18,10 @@ import CompEditor from './CompPicker.jsx';
 import { RulesLink } from '../components/RulesLinks.jsx';
 import RuleTag from '../components/RuleTag.jsx';
 import { isDisputable } from '../lib/disputes.js';
+import { pickActiveTrip } from '../lib/activetrip.js';
 
-/**
- * Everything compStandings / compNeeds need for a trip. scores: false skips the scores (the to-do list doesn't need
- * them); entries: false skips side comp entries. scoresIdx: use scores already loaded by the screen.
- */
-export function useCompData(tripId, { scores = true, entries = true, scoresIdx = null } = {}) {
-  const data = useData();
-  const ids = useMemo(() => (data.rounds || []).filter((r) => r.trip_id === tripId).map((r) => r.id), [data.rounds, tripId]);
-  const sc = useScores(scores && !scoresIdx ? ids : []);
-  const [games] = useRoundGames();
-  const [extra, setExtra] = useState({ sideEntries: [], ownDefs: [], ownEntries: [], cupSides: [], cupMatches: [] });
-  const idKey = ids.join(',');
-  const load = useCallback(async () => {
-    const q = (b) => Promise.resolve(b).then((r) => (r.error ? [] : r.data || []), () => []);
-    const none = Promise.resolve([]);
-    const [cupSides, cupMatches, sideEntries, ownDefs, ownEntries] = await Promise.all([
-      q(supabase.from('cup_sides').select('*').order('sort')),
-      q(supabase.from('cup_matches').select('*').order('sort')),
-      entries && ids.length ? q(supabase.from('side_entries').select('*').in('round_id', ids)) : none,
-      entries ? q(supabase.from('side_comp_defs').select('*')) : none,
-      entries && ids.length ? q(supabase.from('side_comp_entries').select('*').in('round_id', ids)) : none,
-    ]);
-    setExtra({ cupSides, cupMatches, sideEntries, ownDefs, ownEntries });
-  }, [idKey, entries]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { load(); }, [load]);
-  useRealtime(entries ? ['cup_sides', 'cup_matches', 'side_entries', 'side_comp_defs', 'side_comp_entries'] : ['cup_sides', 'cup_matches'], load);
-  const index = scoresIdx || sc.index;
-  return useMemo(() => ({
-    trips: data.trips || [], rounds: data.rounds || [], coursesById: data.coursesById || {}, playersById: data.playersById || {},
-    players: data.players || [], roundPlayers: data.roundPlayers || {}, teamsByRound: data.teamsByRound || {},
-    scoresIdx: index, quickResults: data.quick_results || [], honourBoard: data.honour_board || [], trophies: data.trophies || [],
-    games, ...extra, reload: load,
-  }), [data, index, games, extra, load]);
-}
+// useCompData moved to components/CompsChip.jsx (ov15) so This trip can use it without loading this screen.
+export { useCompData };
 
 // ------------------------------------------------------------------ pieces
 
@@ -228,7 +198,10 @@ export default function CompsBoard() {
   const { status } = useSession();
   const [params] = useSearchParams();
   const asked = params.get('c');
-  const trip = data.currentTrip;
+  // A trip's comps (ov15: comps are part of the trip): ?trip=<id>, else the trip on now / next, else the current one.
+  const askedTrip = params.get('trip');
+  const trip = (askedTrip && data.trips?.find((t) => t.id === askedTrip))
+    || (data.ready ? pickActiveTrip({ trips: data.trips, rounds: data.rounds })?.trip : null) || data.currentTrip;
   const [list, reload] = useTripComps(trip?.id);
   const cd = useCompData(trip?.id);
   const admin = !!status?.is_admin && !status?.viewing;

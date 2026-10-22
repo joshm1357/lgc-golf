@@ -147,7 +147,7 @@ describe('the Trip desk folded into Trips (22 Oct): old /desk links forward', ()
     expect([TOOL.card(R), TOOL.present(R), TOOL.print(R)]).toEqual([`/round/${R}/cards`, `/round/${R}/present`, `/round/${R}/print`]);
   });
   it('each tool’s back bar goes to where it lives', () => {
-    expect(toolHome('/group/players')).toEqual({ to: '/group', label: 'Group & invites' });
+    expect(toolHome('/group/players')).toEqual({ to: '/group', label: 'Players & group' });
     expect(toolHome('/courses/paste')).toEqual({ to: '/courses', label: 'Courses' });
     expect(toolHome(`/round/${R}/cards`)).toEqual({ to: `/?r=${R}`, label: 'Leaderboard' });
     expect(toolHome('/cards')).toEqual({ to: '/', label: 'Leaderboard' });

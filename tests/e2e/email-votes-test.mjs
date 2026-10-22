@@ -198,15 +198,18 @@ await card.locator('[data-channel="both"]').click();
 await page.waitForTimeout(400);
 check(rpc('set_vote_channel').some((w) => w.body.p_value === 'both' && w.body.p_group === GROUP), 'organiser sets the group default to Both');
 check(await card.locator('[data-channel="both"]').getAttribute('aria-pressed') === 'true', 'Both shows as the group default');
-await card.getByRole('button', { name: 'Add email' }).click();
-await card.getByLabel("Hamish's email").fill('hamish@example.com');
-await card.getByRole('button', { name: 'Save' }).click();
-await page.waitForTimeout(400);
+// ov15: an email for someone not on the app is added from their card in the players list (no addresses on show).
+await page.getByTestId('players-list').getByRole('button', { name: /Hamish/ }).first().click();
+const pcard = page.getByTestId('player-card');
+await pcard.getByRole('button', { name: 'Add an email' }).click();
+await pcard.getByLabel("Hamish's email").fill('hamish@example.com');
+await pcard.getByRole('button', { name: 'Save' }).click();
+await page.waitForTimeout(600);
 check(rpc('set_invited_vote_email').some((w) => w.body.p_player === P4 && w.body.p_email === 'hamish@example.com'), 'organiser adds an email for a player not on the app');
-check((await card.innerText()).includes('h…@example.com'), 'organiser sees only a shortened version of it');
-check((await page.getByTestId('channel-summary').innerText()).includes('Email: Hamish'), 'summary says Hamish gets votes by email');
+check(!(await page.locator('.page').innerText()).includes('@example.com'), 'no email address shown anywhere on Players & group');
+check(/\d+ on email/.test(await page.getByTestId('channel-summary').innerText()) && !(await page.getByTestId('channel-summary').innerText()).includes('Hamish'), 'summary gives counts, not names');
 await card.screenshot({ path: `${SHOTS}/ev1-group-default.png` });
-await noSideScroll('Group & invites');
+await noSideScroll('Players & group');
 
 // 2. Mike (a player) adds his email and switches to email only.
 me = { user: U2, player: P2, admin: false };

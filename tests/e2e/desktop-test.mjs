@@ -232,7 +232,7 @@ async function flow(width, mobile = false) {
   }
 
   // 4. Paper cards from the round's tools on the leaderboard (buttons on a laptop, ⋯ on a phone), keyboard only.
-  await go(page, '/');
+  await go(page, '/leaderboard');
   await page.getByTestId('round-tools').waitFor({ timeout: 15000 });
   if (laptop) {
     check(await page.getByTestId('round-tools').getByRole('link', { name: /Present/ }).isVisible(), `${tag}: the round's tools are buttons`);
@@ -273,7 +273,7 @@ async function flow(width, mobile = false) {
   if (laptop) await page.getByRole('navigation', { name: 'Group' }).getByRole('link', { name: 'Players table' }).click();
   else await page.getByTestId('players-table-link').click();
   await page.getByTestId('players-table').waitFor({ timeout: 10000 });
-  check(hashOf(page) === '#/group/players', `${tag}: the players table lives in Group & invites (${hashOf(page)})`);
+  check(hashOf(page) === '#/group/players', `${tag}: the players table lives in Players & group (${hashOf(page)})`);
   await page.getByLabel('Paste players').fill('Name\tHandicap\nZed New\t11\nBig Al\t15\nBo Test\t8\nGus\t77');
   const prev = await page.getByTestId('paste-preview').innerText();
   check(prev.includes('New') && prev.includes('20 → 15') && prev.includes('No change') && prev.includes('Skipped'), `${tag}: the preview shows new, change, no change and skipped`);
@@ -298,7 +298,7 @@ await flow(375, true);
   await page.locator('.side').waitFor({ timeout: 15000 });
   const side = await page.locator('.side').innerText();
   check(!/Trip desk|\bDesk\b/.test(side), 'the sidebar has no Trip desk');
-  check(side.includes('Trips') && side.includes('Courses') && side.includes('Group & invites'), 'the sidebar still has Trips, Courses and Group & invites');
+  check(side.includes('Trips') && side.includes('Courses') && side.includes('Players & group'), 'the sidebar still has Trips, Courses and Players & group');
   // Shortcuts: ? list, Esc, g t, g l, / finder.
   await page.keyboard.press('?');
   await page.getByTestId('shortcut-list').waitFor({ timeout: 4000 });
@@ -380,7 +380,7 @@ await flow(375, true);
 
   // Present and print, from the round's tools.
   db.scores.push({ id: crypto.randomUUID(), round_id: R1, subject_id: pid(0), subject_type: 'player', hole: 1, strokes: 4, picked_up: false, updated_at: now });
-  await go(page, '/');
+  await go(page, '/leaderboard');
   await page.getByTestId('round-tools').getByRole('link', { name: /Present/ }).click();
   await page.getByTestId('present-board').waitFor({ timeout: 10000 });
   check(hashOf(page) === `#/round/${R1}/present`, 'Present opens from the round');
@@ -421,7 +421,7 @@ await flow(375, true);
   await page.getByRole('tablist', { name: 'Sections' }).waitFor({ timeout: 15000 });
   await page.waitForTimeout(800);
   check(await page.getByTestId('organise-panels').count() === 0, 'a player sees Organise as before (no organiser panels)');
-  await go(page, '/');
+  await go(page, '/leaderboard');
   await page.locator('.side').waitFor({ timeout: 10000 });
   await page.waitForTimeout(600);
   check(await page.getByTestId('round-tools').count() === 0, 'a player has no round tools');
@@ -461,7 +461,7 @@ await flow(375, true);
   await page.getByLabel('Paste the scorecard').fill([row('Hole', holes.map((h) => h.n)), row('Par', PAR), row('Index', SI)].join('\n'));
   await page.getByTestId('course-preview').waitFor({ timeout: 5000 });
   await page.screenshot({ path: `${SHOTS_1440}/6-courses-paste.png` });
-  await go(page, '/');
+  await go(page, '/leaderboard');
   await page.getByTestId('round-tools').waitFor({ timeout: 10000 });
   await page.getByTestId('round-tools').scrollIntoViewIfNeeded();
   await page.screenshot({ path: `${SHOTS_1440}/7-round-tools.png` });

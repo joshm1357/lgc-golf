@@ -13,7 +13,9 @@ const D = (key, label, o = {}) => ({ key, label, needs: [], takes: [], organiser
 
 /** The places the caddie can take you. Keys, ids, organiser-only and features match the function's routes.ts. */
 export const DESTINATIONS = [
-  D('leaderboard', 'Leaderboard', { takes: ['round'], path: (i) => (i.round ? `/?r=${i.round}` : '/'),
+  D('trip_now', 'This trip', { path: () => '/',
+    words: ['this trip', 'home', 'trip status', 'today', 'whats happening', 'what is happening', 'trip feed'] }),
+  D('leaderboard', 'Leaderboard', { takes: ['round'], path: (i) => (i.round ? `/?r=${i.round}` : '/leaderboard'),
     words: ['leaderboard', 'leading', 'leader', 'winning', 'standings', 'board', 'results', 'whos winning', 'who is winning'] }),
   D('score', 'Enter scores', { needs: ['round'], path: (i) => `/score/${i.round}`,
     words: ['enter score', 'enter my score', 'put in score', 'scorecard', 'score', 'scores', 'card', 'keypad'] }),
@@ -45,8 +47,8 @@ export const DESTINATIONS = [
   D('notifications', 'Notifications', { feature: 'notifications', path: () => '/notifications',
     words: ['notification', 'notifications', 'alert', 'alerts', 'push', 'notify', 'buzz'] }),
   D('profile', 'My profile', { path: (i) => (i.me ? `/player/${i.me}` : '/more'), words: ['profile', 'my profile', 'photo', 'nickname', 'avatar', 'my details'] }),
-  D('group', 'Group & invites', { path: () => '/group',
-    words: ['invite', 'invites', 'invite link', 'link', 'qr', 'join', 'group', 'organiser', 'organisers', 'roles', 'features', 'switch on', 'switch off'] }),
+  D('group', 'Players & group', { path: () => '/group',
+    words: ['players list', 'everyones handicap', 'dispute a handicap', 'invite', 'invites', 'invite link', 'link', 'qr', 'join', 'group', 'organiser', 'organisers', 'roles', 'features', 'switch on', 'switch off'] }),
   D('stats', 'Stats & season ladder', { feature: 'stats', path: () => '/stats',
     words: ['stats', 'statistics', 'ladder', 'order of merit', 'head to head', 'records', 'record', 'average', 'averages'] }),
   D('trophies', 'The Trophy Room', { feature: 'trophies', path: () => '/trophies',
@@ -89,7 +91,9 @@ export function caddieContext(pathname = '/', search = '', defaults = {}) {
   const q = new URLSearchParams(search || '');
   const seg = pathname.split('/').filter(Boolean);
   const [a, b] = seg;
-  if (!a) return tidy({ screen: 'leaderboard', round_id: id(q.get('r')) || id(defaults.round) });
+  // ov15: "/" is This trip; "/?r=<round>" (and /leaderboard) is a round's leaderboard.
+  if (!a) return q.get('r') ? tidy({ screen: 'leaderboard', round_id: id(q.get('r')) }) : tidy({ screen: 'trip_now', round_id: id(defaults.round) });
+  if (a === 'leaderboard') return tidy({ screen: 'leaderboard', round_id: id(defaults.round) });
   switch (a) {
     case 'score': return tidy({ screen: 'score', round_id: id(b) });
     case 'games': return tidy({ screen: 'games', round_id: id(q.get('r')) });
@@ -127,6 +131,7 @@ export function caddieContext(pathname = '/', search = '', defaults = {}) {
 export function caddieSuggestions(ctx = {}, { isAdmin = false, roundName = '' } = {}) {
   const r = roundName ? ` in ${roundName}` : '';
   switch (ctx.screen) {
+    case 'trip_now': return ['Who’s leading today?', 'What’s on this trip?', isAdmin ? 'Set up the next round' : 'Where do I enter my score?'];
     case 'leaderboard': return [`Who’s leading${r}?`, 'What do I need to win?', isAdmin ? 'Change the teams' : 'Where do I enter my score?'];
     case 'score': return ['What do I need on the last few holes?', 'Is a gimme allowed?', 'Who’s leading?'];
     case 'games': return ['Who’s winning the skins?', 'Who pays who?', 'What games are on today?'];

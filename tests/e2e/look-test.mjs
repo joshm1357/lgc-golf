@@ -149,7 +149,7 @@ const cssVar = (n) => page.evaluate((x) => getComputedStyle(document.documentEle
 
 // A new group: its own colours and font, the plain crest — no L.G.C artwork.
 await page.goto(`${BASE}#/more`);
-await page.getByText('Group & invites').waitFor({ timeout: 15000 });
+await page.getByText('Players & group').waitFor({ timeout: 15000 });
 check((await cssVar('--navy')).toUpperCase() === '#1F4B33', `new group paints its main colour (${await cssVar('--navy')})`);
 check((await cssVar('--display')).includes('Georgia'), 'new group heading font');
 check(await page.getByRole('img', { name: 'The Golf Trip' }).first().isVisible(), 'plain The Golf Trip crest in the header');
@@ -162,7 +162,7 @@ check(!/L\.G\.C/.test(h.title + h.apple) && /trip-192\.png$/.test(h.icon), `new 
 await page.screenshot({ path: `${SHOTS}/l1-new-group.png` });
 
 // The Look card: a pale main colour is refused before saving.
-await page.getByText('Group & invites').click();
+await page.getByText('Players & group').click();
 await page.getByText('🎨 Look').waitFor({ timeout: 10000 });
 await page.getByLabel('Main colour').evaluate((el) => { const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(el, '#9fd3ff'); el.dispatchEvent(new Event('input', { bubbles: true })); });
 await page.waitForTimeout(300);
@@ -183,7 +183,7 @@ check(sw <= 375, `Look card: no sideways scroll (${sw}px)`);
 STATUS.v = { ...NEW, group_name: 'L.G.C', legacy: true, look: { short_name: 'L.G.C', crest_url: 'builtin:lgc', primary: '#1C2B3F', accent: '#D9A521', font: 'condensed' } };
 await page.goto(`${BASE}#/more`);
 await page.reload();
-await page.getByText('Group & invites').waitFor({ timeout: 15000 });
+await page.getByText('Players & group').waitFor({ timeout: 15000 });
 check((await cssVar('--navy-2')).toUpperCase() === '#2E4561' && (await cssVar('--gold')).toUpperCase() === '#D9A521', 'L.G.C keeps exactly its colours');
 check(await page.getByRole('img', { name: /L\.G\.C/ }).first().isVisible(), 'L.G.C keeps its crest');
 h = await head();

@@ -25,7 +25,8 @@ describe('the catalogue', () => {
     }
   });
   it('builds links, and refuses ones missing an id they need', () => {
-    expect(destinationPath('leaderboard', {})).toBe('/');
+    expect(destinationPath('leaderboard', {})).toBe('/leaderboard');
+    expect(destinationPath('trip_now', {})).toBe('/'); // ov15: This trip
     expect(destinationPath('leaderboard', { round: R })).toBe(`/?r=${R}`);
     expect(destinationPath('admin_teams', { round: R })).toBe(`/admin?round=${R}`);
     expect(destinationPath('admin_teams', {})).toBe(null);
@@ -50,7 +51,8 @@ describe('where it shows and what screen you’re on', () => {
     for (const p of ['/group', '/courses', '/plan/x']) expect(usesPanel(p, 375)).toBe(false);
   });
   it('route → context', () => {
-    expect(caddieContext('/', '', { round: R })).toEqual({ screen: 'leaderboard', round_id: R });
+    expect(caddieContext('/', '', { round: R })).toEqual({ screen: 'trip_now', round_id: R });
+    expect(caddieContext('/leaderboard', '', { round: R })).toEqual({ screen: 'leaderboard', round_id: R });
     expect(caddieContext('/', `?r=${R2}`, { round: R })).toEqual({ screen: 'leaderboard', round_id: R2 });
     expect(caddieContext('/score/' + R)).toEqual({ screen: 'score', round_id: R });
     expect(caddieContext(`/round/${R}/cards`)).toEqual({ screen: 'leaderboard', round_id: R });

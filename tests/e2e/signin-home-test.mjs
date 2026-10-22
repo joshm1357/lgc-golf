@@ -365,7 +365,7 @@ const tapSize = async (page, locator, label) => {
   check(clip.includes('#/me/MYKEMYKE2345') && clip.includes("G'day Mike"), 'personal links: the message with Mike’s link is ready to paste');
   await page.getByText('🔗 Personal links').scrollIntoViewIfNeeded();
   await page.screenshot({ path: `${SHOTS}/s12-personal-links-card.png`, fullPage: false });
-  await noSideScroll(page, 'Group & invites');
+  await noSideScroll(page, 'Players & group');
   await ctx.close();
 }
 

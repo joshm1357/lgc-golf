@@ -305,8 +305,8 @@ async function joinAsKurt(page, base) {
   await page.reload();
   await page.waitForTimeout(2500);
   check(!(await banner.isVisible().catch(() => false)), 'closed twice: gone for good');
-  await page.goto(`${PW}#/group`);
-  check(await page.getByTestId('sign-in-card').waitFor({ timeout: 8000 }).then(() => true, () => false), 'still in Group & invites, any time');
+  await page.goto(`${PW}#/player/${K}`); // ov15: your own settings are on your profile now
+  check(await page.getByTestId('sign-in-card').waitFor({ timeout: 8000 }).then(() => true, () => false), 'still on your profile, any time');
   await page.screenshot({ path: `${SHOTS}/8-group-card.png` });
   await ctx.close();
 }
@@ -337,7 +337,7 @@ async function joinAsKurt(page, base) {
   await page.getByLabel('Password', { exact: true }).fill('fairway123');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.getByRole('link', { name: 'Leaderboard' }).first().waitFor({ timeout: 10000 }).catch(() => null);
-  check(await page.getByRole('link', { name: 'Leaderboard' }).first().isVisible().catch(() => false), 'signed in: straight back into the group');
+  check(await page.getByRole('link', { name: 'This trip' }).first().isVisible().catch(() => false), 'signed in: straight back into the group');
   const st = S.calls.filter((c) => c.p === '/rest/v1/rpc/my_status').pop();
   check(st?.sub === UID, 'same user id on the new phone, so the same group and player');
   await page.goto(`${PW}#/more`);
@@ -367,7 +367,7 @@ async function joinAsKurt(page, base) {
   const v = S.calls.find((c) => c.p === '/auth/v1/verify');
   check(v?.body.type === 'recovery', 'the code is checked as a password reset');
   check(S.user.password === 'newpass123', 'the new password is saved');
-  check(await page.getByRole('link', { name: 'Leaderboard' }).first().isVisible().catch(() => false), 'and they’re in');
+  check(await page.getByRole('link', { name: 'This trip' }).first().isVisible().catch(() => false), 'and they’re in');
   await ctx.close();
 }
 
@@ -458,15 +458,15 @@ async function joinAsKurt(page, base) {
   await page.addInitScript(() => { navigator.share = undefined; });
   await page.goto(`${PW}#/group`);
   await page.getByText('🔗 Personal links').waitFor({ timeout: 15000 });
-  check(await page.getByText(/1 of 2 signed in/).isVisible(), 'organiser: how many have saved their spot');
-  check(await page.getByText('✓ Signed in as k…@example.com').isVisible(), 'organiser: ✓ signed in');
+  check(await page.getByText(/1 of 2 signed in/).waitFor({ timeout: 8000 }).then(() => true, () => false), 'organiser: how many have saved their spot');
+  check(await page.getByText('✓ Signed in', { exact: true }).isVisible(), 'organiser: ✓ signed in (no email address shown, ov15)');
   const remind = page.getByRole('button', { name: 'Remind Mike to save their spot' });
   check(await remind.isVisible(), 'organiser: Remind for Mike (on the app, not signed in)');
   check(!(await page.getByRole('button', { name: 'Remind Kurt to save their spot' }).isVisible().catch(() => false)), 'no Remind for someone signed in');
   await tapSize(remind, 'Remind');
   await page.getByText('🔗 Personal links').scrollIntoViewIfNeeded();
   await page.screenshot({ path: `${SHOTS}/14-organiser.png` });
-  await noSideScroll(page, 'Group & invites');
+  await noSideScroll(page, 'Players & group');
   await remind.click();
   await page.getByText('Reminder sent to Mike’s phone').waitFor({ timeout: 8000 }).catch(() => null);
   check(S.notify.some((n) => n.type === 'nudge_signin' && n.player_id === M), 'Remind sends the notification nudge to Mike');

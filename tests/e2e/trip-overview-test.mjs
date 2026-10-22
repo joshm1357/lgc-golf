@@ -168,7 +168,7 @@ await page.waitForTimeout(600);
 check(await page.getByText(/^In \d+ days$/).isVisible(), 'coming trip: countdown');
 check(await page.getByText('3 in').isVisible(), 'coming trip: who’s in');
 check(await page.getByText('Fri 15 Jan').isVisible() && await page.getByText('Sat 16 Jan').isVisible(), 'coming trip: the plan by day');
-check(await page.getByText('Port Macquarie GC').isVisible() && await page.getByText('Ambrose').first().isVisible(), 'coming trip: course and format per day');
+check(await page.getByText('Port Macquarie GC', { exact: true }).first().isVisible() && await page.getByText('Ambrose').first().isVisible(), 'coming trip: course and format per day');
 check(await page.getByText('📋 Book the minibus').isVisible() && await page.getByText('🎒 Bring list: 1 thing').isVisible(), 'coming trip: your bits');
 await page.screenshot({ path: `${SHOTS}/2-next.png`, fullPage: true });
 await noSideScroll('coming overview');

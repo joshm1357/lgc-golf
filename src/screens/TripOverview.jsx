@@ -19,6 +19,7 @@ import { WeatherChip } from '../components/Weather.jsx';
 import { CourseGuideChip } from '../components/CourseGuideLink.jsx';
 import TripHistory from '../components/TripHistory.jsx';
 import { ImportLink } from './AiImport.jsx';
+import TripStatus from '../components/TripStatus.jsx'; // ov15: the trip's leaderboards and comps
 
 function useTripPhotos(tripId, on) {
   const [photos, setPhotos] = useState([]);
@@ -136,6 +137,7 @@ export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage 
         <div className="card pad small muted">No rounds set up yet.{status?.is_admin && plan && onOrganise ? ' Add them under Organise → Set up your trip.' : ''}</div>
       )}
 
+      {tripId && <TripStatus trip={trip || data.trips.find((t) => t.id === tripId)} overview />}
       {/* What you're playing for */}
       {comps.length > 0 && (
         <div className="card pad stack" style={{ gap: 6 }}>

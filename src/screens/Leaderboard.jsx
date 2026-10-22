@@ -36,7 +36,9 @@ export function useRoundChoice() {
 
 export function RoundChips({ round, onChoose, filter }) {
   const data = useData();
-  const list = data.rounds.filter((r) => (filter ? filter(r) : true) && (r.trip_id === data.currentTrip?.id || r.id === round?.id));
+  // The rounds of this round's trip (a past trip's leaderboard shows its own days).
+  const tripId = round?.trip_id || data.currentTrip?.id;
+  const list = data.rounds.filter((r) => (filter ? filter(r) : true) && (r.trip_id === tripId || r.id === round?.id));
   if (list.length <= 1) return null;
   return (
     <div className="chips" role="group" aria-label="Round">
@@ -145,6 +147,7 @@ export default function Leaderboard() {
         )}
       </Header>
       <SaveSpotBanner />
+      {trip && !status?.quick && <div className="section" style={{ paddingBottom: 0 }}><Link to="/" className="small" style={{ fontWeight: 700 }} data-testid="back-to-trip">‹ This trip</Link></div>}
       <RoundChips round={round} onChoose={choose} />
       <CompChips round={round} />
       <RulesTodayChip round={round} />

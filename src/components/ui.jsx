@@ -96,13 +96,13 @@ export function Seg({ options, value, onChange, light }) {
 }
 
 export function TabBar() {
-  const on = { feed: useFeature('feed'), side_comps: useFeature('side_comps'), planner: useFeature('planner'), cup: useFeature('cup') };
+  // ov15: the trip comes first (its leaderboards, comps and feed live inside it), then the Feed, Trips and the players.
+  const on = { feed: useFeature('feed'), planner: useFeature('planner') };
   const tabs = [
-    { to: '/', label: 'Leaderboard', icon: Icon.board, end: true },
-    { to: '/cup', label: 'Cup', icon: Icon.trophy, feature: 'cup' },
+    { to: '/', label: 'This trip', icon: Icon.board, end: true },
     { to: '/feed', label: 'Feed', icon: Icon.feed, feature: 'feed' },
-    { to: '/comps', label: 'Comps', icon: Icon.flag, feature: 'side_comps' },
     { to: '/plan', label: 'Trips', icon: Icon.calendar, feature: 'planner' },
+    { to: '/group', label: 'Players', icon: Icon.user },
     { to: '/more', label: 'More', icon: Icon.more },
   ].filter((t) => !t.feature || on[t.feature]);
   return (

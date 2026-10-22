@@ -8,7 +8,7 @@
   "_github_pages_retired": "true only at release B, step 5: stops deploy.yml so a push can't put the old app back over the hand-over page",
   "sign_in": {
     "staging": "google,email",
-    "live": ""
+    "live": "google,password"
   },
   "_sign_in": "e.g. \"google\" or \"google,email\" once that provider is set up for that database",
   "new_groups": {
@@ -19,7 +19,7 @@
   "google": {
     "client_id": {
       "staging": "716054617925-qp2bvst6o36st4ijc47tkvo21eug3me7.apps.googleusercontent.com",
-      "live": ""
+      "live": "716054617925-de7tpf5g021qu9dd3p6bb0pdj503ldf1.apps.googleusercontent.com"
     },
     "button_hosts": [
       "staging.thegolftrip.club",

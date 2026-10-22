@@ -58,6 +58,8 @@ export const GROUP_TABLES = new Set([
   'custom_games', 'side_comp_conditions',
   // History brought in with "Bring your history": stories, awards, cups … (migration 081)
   'history_notes',
+  // Late organising jobs: penalty strokes on a round, and waivers / notices (migration 085)
+  'score_adjustments', 'job_penalties',
 ]);
 
 let current = (() => {

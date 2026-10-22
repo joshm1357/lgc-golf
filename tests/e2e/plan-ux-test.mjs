@@ -329,10 +329,10 @@ const stayPoll = polls.find((p) => p.purpose === 'stay');
 check(!!stayPoll && db.plan_options.filter((o) => o.poll_id === stayPoll.id).every((o) => o.link), 'accommodation ideas go on with their links');
 check((await page.getByTestId('reach-app').innerText()).includes(' 8 ') && (await page.getByTestId('reach-email').innerText()).includes(' 4 '), `How it goes out: app 8 (9 on the app, 1 chose email only), email 4 (${await page.getByTestId('reach-app').innerText()} / ${await page.getByTestId('reach-email').innerText()})`);
 const msg = await page.getByTestId('share-message').innerText();
-check(msg.startsWith('🗳️ Where and when for Spring away? Vote by') && msg.includes(`#/join/${CODE}?vote=${PLAN}`), `ready-to-paste message with the link (${msg.slice(0, 60)}…)`);
+check(msg.startsWith('🗳️ Where and when for Spring away? Vote by') && msg.includes(`#/join/${CODE}?to=${encodeURIComponent(`/plan/${PLAN}?tab=vote`)}`), `ready-to-paste message with the link (${msg.slice(0, 60)}…)`);
 await page.getByTestId('copy-link').click(); await wait(300);
 const clip = await page.evaluate(() => navigator.clipboard.readText()).catch(() => '');
-check(clip.endsWith(`#/join/${CODE}?vote=${PLAN}`), 'Copy link copies the join-then-vote link');
+check(clip.endsWith(`#/join/${CODE}?to=${encodeURIComponent(`/plan/${PLAN}?tab=vote`)}`), 'Copy link copies the join-then-vote link (one scheme, 083)');
 check(notifyCalls.filter((n) => n.type === 'poll_open').length === 1, 'one notification for the whole card');
 await shot('08-how-it-goes-out');
 await page.getByRole('button', { name: 'Done' }).click(); await wait(300);
@@ -370,7 +370,7 @@ check(await card.getByTestId('voter-thanks').isVisible(), 'answered everything: 
 check(db.plan_votes.some((v) => v.player_id === AL && v.response === 'maybe'), 'answers saved (stored as yes / maybe / no)');
 await shot('11-voter-thanks');
 
-// ---------------------------------------------------------------- E. The share link, opened by someone not in the group yet
+// ---------------------------------------------------------------- E. An OLD vote link (?vote=, before 083), opened by someone not in the group yet
 member = false; asPlayer = false;
 await page.goto(`${BASE}#/join/${CODE}?vote=${PLAN}`);
 await page.reload();

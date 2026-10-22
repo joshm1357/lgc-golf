@@ -11,19 +11,21 @@ import { notify, shareText } from '../lib/push.js';
 import { todayISO } from '../lib/plan.js';
 import { answersFor } from '../lib/emailvotes.js';
 import { allTicked, toggleTick, ballotFrom, callProblem, defaultCloses, closesWord, pollRows, reach, voteShareLink, shareMessage } from '../lib/callvote.js';
+import { joinCodeNow, loadJoinCode } from '../lib/joincode.js';
 import './planux.css';
 
 const appBase = () => `${window.location.origin}${import.meta.env.BASE_URL}`;
 
-/** The group's player invite code (organisers), for share links that let new people join first. */
+/** The group's join code (any member, 083), for share links that let someone with no session join first. */
 export function useJoinCode(on = true) {
-  const [code, setCode] = useState(null);
+  const { status } = useSession();
+  const [code, setCode] = useState(() => joinCodeNow());
   useEffect(() => {
-    if (!on) return undefined;
+    if (!on || code) return undefined;
     let live = true;
-    supabase.rpc('group_invite', { p_role: 'player' }).then(({ data }) => { if (live && typeof data === 'string') setCode(data); }, () => {});
+    loadJoinCode(supabase, { role: status?.role, group: status?.group_id }).then((c) => { if (live && c) setCode(c); });
     return () => { live = false; };
-  }, [on]);
+  }, [on]); // eslint-disable-line react-hooks/exhaustive-deps
   return code;
 }
 
@@ -43,7 +45,7 @@ function useReach(on = true) {
 /** The share link and message for a vote, with [Copy link] [Share…]. */
 export function SharePanel({ plan, title, closes }) {
   const { status } = useSession();
-  const code = useJoinCode(!!status.is_admin);
+  const code = useJoinCode(!status.viewing);
   const link = voteShareLink({ base: appBase(), code, planId: plan.id });
   const msg = shareMessage({ title, planName: plan.name, closes, today: todayISO(), link });
   const copy = async () => {

@@ -3,7 +3,7 @@ import { currentGroup, scopeRequest } from './group.js';
 import { previewOf, blockedWhileViewing, READ_ONLY_MESSAGE } from './preview.js';
 
 // These two values are public by design (they ship in every browser).
-// The data is protected by the group PIN and Row Level Security in the database.
+// The data is protected by group membership (joined by link) and Row Level Security in the database.
 // A test build can point at the staging database instead (VITE_SUPABASE_URL / VITE_SUPABASE_KEY);
 // the live app uses the L.G.C database below.
 export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://luogyzvrbedmicjejilr.supabase.co';

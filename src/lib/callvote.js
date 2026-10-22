@@ -118,7 +118,9 @@ export const votePath = (planId) => `/plan/${planId}?tab=vote`;
  */
 export function voteShareLink({ base, code = null, planId }) {
   if (!UUID.test(String(planId || ''))) return base;
-  return code ? `${base}#/join/${code}?vote=${planId}` : `${base}#${votePath(planId)}`;
+  // The one link scheme (083): #/join/CODE?to=<page>. Old "?vote=<plan>" links still open (voteTarget below).
+  const to = encodeURIComponent(votePath(planId));
+  return code ? `${base}#/join/${code}?to=${to}` : `${base}#${votePath(planId)}`;
 }
 
 /** After joining (or signing in from an invite): where to go — '#/plan/<id>?tab=vote' or null. */

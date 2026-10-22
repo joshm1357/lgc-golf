@@ -192,15 +192,15 @@ await page.getByRole('button', { name: 'Join' }).click();
 await page.waitForTimeout(1500);
 check(writes.some((w) => w.method === 'RPC' && w.table === 'join_by_invite' && w.body.p_token === 'ABCDEFGH2345'), 'joins with the code from the link');
 
-// 5b. iPhone Home Screen app: paste the link into the PIN box.
+// 5b. iPhone Home Screen app: paste the link into the link box (no PIN box any more, 083).
 STATUS.v = { is_member: false, groups: [] };
 await page.goto(`${BASE}#/`);
 await page.reload();
-await page.getByLabel('Group PIN or invite link').fill('https://joshm1357.github.io/lgc-golf/#/join/ABCDEFGH2345');
-await page.getByRole('button', { name: "Let's go" }).click();
+await page.getByLabel('Your link').fill('https://joshm1357.github.io/lgc-golf/#/join/ABCDEFGH2345');
+await page.getByRole('button', { name: 'Open', exact: true }).click();
 let pasted = false;
 try { await page.getByText('You’re invited to').waitFor({ timeout: 8000 }); pasted = true; } catch { /* fail below */ }
-check(pasted, 'a pasted invite link in the PIN box opens the invite');
+check(pasted, 'a pasted invite link in the link box opens the invite');
 check(!writes.some((w) => w.table === 'join_group_id' && w.body?.p_pin?.includes('join')), 'the pasted link is not tried as a PIN');
 
 // 6. A member of a new group: no admin PIN entry in More; can paste a link to join another group.

@@ -12,6 +12,8 @@ import { Header, Avatar, Icon, Loading, toast, PhotoButtons } from '../component
 import { ViewAsButton } from '../components/Viewing.jsx';
 import { PlayerStatsCard } from '../components/PlayerStats.jsx';
 import { HomeArea } from '../components/HomeArea.jsx';
+import { personalLink, myLinkMessage } from '../lib/personal.js';
+import { shareText } from '../lib/push.js';
 
 /** Everything we know about a player: Stableford rounds, Ambrose results, trophies, comps, Tribunal, handicap. */
 export function usePlayerHistory(playerId) {
@@ -203,7 +205,35 @@ export default function Profile() {
           )) : <span className="muted small">Clean record. For now.</span>}
         </div>
         {isMe && <p className="note">Signed in as {playerName(p)} on this phone.</p>}
+        {isMe && !status.viewing && p.approved !== false && <MyLinkCard />}
       </div>
+    </div>
+  );
+}
+
+/** "Copy my link" (083): your own personal link, to open the app as you on another phone or computer. */
+function MyLinkCard() {
+  const [busy, setBusy] = useState(false);
+  const copy = async () => {
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.rpc('create_my_player_link');
+      if (error) throw error;
+      const link = personalLink(data);
+      const r = await shareText(myLinkMessage(link), 'My link');
+      if (r === 'copied') toast('Copied — open it on the other phone');
+      else if (r === 'failed') window.prompt('Copy your link:', link);
+    } catch (e) {
+      toast(friendlyError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="card pad stack" style={{ gap: 6 }} data-testid="my-link">
+      <strong>📱 Open the app on another device</strong>
+      <span className="small muted">Your own link: open it on the other phone or computer and you’re straight in as you. It works once and lasts 14 days — don’t share it.</span>
+      <button type="button" className="btn ghost" disabled={busy} onClick={copy}>{busy ? 'Making your link…' : '🔗 Copy my link'}</button>
     </div>
   );
 }

@@ -215,7 +215,7 @@ check(writes.some((w) => w.method === 'PATCH' && w.table === 'plans' && w.body.s
 
 // 6. Admin setting.
 await page.goto(`${BASE}#/admin`);
-await page.getByText('8. Trip votes').click();
+await page.getByText('7. Trip votes').click();
 await page.getByText('The admin or the trip’s organiser').waitFor();
 writes.length = 0;
 await page.getByText('The admin or the trip’s organiser').click();

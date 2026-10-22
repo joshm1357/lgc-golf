@@ -81,7 +81,7 @@ export function Privacy() {
       <H>Keeping the app safe and working</H>
       <L items={[
         <>Your internet address is used to stop abuse (too many tries, too many new groups). It’s scrambled with the date
-          before it’s stored — except after a wrong PIN or invite code, when it’s kept as it is for up to 30 days to lock out
+          before it’s stored — except after a wrong link or code, when it’s kept as it is for up to 30 days to lock out
           guessing.</>,
         <>If the app breaks on your phone, it sends Josh the error, the screen it happened on (without any invite code or
           sign-in code), which group you were in, the app version and the phone type. No names. Kept for 90 days.</>,

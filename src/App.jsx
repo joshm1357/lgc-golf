@@ -17,6 +17,7 @@ import { Caddie } from './components/Caddie.jsx';
 import { NEW_GROUPS } from './lib/beta.js';
 import { supabase } from './lib/supabase.js';
 import { sourceFrom, countScan } from './lib/quick.js';
+import { loadJoinCode } from './lib/joincode.js';
 // Loaded straight away: the first screens people see and score entry (must work with no signal).
 import Join, { InviteJoin } from './screens/Join.jsx';
 import { inviteCode } from './lib/invite.js';
@@ -147,8 +148,10 @@ function Gate() {
   // Back from Google: go to the page they left from (an invite, the wizard), kept on the phone (lib/auth.js back()).
   useEffect(() => {
     if (loading) return;
+    // Only taken when it's used: a link being opened (#/join/…) takes it itself after joining (083).
+    if (inviteCode(window.location.hash) || !/^#?\/?$/.test(window.location.hash)) return;
     const to = takeReturn();
-    if (to && !inviteCode(window.location.hash) && /^#?\/?$/.test(window.location.hash)) window.location.hash = to;
+    if (to) window.location.hash = to;
   }, [loading]);
   // An invite, the start-a-group wizard or a course's quick round: they've chosen where to go, so don't send them
   // to Your groups afterwards.
@@ -176,7 +179,7 @@ function Gate() {
   if (loc.pathname.startsWith('/me/')) return <><ViewingBar /><PersonalLink code={personalCode(loc.pathname)} /></>;
   const banner = problem && <div className="err" role="alert" style={{ margin: 0, borderRadius: 0 }}>{problem}</div>;
   // The front door: sign in first (when it's switched on in this build), then Your groups, then into a group.
-  // With sign-in off (the live L.G.C build), this is exactly the old rule: not in a group → the PIN screen.
+  // With sign-in off (the live L.G.C build): not in a group → the link-first screen (no PINs, 083).
   const door = frontDoor({ signInOn: SIGN_IN.length > 0, status, fresh: isFreshSignIn(), hasInvite: !!inviteCode(window.location.hash) });
   if (door === 'join' || door === 'home') return <>{banner}<Join /></>;
   if (door === 'your-groups') return <>{banner}<YourGroups /></>;
@@ -196,6 +199,8 @@ function Inside() {
   useEffect(() => { window.scrollTo(0, 0); }, [loc.pathname]);
   // In a group now: a fresh sign-in has done its job (next time, straight back into this group).
   useEffect(() => { clearFreshSignIn(); }, []);
+  // The group's join code, so every link shared from here works on a phone with no session (083).
+  useEffect(() => { if (status?.is_member) loadJoinCode(supabase, { role: status.role, group: status.group_id }); }, [status?.group_id]); // eslint-disable-line react-hooks/exhaustive-deps
   const [waiting, setWaiting] = useState(outboxCount());
   useEffect(() => {
     startOutbox();

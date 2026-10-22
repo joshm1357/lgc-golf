@@ -45,7 +45,7 @@ export default function Admin() {
   const data = useData();
   const trophiesOn = useFeature('trophies');
   const sideCompsOn = useFeature('side_comps');
-  const [pin, setPin] = useState('');
+
   useScrollToRound(data.ready && status?.is_admin);
 
   if (!data.ready) return <Loading />;
@@ -54,15 +54,13 @@ export default function Admin() {
     return (
       <div className="page">
         <Header back title="Admin" sub="For whoever's running the trip" />
-        <form className="section stack" onSubmit={async (e) => {
-          e.preventDefault();
-          const ok = await run(() => supabase.rpc('claim_admin', { p_pin: pin }));
-          if (ok === false) toast("That's not the admin PIN");
-          else if (ok) { await refresh(); toast("You're the admin"); }
-        }}>
-          <label className="field"><span>Admin PIN</span><input className="input" inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value)} /></label>
-          <button className="btn block">Unlock admin</button>
-        </form>
+        {/* No admin PIN any more (083): an organiser makes you one in Group & invites, or sends you an organiser link. */}
+        <div className="section">
+          <div className="card pad stack" style={{ gap: 6 }}>
+            <strong>Only organisers can open Admin</strong>
+            <span className="small muted">Ask an organiser to make you one (More → Group & invites → People), or to send you their organiser link.</span>
+          </div>
+        </div>
       </div>
     );
   }
@@ -84,7 +82,7 @@ export default function Admin() {
         <CommentarySettings />
         {trophiesOn && <TrophiesAdmin />}
         {trophiesOn ? <HonourAdmin /> : <Link to="/history" className="btn ghost block">Add past handicaps (from before the app) →</Link>}
-        <PinsAdmin />
+        {/* Change PINs is gone (083): links only. set_pins stays in the database for old app versions. */}
         <VotesAdmin />
       </div>
     </div>
@@ -404,7 +402,7 @@ function TeamsEditor({ round, pairs = false }) {
       <span className="label">{pairs ? 'Pairs (4BBB)' : 'Teams'}</span>
       {pairs && <span className="small muted">Two players a pair. Each plays off their own handicap, fixed for this round (change it below); the better Stableford points on each hole count.</span>}
       {teams.map((t) => <TeamRow key={t.id} team={t} pairs={pairs} takenElsewhere={teams.filter((o) => o.id !== t.id).flatMap((o) => o.players.map((p) => p.id))} />)}
-      {data.players.length < 2 && <span className="small muted">Only {data.players.length} player so far — the lads appear here once they join with the PIN, or add them under 3. Players.</span>}
+      {data.players.length < 2 && <span className="small muted">Only {data.players.length} player so far — the lads appear here once they join with the invite link, or add them under 3. Players.</span>}
       <div className="stack card pad">
         <strong>{pairs ? 'Add a pair' : 'Add a team'}</strong>
         <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={pairs ? 'Pair name (e.g. Kurt & Al)' : 'Team name'} />
@@ -612,24 +610,6 @@ function HonourAdmin() {
   );
 }
 
-// ---------- PINs ----------
-function PinsAdmin() {
-  const [g, setG] = useState('');
-  const [a, setA] = useState('');
-  return (
-    <Section title="7. Change PINs">
-      <form className="stack" onSubmit={async (e) => {
-        e.preventDefault();
-        if (await run(() => supabase.rpc('set_pins', { p_group_pin: g, p_admin_pin: a }), 'PINs changed')) { setG(''); setA(''); }
-      }}>
-        <input className="input" value={g} onChange={(e) => setG(e.target.value)} placeholder="New group PIN" inputMode="numeric" required />
-        <input className="input" value={a} onChange={(e) => setA(e.target.value)} placeholder="New admin PIN" inputMode="numeric" required />
-        <button className="btn">Change both PINs</button>
-      </form>
-    </Section>
-  );
-}
-
 // ---------- Who picks vote winners (group-wide) ----------
 function VotesAdmin() {
   const { status } = useSession();
@@ -644,7 +624,7 @@ function VotesAdmin() {
     if (await run(() => supabase.rpc('set_vote_decider', { p_group: status.group_id, p_value: v }), 'Saved')) setValue(v);
   };
   return (
-    <Section title="8. Trip votes — who picks the winner">
+    <Section title="7. Trip votes — who picks the winner">
       <span className="small muted">Everyone votes on when and where. This decides who closes a vote and picks the winner. It applies to every trip in the group.</span>
       {[['admin', 'The admin', 'Only admins pick winners (as now).'], ['admin_or_organiser', 'The admin or the trip’s organiser', 'Whoever suggested a trip (or who you make its organiser) can pick its winners too.']].map(([v, label, help]) => (
         <button key={v} type="button" className="chip" aria-pressed={value === v} disabled={value == null}

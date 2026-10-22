@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase, friendlyError } from '../lib/supabase.js';
 import { useSession } from '../lib/store.jsx';
 import { setCurrentGroup } from '../lib/group.js';
-import { linkScreen } from '../lib/personal.js';
+import { linkScreen, phoneScreen } from '../lib/personal.js';
 import { clearFreshSignIn } from '../lib/home.js';
 import { paintLook } from '../lib/theme.js';
 import { GroupCrest } from '../components/Logo.jsx';
@@ -29,7 +29,6 @@ export default function PersonalLink({ code }) {
   useEffect(() => {
     let live = true;
     if (!code) { setInfo(null); return undefined; } // not a real code: say so without asking the server
-    if (!SIGN_IN.length) { setInfo(null); setErr('Signing in isn’t switched on in this version of the app yet.'); return undefined; }
     (async () => {
       try {
         await ensureSignedIn(); // a phone-only sign-in is enough to read who the link is for
@@ -60,7 +59,25 @@ export default function PersonalLink({ code }) {
     }
   };
 
-  const screen = info === undefined ? 'checking' : linkScreen(info, signedIn);
+  // Opened on a phone with no proper sign-in (sign-in off in this build, or "just this phone"): the link makes this
+  // phone that player straight away — no name to pick (083).
+  const useHere = async () => {
+    setBusy(true);
+    setErr('');
+    try {
+      const { data, error } = await supabase.rpc('use_player_link', { p_token: code });
+      if (error) throw error;
+      if (!data) { setErr('That link isn’t right — ask your organiser for a new one.'); return; }
+      goInto(data);
+    } catch (e) {
+      setErr(friendlyError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const inGroup = !!info && (status?.group_id === info.group_id || (status?.groups || []).some((g) => g.id === info.group_id));
+  const phoneOnly = !SIGN_IN.length;
+  const screen = info === undefined ? 'checking' : phoneOnly ? phoneScreen(info, inGroup) : linkScreen(info, signedIn);
   const name = info?.player_name || 'mate';
   const group = info?.group_name || 'your group';
   const muted = { color: 'var(--on-navy-muted)', textAlign: 'center' };
@@ -82,10 +99,33 @@ export default function PersonalLink({ code }) {
             {screen === 'used' ? 'This link has been used' : screen === 'expired' ? 'This link has run out' : 'There’s a newer link'}
           </div>
           <div style={{ ...muted, maxWidth: 340 }}>
-            {screen === 'used' && `Someone has already signed in with ${name}'s link. If that wasn't you, ask an organiser of ${group} for a new one.`}
+            {screen === 'used' && `Someone has already used ${name}'s link. If that wasn't you, ask an organiser of ${group} for a new one.`}
             {screen === 'expired' && `Personal links last 14 days. Ask an organiser of ${group} to send you a new one.`}
             {screen === 'replaced' && 'Your organiser sent you a newer link. Use the latest one in your messages.'}
           </div>
+        </>
+      )}
+
+      {screen === 'in' && (
+        <>
+          <div style={{ fontFamily: 'var(--display)', fontSize: 32, fontWeight: 700, textAlign: 'center' }}>You’re already in</div>
+          <div style={muted}>This phone is in {group}.</div>
+          <button type="button" className="btn gold block" style={{ maxWidth: 340 }} onClick={() => goInto(info.group_id)}>Open {group}</button>
+        </>
+      )}
+
+      {screen === 'use' && (
+        <>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontFamily: 'var(--display)', fontSize: 34, fontWeight: 700 }}>G’day {name} 👋</div>
+            <div style={{ ...muted, marginTop: 6, maxWidth: 340 }}>This link is just for you, from {group}. It opens the app on this phone as you — your name, scores and history.</div>
+          </div>
+          {info?.role === 'organiser' && <div className="small" style={{ ...muted, maxWidth: 340, color: '#fff' }}>This link also makes you an organiser of {group}.</div>}
+          <button type="button" className="btn gold block" style={{ maxWidth: 340 }} disabled={busy} onClick={useHere} data-testid="use-my-link">
+            {busy ? 'Opening…' : `Yes, I’m ${name} — open the app`}
+          </button>
+          {err && <div className="err" role="alert" style={{ color: '#FFB4AB', maxWidth: 340 }}>{err}</div>}
+          <div className="small" style={{ ...muted, maxWidth: 340 }}>Not {name}? Don’t use this link — ask your organiser for your own.</div>
         </>
       )}
 
@@ -107,9 +147,12 @@ export default function PersonalLink({ code }) {
                 : 'Connect this sign-in to your player and you’re in, with all your history.'}
             </div>
           </div>
-          {screen === 'sign-in' && (SIGN_IN.length
-            ? <SignInButtons returnHash={`#/me/${code}`} />
-            : <div style={muted}>Signing in isn’t switched on in this version of the app yet.</div>)}
+          {screen === 'sign-in' && <SignInButtons returnHash={`#/me/${code}`} />}
+          {screen === 'sign-in' && (
+            <button type="button" className="btn ghost block" style={{ maxWidth: 340, color: '#fff', borderColor: 'rgba(255,255,255,.5)', background: 'transparent' }} disabled={busy} onClick={useHere}>
+              {busy ? 'Opening…' : 'Just open it on this phone'}
+            </button>
+          )}
           {screen === 'confirm' && info?.role === 'organiser' && (
             <div className="small" style={{ ...muted, maxWidth: 340, color: '#fff' }}>This link also makes you an organiser of {group}.</div>
           )}

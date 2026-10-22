@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   findPlayer, findTrip, trophyNames, honourLabel, buildReview, itemLine, picked, handicapPlayer, startingHandicap, tripRow,
-  honourRows, ruleRows, summaryLine, readImportReply, rematch, itemProblem, handicapRows, fileKind, capText, docxText, xlsxText, unzip, fitSize, MAX_TEXT,
+  honourRows, ruleRows, summaryLine, trophyOf, matchPlayer, matchTrophy, trophyKey, firstForm, resolvePlayer, playerAliases, choosePlayer, chooseNickname, chooseTrophy, readImportReply, rematch, itemProblem, handicapRows, fileKind, capText, docxText, xlsxText, unzip, fitSize, MAX_TEXT,
 } from './aiimport.js';
 
 const players = [
@@ -65,8 +65,8 @@ describe('the confirm screen', () => {
     expect(by('pl1')).toMatchObject({ match: 'new player', ticked: true });
     expect(by('tr0')).toMatchObject({ match: 'existing trip (Hunter Valley 2019)', already: true, ticked: false });
     expect(by('tr1')).toMatchObject({ match: 'new past trip', ticked: true });
-    expect(by('wn0')).toMatchObject({ match: 'existing trophy', ticked: true });
-    expect(by('wn0').data.trophy).toBe('BD Trophy'); // the group's own spelling
+    expect(by('wn0')).toMatchObject({ match: 'existing trophy BD Trophy', ticked: true });
+    expect(trophyOf(by('wn0'))).toBe('BD Trophy'); // the group's own spelling
     expect(by('wn1')).toMatchObject({ match: 'already on the honour board', ticked: false });
     expect(by('wn2')).toMatchObject({ match: 'new trophy', ticked: true });
     expect(by('hc0')).toMatchObject({ match: 'already in their history', ticked: false });
@@ -76,7 +76,7 @@ describe('the confirm screen', () => {
   });
   it('writes each item as one line', () => {
     expect(itemLine(by('pl1'))).toBe('Pete Green (“Greeny”)');
-    expect(itemLine(by('tr1'))).toBe('Port Stephens 2021 · Horizons');
+    expect(itemLine(by('tr1'))).toBe('Port Stephens 2021 · 2021 (date unknown) · Horizons');
     expect(itemLine(by('wn0'))).toBe('BD Trophy Hunter Valley 2019 — Kurt & Bluey (44 pts)');
     expect(itemLine(by('hc0'))).toBe('Kurt · 14.2 · 2019');
     expect(itemLine({ section: 'handicaps', data: { player: 'Al', date: '2020-06-01', handicap: -2 } })).toBe('Al · +2 · 2020-06-01');
@@ -201,5 +201,122 @@ describe('editing on the confirm screen', () => {
     expect(itemProblem({ section: 'handicaps', data: { player: 'Al', date: '2020-01-01', handicap: 60 } })).toBe('Handicap −10 to 54');
     expect(itemProblem({ section: 'handicaps', data: { player: 'Al', date: '2020-01-01', handicap: '' } })).toBe('Handicap −10 to 54');
     expect(itemProblem({ section: 'rules', data: { title: 'Fines' } })).toBe('');
+  });
+});
+
+// ------------------------------------------------------------------ 22 Oct: Josh's browser test of the import
+describe('player matching (Josh’s cases)', () => {
+  const lgc = [
+    { id: 'jm', name: 'Joshua Moran', nickname: 'Josh' },
+    { id: 'mk', name: 'Mike' },
+    { id: 'km', name: 'Kevin Morris' },
+    { id: 'cm', name: 'Craig MacDougal' },
+    { id: 'kd', name: 'Kurt Dahl', nickname: 'Kurt' },
+    { id: 'rs', name: 'Robert Smith' },
+    { id: 'wb', name: 'William Brown', nickname: 'Brownie' },
+  ];
+  it('"Josh Moran" is likely Joshua Moran (short form + surname) — asked, not made new', () => {
+    expect(matchPlayer('Josh Moran', null, lgc)).toMatchObject({ player: { id: 'jm' }, sure: false });
+    const it = buildReview({ players: [{ name: 'Josh Moran' }] }, { players: lgc })[0];
+    expect(it).toMatchObject({ ask: 'Is this Joshua Moran?', choice: 'jm', existingId: 'jm', already: true, ticked: false });
+    // The organiser says it's someone new → a new player, ticked.
+    const n = choosePlayer(it, 'new', lgc);
+    expect(n).toMatchObject({ existingId: null, match: 'someone new', ticked: true });
+    expect(choosePlayer(n, 'jm', lgc)).toMatchObject({ existingId: 'jm', ticked: false });
+  });
+  it('"Mike Morris" is likely Mike (no surname yet), never Kevin Morris', () => {
+    expect(matchPlayer('Mike Morris', null, lgc)).toMatchObject({ player: { id: 'mk' }, sure: false });
+    expect(matchPlayer('Mike Morris', null, [{ id: 'mi', name: 'Michael', nickname: 'Mike' }, lgc[2]])).toMatchObject({ player: { id: 'mi' }, sure: false });
+    expect(matchPlayer('Mike Morris', null, [lgc[2]])).toBe(null); // only Kevin Morris: someone new
+  });
+  it('"Craig" with nickname Macca is Craig MacDougal, and the nickname is offered (ticked)', () => {
+    expect(matchPlayer('Craig', 'Macca', lgc)).toMatchObject({ player: { id: 'cm' }, sure: true });
+    const it = buildReview({ players: [{ name: 'Craig', nickname: 'Macca' }] }, { players: lgc })[0];
+    expect(it).toMatchObject({ existingId: 'cm', canAddNick: true, nickToAdd: 'Macca', match: 'Craig MacDougal · add nickname Macca', already: false, ticked: true });
+    // Untick "add nickname" → nothing to do.
+    expect(chooseNickname(it, false, lgc)).toMatchObject({ already: true, ticked: false, match: 'already a player (Craig MacDougal)' });
+    // A player who already has a nickname isn't offered another; nor is their own first name.
+    expect(buildReview({ players: [{ name: 'Kurt Dahl', nickname: 'Dahlo' }] }, { players: lgc })[0].canAddNick).toBe(false);
+    expect(buildReview({ players: [{ name: 'Craig MacDougal', nickname: 'Craig' }] }, { players: lgc })[0].canAddNick).toBe(false);
+  });
+  it('full name and nickname are certain; short forms, surname + initial and lone names follow the rules', () => {
+    expect(matchPlayer('joshua moran', null, lgc)).toMatchObject({ player: { id: 'jm' }, sure: true });
+    expect(matchPlayer('Brownie', null, lgc)).toMatchObject({ player: { id: 'wb' }, sure: true });
+    expect(matchPlayer('Bill Brown', null, lgc)).toMatchObject({ player: { id: 'wb' }, sure: false });
+    expect(matchPlayer('Bob Smith', null, lgc)).toMatchObject({ player: { id: 'rs' }, sure: false });
+    expect(matchPlayer('Rob Smith', null, lgc)).toMatchObject({ player: { id: 'rs' }, sure: false });
+    expect(matchPlayer('R. Smith', null, lgc)).toMatchObject({ player: { id: 'rs' }, sure: false }); // surname + initial
+    expect(matchPlayer('Kevin', null, lgc)).toMatchObject({ player: { id: 'km' }, sure: true }); // the only Kevin
+    expect(matchPlayer('Kurt', null, lgc)).toMatchObject({ player: { id: 'kd' }, sure: true });
+    expect(matchPlayer('Rob', null, lgc)).toMatchObject({ player: { id: 'rs' }, sure: false }); // short form alone: likely
+    const twoSams = [{ id: 'a', name: 'Sam Jones' }, { id: 'b', name: 'Sam Smith' }];
+    expect(matchPlayer('Sam', null, twoSams)).toBe(null); // two of them: the organiser decides
+    expect(matchPlayer('Pete Green', 'Greeny', lgc)).toBe(null); // clearly new
+    const fresh = buildReview({ players: [{ name: 'Pete Green', nickname: 'Greeny' }] }, { players: lgc })[0];
+    expect(fresh).toMatchObject({ match: 'new player', ask: '', ticked: true });
+    expect(firstForm('Steve')).toBe(firstForm('Steven'));
+    expect(firstForm('Jono')).toBe('jonathan');
+  });
+  it('handicaps and winners go to the player the organiser picked', () => {
+    const items = buildReview({ players: [{ name: 'Josh Moran' }] }, { players: lgc });
+    const aliases = playerAliases(items);
+    expect(aliases).toEqual({ 'josh moran': 'jm' });
+    expect(resolvePlayer('Josh Moran', lgc, aliases)?.id).toBe('jm');
+    expect(resolvePlayer('Josh Moran', lgc, {})).toBe(null); // not certain without the organiser's say-so
+    const hc = buildReview({ handicaps: [{ player: 'Josh Moran', date: '2019-01-01', handicap: 12 }] }, { players: lgc });
+    expect(handicapRows(hc, lgc, aliases).rows).toEqual([{ player_id: 'jm', date: '2019-01-01', handicap: 12 }]);
+    // A new player made on the spot.
+    const n = [choosePlayer(items[0], 'new', lgc)];
+    expect(playerAliases(n, [{ itemId: 'pl0', id: 'new1' }])).toEqual({ 'josh moran': 'new1' });
+  });
+});
+
+describe('trophy matching', () => {
+  it('ignores case, punctuation and "the / trophy / cup / shield / award"', () => {
+    expect(trophyKey('The B.D. Trophy')).toBe('b d');
+    expect(trophyKey('BD Trophy')).toBe('bd');
+    expect(trophyKey('The Cup')).toBe('the cup'); // nothing else left: the whole name
+    expect(matchTrophy('BD Trophy', ['BD', 'Wooden Spoon'])).toBe('BD');
+    expect(matchTrophy('the wooden spoon award', ['BD', 'Wooden Spoon'])).toBe('Wooden Spoon');
+    expect(matchTrophy('Spoon', ['BD', 'Wooden Spoon'])).toBe('Wooden Spoon'); // one inside the other
+    expect(matchTrophy('Claret Jug', ['BD', 'Wooden Spoon'])).toBe(null);
+    expect(matchTrophy('Cup', ['Hunter Cup', 'Bowral Cup'])).toBe(null); // too vague
+  });
+  it('"BD Trophy" → existing trophy BD, and the organiser can change it', () => {
+    const g = { trophies: [{ name: 'BD' }], honour_board: [{ trophy_name: 'Wooden Spoon', label: '2018', winner_names: 'Sam' }] };
+    const it = buildReview({ winners: [{ trophy: 'BD Trophy', year: 2019, winners: 'Kurt' }] }, g)[0];
+    expect(it).toMatchObject({ trophyChoice: 'BD', match: 'existing trophy BD', ticked: true, trophyOptions: ['BD', 'Wooden Spoon'] });
+    expect(itemLine(it)).toBe('BD 2019 — Kurt');
+    const asNew = chooseTrophy(it, '', g.honour_board);
+    expect(asNew).toMatchObject({ match: 'new trophy', ticked: true });
+    expect(honourRows([asNew], [], [])[0].trophy).toBe('BD Trophy');
+    expect(honourRows([it], [], [])[0].trophy).toBe('BD');
+    // Already on the board under the picked trophy → unticked.
+    expect(chooseTrophy({ ...it, data: { ...it.data, year: 2018, winners: 'Sam' } }, 'Wooden Spoon', g.honour_board)).toMatchObject({ already: true, ticked: false });
+    // An edit keeps the organiser's pick.
+    expect(rematch({ ...chooseTrophy(it, 'Wooden Spoon', g.honour_board), data: { ...it.data, year: 2020 } }, g).trophyChoice).toBe('Wooden Spoon');
+  });
+});
+
+describe('guesses, rules and year-only trips', () => {
+  it('items built on a guess start unticked and say so', () => {
+    const items = buildReview({
+      players: [{ name: 'Pete Green', guess: true }], trips: [{ name: 'Hunter 2017', year: 2017, guess: true }],
+      winners: [{ trophy: 'BD', year: 2017, winners: 'Kurt', guess: true }], handicaps: [{ player: 'Kurt', date: '2017-01-01', handicap: 9, guess: true }],
+      rules: [{ title: 'Ready golf', guess: true }],
+    }, { players: [], trips: [] });
+    expect(items.map((x) => [x.guess, x.ticked])).toEqual([[true, false], [true, false], [true, false], [true, false], [true, false]]);
+    expect(buildReview({ players: [{ name: 'Pete Green' }] }, {})[0]).toMatchObject({ guess: false, ticked: true });
+  });
+  it('a rule’s wording only when it says more than the title', () => {
+    const [a, b] = buildReview({ rules: [{ title: 'Gimmes inside the leather', wording: 'gimmes inside the leather.' }, { title: 'OB lateral hazard', wording: 'OB is a lateral hazard: drop where it went out, one shot.' }] }, {});
+    expect(a.data.wording).toBe('');
+    expect(b.data.wording).toMatch(/drop where it went out/);
+    expect(ruleRows([a])[0].detail).toBe(null);
+  });
+  it('a past trip with only a year shows "2019 (date unknown)" and is saved locked on 1 January', () => {
+    const [t] = buildReview({ trips: [{ name: 'Hunter Valley', year: 2019, place: 'Hunter Valley' }] }, { trips: [] });
+    expect(itemLine(t)).toBe('Hunter Valley · 2019 (date unknown)');
+    expect(tripRow(t)).toEqual({ name: 'Hunter Valley', start_date: '2019-01-01', end_date: '2019-01-01', status: 'locked' });
   });
 });

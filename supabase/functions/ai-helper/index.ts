@@ -15,7 +15,7 @@
 //   * The model only gets a fixed list of read-only tools. It can't write: "Do it" / "Create it" is a separate call
 //     from the app, and the plan is checked again before anything is made. No SQL, no deletes, no messages.
 //   * Names from the database go to the model as data inside <data> tags, and the prompt says never to obey them.
-//   * Cap (by default 60 questions a group a month and 10 a person a day), checked before the model is called. The
+//   * Cap (by default 2000 questions a group a month and 100 a person a day), checked before the model is called. The
 //     feature switch 'ai_helper' must be on (and 'planner' for planning).
 //   * Any provider (providers.ts), chosen by secrets: AI_PROVIDER, AI_BASE_URL, AI_API_KEY, AI_MODEL (or the older
 //     ANTHROPIC_API_KEY + AI_MODEL), and optional AI_GROUP_MONTHLY_CAP / AI_PERSON_DAILY_CAP. Not set: the helper
@@ -139,7 +139,7 @@ function makeDeps(db: SupabaseClient, g: string, uid: string, status: Any): Deps
       if (name === 'our_players') {
         const ps = (await must(db.from('players').select('name,nickname,approved').eq('group_id', g))) as Any[];
         const ok = ps.filter((p) => p.approved !== false);
-        return { count: ok.length, names: ok.slice(0, 40).map((p) => clean(p.nickname || p.name, 40)) };
+        return { count: ok.length, names: ok.slice(0, 100).map((p) => clean(p.nickname || p.name, 40)) };
       }
       if (name === 'past_trips') {
         const [trips, plans, rounds, courses] = await Promise.all([
@@ -204,7 +204,7 @@ function makeDeps(db: SupabaseClient, g: string, uid: string, status: Any): Deps
       if (name === 'our_players') {
         const ps = (await must(db.from('players').select('name,nickname,approved').eq('group_id', g))) as Any[];
         const ok = ps.filter((p) => p.approved !== false);
-        return { count: ok.length, names: ok.slice(0, 40).map((p) => clean(p.nickname || p.name, 40)) };
+        return { count: ok.length, names: ok.slice(0, 100).map((p) => clean(p.nickname || p.name, 40)) };
       }
       throw new Error('No such tool');
     },

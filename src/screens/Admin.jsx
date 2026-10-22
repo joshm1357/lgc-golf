@@ -13,6 +13,7 @@ import { RoundGames } from './Games.jsx';
 import { TeeGroupsCard } from './TeeGroups.jsx';
 import { RoundCompsCard, useScrollToRound } from './CompsBoard.jsx';
 import { CommentarySettings } from '../components/Commentary.jsx';
+import { isYearOnly, tripWhen } from '../lib/trips.js';
 
 async function run(fn, okMsg) {
   try {
@@ -100,7 +101,7 @@ function TripsAdmin() {
     <Section title={`1. Trips (${data.trips.length})`} open={!data.trips.length}>
       {data.trips.map((t) => (
         <div key={t.id} className="row between">
-          <span><strong>{t.name}</strong> <span className="muted small">{t.start_date || ''}{t.status === 'locked' ? ' · locked' : ''}</span></span>
+          <span><strong>{t.name}</strong> <span className="muted small">{isYearOnly(t) ? tripWhen(t) : t.start_date || ''}{t.status === 'locked' ? ' · locked' : ''}</span></span>
           <button type="button" className="btn ghost sm" onClick={() => run(() => supabase.from('trips').update({ status: t.status === 'active' ? 'locked' : 'active' }).eq('id', t.id), 'Updated').then(data.reload)}>
             {t.status === 'active' ? 'Lock trip' : 'Reopen'}
           </button>

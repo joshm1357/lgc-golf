@@ -284,7 +284,7 @@ export function shapePastTrips(trips: Any[], plans: Any[], rounds: Any[], course
     const played = (rounds || []).filter((r) => r.trip_id === t.id).map((r) => courseName[r.course_id]).filter(Boolean);
     out.push({ name: clean(t.name, 60), start_date: t.start_date || null, end_date: t.end_date || null, where: null, status: 'done', courses: [...new Set(played)].slice(0, 6) });
   }
-  return out.sort((a, b) => String(b.start_date || '').localeCompare(String(a.start_date || ''))).slice(0, 20);
+  return out.sort((a, b) => String(b.start_date || '').localeCompare(String(a.start_date || ''))).slice(0, 40);
 }
 
 /** Library courses near a place, made small for the model. */

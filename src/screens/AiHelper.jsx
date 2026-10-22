@@ -9,18 +9,22 @@
 // Each answer has 👍 / 👎 (Rate) so Josh can see whether people want it. All of them call the ai-helper edge
 // function, which checks who you are, the feature switch and the limits, and only ever reads or writes as you.
 // Hidden when the 'ai_helper' feature is off.
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
 import { currentGroup } from '../lib/group.js';
 import { useData, useFeature, useSession } from '../lib/store.jsx';
 import { Header, toast } from '../components/ui.jsx';
 import AnswerFeedback from '../components/AnswerFeedback.jsx';
-import { SETUP_EXAMPLE, MAX_TEXT, canSend, remainingLabel, readReply, askExamples, askTitle } from '../lib/aihelper.js';
+import { SETUP_EXAMPLE, MAX_TEXT, ASK_KEEP, canSend, remainingLabel, readReply, nextRating, askExamples, askTitle, withRetry, loadAsk, saveAsk } from '../lib/aihelper.js';
 
+/** One call to the helper; tried once more by itself if the AI company was busy, replied oddly or was too slow
+ *  (those don't use up a question). "Do it" / "Create it" are never retried. */
 export async function askHelper(body) {
-  const { data, error } = await supabase.functions.invoke('ai-helper', { body: { ...body, group_id: currentGroup() || undefined } });
-  return readReply(data, error);
+  return withRetry(async () => {
+    const { data, error } = await supabase.functions.invoke('ai-helper', { body: { ...body, group_id: currentGroup() || undefined } });
+    return readReply(data, error);
+  }, body);
 }
 
 export const Remaining = ({ r }) => (r ? <span className="small muted">{remainingLabel(r)}</span> : null);
@@ -102,8 +106,11 @@ export default function Ask() {
   const head = askTitle(about);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
-  const [thread, setThread] = useState([]); // [{ q, reply }], newest first
+  // [{ q, reply }], newest first — kept for this tab's session per group (back from another page, it's still there).
+  const group = currentGroup();
+  const [thread, setThread] = useState(() => loadAsk(group));
   const [remaining, setRemaining] = useState(null);
+  useEffect(() => { saveAsk(group, thread); }, [group, thread]);
 
   const ask = async (q) => {
     const question = String(q || '').trim();
@@ -112,7 +119,7 @@ export default function Ask() {
     // 'history' (not 'ask') so it also works with the first version of the function, if that's what's deployed.
     const reply = await askHelper({ mode: 'history', text: question });
     if (reply.remaining) setRemaining(reply.remaining);
-    setThread((t) => [{ q: question, reply }, ...t].slice(0, 10));
+    setThread((t) => [{ q: question, reply }, ...t].slice(0, ASK_KEEP));
     setText('');
     setBusy(false);
   };

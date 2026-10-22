@@ -30,7 +30,7 @@ const STATUS_LABEL = { planning: 'Planning', confirmed: 'Locked in', done: 'Done
 export { useRun, must } from '../lib/run.js';
 import { useRun, must } from '../lib/run.js';
 import { NotifyCard } from '../components/NotifyCard.jsx';
-import { EmailVoteLine } from '../components/VoteEmail.jsx';
+import { PollCard } from '../components/PollCard.jsx';
 
 export { NotifyCard };
 
@@ -261,110 +261,13 @@ function VoteTab({ pd }) {
   );
 }
 
-function optionTitle(poll, o) {
+export function optionTitle(poll, o) {
   if (poll.kind === 'dates' && o.start_date) return fmtRange(o.start_date, o.end_date);
   return o.label;
 }
 
-export function PollCard({ poll, pd, inCard = false }) { // inCard: a section of a combined vote card (077) — its reminders are on the card
-  const data = useData();
-  const { status } = useSession();
-  const me = status.player_id;
-  const [suggesting, setSuggesting] = useState(false);
-  const [closing, setClosing] = useState(false);
-  const [busy, run] = useRun();
-  const options = pd.options.filter((o) => o.poll_id === poll.id);
-  const votes = pd.votes.filter((v) => v.poll_id === poll.id);
-  const rows = tallyPoll(options, votes);
-  const isOpen = poll.status === 'open';
-  const people = everyone(data);
-  const waiting = nonVoters(options, votes, people.map((p) => p.id));
-  const kindLabel = { dates: '📅 Dates', location: '📍 Location', other: '🗳️ Vote' }[poll.kind];
-  // A place that's a partner course (with a bookings contact) offers "Ask about a group booking".
-  const [partners, setPartners] = useState({});
-  const placeNames = poll.kind === 'location' ? options.map((o) => o.label).filter(Boolean).join('|') : '';
-  useEffect(() => {
-    if (!placeNames) return undefined;
-    let live = true;
-    supabase.rpc('partner_courses_for', { p_names: placeNames.split('|') })
-      .then(({ data: m }) => live && setPartners(Object.fromEntries((m || []).map((x) => [x.name, x.slug]))), () => {});
-    return () => { live = false; };
-  }, [placeNames]);
-
-  const respond = (o, r) => run(async () => {
-    const mine = votes.find((v) => v.option_id === o.id && v.player_id === me);
-    if (mine?.response === r) await must(supabase.from('plan_votes').delete().eq('option_id', o.id).eq('player_id', me));
-    else await must(supabase.from('plan_votes').upsert({ option_id: o.id, poll_id: poll.id, player_id: me, response: r, updated_at: new Date().toISOString() }));
-    pd.reload();
-  });
-
-  return (
-    <div className="card" style={{ overflow: 'hidden' }}>
-      <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--line-soft)' }}>
-        <div className="small muted" style={{ fontWeight: 700 }}>{kindLabel}{isOpen ? (poll.closes_on ? ` · closes ${countdown(poll.closes_on)}` : ' · open') : ' · closed'}</div>
-        <div style={{ fontSize: 18, fontWeight: 800 }}>{poll.question}</div>
-      </div>
-      {rows.length === 0 && <div className="empty">No options yet — suggest one.</div>}
-      {rows.map((r) => {
-        const o = r.option;
-        const winner = poll.winner_option_id === o.id;
-        const mine = votes.find((v) => v.option_id === o.id && v.player_id === me)?.response;
-        const canRemove = isOpen && (o.created_by === me || status.is_admin);
-        return (
-          <div key={o.id} style={{ padding: '10px 14px', borderBottom: '1px solid var(--line-soft)', background: winner ? 'var(--gold-soft)' : r.leading && isOpen ? '#FBFAF4' : '#fff' }}>
-            <div className="row between" style={{ alignItems: 'flex-start', gap: 8 }}>
-              <div className="grow">
-                <div style={{ fontWeight: 700, fontSize: 16 }}>
-                  {winner && '✅ '}{optionTitle(poll, o)}
-                  {!winner && r.leading && isOpen && <span className="small" style={{ marginLeft: 6, color: '#7A5A00', fontWeight: 800 }}>LEADING</span>}
-                </div>
-                {(o.address || o.cost_pp != null || o.notes) && (
-                  <div className="small muted">{[o.address, o.cost_pp != null ? `~$${Number(o.cost_pp)} pp` : null, o.notes].filter(Boolean).join(' · ')}</div>
-                )}
-                {o.link && <a href={o.link} target="_blank" rel="noreferrer" className="small">Have a look ↗</a>}
-                {partners[o.label] && <a href={`#/c/${partners[o.label]}?enquire=1`} className="small" style={{ display: 'block', fontWeight: 700 }}>Partner course · Ask about a group booking →</a>}
-              </div>
-              <div style={{ textAlign: 'right', flex: 'none' }}>
-                <div className="num" style={{ fontSize: 20 }}>{r.score}</div>
-                <div className="small muted">✓{r.yes.length} ?{r.maybe.length} ✗{r.no.length}</div>
-              </div>
-            </div>
-            {r.yes.length > 0 && <div className="row small" style={{ gap: 6, marginTop: 4 }}><AvatarStack players={r.yes.map((id) => data.playersById[id]).filter(Boolean)} size={22} /><span className="muted">can</span>{r.no.length > 0 && <span className="muted">· can’t: {r.no.map((id) => playerName(data.playersById[id])).join(', ')}</span>}</div>}
-            {isOpen && me && (
-              <div style={{ display: 'grid', gridTemplateColumns: canRemove ? '1fr 1fr 1fr auto' : '1fr 1fr 1fr', gap: 6, marginTop: 8 }}>
-                {[['yes', '✓ Can', 'var(--navy)'], ['maybe', '? Maybe', '#7A5A00'], ['no', '✗ Can’t', 'var(--under)']].map(([v, label, colour]) => (
-                  <button key={v} type="button" className="btn ghost sm" aria-pressed={mine === v} disabled={busy}
-                    style={mine === v ? { background: colour, borderColor: colour, color: '#fff' } : {}} onClick={() => respond(o, v)}>{label}</button>
-                ))}
-                {canRemove && (
-                  <button type="button" className="btn ghost sm" aria-label="Remove option" onClick={() => { if (window.confirm('Remove this option and its votes?')) run(async () => { await must(supabase.from('plan_options').delete().eq('id', o.id)); pd.reload(); }); }}>{Icon.x(14)}</button>
-                )}
-              </div>
-            )}
-          </div>
-        );
-      })}
-      <div className="stack" style={{ padding: '10px 14px', gap: 8 }}>
-        <EmailVoteLine poll={poll} pd={pd} />
-        {isOpen && !inCard && waiting.length > 0 && (
-          <div className="small"><strong>Still to vote ({waiting.length}):</strong> <span className="muted">{waiting.map((id) => playerName(data.playersById[id])).join(', ')}</span></div>
-        )}
-        {isOpen && <button type="button" className="btn ghost sm" onClick={() => setSuggesting(true)}>+ Suggest {poll.kind === 'dates' ? 'dates' : poll.kind === 'location' ? 'a place' : 'an option'}</button>}
-        {isOpen && !inCard && waiting.length > 0 && (
-          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-            <button type="button" className="btn ghost sm" onClick={() => shareNudge(nudgeText('votes', { plan: pd.plan, names: waiting.map((id) => playerName(data.playersById[id])), url: appLink(`/plan/${pd.plan.id}?tab=vote`) }))}>💬 Nudge in Messenger</button>
-            {status.is_admin && <button type="button" className="btn ghost sm" disabled={busy} onClick={() => run(async () => { const r = await notify('nudge_votes', { plan_id: pd.plan.id }); toast(`Reminder sent to ${r.sent || 0} phone${r.sent === 1 ? '' : 's'}`); })}>🔔 Send reminder</button>}
-          </div>
-        )}
-        {isOpen && canDecide({ isAdmin: status.is_admin, me, plan: pd.plan, voteDecider: pd.voteDecider }) && <button type="button" className="btn sm" onClick={() => setClosing(true)}>Close the vote & pick the winner</button>}
-        {status.is_admin && (isOpen ? null
-          : <button type="button" className="btn ghost sm" onClick={() => run(async () => { await must(supabase.from('plan_polls').update({ status: 'open', winner_option_id: null }).eq('id', poll.id)); pd.reload(); }, 'Vote reopened')}>Reopen this vote</button>)}
-      </div>
-      {suggesting && <OptionSheet poll={poll} onClose={() => setSuggesting(false)} onSaved={pd.reload} />}
-      {closing && <CloseSheet poll={poll} rows={rows} pd={pd} onClose={() => setClosing(false)} />}
-    </div>
-  );
-}
+// One vote: organiser and voter views (080) — components/PollCard.jsx.
+export { PollCard };
 
 function OptionFields({ kind, v, set }) {
   return (
@@ -405,7 +308,7 @@ function cleanOption(kind, v) {
   return row.label ? row : null;
 }
 
-function OptionSheet({ poll, onClose, onSaved }) {
+export function OptionSheet({ poll, onClose, onSaved }) {
   const [v, set] = useState({});
   const [busy, run] = useRun();
   return (
@@ -460,7 +363,7 @@ function PollSheet({ pd, onClose }) {
   );
 }
 
-function CloseSheet({ poll, rows, pd, onClose }) {
+export function CloseSheet({ poll, rows, pd, onClose }) {
   const { status } = useSession();
   const [pick, setPick] = useState(rows[0]?.option.id || null);
   const [apply, setApply] = useState(poll.kind !== 'other');

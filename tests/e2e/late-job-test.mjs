@@ -148,7 +148,7 @@ who = P1;
 await go('/rules');
 await page.getByText('Late organising job').first().waitFor({ timeout: 15000 });
 check(await page.getByText('0 strokes · 5 days').first().isVisible(), 'Rulebook lists the rule at 0 strokes · 5 days');
-check(await page.getByText('Fines', { exact: true }).first().isVisible(), 'it sits under Fines');
+check(await page.getByText('Fines & awards', { exact: true }).first().isVisible(), 'it sits under Fines & awards');
 check(await page.getByText(/Start your Rulebook/).count() > 0, 'a group with only the standard rule still gets the starter picker');
 await shot('lj1-rulebook');
 await noSideScroll('rulebook');

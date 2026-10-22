@@ -31,9 +31,13 @@ import { shapePastTrips, shapeNear } from './plan.ts';
 import { commentaryRequest, commentaryCap } from './commentary.ts';
 import { importRequest } from './import.ts';
 import { jokesRequest, jokesCap } from './jokes.ts';
+import { abSetup, pickAi } from './abtest.ts';
 
 const AI = aiConfig((k) => Deno.env.get(k));
 if (!AI.ok) console.warn('ai-helper: AI provider not set up:', AI.reason); // the reason never includes a key
+// A/B test of two models (abtest.ts, 075): AI_MODEL_B etc. Commentary and jokes (cron) always use A.
+const AB = abSetup((k) => Deno.env.get(k), AI.ok ? AI.cfg : null);
+if (AB.reason) console.warn('ai-helper: model B not on:', AB.reason);
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -70,6 +74,7 @@ async function allRows(db: SupabaseClient, g: string, table: string, cols: strin
 }
 
 function makeDeps(db: SupabaseClient, g: string, uid: string, status: Any): Deps {
+  const ab = pickAi(AB, uid, fetch); // this person's model (A or B) for the whole request
   let own: PlanContext['courses'] | null = null;
   const ownCourses = async () => (own ||= (await must(db.from('courses').select('id,name,library_id,holes').eq('group_id', g).order('name'))) as Any[]);
   const library = async (id: string) => {
@@ -92,8 +97,8 @@ function makeDeps(db: SupabaseClient, g: string, uid: string, status: Any): Deps
       is_member: !!status?.is_member, is_admin: !!status?.is_admin, group_id: status?.group_id || null, group_name: status?.group_name || null,
       player_name: status?.player_name || null, role: status?.role || null,
     },
-    ai: AI.ok ? AI.cfg : null,
-    fetchFn: fetch,
+    ai: ab.ai,
+    fetchFn: ab.fetchFn,
     now: () => new Date(),
     featureOn,
     // Questions so far. Refused ones (cap hits) and ones the AI failed to answer don't count (Josh, 22 Oct: "it didn't
@@ -109,14 +114,19 @@ function makeDeps(db: SupabaseClient, g: string, uid: string, status: Any): Deps
     },
     // The row goes in before the model is called, so two questions at once both count. Never any text.
     logStart: async (row) => {
-      const { data } = await admin.from('helper_log').insert({
+      const ins = (extra: Any) => admin.from('helper_log').insert({
         group_id: g, user_id: uid, mode: row.mode, area: row.area, capped: false, ok: false, ...((row as Any).job ? { job: (row as Any).job } : {}),
-        provider: row.provider ? clean(row.provider, 20) : null, model: row.model ? clean(row.model, 80) : null,
+        provider: row.provider ? clean(row.provider, 20) : null, model: row.model ? clean(row.model, 80) : null, ...extra,
       }).select('id').single();
+      let { data, error } = await ins(ab.startCols()); // + variant and test (075)
+      if (error) ({ data } = await ins({})); // 075 not applied yet: log as before
       return data?.id ?? null;
     },
     logEnd: async (id, row) => {
-      if (id != null) await admin.from('helper_log').update({ ...row, error: row.error ? clean(row.error, 40) : null }).eq('id', id);
+      if (id == null) return;
+      const up = (extra: Any) => admin.from('helper_log').update({ ...row, error: row.error ? clean(row.error, 40) : null, ...extra }).eq('id', id);
+      const { error } = await up(ab.endCols(row)); // + fallback and rough cost (075)
+      if (error) await up({});
     },
     tripPlanContext: async (raw) => {
       const lib: Record<string, Any> = {};

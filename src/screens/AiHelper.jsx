@@ -15,7 +15,8 @@ import { supabase } from '../lib/supabase.js';
 import { currentGroup } from '../lib/group.js';
 import { useData, useFeature, useSession } from '../lib/store.jsx';
 import { Header, toast } from '../components/ui.jsx';
-import { SETUP_EXAMPLE, MAX_TEXT, canSend, remainingLabel, readReply, nextRating, askExamples, askTitle } from '../lib/aihelper.js';
+import AnswerFeedback from '../components/AnswerFeedback.jsx';
+import { SETUP_EXAMPLE, MAX_TEXT, canSend, remainingLabel, readReply, askExamples, askTitle } from '../lib/aihelper.js';
 
 export async function askHelper(body) {
   const { data, error } = await supabase.functions.invoke('ai-helper', { body: { ...body, group_id: currentGroup() || undefined } });
@@ -24,31 +25,8 @@ export async function askHelper(body) {
 
 export const Remaining = ({ r }) => (r ? <span className="small muted">{remainingLabel(r)}</span> : null);
 
-/** 👍 / 👎 on one answer (only your own; nothing you typed is stored). Tap again to clear. */
-export function Rate({ logId }) {
-  const [rating, setRating] = useState(0);
-  const [busy, setBusy] = useState(false);
-  if (logId == null) return null;
-  const tap = async (v) => {
-    const next = nextRating(rating, v);
-    setBusy(true);
-    const { error } = await supabase.rpc('rate_helper', { p_log: logId, p_rating: next });
-    setBusy(false);
-    if (error) toast('Couldn’t save that — try again');
-    else setRating(next);
-  };
-  const btn = (v, icon, label) => (
-    <button type="button" className="btn ghost sm" aria-label={label} aria-pressed={rating === v} disabled={busy} onClick={() => tap(v)}
-      style={{ minWidth: 48, minHeight: 40, ...(rating === v ? { background: 'var(--gold-soft)', borderColor: 'var(--gold)' } : {}) }}>{icon}</button>
-  );
-  return (
-    <div className="row" style={{ gap: 6, alignItems: 'center' }} role="group" aria-label="Was this helpful?">
-      <span className="small muted">{rating ? 'Thanks!' : 'Helpful?'}</span>
-      {btn(1, '👍', 'Helpful')}
-      {btn(-1, '👎', 'Not helpful')}
-    </div>
-  );
-}
+/** 👍 / 👎 on one answer, with a reason after 👎 (components/AnswerFeedback.jsx, 075). */
+export const Rate = AnswerFeedback;
 
 /** "✨ Set it up for me" — goes at the top of Set up your trip. onApplied(tripId) after Do it. */
 export function SetupHelperBox({ onApplied }) {

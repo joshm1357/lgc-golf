@@ -4,6 +4,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { Loading } from './ui.jsx';
+import AbResults from './AbResults.jsx';
 import { areaName, errorLabel, upShare, tokens, weekRows } from '../lib/aiusage.js';
 
 const when = (t) => (t ? new Date(t).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : '—');
@@ -32,7 +33,7 @@ export default function AiUsage({ days }) {
   if (state.loading) return <Loading />;
   if (state.error) return <div className="err" role="alert">Couldn’t load the AI numbers: {state.error}</div>;
   const u = state.u;
-  if (!u || (!u.requests && !u.cap_hits)) return <div className="empty">No AI helper questions yet. They show here once groups start asking.</div>;
+  if (!u || (!u.requests && !u.cap_hits)) return <><div className="empty">No AI helper questions yet. They show here once groups start asking.</div><AbResults days={days} /></>;
   const share = upShare(u.up, u.down);
   const grid = { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 };
   const weeks = weekRows(u.weeks);
@@ -114,6 +115,8 @@ export default function AiUsage({ days }) {
           </div>
         </>
       )}
+
+      <AbResults days={days} />
 
       {(u.errors || []).length > 0 && (
         <>

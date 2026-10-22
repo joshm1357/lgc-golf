@@ -22,6 +22,7 @@ import { ShareVoteButton } from './CallVote.jsx';
 import { addExtrasToPlan } from './ExtrasPanel.jsx';
 import { extraWins, extrasFromOptions } from '../lib/extras.js';
 import { OptionSheet, CloseSheet, optionTitle, everyone, shareNudge } from '../screens/Planner.jsx';
+import './planux.css';
 
 const TONE = { yes: 'var(--navy)', maybe: '#7A5A00', no: 'var(--under)' };
 
@@ -128,6 +129,26 @@ export function PollCard({ poll, pd, inCard = false, asVoter = false }) {
       <div className="card" style={{ overflow: 'hidden' }} data-testid="poll-organiser">
         {inCard ? <button type="button" onClick={() => setExpanded(false)} style={{ width: '100%', textAlign: 'left', background: 'none', border: 0, padding: 0, color: 'inherit', font: 'inherit' }}>{header}</button> : header}
         {rows.length === 0 && <div className="empty">No options yet — add one.</div>}
+        {rows.length > 0 && (
+          <div className="res-table" data-testid="results-table">
+            <table>
+              <thead><tr><th>Option</th><th>Total</th>{people.map((p) => <th key={p.id} title={playerName(p)}>{playerName(p).slice(0, 6)}</th>)}</tr></thead>
+              <tbody>
+                {results.rows.map((r) => (
+                  <tr key={r.option.id} className={r.leading && isOpen ? 'lead' : ''}>
+                    <td><strong>{poll.winner_option_id === r.option.id ? '✅ ' : ''}{optionTitle(poll, r.option)}</strong>{r.against && <span style={{ color: 'var(--under)', fontWeight: 700 }}> · {r.against}</span>} <OptionLink o={r.option} kind={kind} /></td>
+                    <td><strong>{r.score}</strong></td>
+                    {people.map((p) => {
+                      const v = votes.find((x) => x.option_id === r.option.id && x.player_id === p.id)?.response;
+                      return <td key={p.id} title={v ? words[v] : 'No answer'}>{v ? words[v].split(' ')[0] : '·'}</td>;
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <div className="res-rows">
         {results.rows.map((r) => {
           const o = r.option;
           const winner = poll.winner_option_id === o.id;
@@ -148,6 +169,7 @@ export function PollCard({ poll, pd, inCard = false, asVoter = false }) {
             </div>
           );
         })}
+        </div>
         <div className="stack" style={{ padding: '10px 14px', gap: 8 }}>
           {!inCard && <EmailVoteLine poll={poll} pd={pd} />}
           {!inCard && isOpen && (

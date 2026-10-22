@@ -22,7 +22,7 @@ import './tripbuilder.css';
 import AreaStart from '../components/AreaStart.jsx';
 import ExtrasPanel from '../components/ExtrasPanel.jsx';
 import { CallVoteSheet, callBatch } from '../components/CallVote.jsx';
-import { CallsWho, CourseCall, BestPerDay, useSocialTimes } from '../components/TeeCalls.jsx';
+import { CallsWho, CourseCall, BestPerDay, TeeGridTable, useSocialTimes } from '../components/TeeCalls.jsx';
 import { windowDates, slotsFor } from '../lib/teegrid.js';
 import { extrasSection } from '../lib/extras.js';
 
@@ -425,6 +425,7 @@ export default function TripBuilder() {
       </div>
       {org && <button type="button" className="btn gold block" disabled={busy || !callList.length} onClick={makeCalls} data-testid="tb-make-calls">📞 Make the “Call the course” jobs ({callList.length})</button>}
       {callList.length > 0 && <CallsWho items={pd.items} callJobIds={Object.values(callJobIds)} org={org} reload={pd.reload} />}
+      {callList.length > 0 && <TeeGridTable courses={callList} dates={callDates} rows={tees} need={need.needed || 1} />}
       {callList.map((j) => {
         const job = jobs.find((x) => x.id === callJobIds[j.course_id]);
         const mine = job && job.owner_id && job.owner_id === me;
@@ -477,7 +478,7 @@ export default function TripBuilder() {
   };
 
   return (
-    <div className="page">
+    <div className="page tb-wide">
       <Header back="Trip" title="Build the trip" sub={plan.name} />
       <div className="section stack">
         <div className="tb-steps" role="list" aria-label="Steps">
@@ -488,7 +489,7 @@ export default function TripBuilder() {
           ))}
         </div>
         {!org && <div className="small muted">The organiser builds the trip here; you vote on the trip’s page{jobs.some((j) => j.owner_id === me && Object.values(callJobIds).includes(j.id)) ? ' — and put in the tee times for your call below' : ''}.</div>}
-        <div className="tb-layout">
+        <div className={`tb-layout${current === 'area' ? ' single' : ''}`}>
           <div className="tb-side">
             {current !== 'area' && map}
             {current !== 'area' && <div className="small muted" style={{ marginTop: 4 }}>🏠 = a place to stay. Dots are courses: green = on the list for {focusDay.name.replace(/ —.*/, '')}, red = most votes, yellow = others nearby. Drive times are rough.</div>}

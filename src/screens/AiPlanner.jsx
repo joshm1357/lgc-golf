@@ -118,10 +118,11 @@ export function PlanWithAiSheet({ onClose }) {
 
   const diff = diffDraft(prev, draft);
   const lastAi = [...turns].reverse().find((t) => t.role === 'assistant');
-  const shown = turns.map((t) => (t === lastAi && draft ? { ...t, card: <DraftCard draft={draft} diff={diff} prev={prev} /> } : t));
+  const shown = turns.map((t) => (t === lastAi && draft ? { ...t, card: <div className="pc-inline-card"><DraftCard draft={draft} diff={diff} prev={prev} /></div> } : t));
   const ready = draft && (draft.places || []).length > 0 && (draft.dates || []).length > 0;
   return (
-    <Sheet title="✨ Plan it with AI" onClose={onClose}>
+    <Sheet title="✨ Plan it with AI" onClose={onClose} wide>
+      <div className="pc-grid">
       <div className="stack" style={{ gap: 10 }} aria-label="Plan it with AI">
         {!confirm ? (
           <AiChat turns={shown} onSend={send} busy={busy} left={turnsLeft(turns)} placeholder={turns.length ? 'Answer, or say what to change…' : PLAN_EXAMPLE}
@@ -149,6 +150,10 @@ export function PlanWithAiSheet({ onClose }) {
         {err && <div className="small err" style={{ margin: 0 }} role="alert">{err}</div>}
         {lastAi && logId != null && <Rate key={logId} logId={logId} />}
         <Remaining r={remaining} />
+      </div>
+      <aside className="pc-aside" data-testid="draft-aside">
+        {draft ? <DraftCard draft={draft} diff={diff} prev={prev} /> : <div className="card pad small muted">The trip’s options show here as you chat — places with their courses, weekends, extras and rough costs.</div>}
+      </aside>
       </div>
     </Sheet>
   );

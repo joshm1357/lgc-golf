@@ -11,6 +11,7 @@ import * as TB from '../lib/tripbuilder.js';
 import { pickFacts } from '../lib/tripfinder.js';
 import BuilderMap from './BuilderMap.jsx';
 import StaySearch from './StaySearch.jsx';
+import './planux.css';
 
 export const slimCourse = (c) => ({ id: c.id, name: c.name, area: c.area || null, lat: c.lat, lng: c.lng, mine_avg: c.mine_avg ?? null, others_avg: c.others_avg ?? null, others_n: c.others_n ?? null });
 
@@ -120,9 +121,13 @@ export default function AreaStart({ plan, st, save, org, areas, history, accom =
   return (
     <div className="stack" style={{ gap: 10 }} data-testid="area-start">
       {tabs}
+      <div className="as-grid">
+      <div className="as-map">
       <BuilderMap className="tb-map tb-map-tall" courses={mapCourses} stays={mapStays} onCourse={(c) => toggleCourse(courseMap[c.id] || c)} onStay={toggleStay}
         onTap={org && addPin === 'tap' ? (p) => { setAddPin(p); setPinName(''); } : undefined} />
-      <span className="small muted">Tap ⛳ pins and 🏠 pins to put them on the table (or tick them below). ✨ = suggested — you choose.</span>
+      <span className="small muted">Tap course dots and 🏠 pins to put them on the table (or tick them in the lists). ✨ = suggested — you choose.</span>
+      </div>
+      <div className="stack as-lists" style={{ gap: 10 }}>
 
       <div className="card pad stack" style={{ gap: 4 }} data-testid="area-courses">
         <div className="row between"><strong>⛳ Courses — {area}</strong><span className="small muted">{onTableCourses.length} on the table</span></div>
@@ -168,6 +173,8 @@ export default function AreaStart({ plan, st, save, org, areas, history, accom =
         <StaySearch places={(onTableStays.length ? onTableStays.map((s) => s.name) : [area]).slice(0, 3)} weekends={st.weekends || []} people={people} busy={busy} onSave={org ? addIdea : null} />
       </div>
 
+      </div>
+      </div>
       {org && !st.region && options.length > 1 && <button type="button" className="btn block" onClick={goingHere} data-testid="going-here">We’re going to {area} (skip the area vote)</button>}
       {org && !st.region && options.length === 1 && <button type="button" className="btn block" onClick={goingHere} data-testid="going-here">✓ {area} it is</button>}
     </div>
@@ -181,6 +188,18 @@ function AreaCompare({ st, areas, accom, people, origin, tees, org, onChoose, on
   return (
     <div className="stack" style={{ gap: 8 }} data-testid="area-compare">
       <span className="small muted">Side by side. Choose one yourself, or call the vote and let the group say.</span>
+      <table className="cmp-table" data-testid="compare-table">
+        <thead><tr><th aria-label="What" />{rows.map((r) => <th key={r.area}>📍 {r.area}</th>)}</tr></thead>
+        <tbody>
+          <tr><th>⛳ Courses</th>{rows.map((r) => <td key={r.area}><strong>{r.courses.length}</strong>{r.courses.length ? `: ${r.courses.join(', ')}` : ' — none ticked yet'}</td>)}</tr>
+          <tr><th>🏠 Stay</th>{rows.map((r) => <td key={r.area}>{r.stays.join(', ') || '—'}</td>)}</tr>
+          <tr><th>🏡 Places</th>{rows.map((r) => <td key={r.area}>{r.ideas.length ? r.ideas.map((a) => <div key={a.id}>{a.link ? <a href={a.link} target="_blank" rel="noreferrer noopener">{a.name} ↗</a> : a.name}</div>) : '—'}</td>)}</tr>
+          <tr><th>💰 Stay each</th>{rows.map((r) => <td key={r.area}>{r.costEach != null ? `about $${r.costEach}` : '—'}</td>)}</tr>
+          <tr><th>🚗 Drive</th>{rows.map((r) => <td key={r.area}>{r.driveText ? `about ${r.driveText}` : '—'}</td>)}</tr>
+          <tr><th>⏱️ Tee times</th>{rows.map((r) => <td key={r.area}>{r.teeDays ? `${r.teeDays} day${r.teeDays === 1 ? '' : 's'} in` : 'not asked yet'}</td>)}</tr>
+          {org && <tr><th />{rows.map((r) => <td key={r.area}><button type="button" className="btn sm" onClick={() => onChoose(r.area)}>Choose this one</button></td>)}</tr>}
+        </tbody>
+      </table>
       <div className="tb-compare">
         {rows.map((r) => (
           <div key={r.area} className="card pad stack" style={{ gap: 4 }} data-testid="compare-area">

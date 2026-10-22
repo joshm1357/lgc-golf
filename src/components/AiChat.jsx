@@ -3,6 +3,7 @@
 // Reusable: "Plan it with AI" uses it now; the Caddie can later. No maths here — see lib/planchat.js.
 import React, { useEffect, useRef, useState } from 'react';
 import { quickChoice } from '../lib/planchat.js';
+import './planux.css';
 
 /**
  * turns: [{ role: 'user' | 'assistant', text, questions?: [{ id, text, quick: [] }], card?: node }]

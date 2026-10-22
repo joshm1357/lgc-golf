@@ -9,7 +9,9 @@ import { Sheet, toast } from './ui.jsx';
 import { useRun, must } from '../lib/run.js';
 import { notify, shareText } from '../lib/push.js';
 import { todayISO } from '../lib/plan.js';
+import { answersFor } from '../lib/emailvotes.js';
 import { allTicked, toggleTick, ballotFrom, callProblem, defaultCloses, closesWord, pollRows, reach, voteShareLink, shareMessage } from '../lib/callvote.js';
+import './planux.css';
 
 const appBase = () => `${window.location.origin}${import.meta.env.BASE_URL}`;
 
@@ -138,7 +140,7 @@ export function CallVoteSheet({ plan, title, range, keenDefault = true, keenOpti
     setCalled({ closes });
   }, 'The vote’s called');
   return (
-    <Sheet title={called ? 'The vote’s out' : 'Call the vote'} onClose={onClose}>
+    <Sheet title={called ? 'The vote’s out' : 'Call the vote'} onClose={onClose} wide={!called}>
       {called ? (
         <div className="stack" style={{ gap: 10 }}>
           <div className="small" style={{ fontWeight: 700 }}>🗳️ “{title}” — closes {closesWord(called.closes, todayISO())}.</div>
@@ -146,6 +148,7 @@ export function CallVoteSheet({ plan, title, range, keenDefault = true, keenOpti
           <button type="button" className="btn ghost block" onClick={onClose}>Done</button>
         </div>
       ) : (
+        <div className="cv-grid">
         <div className="stack" style={{ gap: 10 }} data-testid="call-vote">
           {intro}
           <span className="label">What goes on the ballot</span>
@@ -172,6 +175,34 @@ export function CallVoteSheet({ plan, title, range, keenDefault = true, keenOpti
           <label className="field"><span>Closes</span><input className="input" type="date" value={closes || ''} min={todayISO()} onChange={(e) => setCloses(e.target.value)} aria-label="Closes" /></label>
           {problem && <span className="small err" style={{ margin: 0 }}>{problem}</span>}
           <button type="button" className="btn gold block" disabled={busy || !!problem} onClick={call} data-testid="call-the-vote">🗳️ Call the vote{ballot.count ? ` (${ballot.count} option${ballot.count === 1 ? '' : 's'})` : ''}</button>
+        </div>
+        <aside className="cv-preview" data-testid="ballot-preview">
+          <span className="label">What the group sees</span>
+          <div className="card" style={{ overflow: 'hidden', borderColor: 'var(--navy)', borderWidth: 2, marginTop: 6 }}>
+            <div style={{ padding: '10px 14px', background: 'var(--navy)', color: '#fff' }}>
+              <div className="small" style={{ opacity: 0.85, fontWeight: 700 }}>🗳️ {ballot.sections.length + (keenOption && keen ? 1 : 0)} quick questions · closes {closesWord(closes, todayISO())}</div>
+              <div style={{ fontSize: 18, fontWeight: 800 }}>{title}</div>
+            </div>
+            <div className="stack" style={{ padding: 10, gap: 8 }}>
+              {ballot.sections.map((s) => {
+                const words = answersFor({ kind: s.kind, question: s.question, purpose: s.options.some((o) => o.stayId) ? 'stay' : null });
+                return (
+                  <div key={s.key} className="card pad stack" style={{ gap: 4 }}>
+                    <strong>{s.question}</strong>
+                    {s.options.map((o) => (
+                      <div key={o.key} className="row between small" style={{ gap: 6 }}>
+                        <span style={{ fontWeight: 600 }}>{o.label}</span>
+                        <span className="muted" style={{ whiteSpace: 'nowrap' }}>{words.yes.split(' ')[0]} {words.maybe.split(' ')[0]} {words.no.split(' ')[0]}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+              {keenOption && keen && <div className="card pad"><strong>Are you keen?</strong> <span className="small muted">✓ In · ? Maybe · ✗ Out</span></div>}
+              {!ballot.sections.length && !(keenOption && keen) && <span className="small muted">Nothing ticked yet.</span>}
+            </div>
+          </div>
+        </aside>
         </div>
       )}
     </Sheet>

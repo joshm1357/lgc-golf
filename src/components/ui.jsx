@@ -119,7 +119,7 @@ export function TabBar() {
   );
 }
 
-export function Sheet({ title, onClose, children }) {
+export function Sheet({ title, onClose, children, wide = false }) {
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -133,7 +133,7 @@ export function Sheet({ title, onClose, children }) {
   }, [onClose]);
   return (
     <div className="sheet-bg" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="sheet" role="dialog" aria-modal="true" aria-label={title}>
+      <div className={wide ? 'sheet wide' : 'sheet'} role="dialog" aria-modal="true" aria-label={title}>
         <div className="sheet-hdr">
           <h2>{title}</h2>
           <button type="button" className="btn ghost sm" onClick={onClose} aria-label="Close">{Icon.x(18)}</button>

@@ -16,6 +16,7 @@ import { notify } from '../lib/push.js';
 import { callProgress, canFinishCall, callChecklist, callScript, parseRanges, dayShort, bestPerDay, socialLine, slotsFor } from '../lib/teegrid.js';
 import { bestBlock } from '../lib/tripbuilder.js';
 import { bulkAllocate, callMode, jobStage, stagePatch } from '../lib/tripjobs.js';
+import './planux.css';
 
 /** The group's usual social times for these courses: { course_id: row }. */
 export function useSocialTimes(ids) {
@@ -217,6 +218,30 @@ export function BestPerDay({ rows, dates, needed, courses }) {
           <strong>{d.label}:</strong> {d.best.length ? d.best.slice(0, 3).map((b) => `${b.name} ${b.block.text}${b.price != null ? ` ($${b.price})` : ''}`).join(' · ') : <span className="muted">nothing with {needed} in a row yet</span>}
         </div>
       ))}
+    </div>
+  );
+}
+
+/** On a desktop: every course × every day at a glance (the cards below are where the times are put in). */
+export function TeeGridTable({ courses, dates, rows, need }) {
+  if (!courses.length || !dates.length) return null;
+  const cell = (r) => {
+    if (!r || (!r.available && !(r.ranges || []).length && !(r.times || []).length)) return <span className="muted">—</span>;
+    if (r.available === 'no') return <span style={{ color: 'var(--under)' }}>✗</span>;
+    if (r.available === 'unknown') return <span style={{ color: '#7A5A00' }}>? ask again</span>;
+    const b = bestBlock(slotsFor(r), need, { earliest: 0 });
+    return <span>{b ? <strong>✓ {b.text}</strong> : (r.ranges || []).map((x) => x.replace('-', '–')).join(', ')}{r.price != null ? <span className="muted"> · ${Number(r.price)}</span> : null}</span>;
+  };
+  return (
+    <div className="tee-grid" data-testid="tee-grid">
+      <table>
+        <thead><tr><th>Course</th>{dates.map((d) => <th key={d}>{dayShort(d)}</th>)}</tr></thead>
+        <tbody>
+          {courses.map((c) => (
+            <tr key={c.course_id}><td><strong>{c.name}</strong></td>{dates.map((d) => <td key={d}>{cell(rows.find((r) => r.course_id === c.course_id && String(r.play_date).slice(0, 10) === d))}</td>)}</tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

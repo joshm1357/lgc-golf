@@ -163,7 +163,7 @@ check((await box.getAttribute('placeholder')).startsWith('Weekend away in March'
 check(await page.getByRole('button', { name: 'Send', exact: true }).isDisabled(), 'Send waits for some words');
 await box.fill('Weekend away in March, 12 of us, somewhere within 3 hours of Sydney, about $500 each');
 await page.getByRole('button', { name: 'Send', exact: true }).click();
-await page.getByTestId('draft-card').waitFor({ timeout: 10000 });
+await page.locator('.pc-inline-card [data-testid="draft-card"]').waitFor({ timeout: 10000 });
 check(await page.getByText('56 questions left this month for the group · 8 for you today').isVisible(), 'questions left shows');
 const planCall = calls.find((c) => c.body.mode === 'plan_chat');
 check(!!planCall && planCall.body.group_id === GROUP && /^Bearer /.test(planCall.auth), 'plan call: mode, group and the person’s own sign-in');

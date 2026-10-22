@@ -159,6 +159,7 @@ export function PollCard({ poll, pd, inCard = false, asVoter = false }) {
                   <div style={{ fontWeight: 700 }}>{winner && '✅ '}{optionTitle(poll, o)}{!winner && r.leading && isOpen && <span className="small" style={{ marginLeft: 6, color: '#7A5A00', fontWeight: 800 }}>LEADING</span>}</div>
                   {(o.cost_pp != null || o.notes) && <div className="small muted">{[o.cost_pp != null ? `~$${Number(o.cost_pp)} pp` : null, o.notes].filter(Boolean).join(' · ')}</div>}
                   <OptionLink o={o} kind={kind} />
+                  {partners[o.label] && <a href={`#/c/${partners[o.label]}?enquire=1`} className="small" style={{ display: 'block', fontWeight: 700 }}>Partner course · Ask about a group booking →</a>}
                   {r.against && <div className="small" style={{ color: 'var(--under)', fontWeight: 700 }} data-testid="against">⚠️ {r.against}</div>}
                 </div>
                 <div style={{ textAlign: 'right', flex: 'none' }}>

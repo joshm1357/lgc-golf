@@ -10,6 +10,7 @@
 import { daysUntil, fmtRange, todayISO, parseDate, money } from './plan.js';
 import { closesLabel } from './trips.js';
 import { depositStatus } from './tripbudget.js';
+import { lateInfo, lateMessage } from './latejobs.js';
 
 export const JOB_STAGES = ['todo', 'asked', 'done'];
 export const JOB_STAGE_LABEL = { todo: 'To do', asked: 'Asked / waiting', done: 'Done ✓' };
@@ -197,7 +198,8 @@ const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 /**
  * The one "Next step" for this person on this trip.
  * ctx: { plan, stage, items, polls, options, votes, rsvps, transfers, playerIds, me, isOrganiser, today, names,
- *        builder: { weekends, teeOptions, cards, callJobIds } (from the trip builder's tables when they exist; empty if not) }
+ *        builder: { weekends, teeOptions, cards, callJobIds } (from the trip builder's tables when they exist; empty if not),
+ *        late: { rule, penalties, adjustments } (085: the late job rule — a late job of yours comes first, with the warning) }
  * Returns { key, icon, title, detail, who, label, action } or null.
  *   action: { type: 'tab', tab } | { type: 'allocate', id } | { type: 'job', id } | { type: 'make_jobs' } | { type: 'lock' }
  *         | { type: 'builder' } | { type: 'pay' } | { type: 'deposits' } | { type: 'trip_plan' } | { type: 'go', to }
@@ -205,8 +207,10 @@ const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 export function nextStep(ctx) {
   const {
     plan, stage, items = [], polls = [], options = [], votes = [], rsvps = [], transfers = [], playerIds = [],
-    me = null, isOrganiser = false, today = todayISO(), names = {}, builder = {},
+    me = null, isOrganiser = false, today = todayISO(), names = {}, builder = {}, late = null,
   } = ctx;
+  const lateOf = (j) => (late?.rule ? lateInfo(j, late.rule, { today, penalties: late.penalties, adjustments: late.adjustments }) : null);
+  const lateWords = (j) => { const i = lateOf(j); return i && !i.waived && !i.applied ? lateMessage(i) : ''; };
   if (!plan || stage === 'cancelled') return null;
   const phase = planPhase({ plan, stage, items, rsvps, transfers });
   const jobs = sortJobs(items);
@@ -259,7 +263,7 @@ export function nextStep(ctx) {
     // Several calls with the same person (one person for all, 080): one step, not one per course.
     if (mineCalls.length > 1) return step({ key: 'calls-mine', icon: '📞', title: `Your job: call ${mineCalls.length} courses for tee times`, detail: 'Ring each one and enter the times they can give you.', who: me, label: 'Open the calls', action: { type: 'builder' } });
     const mine = mineCalls[0];
-    if (mine) return step({ key: `job:${mine.id}`, icon: '📞', title: mine.title, detail: 'Your job — enter the times they can give you.', who: me, label: 'Open the job', action: { type: 'job', id: mine.id } });
+    if (mine) return step({ key: `job:${mine.id}`, icon: lateWords(mine) ? '⚠️' : '📞', title: mine.title, detail: lateWords(mine) ? `${lateWords(mine)}.` : 'Your job — enter the times they can give you.', who: me, ...(lateWords(mine) ? { late: true } : {}), label: 'Open the job', action: { type: 'job', id: mine.id } });
     if (calls.length) {
       const first = calls[0];
       return step({ key: 'calls-wait', icon: '📞', title: `Waiting on ${plural(calls.length, 'call')} for tee times`, detail: `${nameOf(names, first.owner_id)} is on ${first.title.replace(/^📞\s*/, '')}.`, who: first.owner_id, label: 'See jobs', action: { type: 'tab', tab: 'jobs' } });
@@ -284,6 +288,9 @@ export function nextStep(ctx) {
   if (dep && keen && !isOrganiser && mineDep && mineDep.state === 'unpaid') {
     return step({ key: 'pay', icon: '💳', title: `Confirm you’re in and pay your ${money(deposit)} deposit`, detail: myRsvp === 'in' ? 'Pay the organiser, then tap “I’ve paid”.' : 'Accommodation is booked — lock in your spot.', who: me, label: 'Confirm and pay', action: { type: 'pay' } });
   }
+  // A late job of yours (penalty strokes coming) beats everything below.
+  const myLate = open.find((j) => j.owner_id === me && lateWords(j));
+  if (myLate && me) return step({ key: `late:${myLate.id}`, icon: '⚠️', title: `Your job: ${myLate.title}`, detail: `${lateWords(myLate)}.`, who: me, late: true, label: 'Open the job', action: { type: 'job', id: myLate.id } });
   if (!isOrganiser) {
     const myJob = open.find((j) => j.owner_id === me);
     if (myJob) return step({ key: `job:${myJob.id}`, icon: '📋', title: `Your job: ${myJob.title}`, detail: myJob.due ? `Due ${fmtRange(myJob.due)}.` : '', who: me, label: 'Open the job', action: { type: 'job', id: myJob.id } });
@@ -311,6 +318,8 @@ export function nextStep(ctx) {
       }
       return step({ key: `job:${j.id}`, icon: '📋', title: j.title, detail: j.due ? `Due ${fmtRange(j.due)}${j.due < today ? ' — overdue' : ''}.` : '', who: me, label: 'Open the job', action: { type: 'job', id: j.id } });
     }
+    const lw = lateWords(j);
+    if (lw) return step({ key: `wait:${j.id}`, icon: '⚠️', title: j.title, detail: `${nameOf(names, j.owner_id)} is on it — ${lw.replace(/^⚠️\s*/, '')}.`, who: j.owner_id, late: true, label: 'See jobs', action: { type: 'tab', tab: 'jobs' } });
     return step({ key: `wait:${j.id}`, icon: '⏳', title: j.title, detail: `${nameOf(names, j.owner_id)} is on it${jobStage(j) === 'asked' ? ' — asked, waiting to hear back' : ''}.`, who: j.owner_id, label: 'See jobs', action: { type: 'tab', tab: 'jobs' } });
   };
   if (overdue) return jobStep(overdue);

@@ -6,7 +6,8 @@ import { inviteCode } from '../lib/invite.js';
 import { linkTarget, inviteNext, readLink, pageToKeep, targetQuery } from '../lib/links.js';
 import { SIGN_IN, signInWith, signInWithEmail, verifyEmailCode, linkProvider, linkGoogleToken } from '../lib/auth.js';
 import { signInModes } from '../lib/savespot.js';
-import { EmailPasswordSignIn } from '../components/SignInForms.jsx';
+import { EmailPasswordSignIn, EmailContinue } from '../components/SignInForms.jsx';
+import { joinDoor, deadLinkWords, markJoinAfterSignIn, joinAfterSignIn, clearJoinAfterSignIn, markWelcome } from '../lib/joinfirst.js';
 import { cleanEmailCode, looksLikeEmail, clearFreshSignIn, markFreshSignIn, rememberReturn, takeReturn } from '../lib/home.js';
 import { GOOGLE_CLIENT_ID, googleButtonHere, loadGoogle, makeNonce } from '../lib/google.js';
 import { GroupCrest } from '../components/Logo.jsx';
@@ -28,6 +29,7 @@ export function InviteJoin({ code, inside = false, onLook }) {
   // A shared link (#/join/CODE?to=<page>, 083; or an old vote link ?vote=<plan>): after joining, land on that page.
   const target = linkTarget(window.location.hash);
   const after = () => target || takeReturn() || '#/';
+  const signedIn = !!status?.signed_in;
   const [info, setInfo] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -44,10 +46,14 @@ export function InviteJoin({ code, inside = false, onLook }) {
         if (data?.group_id && !data.already_in) rememberSource({ from_group: data.group_id, placement: 'invite' });
         // Show the group's own crest and colours (not when already inside another group's app).
         if (data?.look && !inside) { paintLook(data.look, data.group_name); onLook?.(data.look); }
-        // Already in: straight to the page (switching group first if another one is open on this phone).
-        const next = inviteNext({ info: data, inside, currentGroupId: status?.group_id, hasTarget: !!target });
+        // Already in: straight to the page (switching group first if another one is open on this phone). Signed in
+        // properly: always straight there, with "Welcome back" (ov13).
+        const next = inviteNext({ info: data, inside, currentGroupId: status?.group_id, hasTarget: !!target, signedIn });
+        if ((next === 'go' || next === 'switch') && signedIn) { clearJoinAfterSignIn(); markWelcome(data.group_id); }
         if (next === 'go') window.location.hash = after();
         else if (next === 'switch') { setCurrentGroup(data.group_id); window.location.hash = after(); window.location.reload(); }
+        // Just signed in from this link's sign-in screen: join as that account straight away (no second tap).
+        else if (next === 'join' && signedIn && joinAfterSignIn(code)) { clearJoinAfterSignIn(); join(); }
       } catch (e) {
         if (live) { setErr(friendlyError(e)); setInfo({ bad: true }); }
       }
@@ -64,6 +70,7 @@ export function InviteJoin({ code, inside = false, onLook }) {
       if (!data) { setErr('That link has stopped working — ask for a new one.'); return; }
       setCurrentGroup(data);
       clearFreshSignIn();
+      clearJoinAfterSignIn();
       if (inside) {
         // Everything on screen belongs to the old group: start fresh in the new one.
         window.location.hash = after();
@@ -149,6 +156,7 @@ export function LostLink({ light = false }) {
 function FrontDoor() {
   const { status } = useSession();
   const [inviteLook, setInviteLook] = useState(null);
+  const [phoneOnly, setPhoneOnly] = useState(null); // the link code they chose "Just this phone for now" for
   const signInOn = SIGN_IN.length > 0;
   const hash = window.location.hash;
   const code = inviteCode(hash);
@@ -159,16 +167,15 @@ function FrontDoor() {
   useEffect(() => { if (signInOn && !code && !savedLook()) paintLook(DEFAULT_LOOK, null); }, [code, signInOn]);
 
   if (code) {
-    // A link: join straight away (no account needed before the first tee). Signing in is optional, and brings them
-    // back to this same link.
+    // A link on a phone or laptop that isn't signed in: sign in first, as part of joining (ov13). "Just this phone
+    // for now" is the old phone-only way (they get Save your spot later).
+    if (joinDoor({ signInOn, signedIn: !!status?.signed_in, phoneOnly: phoneOnly === code }) === 'sign-in') {
+      return <JoinSignIn code={code} returnHash={`#/join/${code}${targetQuery(hash)}`} onPhone={() => { clearJoinAfterSignIn(); setPhoneOnly(code); }} />;
+    }
     return (
       <div style={{ ...NAVY_PAGE, gap: 18 }}>
         <GroupCrest size={120} look={inviteLook || savedLook()} name={inviteLook?.name} />
         <InviteJoin code={code} onLook={setInviteLook} />
-        {signInOn && !status?.signed_in && <div className="stack" style={{ width: '100%', maxWidth: 340, gap: 8, borderTop: '1px solid rgba(255,255,255,.2)', paddingTop: 14 }}>
-          <span className="small" style={{ color: 'var(--on-navy-muted)', textAlign: 'center' }}>Got an account already? Sign in first and your scores stay with you on any phone.</span>
-          <SignInButtons returnHash={`#/join/${code}${targetQuery(hash)}`} quiet />
-        </div>}
       </div>
     );
   }
@@ -204,8 +211,87 @@ function FrontDoor() {
   );
 }
 
+/**
+ * The sign-in-first join screen (ov13): "Join <group> — sign in so it's you on any phone or laptop".
+ * Continue with Google (Google's own button where it can, so no trip away), email + password (one form that works out
+ * sign in or create), or "Just this phone for now". After signing in, InviteJoin uses the link as that account.
+ */
+function JoinSignIn({ code, returnHash, onPhone }) {
+  const [info, setInfo] = useState(undefined); // undefined = checking; null = not a working link
+  const [dead, setDead] = useState(null); // why it isn't working: 'used' | 'expired' | null
+  const [err, setErr] = useState('');
+  const modes = signInModes(SIGN_IN);
+  const target = linkTarget(window.location.hash);
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      try {
+        // A phone-only session is enough to read which group the link is for (it's replaced when they sign in).
+        await ensureSignedIn();
+        const { data, error } = await supabase.rpc('invite_info', { p_token: code });
+        if (error) throw error;
+        if (!live) return;
+        setInfo(data || null);
+        if (data?.look) paintLook(data.look, data.group_name);
+        if (data) { markJoinAfterSignIn(code); return; }
+        // Not working: used or run out (086)? An older database without it just says "isn't working".
+        const r = await supabase.rpc('used_link_info', { p_token: code }).then((x) => x, () => ({ data: null }));
+        if (live) setDead(r?.data?.state || null);
+      } catch (e) {
+        if (live) { setErr(friendlyError(e)); setInfo(null); }
+      }
+    })();
+    return () => { live = false; };
+  }, [code]);
+  const muted = { color: 'var(--on-navy-muted)', textAlign: 'center' };
+  const words = info === null ? deadLinkWords(dead) : null;
+  return (
+    <div style={{ ...NAVY_PAGE, gap: 14 }} data-testid="join-sign-in">
+      <GroupCrest size={104} look={info?.look || savedLook()} name={info?.group_name} />
+      {info === undefined && <div style={muted}>Checking the link…</div>}
+      {info && (
+        <div style={{ textAlign: 'center', maxWidth: 340 }}>
+          <div style={{ fontFamily: 'var(--display)', fontSize: 30, fontWeight: 700, lineHeight: 1.1 }}>Join {info.group_name}</div>
+          <div style={{ ...muted, marginTop: 6 }}>Sign in so it’s you on any phone or laptop.</div>
+          {(info.role === 'organiser' || info.team || info.role === 'guest') && (
+            <div className="small" style={{ ...muted, marginTop: 6 }}>
+              {info.role === 'organiser' ? 'This link makes you an organiser. It works once.' : info.team ? <>You’ll be on <strong style={{ color: '#fff' }}>{info.team}</strong>.</> : 'You’re joining as a guest.'}
+            </div>
+          )}
+          {target && <div className="small" style={{ ...muted, marginTop: 4 }}>Then pick your name and you’ll go straight to what was shared.</div>}
+        </div>
+      )}
+      {words && (
+        <div style={{ textAlign: 'center', maxWidth: 340 }} role="alert" data-testid="dead-link">
+          <div style={{ fontFamily: 'var(--display)', fontSize: 26, fontWeight: 700, lineHeight: 1.15 }}>{words.title}</div>
+          <div style={{ ...muted, marginTop: 6 }}>{words.body}</div>
+        </div>
+      )}
+      {info !== undefined && (
+        <div className="stack" style={{ width: '100%', maxWidth: 340, gap: 10 }}>
+          {modes.google && <GoogleSignIn returnHash={returnHash} cont onError={(x) => setErr(friendlyError(x))} />}
+          {modes.google && (modes.password || modes.emailCode) && (
+            <div role="separator" style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--on-navy-muted)' }} className="small">
+              <span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.2)' }} />or<span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.2)' }} />
+            </div>
+          )}
+          {modes.password && <EmailContinue />}
+          {modes.emailCode && <SignInButtons returnHash={returnHash} quiet emailOnly />}
+          {err && <div className="err" role="alert" style={{ color: '#FFB4AB' }}>{err}</div>}
+        </div>
+      )}
+      {info && (
+        <button type="button" onClick={onPhone} data-testid="just-this-phone"
+          style={{ background: 'none', border: 0, color: '#fff', textDecoration: 'underline', minHeight: 44, padding: '8px 12px', font: 'inherit', fontSize: 14, cursor: 'pointer' }}>
+          Just this phone for now
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** Sign in with Google, or have a 6-digit code emailed. Makes an account if there isn't one. */
-export function SignInButtons({ returnHash = '', quiet = false }) {
+export function SignInButtons({ returnHash = '', quiet = false, emailOnly = false }) {
   const { refresh } = useSession();
   const modes = signInModes(SIGN_IN);
   const [email, setEmail] = useState('');
@@ -223,10 +309,10 @@ export function SignInButtons({ returnHash = '', quiet = false }) {
   const primaryStyle = quiet ? ON_NAVY_GHOST : undefined;
   return (
     <div className="stack" style={{ width: '100%', maxWidth: 340, gap: 10 }}>
-      {SIGN_IN.includes('google') && <GoogleSignIn returnHash={returnHash} quiet={quiet} busy={busy} onError={(x) => setErr(friendlyError(x))} />}
-      {SIGN_IN.includes('facebook') && <button type="button" className="btn ghost block" style={ON_NAVY_GHOST} disabled={busy} onClick={go(() => signInWith('facebook', returnHash))}>Sign in with Facebook</button>}
+      {SIGN_IN.includes('google') && !emailOnly && <GoogleSignIn returnHash={returnHash} quiet={quiet} busy={busy} onError={(x) => setErr(friendlyError(x))} />}
+      {SIGN_IN.includes('facebook') && !emailOnly && <button type="button" className="btn ghost block" style={ON_NAVY_GHOST} disabled={busy} onClick={go(() => signInWith('facebook', returnHash))}>Sign in with Facebook</button>}
       {/* Email + password (22 Oct): Sign in, Forgot password? (an emailed code), Create an account. */}
-      {modes.password && <EmailPasswordSignIn />}
+      {modes.password && !emailOnly && <EmailPasswordSignIn />}
       {modes.emailCode && (sent
         ? (
           // A 6-digit code, typed here — an emailed link would open Safari, not the Home Screen app.
@@ -258,7 +344,7 @@ export function SignInButtons({ returnHash = '', quiet = false }) {
  * Sign in with Google. Where Google knows this address, Google's own button: Google shows our app, and the sign-in
  * happens without leaving the app. Anywhere else (or if Google's script won't load): the redirect via Supabase.
  */
-export function GoogleSignIn({ returnHash, quiet, busy, onError, link = false, onLinked, onLeaving, light = false }) {
+export function GoogleSignIn({ returnHash, quiet, busy, onError, link = false, onLinked, onLeaving, light = false, cont = false }) {
   const { refresh } = useSession();
   const [mode, setMode] = useState(() => (googleButtonHere() ? 'loading' : 'redirect'));
   const [working, setWorking] = useState(false);
@@ -298,7 +384,7 @@ export function GoogleSignIn({ returnHash, quiet, busy, onError, link = false, o
             }
           },
         });
-        id.renderButton(box.current, { type: 'standard', theme: 'outline', size: 'large', text: link ? 'continue_with' : 'signin_with', shape: 'pill',
+        id.renderButton(box.current, { type: 'standard', theme: 'outline', size: 'large', text: link || cont ? 'continue_with' : 'signin_with', shape: 'pill',
           logo_alignment: 'center', width: Math.min(340, Math.max(200, box.current.offsetWidth || 300)) });
         setMode('google');
       } catch { if (live) setMode('redirect'); }
@@ -314,7 +400,7 @@ export function GoogleSignIn({ returnHash, quiet, busy, onError, link = false, o
           onLeaving?.(); // the app remembers it's gone to Google, to say "Done" when it's back
           linkProvider('google', returnHash).catch(onError);
         }}>
-        <GoogleG /> {link ? 'Continue with Google' : 'Sign in with Google'}
+        <GoogleG /> {link || cont ? 'Continue with Google' : 'Sign in with Google'}
       </button>
     );
   }

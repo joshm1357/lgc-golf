@@ -19,6 +19,7 @@ import { setupSteps } from '../lib/setupguide.js';
 import { formatName } from '../lib/board.js';
 import { groupWhen } from '../lib/teegroups.js';
 import { download } from './DeskNav.jsx';
+import { useLateJobs, LateBadge } from '../components/LateJobs.jsx';
 import './desk.css';
 
 /** Plans for the trip switcher. */
@@ -205,6 +206,7 @@ function VotesPanel({ pd, p, goTab }) {
 
 function JobsPanel({ pd, p, goTab }) {
   const data = useData();
+  const late = useLateJobs();
   const { status } = useSession();
   const [busy, run] = useRun();
   const [title, setTitle] = useState('');
@@ -227,6 +229,7 @@ function JobsPanel({ pd, p, goTab }) {
               <span className="grow">{j.title}</span>
               <span className="small muted">{j.owner_id ? playerName(data.playersById[j.owner_id]) : 'no owner'}</span>
             </label>
+            <LateBadge job={j} late={late} compact />
           </li>
         ))}
       </ul>

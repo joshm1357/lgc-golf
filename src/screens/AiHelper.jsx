@@ -17,6 +17,7 @@ import { useData, useFeature, useSession } from '../lib/store.jsx';
 import { Header, toast } from '../components/ui.jsx';
 import AnswerFeedback from '../components/AnswerFeedback.jsx';
 import { SETUP_EXAMPLE, MAX_TEXT, ASK_KEEP, canSend, remainingLabel, readReply, nextRating, askExamples, askTitle, withRetry, loadAsk, saveAsk } from '../lib/aihelper.js';
+import Thinking from '../components/Thinking.jsx';
 
 /** One call to the helper; tried once more by itself if the AI company was busy, replied oddly or was too slow
  *  (those don't use up a question). "Do it" / "Create it" are never retried. */
@@ -73,6 +74,7 @@ export function SetupHelperBox({ onApplied }) {
           <textarea className="textarea" rows={4} style={{ padding: 12 }} value={text} maxLength={MAX_TEXT} aria-label="Describe your trip"
             placeholder={SETUP_EXAMPLE} onChange={(e) => setText(e.target.value)} disabled={busy} />
           <button type="button" className="btn gold" disabled={busy || !canSend(text)} onClick={send}>{busy ? 'Working it out…' : 'Send'}</button>
+          {busy && <Thinking steps={['Reading your trip', 'Finding the courses', 'Setting up the rounds', 'Checking it over']} />}
         </>
       )}
       {reply?.kind === 'message' && <div className="card pad small" style={{ background: 'var(--ground)' }}>💬 {reply.text}</div>}
@@ -137,6 +139,7 @@ export default function Ask() {
             placeholder="Ask anything about the group’s golf…" onChange={(e) => setText(e.target.value)} disabled={busy} />
           <button type="submit" className="btn gold" disabled={busy || !canSend(text)}>{busy ? 'Looking it up…' : 'Ask'}</button>
         </form>
+        {busy && <Thinking steps={['Reading your question', 'Looking through the group’s history', 'Writing the answer']} />}
         <Remaining r={remaining} />
         {thread.map(({ q, reply }, i) => (
           <div key={thread.length - i} className="card pad stack" style={{ gap: 6 }}>

@@ -202,7 +202,8 @@ const tapSize = async (page, locator, label) => {
   await page.goto(SIGNIN);
   await page.getByText('You’re not in a group yet').waitFor({ timeout: 15000 });
   check(await page.getByRole('link', { name: 'Start a new group' }).isVisible(), 'none yet: Start a new group');
-  check(await page.getByRole('button', { name: 'Join with an invite link' }).isVisible(), 'none yet: Join with an invite link');
+  check(await page.getByLabel('Your link').isVisible(), 'none yet: the link box straight away (ov13), never a blank app');
+  check(/signed in as josh@thegolftrip\.club but not in a group yet\. Open your group’s link \(paste it here\) and you’ll join as this account\./.test(await page.getByTestId('no-group').innerText()), 'none yet: says who is signed in and what to do');
   check(await page.getByText(/Ask your organiser for your personal link/).isVisible(), 'none yet: points people who played before to their personal link');
   check(!(await page.getByText(/No account found/).isVisible().catch(() => false)), 'none yet: the old "No account found" warning is gone');
   await page.screenshot({ path: `${SHOTS}/s6-no-group.png`, fullPage: true });
@@ -222,19 +223,21 @@ const tapSize = async (page, locator, label) => {
   await ctx.close();
 }
 
-// 5. A guest opens an invite link: joins without an account; signing in is offered underneath.
+// 5. A guest opens an invite link: sign in first, as part of joining (ov13); "Just this phone for now" underneath.
 {
   STATUS.v = null;
   const { ctx, page } = await phone();
   await page.goto(`${SIGNIN}#/join/ABCDEFGH2345`);
-  await page.getByText('You’re invited to').waitFor({ timeout: 15000 });
-  check(await page.getByRole('button', { name: 'Join', exact: true }).isVisible(), 'invite: Join without an account');
-  check(await page.getByRole('button', { name: /Sign in with Google/ }).isVisible(), 'invite: sign-in offered underneath');
+  await page.getByText('Join Test Group B').waitFor({ timeout: 15000 });
+  check(await page.getByText('Sign in so it’s you on any phone or laptop.').isVisible(), 'invite: sign in first, and why');
+  check(await page.getByRole('button', { name: /Continue with Google/ }).isVisible(), 'invite: Continue with Google');
+  check(await page.getByRole('button', { name: 'Email me a code' }).isVisible(), 'invite (email-code build): Email me a code');
+  check(await page.getByTestId('just-this-phone').isVisible(), 'invite: "Just this phone for now"');
   await page.screenshot({ path: `${SHOTS}/s7-invite.png`, fullPage: true });
   await noSideScroll(page, 'Invite');
   const [auth] = await Promise.all([
     page.waitForRequest((r) => r.url().includes('/auth/v1/authorize'), { timeout: 10000 }).catch(() => null),
-    page.getByRole('button', { name: /Sign in with Google/ }).click(),
+    page.getByRole('button', { name: /Continue with Google/ }).click(),
   ]);
   const rt = auth ? new URL(auth.url()).searchParams.get('redirect_to') || '' : '';
   check(!!auth && !rt.includes('#'), 'invite: the address sent to Google has no # (Supabase puts the sign-in there)');
@@ -318,8 +321,10 @@ const tapSize = async (page, locator, label) => {
   LINK.info = { group_id: G1, group_name: 'L.G.C', player_name: 'Mike', state: 'used', mine: false, signed_in: false, look: null };
   const { ctx, page } = await phone();
   await page.goto(`${SIGNIN}#/me/MYKEMYKE2345`);
-  await page.getByText('This link has been used').waitFor({ timeout: 15000 });
-  check(!(await page.getByRole('button', { name: /Sign in with Google/ }).isVisible().catch(() => false)), 'used personal link: no way to use it');
+  await page.getByText('This link’s already been used').waitFor({ timeout: 15000 });
+  check(await page.getByText(/If that was you, sign in below/).isVisible(), 'used personal link (not signed in): "If that was you, sign in below"');
+  check(await page.getByRole('button', { name: /Sign in with Google/ }).isVisible(), 'used personal link: sign-in offered below (ov13)');
+  check(!(await page.getByRole('button', { name: /Yes, I’m Mike/ }).isVisible().catch(() => false)), 'used personal link: no way to use it');
   await ctx.close();
 }
 

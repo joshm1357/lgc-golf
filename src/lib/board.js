@@ -1,7 +1,7 @@
 // Turns raw scores into leaderboards (pure functions — no screen code).
 import {
   ambroseStatus, stablefordStatus, countbackKey, compareCountback, stablefordCountback,
-  rankRows, recentForm, strokeStatus, strokeCountback, fourballStatus,
+  rankRows, recentForm, strokeStatus, strokeCountback, fourballStatus, penaltyFor, applyPenalty,
 } from './scoring.js';
 import { project, needToTie } from './projection.js';
 
@@ -53,14 +53,21 @@ export function compBonuses(round, teams, sideEntries = []) {
   return out;
 }
 
-export function roundBoard({ round, course, teams = [], roundPlayers = [], playersById = {}, scoresIdx = {}, quickResults = [], bonuses = {} }) {
+/**
+ * adjustments: the round's penalty strokes (score_adjustments, 085) — added to the player's (or their team's) score.
+ * Each row gets penalty (strokes counted) and penaltyLines (all, waived ones too).
+ */
+export function roundBoard({ round, course, teams = [], roundPlayers = [], playersById = {}, scoresIdx = {}, quickResults = [], bonuses = {}, adjustments = [] }) {
   const holes = courseHoles(course);
+  const adj = (adjustments || []).filter((a) => !a.round_id || a.round_id === round.id);
+  const pen = (ids) => penaltyFor(adj, ids);
   const nums = holes.map((h) => h.n);
   const scores = scoresIdx[round.id] || {};
   if (round.format === 'ambrose') {
     const rows = teams.map((t) => {
       const sc = scores[t.id] || {};
-      const st = ambroseStatus(holes, sc, t.handicap);
+      const p = pen((t.players || []).map((x) => x.id));
+      const st = applyPenalty('ambrose', ambroseStatus(holes, sc, t.handicap), p.strokes);
       const b = bonuses[t.id] || { strokes: 0, wins: [] };
       if (b.strokes) {
         st.netToPar -= b.strokes;
@@ -68,7 +75,7 @@ export function roundBoard({ round, course, teams = [], roundPlayers = [], playe
       }
       return {
         id: t.id, name: t.name, players: t.players || [], handicap: t.handicap, scores: sc, ...st,
-        bonus: b.strokes, bonusWins: b.wins,
+        bonus: b.strokes, bonusWins: b.wins, penaltyLines: p.lines,
         sortValue: st.thru ? st.netToPar : 999, cb: st.finished ? countbackKey(holes, sc, t.handicap) : null,
         form3: recentForm(st.perHole, sc, 3, 0),
       };
@@ -78,7 +85,7 @@ export function roundBoard({ round, course, teams = [], roundPlayers = [], playe
       tiebreak: (a, b) => (a.cb && b.cb ? compareCountback(a.cb, b.cb) : 0),
     });
     const proj = holes.length
-      ? project(rows.map((r) => ({ id: r.id, perHole: r.perHole, base: -(r.bonus || 0) })), nums, { higherBetter: false, defaultValue: 0 })
+      ? project(rows.map((r) => ({ id: r.id, perHole: r.perHole, base: (r.penalty || 0) - (r.bonus || 0) })), nums, { higherBetter: false, defaultValue: 0 })
       : [];
     return { format: 'ambrose', holes, rows: ranked, projection: attachProjection(ranked, proj, false), higherBetter: false };
   }
@@ -87,11 +94,12 @@ export function roundBoard({ round, course, teams = [], roundPlayers = [], playe
     const hcpOf = Object.fromEntries(roundPlayers.map((rp) => [rp.player_id, rp.playing_handicap]));
     const rows = teams.map((t) => {
       const members = (t.players || []).map((p) => ({ id: p.id, hcp: hcpOf[p.id] ?? Number(p.handicap ?? 0), scores: scores[p.id] || {} }));
-      const st = fourballStatus(holes, members);
+      const p = pen(members.map((x) => x.id));
+      const st = applyPenalty('fourball', fourballStatus(holes, members), p.strokes);
       const sc = {};
       for (const n of Object.keys(st.perHole)) sc[n] = { updated_at: members.map((m) => m.scores[n]?.updated_at || '').sort().pop() };
       return {
-        id: t.id, name: t.name, players: t.players || [], members, handicap: null, scores: sc, ...st,
+        id: t.id, name: t.name, players: t.players || [], members, handicap: null, scores: sc, ...st, penaltyLines: p.lines,
         sortValue: st.thru ? st.vsExpected : -999,
         cb: st.finished ? stablefordCountback(holes, st.perHole) : null,
         form3: recentForm(st.perHole, sc, 3, 2),
@@ -102,7 +110,7 @@ export function roundBoard({ round, course, teams = [], roundPlayers = [], playe
       tiebreak: (a, b) => (a.cb && b.cb ? compareCountback(b.cb, a.cb) : 0),
     });
     const proj = holes.length
-      ? project(rows.map((r) => ({ id: r.id, perHole: r.perHole })), nums, { higherBetter: true, defaultValue: 2 })
+      ? project(rows.map((r) => ({ id: r.id, perHole: r.perHole, base: -(r.penalty || 0) })), nums, { higherBetter: true, defaultValue: 2 })
       : [];
     return { format: 'fourball', holes, rows: ranked, projection: attachProjection(ranked, proj, true), higherBetter: true };
   }
@@ -111,10 +119,11 @@ export function roundBoard({ round, course, teams = [], roundPlayers = [], playe
     const rows = roundPlayers.map((rp) => {
       const p = playersById[rp.player_id];
       const sc = scores[rp.player_id] || {};
-      const st = strokeStatus(holes, sc, rp.playing_handicap);
+      const pn = pen([rp.player_id]);
+      const st = applyPenalty('stroke', strokeStatus(holes, sc, rp.playing_handicap), pn.strokes);
       return {
         id: rp.player_id, name: p ? p.nickname || p.name : '?', players: p ? [p] : [], handicap: rp.playing_handicap,
-        scores: sc, ...st, sortValue: st.thru ? st.netToPar : 999,
+        scores: sc, ...st, penaltyLines: pn.lines, sortValue: st.thru ? st.netToPar : 999,
         cb: st.finished ? strokeCountback(holes, st.perHole) : null,
         form3: recentForm(st.perHole, sc, 3, 0),
       };
@@ -124,7 +133,7 @@ export function roundBoard({ round, course, teams = [], roundPlayers = [], playe
       tiebreak: (a, b) => (a.cb && b.cb ? compareCountback(a.cb, b.cb) : 0),
     });
     const proj = holes.length
-      ? project(rows.map((r) => ({ id: r.id, perHole: r.perHole })), nums, { higherBetter: false, defaultValue: 0 })
+      ? project(rows.map((r) => ({ id: r.id, perHole: r.perHole, base: r.penalty || 0 })), nums, { higherBetter: false, defaultValue: 0 })
       : [];
     return { format: 'stroke', holes, rows: ranked, projection: attachProjection(ranked, proj, false), higherBetter: false };
   }
@@ -134,19 +143,22 @@ export function roundBoard({ round, course, teams = [], roundPlayers = [], playe
     const p = playersById[rp.player_id];
     const sc = scores[rp.player_id] || {};
     const hasHoles = Object.keys(sc).length > 0;
+    const pn = pen([rp.player_id]);
     if (!hasHoles && qrBy[rp.player_id]) {
-      const pts = qrBy[rp.player_id].points;
+      const raw = qrBy[rp.player_id].points;
+      const pts = raw - pn.strokes;
       return {
         id: rp.player_id, name: p ? p.nickname || p.name : '?', players: p ? [p] : [], handicap: rp.playing_handicap,
         scores: {}, thru: holes.length || 18, points: pts, vsExpected: pts - 2 * (holes.length || 18), finished: true,
-        perHole: Object.fromEntries(nums.map((n) => [n, pts / (nums.length || 18)])), quick: true,
+        perHole: Object.fromEntries(nums.map((n) => [n, raw / (nums.length || 18)])), quick: true,
+        penalty: pn.strokes, penaltyLines: pn.lines,
         sortValue: pts - 2 * (holes.length || 18), cb: null, form3: null,
       };
     }
-    const st = stablefordStatus(holes, sc, rp.playing_handicap);
+    const st = applyPenalty('stableford', stablefordStatus(holes, sc, rp.playing_handicap), pn.strokes);
     return {
       id: rp.player_id, name: p ? p.nickname || p.name : '?', players: p ? [p] : [], handicap: rp.playing_handicap,
-      scores: sc, ...st, sortValue: st.thru ? st.vsExpected : -999,
+      scores: sc, ...st, penaltyLines: pn.lines, sortValue: st.thru ? st.vsExpected : -999,
       cb: st.finished ? stablefordCountback(holes, st.perHole) : null,
       form3: recentForm(st.perHole, sc, 3, 2),
     };
@@ -156,7 +168,7 @@ export function roundBoard({ round, course, teams = [], roundPlayers = [], playe
     tiebreak: (a, b) => (a.cb && b.cb ? compareCountback(b.cb, a.cb) : 0),
   });
   const proj = holes.length
-    ? project(rows.map((r) => ({ id: r.id, perHole: r.perHole })), nums, { higherBetter: true, defaultValue: 2 })
+    ? project(rows.map((r) => ({ id: r.id, perHole: r.perHole, base: -(r.penalty || 0) })), nums, { higherBetter: true, defaultValue: 2 })
     : [];
   return { format: 'stableford', holes, rows: ranked, projection: attachProjection(ranked, proj, true), higherBetter: true };
 }
@@ -235,11 +247,11 @@ function fmtSigned(n) {
  * Stableford trophy: each player's raw Stableford points added across every Stableford round in the trip.
  * The live round (if any) adds a projection for the holes still to play.
  */
-export function stablefordTrophyBoard({ trip, rounds, coursesById, roundPlayers, playersById, scoresIdx, quickResults }) {
+export function stablefordTrophyBoard({ trip, rounds, coursesById, roundPlayers, playersById, scoresIdx, quickResults, adjustments = [] }) {
   const sRounds = rounds.filter((r) => r.trip_id === trip.id && r.format === 'stableford');
   const totals = {};
   const boards = sRounds.map((r) =>
-    roundBoard({ round: r, course: coursesById[r.course_id], roundPlayers: roundPlayers[r.id] || [], playersById, scoresIdx, quickResults })
+    roundBoard({ round: r, course: coursesById[r.course_id], roundPlayers: roundPlayers[r.id] || [], playersById, scoresIdx, quickResults, adjustments })
   );
   boards.forEach((b, i) => {
     for (const row of b.rows) {
@@ -264,7 +276,8 @@ export function stablefordTrophyBoard({ trip, rounds, coursesById, roundPlayers,
     const holes = b.holes.map((h) => h.n);
     const subs = rows.map((r) => {
       const liveRow = b.rows.find((x) => x.id === r.id);
-      return { id: r.id, base: r.total - (liveRow?.points ?? 0), perHole: liveRow?.perHole || Object.fromEntries(holes.map((n) => [n, 0])) };
+      // Base = everything but the live round's hole points (its penalty stays in the base).
+      return { id: r.id, base: r.total - (liveRow ? liveRow.points + (liveRow.penalty || 0) : 0), perHole: liveRow?.perHole || Object.fromEntries(holes.map((n) => [n, 0])) };
     });
     const p = project(subs, holes, { higherBetter: true, defaultValue: 2 });
     const byId = Object.fromEntries(p.map((x) => [x.id, x]));

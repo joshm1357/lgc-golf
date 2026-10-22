@@ -1016,3 +1016,46 @@ screen, "Viewing as Mike · read only", and Stop.
   `supabase/functions/notify/index.ts`, `docs/SIGN-IN-SETUP.md`, `tests/e2e/save-spot-test.mjs`.
 - **Tested:** Vitest 1145 (savespot 27 new); e2e `save-spot-test.mjs` 89 checks; signin-home 71, links 24, stage2 19,
   beta 46, phone 17, notify-prompt 31 pass.
+
+## Late organising jobs cost strokes (OV12, 22 Oct 2026) — branch `ov12-late-job-penalty`, migration 085
+- **Rule:** every group has a standard Rulebook rule "Late organising job" (Fines): more than N days overdue on a trip
+  job → X penalty strokes in the next round. Starts at 0 strokes / 5 days (listed, does nothing). Organisers change X
+  and N in the rule's Edit sheet (under the group's decision rule); it can be retired but not deleted. Both numbers are
+  RuleTags (disputable); an upheld verdict on either can be applied in one tap.
+- **Server decides:** `private.late_jobs()`; when a round goes live (`zz_late_jobs` trigger on rounds) each late job whose
+  owner plays costs X strokes once (`score_adjustments`, unique per job): "Late job: Book the bus (+2)". The job's own
+  trip first; another round only when that trip has no rounds left to start. Done before the round = nothing.
+  Daily `lgc-late-jobs` cron tells the owner once (notify_queue via `gov_queue`). Organiser waiver:
+  `waive_late_penalty` (recorded in `job_penalties` / on the adjustment). Owners can't move a late job's due date.
+- **Scoring:** `scoring.js penaltyFor / applyPenalty`; Stableford/4BBB −1 point per stroke, Ambrose/stroke play +1 net.
+  Leaderboard tag, scorecard line (RuleTag, disputable) + Penalty row, score entry, Stableford trophy.
+- **Tested:** SQL `supabase/tests/085_late_job_penalty.sql` (50 results, staging); Vitest 1172 (latejobs 27 new);
+  e2e `late-job-test.mjs` 30 checks + trip-plan, stroke, rulebook ×3, dispute, fourball, plan-ux pass.
+## Sign in first, as part of joining (ov13), branch `ov13-signin-first-join`, 22 Oct 2026
+- **Why:** Josh joined on his phone, missed Save your spot, then tapped "Sign in" with Google on his laptop and got a
+  separate, empty account. "That seems weird that I need Save my spot in addition to signing in with Google."
+- **Join links (sign-in builds):** any join link (invite, team, organiser) on a phone or laptop that isn't signed in
+  shows ONE screen first: "Join <group> — Sign in so it's you on any phone or laptop." Continue with Google (Google's
+  own button where it can, else the redirect, which keeps the code and `?to=` page), email + password in one form
+  ("Continue with email": tries sign in; no account → "Create my account" → 6-digit code if the project confirms;
+  existing email + wrong password → "Forgot password"), and a small "Just this phone for now" (the old phone-only
+  join; Save your spot stays for those people). After signing in the link is used by the SIGNED-IN account straight
+  away (no second Join tap) → pick name → notifications → the page.
+- **Already in:** signed in and already in that group with a name → straight to the page, toast "Welcome back, Kurt".
+  In it with no name (names freed) → straight to pick name.
+- **Signed in, no group:** "You're signed in as <email> but not in a group yet. Open your group's link (paste it here)
+  and you'll join as this account." with the link box showing (pasting joins as that account).
+- **Used one-use links:** organiser link → "This link's already been used. If that was you, sign in below." (086);
+  personal link opened when not signed in → same words + sign-in below.
+- **Taken name:** adds "That's you on another phone? Sign in there and connect Google or email, then sign in here."
+- **Save your spot wording:** "Connect Google or email so you can sign in on your laptop".
+- **Migration 086** (staging only): `used_link_info(token)` → `{state:'used'|'expired'}` for organiser links, else null.
+  Signed-in only, uses the wrong-guess limit, gives nothing else away. Old app versions never call it.
+- **Files:** `src/lib/joinfirst.js` (+test), `src/lib/links.js` (inviteNext: signed in → straight there),
+  `src/screens/Join.jsx` (JoinSignIn, auto-join), `src/components/SignInForms.jsx` (EmailContinue), `src/App.jsx`
+  (welcome back), `src/screens/YourGroups.jsx`, `ProfileSetup.jsx`, `PersonalLink.jsx`, `src/components/SaveSpot.jsx`,
+  `Group.jsx`, `src/lib/savespot.js`, `supabase/migrations/086_used_link_info.sql`,
+  `supabase/tests/086_signin_first_join.sql` (+expected), `tests/e2e/signin-first-test.mjs`.
+- **Tested:** Vitest 1166 (joinfirst 21 new); SQL on staging 32 checks, rolled back (signed-in user joining via player
+  invite, team link → cup_side, organiser link → role + once only, personal link via 046 claim_player_link, taken name,
+  used_link_info); e2e signin-first 59, save-spot 89, signin-home 76, links 24, stage2, notify-prompt, beta pass.

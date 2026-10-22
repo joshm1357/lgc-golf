@@ -15,6 +15,7 @@ import { StandardRules, RuleIdeas } from '../components/StandardRules.jsx';
 import { standardOptions, standardRule } from '../lib/standardrules.js';
 import { useRuleData, RulesFilterBar, RoundRules, TargetRules, RuleScopeFields, scopeRow, ScopeBadge } from '../components/RuleLayers.jsx';
 import { filterLocal, loadFilter, saveFilter, chipTarget, scopeFromValue } from '../lib/rulelayers.js';
+import { lateRulePatch, LATE_KEY } from '../lib/latejobs.js';
 
 const CATS = [
   ['format', 'Format & scoring'], ['side_comp', 'Side comps'], ['bonus', 'Bonuses'], ['handicap', 'Handicaps'],
@@ -69,7 +70,8 @@ export default function Rulebook() {
   const newStart = chipTarget(filter) ? { category: 'other', applies_to: ['all'], status: 'proposed', ...scopeFromValue(filter) } : null;
   const proposed = rb.rules.filter((r) => r.status === 'proposed');
   const old = rb.rules.filter((r) => r.status === 'rejected' || r.status === 'retired');
-  const showPicker = status.is_admin && rb.rules.filter((r) => r.status === 'active' || r.status === 'proposed').length === 0;
+  // The standard "Late organising job" rule (085) doesn't count as the group having rules.
+  const showPicker = status.is_admin && rb.rules.filter((r) => !r.system_key && (r.status === 'active' || r.status === 'proposed')).length === 0;
 
   return (
     <div className="page">
@@ -106,7 +108,7 @@ export default function Rulebook() {
             </div>
           );
         })}
-        {active.length === 0 && !showPicker && <div className="empty">No rules yet.{!status.is_admin && rb.rules.length === 0 ? ' Your organiser can start from a ready-made Rulebook.' : ''}</div>}
+        {active.filter((r) => !r.system_key).length === 0 && !showPicker && <div className="empty">No rules yet.{!status.is_admin && rb.rules.length === 0 ? ' Your organiser can start from a ready-made Rulebook.' : ''}</div>}
         </>}
 
         {(status.is_admin || (votingOn && status.role !== 'guest')) && <button type="button" className="btn gold block" onClick={() => setEditing(newStart ? { start: newStart } : {})}>{votingOn ? '+ Propose a rule' : '+ Add a rule'}</button>}
@@ -230,6 +232,7 @@ export function RuleSheet({ rule, start, onClose, onSaved, settings, localRules 
   // organiser decides (L.G.C does). Otherwise it's a vote / a challenge — the database refuses the shortcut.
   const direct = (k) => !settings || settings[k]?.decides === 'organiser';
   const [v, set] = useState(() => rule || start || { category: 'side_comp', applies_to: ['ambrose'], status: 'proposed' });
+  const isLate = rule?.system_key === LATE_KEY; // the standard late job rule: two numbers instead of "Worth" 
   const [busy, run] = useRun();
   const f = (k) => ({ value: v[k] ?? '', onChange: (e) => set({ ...v, [k]: e.target.value }) });
   const toggle = (a) => {
@@ -239,6 +242,14 @@ export function RuleSheet({ rule, start, onClose, onSaved, settings, localRules 
   };
   const save = (asStatus) => run(async () => {
     const row = { title: v.title.trim(), detail: v.detail?.trim() || null, category: v.category, applies_to: v.applies_to, value: v.value?.trim() || null };
+    if (isLate) {
+      const p = lateRulePatch(v.late_strokes, v.late_days);
+      if (p.error) throw new Error(p.error);
+      Object.assign(row, p);
+      delete row.value; // the server writes "2 strokes · 5 days" from the numbers
+      // Wording left as it was: the server rewrites it to the new numbers (it keeps an organiser's own wording).
+      if (row.detail === (rule.detail || '').trim()) row.detail = rule.detail;
+    }
     // Which standard rule it changes (073). Only sent when set (or being cleared), so an older database still works.
     if (v.overrides || rule?.overrides) row.overrides = v.overrides || null;
     Object.assign(row, scopeRow(v, rule)); // v3 (076): what it's for, and which of our rules it changes
@@ -260,7 +271,12 @@ export function RuleSheet({ rule, start, onClose, onSaved, settings, localRules 
     <Sheet title={rule ? 'Edit rule' : 'Propose a rule'} onClose={onClose}>
       <div className="stack">
         <label className="field"><span>Rule</span><input className="input" {...f('title')} placeholder="e.g. Birdie bonus" /></label>
-        <label className="field"><span>Worth / amount (optional)</span><input className="input" {...f('value')} placeholder="e.g. −1 stroke, +2 points, $5" /></label>
+        {isLate ? (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }} data-testid="late-rule-fields">
+            <label className="field"><span>Penalty strokes (0 = off)</span><input className="input" inputMode="numeric" data-testid="late-strokes" {...f('late_strokes')} /></label>
+            <label className="field"><span>Days overdue before it counts</span><input className="input" inputMode="numeric" data-testid="late-days" {...f('late_days')} /></label>
+          </div>
+        ) : <label className="field"><span>Worth / amount (optional)</span><input className="input" {...f('value')} placeholder="e.g. −1 stroke, +2 points, $5" /></label>}
         <label className="field"><span>Details</span><textarea className="textarea" rows={4} style={{ padding: 12 }} {...f('detail')} placeholder="How it works, when it counts" /></label>
         <label className="field"><span>Type</span>
           <select className="select" {...f('category')}>{CATS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
@@ -288,7 +304,8 @@ export function RuleSheet({ rule, start, onClose, onSaved, settings, localRules 
         {rule && <button type="button" className="btn gold block" disabled={busy || !ok} onClick={() => save(rule.status)}>Save</button>}
         {rule && isAdmin && rule.status === 'active' && direct('scrap_rule') && <button type="button" className="btn ghost block" disabled={busy} onClick={() => save('retired')}>Retire this rule</button>}
         {rule && isAdmin && (rule.status === 'retired' || rule.status === 'rejected') && <button type="button" className="btn ghost block" disabled={busy} onClick={() => save('active')}>Bring it back</button>}
-        {rule && (isAdmin || rule.status === 'proposed') && (
+        {isLate && <span className="small muted">A standard rule — switch it off with 0 strokes (or retire it); it can’t be deleted.</span>}
+        {rule && !isLate && (isAdmin || rule.status === 'proposed') && (
           <button type="button" className="btn ghost block" onClick={() => { if (window.confirm('Delete this rule completely?')) run(async () => { await must(supabase.from('rules').delete().eq('id', rule.id)); onSaved(); onClose(); toast('Deleted'); }); }}>Delete</button>
         )}
       </div>

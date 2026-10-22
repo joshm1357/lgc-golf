@@ -195,7 +195,7 @@ check((await page.getByTestId('call-vote').locator('input[type=checkbox]').count
 await page.getByTestId('call-the-vote').click();
 await page.getByTestId('how-it-goes-out').waitFor({ timeout: 5000 });
 check(true, 'after calling: How it goes out');
-await page.getByRole('button', { name: 'Done' }).click();
+await page.getByRole('button', { name: 'Done', exact: true }).click();
 await page.waitForTimeout(400);
 const stayPoll = db.plan_polls.find((p) => p.purpose === 'stay');
 check(!!stayPoll && db.plan_options.filter((o) => o.poll_id === stayPoll.id).length === 2, 'a vote with the two places');
@@ -257,9 +257,14 @@ check(db.plan_rsvps.find((r) => r.player_id === P2).status === 'in', 'Mike is no
 check(db.plan_transfers.some((t) => t.from_id === P2 && !t.to_id && Number(t.amount) === 150 && !t.confirmed), 'his payment waits to be ticked off');
 await waitNext(/Deposit sent/, 'Mike: waiting for the tick');
 
-// 7. The organiser ticks it off.
+// 7. The organiser ticks it off — on Organise (ov14: organiser-only things never show on the Overview).
 who = P1;
-await open('overview');
+await page.goto(`${BASE}#/plan/${PLAN}?view=overview`);
+await page.reload();
+await page.getByTestId('overview-glance').waitFor({ timeout: 15000 });
+check(!(await card().count()), 'the organiser’s Overview has no organiser Next step on it');
+await open('organise');
+check(await page.getByTestId('step-lockin').getAttribute('data-state') === 'current', 'deposits: the Lock in step is current');
 await waitNext(/Tick off 1 deposit/, 'organiser: tick off 1 deposit');
 await card().getByRole('button', { name: 'Check deposits' }).click();
 await sheet().getByText('Confirmed, not paid yet').waitFor({ timeout: 5000 });

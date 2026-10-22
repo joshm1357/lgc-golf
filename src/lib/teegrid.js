@@ -96,9 +96,11 @@ export function callChecklist(dates = [], { need = 1 } = {}) {
 }
 
 /** A short script to read on the phone. */
-export function callScript({ course = 'the course', group = 'our golf group', need = 1, dates = [] } = {}) {
+export function callScript({ course = 'the course', group = 'our golf group', need = 1, dates = [], memberDays = [] } = {}) {
   const when = dates.length ? dates.map(dayShort).join(', ') : 'a weekend coming up';
-  return `Hi, I’m ringing for ${group}. We’re planning a golf weekend and looking at ${course}. We’d need ${need} tee time${need === 1 ? '' : 's'} in a row — ${need * 4} players. Could you tell me what you’d have on ${when}? Nothing to book yet — we’re working out which days suit. And what are your usual social times during the week and on weekends, the biggest group you take, and the price each?`;
+  // ov17: when the research says members have some of those days, ask for times around them.
+  const around = memberDays.length ? ` I know members have the course on ${memberDays.join(' and ')} — what could we get around that?` : '';
+  return `Hi, I’m ringing for ${group}. We’re planning a golf weekend and looking at ${course}. We’d need ${need} tee time${need === 1 ? '' : 's'} in a row — ${need * 4} players. Could you tell me what you’d have on ${when}?${around} Nothing to book yet — we’re working out which days suit. And what are your usual social times during the week and on weekends, the biggest group you take, and the price each?`;
 }
 
 /**

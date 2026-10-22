@@ -174,8 +174,8 @@ const SHOTS_1440 = process.env.SHOTS_1440 || `${SHOTS}/1440`;
 fs.mkdirSync(SHOTS_1440, { recursive: true });
 const hashOf = (page) => decodeURIComponent(new URL(page.url()).hash);
 
-// The jobs, at a given width. Laptop (1024 px and up): the trip's panels are part of Trips → Organise.
-// Tablet and phone: Organise is unchanged (no panels), and the tools are reached from their new homes.
+// The jobs, at a given width. Laptop (1024 px and up): Organise has the steps across the top and a slim status column
+// (ov14). Tablet and phone: the steps stacked, no status column; the tools are reached from their new homes.
 async function flow(width, mobile = false) {
   db = freshDb();
   const tag = `${width}`;
@@ -188,21 +188,31 @@ async function flow(width, mobile = false) {
   check(hashOf(page).includes('view=organise'), `${tag}: /desk forwards to the trip's Organise view (${hashOf(page)})`);
   if (laptop) {
     await page.getByTestId('organise-panels').waitFor({ timeout: 15000 });
-    await page.getByTestId('panel-kitty').waitFor({ timeout: 10000 });
+    await page.getByTestId('panel-votes').waitFor({ timeout: 10000 });
+    // ov14: the right-hand column is status only (who's in, open votes); the rest lives under its step or More.
     const panels = await page.locator('.org-side .desk-panel').evaluateAll((els) => els.map((e) => e.dataset.testid));
-    check(['panel-people', 'panel-votes', 'panel-kitty', 'panel-jobs', 'panel-rooms', 'panel-checklist', 'panel-rounds', 'panel-tribunal'].every((p) => panels.includes(p)), `${tag}: every panel is on Organise (${panels.join(', ')})`);
+    check(panels.join(',') === 'panel-people,panel-votes', `${tag}: the right-hand column is who's in and open votes only (${panels.join(', ')})`);
+    check(await page.getByRole('list', { name: 'Organising steps' }).isVisible(), `${tag}: the steps run across the top`);
+    check(await page.locator('.org-side .btn.gold').count() === 0 && await page.locator('.btn.gold:visible').count() === 1, `${tag}: one big button on the page, none in the status column`);
     check((await page.getByTestId('desk-countdown').innerText()).includes('6 weeks'), `${tag}: the countdown says in 6 weeks`);
     check((await page.getByTestId('panel-people').innerText()).includes('Haven’t said'), `${tag}: who's in shows who hasn't said`);
-    check((await page.getByTestId('panel-rounds').innerText()).includes('8:00'), `${tag}: rounds show tee times`);
-    check((await page.getByTestId('panel-tribunal').innerText()).includes('Di'), `${tag}: the open Tribunal case is listed`);
-    check((await page.getByTestId('panel-kitty').innerText()).includes('$1,200'), `${tag}: the kitty panel shows the total`);
     const main = await page.locator('.org-main').boundingBox();
     const side = await page.getByTestId('organise-panels').boundingBox();
-    check(main && side && side.x > main.x + main.width - 1, `${tag}: the panels sit down the right of the tabs`);
+    check(main && side && side.x > main.x + main.width - 1, `${tag}: the status column sits down the right of the steps`);
     await page.screenshot({ path: `${SHOTS}/${tag}-1-organise.png`, fullPage: true });
+    // Rounds & tee times and the set-up checklist are on the On the day step; the Tribunal is under More.
+    await page.getByRole('list', { name: 'Organising steps' }).getByRole('button', { name: /On the day/ }).click();
+    await page.getByTestId('panel-rounds').getByText(/8:00/).first().waitFor({ timeout: 10000 }).catch(() => {});
+    check((await page.getByTestId('panel-rounds').innerText()).includes('8:00'), `${tag}: rounds show tee times (On the day)`);
+    check(await page.getByTestId('panel-checklist').isVisible(), `${tag}: the set-up checklist is on On the day`);
+    await page.getByTestId('organise-more').getByRole('tab', { name: /Tribunal/ }).click();
+    await page.getByTestId('panel-tribunal').getByText(/Di/).first().waitFor({ timeout: 10000 }).catch(() => {});
+    check((await page.getByTestId('panel-tribunal').innerText()).includes('Di'), `${tag}: the open Tribunal case is listed (More)`);
 
-    // 2. Close a vote from its panel (the leading option is picked by default).
-    await page.getByTestId('panel-votes').getByRole('button', { name: 'Close & pick' }).click();
+    // 2. Close a vote on the Vote step (the leading option is picked by default).
+    await page.getByRole('list', { name: 'Organising steps' }).getByRole('button', { name: /Vote/ }).click();
+    await page.getByRole('button', { name: /Close now & pick the winner/ }).first().click();
+    await page.getByRole('button', { name: 'Pick this winner' }).click();
     await page.getByTestId('panel-votes').getByText('No votes open').waitFor({ timeout: 8000 });
     check(db.plan_polls[0].status === 'closed' && db.plan_polls[0].winner_option_id === 'o1', `${tag}: the vote is closed with Navy as the winner`);
 
@@ -222,17 +232,18 @@ async function flow(width, mobile = false) {
     await page.keyboard.press('Enter');
     await page.getByTestId('costs-table').getByText('Green fees').waitFor({ timeout: 8000 });
     check(db.plan_costs.some((c) => c.title === 'Green fees' && Number(c.amount) === 600), `${tag}: the cost is saved`);
-    check((await page.getByTestId('who-owes').innerText()).includes('→'), `${tag}: who pays whom is shown`);
+    check(/who pays who/i.test(await page.getByTestId('step-money').innerText()), `${tag}: who pays whom is shown (once)`);
+    check(await page.getByTestId('who-owes').count() === 0, `${tag}: the costs aren't listed twice (table only, no second who-pays-whom)`);
     await page.screenshot({ path: `${SHOTS}/${tag}-2-cost.png`, fullPage: true });
   } else {
-    await page.getByRole('tablist', { name: 'Sections' }).waitFor({ timeout: 15000 });
+    await page.getByTestId('organise-steps').waitFor({ timeout: 15000 });
     await page.waitForTimeout(800);
-    check(await page.getByTestId('organise-panels').count() === 0, `${tag}: Organise on a ${mobile ? 'phone' : 'tablet'} is unchanged (no panels)`);
+    check(await page.getByTestId('organise-panels').count() === 0, `${tag}: Organise on a ${mobile ? 'phone' : 'tablet'}: the steps stacked, no status column`);
     await page.screenshot({ path: `${SHOTS}/${tag}-1-organise.png`, fullPage: true });
   }
 
   // 4. Paper cards from the round's tools on the leaderboard (buttons on a laptop, ⋯ on a phone), keyboard only.
-  await go(page, '/');
+  await go(page, '/leaderboard');
   await page.getByTestId('round-tools').waitFor({ timeout: 15000 });
   if (laptop) {
     check(await page.getByTestId('round-tools').getByRole('link', { name: /Present/ }).isVisible(), `${tag}: the round's tools are buttons`);
@@ -273,7 +284,7 @@ async function flow(width, mobile = false) {
   if (laptop) await page.getByRole('navigation', { name: 'Group' }).getByRole('link', { name: 'Players table' }).click();
   else await page.getByTestId('players-table-link').click();
   await page.getByTestId('players-table').waitFor({ timeout: 10000 });
-  check(hashOf(page) === '#/group/players', `${tag}: the players table lives in Group & invites (${hashOf(page)})`);
+  check(hashOf(page) === '#/group/players', `${tag}: the players table lives in Players & group (${hashOf(page)})`);
   await page.getByLabel('Paste players').fill('Name\tHandicap\nZed New\t11\nBig Al\t15\nBo Test\t8\nGus\t77');
   const prev = await page.getByTestId('paste-preview').innerText();
   check(prev.includes('New') && prev.includes('20 → 15') && prev.includes('No change') && prev.includes('Skipped'), `${tag}: the preview shows new, change, no change and skipped`);
@@ -298,7 +309,7 @@ await flow(375, true);
   await page.locator('.side').waitFor({ timeout: 15000 });
   const side = await page.locator('.side').innerText();
   check(!/Trip desk|\bDesk\b/.test(side), 'the sidebar has no Trip desk');
-  check(side.includes('Trips') && side.includes('Courses') && side.includes('Group & invites'), 'the sidebar still has Trips, Courses and Group & invites');
+  check(side.includes('Trips') && side.includes('Courses') && side.includes('Players & group'), 'the sidebar still has Trips, Courses and Players & group');
   // Shortcuts: ? list, Esc, g t, g l, / finder.
   await page.keyboard.press('?');
   await page.getByTestId('shortcut-list').waitFor({ timeout: 4000 });
@@ -311,7 +322,7 @@ await flow(375, true);
   check(hashOf(page) === '#/plan', `g t opens Trips (${hashOf(page)})`);
   await page.keyboard.press('g'); await page.keyboard.press('l');
   await page.waitForTimeout(500);
-  check(/#\/$/.test(page.url()), `g l goes to the leaderboard (${page.url()})`);
+  check(/#\/leaderboard$/.test(page.url()), `g l goes to the leaderboard (${page.url()})`);
   await page.keyboard.press('g'); await page.keyboard.press('p');
   await page.getByTestId('players-table').waitFor({ timeout: 8000 });
   check(hashOf(page) === '#/group/players', 'g p opens the players table');
@@ -380,7 +391,7 @@ await flow(375, true);
 
   // Present and print, from the round's tools.
   db.scores.push({ id: crypto.randomUUID(), round_id: R1, subject_id: pid(0), subject_type: 'player', hole: 1, strokes: 4, picked_up: false, updated_at: now });
-  await go(page, '/');
+  await go(page, '/leaderboard');
   await page.getByTestId('round-tools').getByRole('link', { name: /Present/ }).click();
   await page.getByTestId('present-board').waitFor({ timeout: 10000 });
   check(hashOf(page) === `#/round/${R1}/present`, 'Present opens from the round');
@@ -418,10 +429,11 @@ await flow(375, true);
   await page.route('https://*.supabase.co/rest/v1/rpc/my_status*', (route) => route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' },
     body: JSON.stringify({ is_member: true, is_admin: false, player_id: pid(1), group_name: 'Hunter Weekend', group_id: GROUP, role: 'player', legacy: false, groups: [{ id: GROUP, name: 'Hunter Weekend', slug: 'hunter', role: 'player' }] }) }));
   await go(page, `/plan/${PLAN}?view=organise`);
-  await page.getByRole('tablist', { name: 'Sections' }).waitFor({ timeout: 15000 });
+  await page.getByTestId('organise-steps').waitFor({ timeout: 15000 });
   await page.waitForTimeout(800);
-  check(await page.getByTestId('organise-panels').count() === 0, 'a player sees Organise as before (no organiser panels)');
-  await go(page, '/');
+  check(await page.getByTestId('organise-panels').count() === 0, 'a player sees the steps, with no organiser panels');
+  check(await page.getByTestId('primary').count() === 0, 'a player gets no organiser big button');
+  await go(page, '/leaderboard');
   await page.locator('.side').waitFor({ timeout: 10000 });
   await page.waitForTimeout(600);
   check(await page.getByTestId('round-tools').count() === 0, 'a player has no round tools');
@@ -437,7 +449,7 @@ await flow(375, true);
   const { ctx, page } = await open(1440);
   await page.setViewportSize({ width: 1440, height: 900 });
   await go(page, `/plan/${PLAN}?view=organise`);
-  await page.getByTestId('panel-tribunal').waitFor({ timeout: 15000 });
+  await page.getByTestId('panel-votes').waitFor({ timeout: 15000 });
   await page.waitForTimeout(500);
   await page.screenshot({ path: `${SHOTS_1440}/1-organise.png` });
   await go(page, `/plan/${PLAN}?view=organise&tab=kitty`);
@@ -461,7 +473,7 @@ await flow(375, true);
   await page.getByLabel('Paste the scorecard').fill([row('Hole', holes.map((h) => h.n)), row('Par', PAR), row('Index', SI)].join('\n'));
   await page.getByTestId('course-preview').waitFor({ timeout: 5000 });
   await page.screenshot({ path: `${SHOTS_1440}/6-courses-paste.png` });
-  await go(page, '/');
+  await go(page, '/leaderboard');
   await page.getByTestId('round-tools').waitFor({ timeout: 10000 });
   await page.getByTestId('round-tools').scrollIntoViewIfNeeded();
   await page.screenshot({ path: `${SHOTS_1440}/7-round-tools.png` });

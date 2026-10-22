@@ -14,11 +14,11 @@ import { isRoundFinished } from '../lib/replay.js';
 import { fmtRange } from '../lib/plan.js';
 import { isYearOnly, tripWhen } from '../lib/trips.js';
 import { tripDays, tripCourses, roundFormat, roundWinner, countdownWords, whosIn, tripHonours } from '../lib/tripsummary.js';
-import { useTripComps } from '../components/CompsChip.jsx';
 import { WeatherChip } from '../components/Weather.jsx';
 import { CourseGuideChip } from '../components/CourseGuideLink.jsx';
 import TripHistory from '../components/TripHistory.jsx';
 import { ImportLink } from './AiImport.jsx';
+import TripStatus from '../components/TripStatus.jsx'; // ov15: the trip's leaderboards and comps
 
 function useTripPhotos(tripId, on) {
   const [photos, setPhotos] = useState([]);
@@ -59,13 +59,13 @@ function RoundLine({ round, course, board, upcoming }) {
   );
 }
 
-export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage = null, onOrganise = null }) {
+// votes: the open votes (OverviewVotes), shown straight after the trip at a glance.
+export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage = null, onOrganise = null, votes = null }) {
   const data = useData();
   const { status } = useSession();
   const feedOn = useFeature('feed');
   const dinnerOn = useFeature('dinner_awards');
   const statsOn = useFeature('stats');
-  const cupOn = useFeature('cup');
   const tripId = trip?.id || plan?.trip_id || null;
   const rounds = useMemo(() => (tripId ? data.rounds.filter((r) => r.trip_id === tripId) : []), [data.rounds, tripId]);
   const days = useMemo(() => tripDays(rounds, data.coursesById, tripId), [rounds, data.coursesById, tripId]);
@@ -75,7 +75,6 @@ export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage 
     round: r, course: data.coursesById[r.course_id], teams: data.teamsByRound[r.id] || [], roundPlayers: data.roundPlayers[r.id] || [],
     playersById: data.playersById, scoresIdx: scores.index, quickResults: data.quick_results,
   })])), [rounds, data, scores.index]);
-  const [comps] = useTripComps(tripId);
   const photos = useTripPhotos(tripId, feedOn);
   const people = whosIn({ rsvps, rounds, roundPlayers: data.roundPlayers, teamsByRound: data.teamsByRound, playersById: data.playersById });
   const honours = tripHonours(data.honour_board, tripId);
@@ -88,7 +87,6 @@ export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage 
   const me = status?.player_id;
   const myJobs = items.filter((j) => j.kind === 'job' && j.owner_id === me && !j.done);
   const bring = items.filter((j) => j.kind === 'bring');
-  const cupComp = comps.find((c) => c.kind === 'cup' && !c.retired);
 
   return (
     <div className="stack" style={{ gap: 14 }}>
@@ -97,13 +95,18 @@ export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage 
         {photos[0] && <img src={photos[0].photo_url} alt="" style={{ width: '100%', maxHeight: 200, objectFit: 'cover', borderRadius: 10 }} />}
         <div className="row between" style={{ gap: 8, alignItems: 'flex-start' }}>
           <div className="grow" style={{ minWidth: 0 }}>
-            {/* The plan page's header already shows the dates and place. */}
             {!plan && <div className="small muted">{[start ? (isYearOnly(trip) ? tripWhen(trip) : fmtRange(start, end)) : 'Dates TBC', place || null].filter(Boolean).join(' · ')}</div>}
-            {!done && plan && <div style={{ fontWeight: 800 }}>{countdown === 'On now' ? '⛳ On now' : '🔒 Locked in'}</div>}
+            {!done && plan && <div style={{ fontWeight: 800 }} data-testid="overview-stage">{countdown === 'On now' || stage === 'on' ? '⛳ On now' : stage === 'locked' ? '🔒 Locked in' : stage === 'idea' ? '💡 Just an idea so far' : '🗳️ Still being decided'}</div>}
             {done && <div style={{ fontWeight: 800 }}>🏁 Done and dusted</div>}
           </div>
           {countdown && countdown !== 'On now' && <span className="chip" style={{ alignSelf: 'center', background: 'var(--navy)', borderColor: 'var(--navy)', color: '#fff', fontWeight: 800, whiteSpace: 'nowrap' }}>{countdown}</span>}
         </div>
+        {plan && !done && (
+          <div className="row small" style={{ gap: 14, flexWrap: 'wrap' }} data-testid="overview-glance">
+            <span>📍 <strong>{plan.location_name || 'Place to be decided'}</strong></span>
+            <span>📅 <strong>{start ? fmtRange(start, end) : 'Dates to be decided'}</strong></span>
+          </div>
+        )}
         {people.length > 0 && (
           <div className="row" style={{ gap: 8 }}>
             <AvatarStack players={people} />
@@ -111,6 +114,10 @@ export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage 
           </div>
         )}
       </div>
+
+      {votes}
+      {/* ov15: the trip's status — live board, what we're playing for (with leaders), and each round's leaderboard. */}
+      {tripId && <TripStatus trip={trip || data.trips.find((t) => t.id === tripId)} overview />}
 
       {/* Results (done) */}
       {done && honours.length > 0 && (
@@ -132,21 +139,10 @@ export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage 
             </div>
           ))}
         </div>
-      ) : (
-        <div className="card pad small muted">No rounds set up yet.{status?.is_admin && plan && onOrganise ? ' Add them under Organise → Set up your trip.' : ''}</div>
+      ) : (stage === 'idea' || stage === 'deciding') ? null : (
+        <div className="card pad small muted">No rounds set up yet.</div>
       )}
 
-      {/* What you're playing for */}
-      {comps.length > 0 && (
-        <div className="card pad stack" style={{ gap: 6 }}>
-          <strong>🎯 What you’re playing for</strong>
-          {comps.filter((c) => !c.retired).map((c) => <div key={c.id} className="small" style={{ fontWeight: 600 }}>{c.name}</div>)}
-          <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
-            <Link to="/comps-board" className="small" style={{ fontWeight: 700 }}>Standings →</Link>
-            {cupOn && cupComp && <Link to="/cup" className="small" style={{ fontWeight: 700 }}>The Cup →</Link>}
-          </div>
-        </div>
-      )}
 
       {/* Your bits (coming up) */}
       {!done && plan && (myJobs.length > 0 || bring.length > 0) && (

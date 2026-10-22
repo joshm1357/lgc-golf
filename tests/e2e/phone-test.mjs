@@ -111,7 +111,7 @@ page.on('pageerror', (e) => errors.push(`[${step}] ${String(e)} ${String(e.stack
 const scripts = new Set();
 page.on('request', (r) => { const u = r.url(); if (u.includes('/assets/') && u.endsWith('.js')) scripts.add(u.split('/').pop()); });
 
-// 1. Leaderboard opens with only the starting file.
+// 1. The first screen (This trip since ov15, with today's leaderboard) opens with only the starting file.
 await page.goto(BASE);
 await page.getByText('Saturday').first().waitFor({ timeout: 15000 });
 await page.waitForTimeout(800);
@@ -134,7 +134,7 @@ check(listed.every((f) => cached.includes(`/lgc-golf/${f}`)), `service worker sa
 await page.reload(); // now controlled by the service worker
 await page.getByText('Saturday').first().waitFor();
 await ctx.setOffline(true);
-for (const [hash, text] of [['#/tribunal', 'Tribunal'], ['#/plan', 'Ideas and voting'], ['#/comps', 'Closest'], ['#/admin', 'Admin']]) {
+for (const [hash, text] of [['#/tribunal', 'Tribunal'], ['#/plan', 'Ideas and voting'], [`#/comps?r=${ROUND}`, 'Closest'], ['#/admin', 'Admin']]) {
   await page.evaluate((h) => { window.location.hash = h; }, hash);
   let ok = false;
   // Scoped to the page: on a laptop build the (hidden on phones) sidebar has the same words.
@@ -162,7 +162,7 @@ await page.goto(BASE).catch(() => {});
 let appBack = false;
 try { await page.getByText('Saturday').first().waitFor({ timeout: 8000 }); appBack = true; } catch { /* fail below */ }
 check(appBack, 'after a Wi-Fi login page, the app still opens offline');
-await page.evaluate(() => { window.location.hash = '#/comps'; });
+await page.evaluate((r) => { window.location.hash = `#/comps?r=${r}`; }, ROUND); // a round's side comps (ov15)
 let compsOk = false;
 try { await page.getByText('Closest').first().waitFor({ timeout: 6000 }); compsOk = true; } catch { /* fail below */ }
 check(compsOk, 'offline: Comps still opens after the weak-signal and Wi-Fi tests');

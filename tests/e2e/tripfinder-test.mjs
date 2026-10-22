@@ -142,8 +142,8 @@ const page = await ctx.newPage();
 page.on('pageerror', (e) => fails.push(`page error: ${e}`));
 page.on('dialog', (d) => d.accept());
 
-// 1. The trip: organisers see "Find a course".
-await page.goto(`${BASE}#/plan/${PLAN}`);
+// 1. The trip: organisers see "Find a course" (Organise → Plan, ov14).
+await page.goto(`${BASE}#/plan/${PLAN}?view=organise&step=plan`);
 await page.locator('[data-testid="tf-link"]').waitFor({ timeout: 15000 });
 check(true, 'the trip shows "Find a course" for the organiser');
 await page.locator('[data-testid="tf-link"]').click();

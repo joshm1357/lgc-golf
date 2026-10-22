@@ -54,11 +54,11 @@ export default function Admin() {
     return (
       <div className="page">
         <Header back title="Admin" sub="For whoever's running the trip" />
-        {/* No admin PIN any more (083): an organiser makes you one in Group & invites, or sends you an organiser link. */}
+        {/* No admin PIN any more (083): an organiser makes you one in Players & group, or sends you an organiser link. */}
         <div className="section">
           <div className="card pad stack" style={{ gap: 6 }}>
             <strong>Only organisers can open Admin</strong>
-            <span className="small muted">Ask an organiser to make you one (More → Group & invites → People), or to send you their organiser link.</span>
+            <span className="small muted">Ask an organiser to make you one (Players & group → People and roles), or to send you their organiser link.</span>
           </div>
         </div>
       </div>

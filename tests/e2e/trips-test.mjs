@@ -179,11 +179,14 @@ const rpc = writes.find((w) => w.method === 'RPC' && w.table === 'start_trip_vot
 check(!!ins && ins.body.name === 'Winter Escape' && ins.body.proposed === false, 'suggestion saved as a trip (admin: not just an idea)');
 check(!!rpc && rpc.body.p_dates.length === 1 && rpc.body.p_dates[0].end_date === '2027-06-13' && rpc.body.p_places[0].label === 'Orange', 'its dates and place votes are opened with the options typed');
 
-// 3. An idea: stage bar, votes, chat.
+// 3. An idea: the steps (Plan is current — approve or pass), its votes under Vote, chat under More.
 await page.goto(`${BASE}#/plan/${IDEA}`);
-await page.getByText('Which weekend works?').first().waitFor({ timeout: 10000 });
-check(await page.getByRole('listitem').filter({ hasText: 'Idea' }).first().getAttribute('aria-current') === 'step', 'stage bar shows Idea');
+await page.getByTestId('step-plan').waitFor({ timeout: 10000 });
+check(await page.getByTestId('step-plan').getAttribute('data-state') === 'current', 'an idea: the Plan step is current');
+check(await page.getByTestId('step-plan').getByRole('button', { name: /Approve/ }).isVisible(), 'an idea: Approve is on the Plan step');
 check(await page.getByText('Organiser:').first().isVisible(), 'organiser shown');
+await page.getByTestId('step-vote').getByRole('button').first().click();
+await page.getByText('Which weekend works?').first().waitFor({ timeout: 10000 });
 await page.screenshot({ path: `${SHOTS}/t3-idea-vote.png`, fullPage: true });
 await noSideScroll('Trip vote tab');
 await page.getByRole('tab', { name: /Chat/ }).click();
@@ -197,7 +200,7 @@ await page.screenshot({ path: `${SHOTS}/t4-chat.png`, fullPage: true });
 await noSideScroll('Chat tab');
 
 // 4. Admin closes a vote through the server step.
-await page.getByRole('tab', { name: /Vote/ }).click();
+await page.getByTestId('step-vote').getByRole('button').first().click();
 await page.getByRole('button', { name: /Close now & pick the winner/ }).first().click();
 writes.length = 0;
 await page.getByRole('button', { name: 'Pick this winner' }).click();

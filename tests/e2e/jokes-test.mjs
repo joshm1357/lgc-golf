@@ -102,7 +102,7 @@ const settle = () => page.waitForTimeout(600);
 
 // 1. Organiser: More has no Running jokes item; /in-jokes isn't a screen any more.
 await page.goto(`${BASE}#/more`);
-await page.getByText('Group & invites').first().waitFor({ timeout: 15000 });
+await page.getByText('Players & group').first().waitFor({ timeout: 15000 });
 const more = await page.locator('body').innerText();
 check(!/running jokes|in-jokes/i.test(more), 'organiser: More has no Running jokes item');
 check(await page.locator('a[href*="in-jokes"]').count() === 0, 'organiser: no link to /in-jokes anywhere on More');
@@ -140,7 +140,7 @@ await noSideScroll('dinner awards');
 admin = false;
 await page.goto(`${BASE}#/more`);
 await page.reload();
-await page.getByText('Group & invites').first().waitFor({ timeout: 15000 });
+await page.getByText('Players & group').first().waitFor({ timeout: 15000 });
 check(!/running jokes|in-jokes/i.test(await page.locator('body').innerText()), 'player: More has no Running jokes item');
 await page.goto(`${BASE}#/group`);
 await page.getByText('Your data').first().waitFor({ timeout: 15000 }).catch(() => {});

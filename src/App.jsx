@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { startOutbox, outboxCount, onOutboxChange, onOutboxDrop } from './lib/outbox.js';
-import { HashRouter, Routes, Route, useLocation, useParams } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { SessionProvider, DataProvider, useSession, useData, useFeature } from './lib/store.jsx';
 import { TabBar, Toaster, Loading, UpdateBanner, toast } from './components/ui.jsx';
 import { lazyScreen, LazyArea } from './lib/lazy.jsx';
@@ -30,6 +30,8 @@ import { personalCode } from './lib/personal.js';
 import { takeWelcome, welcomeName } from './lib/joinfirst.js';
 import ProfileSetup, { AwaitingApproval } from './screens/ProfileSetup.jsx';
 import Leaderboard from './screens/Leaderboard.jsx';
+import TripNow from './screens/TripNow.jsx';
+import { pickActiveTrip } from './lib/activetrip.js';
 import ScoreEntry from './screens/ScoreEntry.jsx';
 import Feed from './screens/Feed.jsx';
 import More from './screens/More.jsx';
@@ -102,10 +104,31 @@ function JoinInsideRoute({ code: given }) {
   );
 }
 
+// The first tab (ov15): This trip. A round's leaderboard is #/?r=<round> — every recap link already in a group chat
+// still lands on it. A quick round (one round, no trip) keeps its leaderboard here.
+function Home() {
+  const [params] = useSearchParams();
+  const { status } = useSession();
+  return params.get('r') || status?.quick ? <Leaderboard /> : <TripNow />;
+}
+
+// The old Comps tab (#/comps): with a round it's that round's side comps (links from posts and awards). Without one:
+// the live round's side comps if it has any today, else the trip's comps and standings.
+function CompsRoute() {
+  const [params] = useSearchParams();
+  const data = useData();
+  const r = params.get('r');
+  if (r || params.get('kind') || params.get('hole')) return <FeatureRoute feature="side_comps" label="Side comps"><Comps /></FeatureRoute>;
+  const live = data.liveRound;
+  if (live && ((live.ctp_holes || []).length || (live.ld_holes || []).length || (live.own_comps || []).length)) return <Navigate to={`/comps?r=${live.id}`} replace />;
+  const trip = pickActiveTrip({ trips: data.trips, rounds: data.rounds })?.trip || data.currentTrip;
+  return <Navigate to={trip ? `/comps-board?trip=${trip.id}` : '/comps-board'} replace />;
+}
+
 // Screens of a switched-off feature (opened from an old post, a bookmark or a notification) say so instead of half-working.
 function FeatureRoute({ feature, label, children }) {
   return useFeature(feature) ? children : (
-    <div className="page"><div className="empty" style={{ marginTop: 40 }}>{label} is switched off for this group.<div className="small muted" style={{ marginTop: 6 }}>An organiser can switch it on in More → Group & invites → Features.</div></div></div>
+    <div className="page"><div className="empty" style={{ marginTop: 40 }}>{label} is switched off for this group.<div className="small muted" style={{ marginTop: 6 }}>An organiser can switch it on in Players & group → Features.</div></div></div>
   );
 }
 function DrawOverlayIfOn() {
@@ -241,10 +264,11 @@ function Inside() {
       {offline && <div className="sync" role="status">📵 No signal — showing the copy saved on this phone.{status.viewing ? '' : ' Scores you enter are kept and sent when signal comes back.'}</div>}
       <LazyArea resetKey={loc.pathname} fallback={<Loading />}>
       <Routes>
-        <Route path="/" element={<Leaderboard />} />
+        <Route path="/" element={<Home />} />
+        <Route path="/leaderboard" element={<Leaderboard />} />
         <Route path="/score/:roundId" element={<ScoreEntry />} />
         <Route path="/feed" element={<FeatureRoute feature="feed" label="The Feed"><Feed /></FeatureRoute>} />
-        <Route path="/comps" element={<FeatureRoute feature="side_comps" label="Side comps"><Comps /></FeatureRoute>} />
+        <Route path="/comps" element={<CompsRoute />} />
         <Route path="/map" element={<FeatureRoute feature="location" label="Where’s everyone"><MapScreen /></FeatureRoute>} />
         <Route path="/more" element={<More />} />
         <Route path="/notifications" element={<FeatureRoute feature="notifications" label="Phone notifications"><Notifications /></FeatureRoute>} />
@@ -289,7 +313,7 @@ function Inside() {
         <Route path="/round/:roundId/present" element={<Present />} />
         <Route path="/present" element={<Present />} />
         <Route path="/desk/*" element={<DeskForward />} />
-        <Route path="*" element={<Leaderboard />} />
+        <Route path="*" element={<Home />} />
       </Routes>
       </LazyArea>
       {!hideTabs && <TabBar />}

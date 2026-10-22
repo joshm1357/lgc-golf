@@ -22,24 +22,25 @@ import { startExtras } from '../lib/extras.js';
 import { askHelper, Rate, Remaining } from './AiHelper.jsx';
 import { AskChip } from '../components/AskChip.jsx';
 import AiChat from '../components/AiChat.jsx';
+import { openPlanner } from '../components/Caddie.jsx';
 
 /** The Trips tab's AI bits in one line: [✨ Plan it with AI] for organisers, and the "✨ Ask" chip for everyone. */
 export function TripsAi() {
   const on = useFeature('ai_helper');
   const planner = useFeature('planner');
   const { status } = useSession();
-  const [open, setOpen] = useState(false);
   if (!on || !planner) return null;
-  const carryOn = open ? 0 : chatSize(loadChat(status?.group_id)) || (pending.has(status?.group_id) ? 1 : 0);
+  const carryOn = chatSize(loadChat(status?.group_id)) || (pending.has(status?.group_id) ? 1 : 0);
+  // ov16: "Plan it with AI" IS the Caddie now — this is a shortcut that opens it in ✨ Plan a trip mode (the chat
+  // beside the trip screen, which fills in as you talk). PlanWithAiSheet below is kept for older links only.
   return (
     <div className="stack" style={{ gap: 8 }}>
       {status?.is_admin && (
-        <button type="button" className="btn ghost block" style={{ minHeight: 52, borderColor: 'var(--navy)', fontWeight: 800 }} onClick={() => setOpen(true)}>
+        <button type="button" className="btn ghost block" style={{ minHeight: 52, borderColor: 'var(--navy)', fontWeight: 800 }} onClick={openPlanner} data-testid="plan-with-ai">
           ✨ {carryOn ? `Carry on your plan (${carryOn} messages)` : 'Plan it with AI'}
         </button>
       )}
       <div style={{ textAlign: 'center' }}><AskChip about="trips" inline /></div>
-      {open && <PlanWithAiSheet onClose={() => setOpen(false)} />}
     </div>
   );
 }
@@ -84,7 +85,7 @@ export function PlanWithAiSheet({ onClose }) {
     if (r.remaining) setRemaining(r.remaining);
     if (r.logId != null) setLogId(r.logId);
     const done = finish(r, before, mine);
-    if (done && r.kind === 'chat') { setPrev(draft); setDraft(r.draft); setSummary(r.summary || []); }
+    if (done && r.kind === 'chat' && r.draft) { setPrev(draft); setDraft(r.draft); setSummary(r.summary || []); }
     if (done) { setTurns(done.turns); return; }
     setErr(r.text || 'The helper didn’t answer — try again.');
   };

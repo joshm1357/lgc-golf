@@ -3,10 +3,11 @@
 // a 'ruling' case that also records what was disputed (cases.subject_kind / subject_ref). Pure functions only; the
 // chip and sheet are in components/RuleTag.jsx, the database decides (raise_dispute).
 
-/** What can be disputed, by table → fields. Same list as private.dispute_fields in 082. Scores and names never. */
+/** What can be disputed, by table → fields. Same list as private.dispute_fields in 082 (+ players.handicap, 087). Scores and names never. */
 export const DISPUTABLE = {
   rounds: ['comp_bonus', 'min_drives', 'rules', 'format', 'ctp_holes', 'ld_holes', 'own_comps'],
   teams: ['handicap'],
+  players: ['handicap'], // 087 (ov15): a player's handicap, from the players list
   round_games: ['stake', 'options', 'settings'],
   cup_matches: ['points', 'a_hcp', 'b_hcp'],
   trips: ['cup_points'],
@@ -21,7 +22,7 @@ export const DISPUTABLE = {
 
 /** Plain words for where a value comes from. */
 export const SOURCE = {
-  rounds: 'Round setting', teams: 'Team setting', round_games: 'Game setting', cup_matches: 'Cup match setting',
+  rounds: 'Round setting', teams: 'Team setting', players: 'Player handicap (set by an organiser)', round_games: 'Game setting', cup_matches: 'Cup match setting',
   trips: 'Trip setting', comps: 'Comp setting', side_comp_defs: 'Side comp setting', trophies: 'Trophy rule',
   custom_games: 'Game rules', rules: 'Rulebook rule', standard: 'Standard rule (built into the app)',
   score_adjustments: 'Penalty on the scorecard',
@@ -77,7 +78,7 @@ export function disputeState({ ref, cases = [], me = null, role = null, tribunal
   const other = open.find((c) => c !== mine) || null;
   const base = { canView: true, canDispute: false, mine, other, underDispute: open.length > 0 };
   if (!isDisputable(ref)) return { ...base, state: 'invalid', why: 'This can’t be disputed.' };
-  if (!tribunalOn || !rulingOn) return { ...base, state: 'off', why: 'Disputes need the Tribunal and rule challenges switched on (Group & invites → Features).' };
+  if (!tribunalOn || !rulingOn) return { ...base, state: 'off', why: 'Disputes need the Tribunal and rule challenges switched on (Players & group → Features).' };
   if (!role || role === 'guest') return { ...base, state: 'guest', why: 'Guests can see the rule but can’t dispute it.' };
   if (mine) return { ...base, state: 'mine', why: 'You’ve already raised this — see the case.' };
   if (other) return { ...base, state: 'open', why: 'It’s already before the Tribunal — have your say in the hearing.' };
@@ -132,6 +133,7 @@ export const APPLY_SPEC = {
   'rounds.comp_bonus': NUM(0, 10, { whole: true, msg: 'Side comp strokes: a whole number from 0 to 10' }),
   'rounds.min_drives': NUM(0, 9, { whole: true, blank: true, msg: 'Minimum drives: a whole number from 0 to 9' }),
   'teams.handicap': NUM(-10, 54, { msg: 'A team handicap is between −10 and 54' }),
+  'players.handicap': NUM(-10, 54, { msg: 'A handicap is between −10 and 54' }),
   'round_games.stake': NUM(0, 1000, { cents: true, msg: 'A stake is dollars and cents, up to $1000' }),
   'cup_matches.points': NUM(0.01, 10, { msg: 'A match is worth more than 0 and up to 10 points' }),
   'cup_matches.a_hcp': NUM(-10, 54, { msg: 'A handicap is between −10 and 54' }),

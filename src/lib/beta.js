@@ -26,6 +26,8 @@ export function checkFeedback(kind, message) {
 // Bump this when there's something new worth a note; each phone sees each note once.
 export const WHATS_NEW_ID = 'beta-1';
 export const WHATS_NEW = [
+  { title: 'This trip', body: 'The first tab is the trip that’s on (or next): today’s leaderboard, what you’re playing for and the trip’s posts. Each round’s full leaderboard is one tap away.' },
+  { title: 'Players & group', body: 'Everyone’s handicap in one list. Organisers change them; think one’s wrong? Tap it to dispute it. Your own settings are on your profile.' },
   { title: 'Trips', body: 'The Trips tab replaces Coming up. Every trip goes from idea to votes to locked in to the record, with past trips kept.' },
   { title: 'Sign in once, any phone', body: 'Sign in with Google or an emailed code. Your scores and history follow you to a new phone.' },
   { title: 'On your laptop', body: 'Open the app on a computer for a bigger layout, and install it from Chrome or Edge.' },

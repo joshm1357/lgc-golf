@@ -20,6 +20,7 @@ const D = (key: string, label: string, o: Partial<Destination> = {}): Destinatio
   ({ key, label, needs: [], takes: [], organiser: false, feature: null, ...o });
 
 export const DESTINATIONS: Destination[] = [
+  D('trip_now', 'This trip'),
   D('leaderboard', 'Leaderboard', { takes: ['round'] }),
   D('score', 'Enter scores', { needs: ['round'] }),
   D('comps_board', 'What we’re playing for'),
@@ -37,7 +38,7 @@ export const DESTINATIONS: Destination[] = [
   D('history_import', 'Bring in our history', { organiser: true, feature: 'ai_helper' }),
   D('notifications', 'Notifications', { feature: 'notifications' }),
   D('profile', 'My profile'),
-  D('group', 'Group & invites'),
+  D('group', 'Players & group'),
   D('stats', 'Stats & season ladder', { feature: 'stats' }),
   D('trophies', 'The Trophy Room', { feature: 'trophies' }),
   D('replay', 'Round replay', { needs: ['round'], feature: 'replay' }),

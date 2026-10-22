@@ -189,7 +189,7 @@ check(true, 'the new trip opens');
 await page.screenshot({ path: `${SHOTS}/3-created.png`, fullPage: true });
 
 // 2. Leaderboard: the Ask chip → /ask?about=round → an answer → 👎.
-await page.goto(`${BASE}#/`);
+await page.goto(`${BASE}#/leaderboard`);
 await page.getByText('✨ Ask about this round').waitFor({ timeout: 15000 });
 check(true, 'the "✨ Ask about this round" chip shows on the leaderboard');
 await page.screenshot({ path: `${SHOTS}/4-leaderboard.png` });
@@ -230,7 +230,7 @@ await page.getByText('💡 Suggest a trip or round').waitFor({ timeout: 15000 })
 await page.waitForTimeout(500);
 check(!(await page.getByRole('button', { name: /✨ (Plan it with AI|Carry on your plan)/ }).isVisible().catch(() => false)), 'switched off: no Plan it with AI');
 check(!(await page.getByText('✨ Ask about our trips').isVisible().catch(() => false)), 'switched off: no Ask chip on Trips');
-await page.goto(`${BASE}#/`);
+await page.goto(`${BASE}#/leaderboard`);
 await page.getByText('Wednesday — Kurri').first().waitFor({ timeout: 15000 });
 await page.waitForTimeout(500);
 check(!(await page.getByText('✨ Ask about this round').isVisible().catch(() => false)), 'switched off: no Ask chip on the leaderboard');

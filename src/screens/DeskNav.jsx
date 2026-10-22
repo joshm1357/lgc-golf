@@ -27,7 +27,7 @@ export function GroupTabs({ deskOnly = false }) {
   const { pathname } = useLocation();
   const { status } = useSession();
   if (!status?.is_admin) return null;
-  const items = [{ to: '/group', label: 'Group & invites' }, { to: TOOL.players, label: 'Players table' }];
+  const items = [{ to: '/group', label: 'Players & group' }, { to: TOOL.players, label: 'Players table' }];
   return (
     <nav className={'desk-nav group-tabs no-print' + (deskOnly ? ' desk-only' : '')} aria-label="Group">
       {items.map((t) => {

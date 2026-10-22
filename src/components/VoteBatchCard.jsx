@@ -30,16 +30,17 @@ export function useVoteBatches(planId) {
   return [rows, load];
 }
 
-export function VoteBatches({ pd }) {
+export function VoteBatches({ pd, voterOnly = false, openOnly = false }) {
   const [batches] = useVoteBatches(pd.plan.id);
-  const shown = batches.filter((b) => pd.polls.some((p) => p.vote_batch === b.id));
+  const shown = batches.filter((b) => pd.polls.some((p) => p.vote_batch === b.id && (!openOnly || p.status === 'open')));
   if (!shown.length) return null;
-  return <>{shown.map((b) => <VoteBatchCard key={b.id} batch={b} pd={pd} />)}</>;
+  return <>{shown.map((b) => <VoteBatchCard key={b.id} batch={b} pd={pd} voterOnly={voterOnly} />)}</>;
 }
 
 const KEEN = [['in', '✓ In', 'var(--navy)'], ['maybe', '? Maybe', '#7A5A00'], ['out', '✗ Out', 'var(--under)']];
 
-export function VoteBatchCard({ batch, pd }) {
+// voterOnly: the ballot only, even for organisers (the Overview; the results are on Organise → Vote).
+export function VoteBatchCard({ batch, pd, voterOnly = false }) {
   const data = useData();
   const { status } = useSession();
   const me = status.player_id;
@@ -56,7 +57,7 @@ export function VoteBatchCard({ batch, pd }) {
     pd.reload();
   });
   const sections = polls.length + (batch.keen ? 1 : 0);
-  const canRun = organiserView({ isAdmin: status.is_admin && !status.viewing, me, plan: pd.plan });
+  const canRun = !voterOnly && organiserView({ isAdmin: status.is_admin && !status.viewing, me, plan: pd.plan });
   const org = canRun && !asVoter;
   const doneAll = hasAnsweredAll({ polls: polls.filter((p) => p.status === 'open'), votes: pd.votes, me, keen: batch.keen, rsvps: pd.rsvps });
   const name = (id) => playerName(data.playersById[id]);

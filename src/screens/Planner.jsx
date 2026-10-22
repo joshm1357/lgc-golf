@@ -1,6 +1,6 @@
 // One trip (or one-day round), from idea to the record afterwards.
 //   /plan           → the Trips tab (Trips.jsx)
-//   /plan/:planId   → one trip: Vote · Chat · Who's in · Details · Jobs · Kitty · Rooms & cars
+//   /plan/:planId   → one trip: Overview (at a glance, open votes) | Organise (six steps + More — OrganiseSteps.jsx)
 // Anyone can suggest options, vote, chat, say if they're in and add jobs. The admin picks vote winners (or the trip's
 // organiser too, if the group allows it) and locks the trip in, which makes it a trip in the app.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -12,17 +12,16 @@ import {
   tallyPoll, nonVoters, suggestions, fmtRange, countdown, nudgeText, RSVP_LABEL, DEFAULT_BRING, todayISO, money,
 } from '../lib/plan.js';
 import { notify, shareText, appLink, pushState, enablePush, disablePush, isIOS } from '../lib/push.js';
-import { DetailsTab, JobsTab, KittyTab, GroupsTab } from './PlanTabs.jsx';
-import { TripSetupCard } from './TripSetup.jsx';
 import TripExtras from './TripExtras.jsx';
 import { TripFinderCard } from '../components/TripFinderCard.jsx';
 import { TripBuilderCard } from '../components/TripBuilderCard.jsx';
 import { VoteBatches } from '../components/VoteBatchCard.jsx';
 import { TripOverview } from './TripOverview.jsx';
-import { NextStepCard, TripPlanCards, TripJobsTab, makeTripJobs } from './TripPlan.jsx';
-import { ItemSheet } from './PlanTabs.jsx';
+import { NextStepCard, makeTripJobs } from './TripPlan.jsx';
+import { OrganiseView } from './OrganiseSteps.jsx';
+import { OverviewVotes } from '../components/OverviewVotes.jsx';
 import { defaultView } from '../lib/tripsummary.js';
-import { STAGES, STAGE_LABEL, tripStage, canDecide } from '../lib/trips.js';
+import { tripStage } from '../lib/trips.js';
 
 const PLAN_TABLES = ['plans', 'plan_polls', 'plan_options', 'plan_votes', 'plan_rsvps', 'plan_items', 'plan_costs', 'plan_payments', 'plan_groups', 'plan_group_members', 'plan_transfers', 'plan_comments'];
 const STATUS_LABEL = { planning: 'Planning', confirmed: 'Locked in', done: 'Done', cancelled: 'Called off' };
@@ -34,12 +33,6 @@ import { PollCard } from '../components/PollCard.jsx';
 import { HowItGoesOut } from '../components/CallVote.jsx';
 import { defaultCloses } from '../lib/callvote.js';
 import { useDesktop } from '../components/Sidebar.jsx';
-import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
-
-// Organise on a laptop, for organisers: the trip's panels down the right (what was the Trip desk), and the costs
-// table on the Kitty tab. Loaded only on a laptop, so phones download nothing new.
-const OrganiseSide = lazyScreen(() => import('./OrganisePanels.jsx'), 'OrganiseSide', { inline: true });
-const CostsPanel = lazyScreen(() => import('./OrganisePanels.jsx'), 'CostsPanel', { inline: true });
 
 export { NotifyCard };
 
@@ -105,16 +98,6 @@ export function usePlanData(planId) {
   return d;
 }
 
-const TABS = [
-  { value: 'vote', label: '🗳️ Vote', feature: 'planner_tasks' },
-  { value: 'chat', label: '💬 Chat' },
-  { value: 'people', label: '🙋 Who’s in' },
-  { value: 'details', label: '📍 Details' },
-  { value: 'jobs', label: '📋 Jobs', feature: 'planner_tasks' },
-  { value: 'kitty', label: '💰 Kitty', feature: 'planner_costs' },
-  { value: 'groups', label: '🛏️ Rooms & cars', feature: 'planner_rooms' },
-];
-
 export function PlanDetail() {
   const { planId } = useParams();
   const [params, setParams] = useSearchParams();
@@ -123,55 +106,32 @@ export function PlanDetail() {
   const data = useData();
   const [editing, setEditing] = useState(false);
   const wide = useDesktop();
-  const [newCostAt, setNewCostAt] = useState(0); // "n" on Organise (laptop): when it was pressed
-  const onNewCost = useCallback(() => setNewCostAt(Date.now()), []);
-  // Tabs for switched-off features (Group & invites → Features) aren't shown.
-  const on = { planner_tasks: useFeature('planner_tasks'), planner_costs: useFeature('planner_costs'), planner_rooms: useFeature('planner_rooms') };
-  const tabs = TABS.filter((t) => !t.feature || on[t.feature]);
-  const tab = tabs.some((t) => t.value === params.get('tab')) ? params.get('tab') : null;
-  const setTab = (t) => setParams((p) => { const n = new URLSearchParams(p); n.set('view', 'organise'); n.set('tab', t); return n; }, { replace: true });
-  // Overview (what the trip is: results, courses, who's in) or Organise (votes, jobs, kitty…). Josh, 21 Oct.
-  const setView = (v, t = null) => setParams((p) => { const n = new URLSearchParams(p); n.set('view', v); if (t) n.set('tab', t); else if (v === 'overview') n.delete('tab'); return n; }, { replace: true });
+  // Old addresses (notifications, shared links) say ?tab=vote / people / jobs / kitty / groups / chat / details.
+  const tab = params.get('tab');
+  const setTab = (t) => setParams((p) => { const n = new URLSearchParams(p); n.set('view', 'organise'); n.set('tab', t); n.delete('step'); return n; }, { replace: true });
+  // Overview (the trip at a glance and its open votes — everyone) or Organise (the steps). Josh, 21–22 Oct.
+  const setView = (v, t = null) => setParams((p) => { const n = new URLSearchParams(p); n.set('view', v); n.delete('step'); if (t) n.set('tab', t); else n.delete('tab'); return n; }, { replace: true });
 
   if (!pd) return <div className="page"><Header back="Trips" title="Loading…" /><Loading /></div>;
   if (!pd.plan) return <div className="page"><Header back="Trips" title="Not found" /><div className="empty">This trip has been removed.</div></div>;
   const { plan } = pd;
   const trip = plan.trip_id ? data.trips.find((t) => t.id === plan.trip_id) : null;
   const stage = tripStage(plan, trip);
-  const view = params.get('view') === 'organise' || params.get('view') === 'overview' ? params.get('view') : (tab ? 'organise' : defaultView(stage));
-  // Open on the most useful tab: vote while a vote is open, otherwise the details.
-  const current = tab || (on.planner_tasks && pd.polls.some((p) => p.status === 'open') ? 'vote' : plan.start_date ? 'details' : 'people');
+  const isAdmin = !!status.is_admin;
+  // A player's vote link (?tab=vote) lands on the Overview, where the votes are; organisers get Organise → Vote.
+  const fromTab = tab ? (tab === 'vote' && !isAdmin ? 'overview' : 'organise') : null;
+  const asked = params.get('view');
+  const view = stage === 'cancelled' ? 'organise'
+    : asked === 'organise' || asked === 'overview' ? asked : fromTab || defaultView(stage, isAdmin);
   const sub = [plan.start_date ? `${fmtRange(plan.start_date, plan.end_date)} · ${countdown(plan.start_date)}` : 'Dates TBC', plan.location_name || 'Location TBC'].join(' · ');
-  // Laptop + Organise + one of the trip's organisers: the trip's panels down the right (was the Trip desk, 22 Oct).
-  const desk = wide && view === 'organise' && plan.status !== 'cancelled' && (status.is_admin || (!!status.player_id && plan.organiser_id === status.player_id));
-
-  const organise = (
-      <div className="section stack">
-        {plan.status === 'cancelled' && <div className="err">{plan.proposed ? 'The admin passed on this one.' : 'This one’s been called off.'}</div>}
-        {plan.status !== 'cancelled' && <StageBar pd={pd} />}
-        {plan.proposed && plan.status !== 'cancelled' && <ProposalBanner plan={plan} reload={pd.reload} />}
-        <LockInCard pd={pd} />
-        <TripPlanCards pd={pd} />
-        {on.planner_tasks && <Checklist pd={pd} onGo={setTab} />}
-        <TripSetupCard plan={plan} reload={pd.reload} />
-        <TripExtras pd={pd} />
-        <TripBuilderCard pd={pd} />
-        <TripFinderCard pd={pd} />
-        {current === 'vote' && <VoteTab pd={pd} />}
-        {current === 'chat' && <ChatTab pd={pd} />}
-        {current === 'people' && <PeopleTab pd={pd} />}
-        {current === 'details' && <DetailsTab pd={pd} />}
-        {current === 'jobs' && <TripJobsTab pd={pd} AddSheet={ItemSheet} />}
-        {desk && current === 'kitty' && <LazyArea fallback={null} quiet><CostsPanel pd={pd} focusAt={newCostAt} /></LazyArea>}
-        {current === 'kitty' && <KittyTab pd={pd} />}
-        {current === 'groups' && <GroupsTab pd={pd} />}
-      </div>
-  );
+  // Laptop + one of the trip's organisers: the slim status column down the right (was the Trip desk, 22 Oct).
+  const organiser = isAdmin || (!!status.player_id && plan.organiser_id === status.player_id);
+  const desk = wide && view === 'organise' && plan.status !== 'cancelled' && organiser;
 
   return (
     <div className={'page' + (desk ? ' org-desk-page' : '')}>
       <Header back="Trips" title={plan.name} sub={sub}
-        right={(status.is_admin || (plan.proposed && plan.created_by === status.player_id)) && <button type="button" className="btn ghost sm" style={{ color: '#fff', background: 'transparent', borderColor: 'rgba(255,255,255,.45)' }} onClick={() => setEditing(true)}>Edit</button>}>
+        right={(isAdmin || (plan.proposed && plan.created_by === status.player_id)) && <button type="button" className="btn ghost sm" style={{ color: '#fff', background: 'transparent', borderColor: 'rgba(255,255,255,.45)' }} onClick={() => setEditing(true)}>Edit</button>}>
         {plan.status !== 'cancelled' && (
           <div className="chips" role="tablist" aria-label="View" style={{ margin: '4px -16px 0', padding: '0 16px' }}>
             {[{ value: 'overview', label: '⛳ Overview' }, { value: 'organise', label: '🧰 Organise' }].map((v) => (
@@ -180,27 +140,23 @@ export function PlanDetail() {
             ))}
           </div>
         )}
-        {(view === 'organise' || plan.status === 'cancelled') && <div className="chips" role="tablist" aria-label="Sections" style={{ margin: '4px -16px 0', padding: '0 16px' }}>
-          {tabs.map((t) => (
-            <button key={t.value} type="button" role="tab" className="chip" aria-selected={t.value === current} onClick={() => setTab(t.value)}
-              style={t.value === current ? { background: 'var(--gold)', borderColor: 'var(--gold)', color: 'var(--navy)' } : { background: 'rgba(255,255,255,.08)', borderColor: 'rgba(255,255,255,.35)', color: '#fff' }}>{t.label}</button>
-          ))}
-        </div>}
       </Header>
-      {plan.status !== 'cancelled' && <NextStepCard pd={pd} stage={stage} onTab={setTab} onView={setView} />}
-      {view === 'overview' && plan.status !== 'cancelled' ? (
-        <div className="section">
-          {plan.status === 'planning' && <TripBuilderCard pd={pd} first />}
-          <TripOverview trip={trip} plan={plan} rsvps={pd.rsvps} items={pd.items} stage={stage} onOrganise={(t) => setView('organise', t)} />
-          {/* After the trip: rate the course, dinner awards, and "same as last time" belong with the summary. */}
-          {stage === 'done' && <div className="stack" style={{ marginTop: 14 }}><TripFinderCard pd={pd} /><TripExtras pd={pd} /></div>}
-        </div>
-      ) : desk ? (
-        <div className="org-desk">
-          <div className="org-main">{organise}</div>
-          <LazyArea fallback={null} quiet><OrganiseSide pd={pd} current={current} onTab={setTab} onNewCost={onNewCost} /></LazyArea>
-        </div>
-      ) : organise}
+      {view === 'overview' ? (
+        <>
+          {/* A player's own next thing (a deposit, a job). Organisers get theirs on Organise; votes are below. */}
+          {!isAdmin && <NextStepCard pd={pd} stage={stage} onTab={setTab} hideVotes />}
+          <div className="section">
+            {plan.proposed && !isAdmin && <div style={{ marginBottom: 12 }}><ProposalBanner plan={plan} reload={pd.reload} /></div>}
+            <TripOverview trip={trip} plan={plan} rsvps={pd.rsvps} items={pd.items} stage={stage} onOrganise={(t) => setView('organise', t)}
+              votes={<OverviewVotes pd={pd} />} />
+            {!isAdmin && plan.status === 'planning' && <div style={{ marginTop: 14 }}><TripBuilderCard pd={pd} /></div>}
+            {/* After the trip: rate the course and the dinner awards belong with the summary. */}
+            {stage === 'done' && <div className="stack" style={{ marginTop: 14 }}><TripFinderCard pd={pd} /><TripExtras pd={pd} viewer /></div>}
+          </div>
+        </>
+      ) : (
+        <OrganiseView pd={pd} stage={stage} trip={trip} wide={wide} desk={desk} onEdit={() => setEditing(true)} />
+      )}
       {editing && <PlanSheet plan={plan} onClose={() => setEditing(false)} onSaved={() => pd.reload()} />}
     </div>
   );
@@ -208,10 +164,10 @@ export function PlanDetail() {
 
 // ---------------------------------------------------------------- Organiser's checklist (suggestions, never automatic)
 
-function Checklist({ pd, onGo }) {
+export function Checklist({ pd, onGo, open: startOpen = false }) {
   const data = useData();
   const { status } = useSession();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(startOpen);
   const [hidden, setHidden] = useState(() => { try { return JSON.parse(localStorage.getItem(`lgc-hide-${pd.plan.id}`) || '[]'); } catch { return []; } });
   const [busy, run] = useRun();
   const list = useMemo(() => suggestions(pd.plan, { ...pd, playerIds: everyone(data).map((p) => p.id) }), [pd, data]);
@@ -264,7 +220,8 @@ function Checklist({ pd, onGo }) {
 
 // ---------------------------------------------------------------- Vote
 
-function VoteTab({ pd }) {
+// The Vote step on Organise: the votes (organiser results), Call a vote, and the decided ones.
+export function VoteTab({ pd }) {
   const { status } = useSession();
   const [creating, setCreating] = useState(false);
   const open = pd.polls.filter((p) => p.status === 'open' && !p.vote_batch); // combined cards (077) show in VoteBatches
@@ -274,7 +231,7 @@ function VoteTab({ pd }) {
       {pd.polls.length === 0 && <div className="empty">No votes yet.{status.is_admin ? ' Put one up — dates, place, or anything else.' : ' The admin will put one up.'}</div>}
       <VoteBatches pd={pd} />
       {open.map((p) => <PollCard key={p.id} poll={p} pd={pd} />)}
-      {status.is_admin && <button type="button" className="btn gold block" onClick={() => setCreating(true)} data-testid="call-a-vote">🗳️ Call a vote</button>}
+      {status.is_admin && <button type="button" className="btn ghost block" onClick={() => setCreating(true)} data-testid="call-a-vote">🗳️ Call a vote</button>}
       {closed.length > 0 && <span className="label">Decided</span>}
       {closed.map((p) => <PollCard key={p.id} poll={p} pd={pd} />)}
       <p className="note" style={{ margin: 0 }}>Dates: ✓ Can · ? Maybe · ✗ Can’t. Places: ⭐ Prefer · 👍 Option · 👎 Don’t like. The first is 2 points, the middle 1. Anyone can add an option. {pd.voteDecider === 'admin_or_organiser' ? 'The admin or the trip’s organiser' : 'The admin'} closes the vote and picks the winner.</p>
@@ -348,7 +305,7 @@ export function OptionSheet({ poll, onClose, onSaved }) {
 
 const QUESTION = { dates: 'Which weekend works?', location: 'Where should we go?', other: '' };
 
-function PollSheet({ pd, onClose }) {
+export function PollSheet({ pd, onClose }) {
   const { status } = useSession();
   const [kind, setKind] = useState(pd.polls.some((p) => p.kind === 'dates') ? 'location' : 'dates');
   const [question, setQuestion] = useState(QUESTION[kind]);
@@ -434,7 +391,7 @@ export function CloseSheet({ poll, rows, pd, onClose }) {
 
 // ---------------------------------------------------------------- Who's in
 
-function PeopleTab({ pd }) {
+export function PeopleTab({ pd }) {
   const data = useData();
   const { status } = useSession();
   const me = status.player_id;
@@ -508,7 +465,7 @@ function PeopleTab({ pd }) {
           {locked ? (
             <button type="button" className="btn ghost" disabled={busy} onClick={() => run(async () => { await must(supabase.from('plans').update({ rsvp_locked: false }).eq('id', plan.id)); pd.reload(); }, 'Unlocked — the lads can change their answer')}>🔓 Unlock the list</button>
           ) : (
-            <button type="button" className="btn gold" disabled={busy || by('in').length === 0} onClick={() => {
+            <button type="button" className="btn ghost" disabled={busy || by('in').length === 0} onClick={() => {
               if (!window.confirm(`Lock in the ${by('in').length} who are in? After this only you can change who’s coming.`)) return;
               run(async () => {
                 await must(supabase.from('plans').update({ rsvp_locked: true, status: plan.status === 'planning' ? 'confirmed' : plan.status }).eq('id', plan.id));
@@ -542,7 +499,7 @@ function PeopleTab({ pd }) {
   );
 }
 
-function ProposalBanner({ plan, reload }) {
+export function ProposalBanner({ plan, reload }) {
   const data = useData();
   const { status } = useSession();
   const [busy, run] = useRun();
@@ -652,33 +609,10 @@ function PlanSheet({ plan, onClose, onSaved }) {
 }
 
 
-// ---------------------------------------------------------------- Where the trip is up to
+// ---------------------------------------------------------------- Lock it in
 
-function StageBar({ pd }) {
-  const data = useData();
-  const { plan } = pd;
-  const trip = plan.trip_id && data.trips.find((t) => t.id === plan.trip_id);
-  const stage = tripStage(plan, trip);
-  const at = STAGES.indexOf(stage);
-  const org = data.playersById[plan.organiser_id || plan.created_by];
-  return (
-    <div className="stack" style={{ gap: 6 }}>
-      <div role="list" aria-label="Where this trip is up to" style={{ display: 'grid', gridTemplateColumns: `repeat(${STAGES.length}, 1fr)`, gap: 4 }}>
-        {STAGES.map((s, i) => (
-          <div key={s} role="listitem" aria-current={i === at ? 'step' : undefined} className="small"
-            style={{ textAlign: 'center', padding: '6px 2px', borderRadius: 8, fontWeight: i === at ? 800 : 600, fontSize: 12, lineHeight: 1.2,
-              background: i === at ? 'var(--navy)' : i < at ? 'var(--gold-soft)' : 'transparent', color: i === at ? '#fff' : i < at ? 'var(--navy)' : 'var(--muted)',
-              border: `1px solid ${i <= at ? 'var(--navy)' : 'var(--line)'}` }}>
-            {STAGE_LABEL[s].replace(/^\S+\s/, '')}
-          </div>
-        ))}
-      </div>
-      {org && <span className="small muted">Organiser: <strong style={{ color: 'var(--ink, inherit)' }}>{playerName(org)}</strong>{plan.budget_pp ? ` · rough budget ${money(plan.budget_pp)} each` : ''}</span>}
-    </div>
-  );
-}
-
-function LockInCard({ pd }) {
+// "Lock it in now" on the Lock in step, for when the Next step is still on something else.
+export function LockInCard({ pd }) {
   const { status } = useSession();
   const [busy, run] = useRun();
   const { plan } = pd;
@@ -701,14 +635,14 @@ function LockInCard({ pd }) {
       }}>
       <span style={{ fontSize: 26 }}>🔒</span>
       <span className="grow"><strong>Lock it in</strong><div className="small muted">{fmtRange(plan.start_date, plan.end_date)} · {plan.location_name || 'place TBC'} — makes it a trip in the app, ready for rounds.</div></span>
-      <span className="btn sm">Lock in</span>
+      <span className="btn ghost sm">Lock in now</span>
     </button>
   );
 }
 
 // ---------------------------------------------------------------- Chat (the back-and-forth on a trip)
 
-function ChatTab({ pd }) {
+export function ChatTab({ pd }) {
   const data = useData();
   const { status } = useSession();
   const me = status.player_id;

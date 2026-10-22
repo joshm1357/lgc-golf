@@ -6,7 +6,8 @@ describe('keyboard shortcuts', () => {
     let r = nextKey({}, 'g', {}, 1000);
     expect(r.action).toBeNull();
     expect(nextKey(r.state, 't', {}, 1500).action).toEqual({ type: 'go', to: '/plan' });
-    expect(nextKey(r.state, 'l', {}, 1500).action).toEqual({ type: 'go', to: '/' });
+    expect(nextKey(r.state, 'l', {}, 1500).action).toEqual({ type: 'go', to: '/leaderboard' });
+    expect(nextKey(r.state, 'h', {}, 1500).action).toEqual({ type: 'go', to: '/' }); // This trip (ov15)
     expect(nextKey(r.state, 'p', {}, 1500).action).toEqual({ type: 'go', to: '/group/players' });
     expect(nextKey(r.state, 'c', {}, 1500).action).toEqual({ type: 'go', to: '/cards' });
     r = nextKey({}, 'g', {}, 1000);

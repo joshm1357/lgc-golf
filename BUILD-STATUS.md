@@ -1059,3 +1059,108 @@ screen, "Viewing as Mike · read only", and Stop.
 - **Tested:** Vitest 1166 (joinfirst 21 new); SQL on staging 32 checks, rolled back (signed-in user joining via player
   invite, team link → cup_side, organiser link → role + once only, personal link via 046 claim_player_link, taken name,
   used_link_info); e2e signin-first 59, save-spot 89, signin-home 76, links 24, stage2, notify-prompt, beta pass.
+## ov16 — Plan it with AI: ask first, never dead-end, lives in the Caddie, branch `ov16-ai-ask-first`, 22 Oct 2026
+- **Why:** on live "Plan it with AI" twice ended `too_many_rounds` (8 model calls used up: a 3-course library, the
+  helper kept searching). Josh: it should ask questions back, not do the whole thing from one message; and "Plan it
+  with AI" should BE the Caddie, with the real trip screen filling in as you talk.
+- **Ask first (plan_chat):** a vague first message gets a short reply — what it understood + 1–3 questions with quick
+  answers (incl. "Driving or flying?") — and no draft (`draft` is optional in reply_with_draft). It builds once it
+  knows when / where / how many, or when the organiser says "plan it" (detected server-side and in a tappable chip;
+  "Or just say 'plan it'…" shows under every reply). Conversational, local-knowledge tone. "done" always keeps a
+  question to refine. Flying: said to be coming soon; kept as `travel: 'fly'` on the draft (brief note, builder state).
+- **Never dead-end (all modes, logic.ts runLoop):** repeated identical tool calls answered from cache with a note
+  (2 repeats → last round early); the last round (out of rounds, or < 30 s before the deadline) tells the model to
+  answer now and, in plan_chat, forces reply_with_draft (Anthropic tool_choice; OpenAI-style hosts get only that tool);
+  the same validation problems twice, or any on the last round → the reply with the bad parts left out (lenient
+  checks; setup drops rounds on unknown courses); else a server-built "I got stuck finding X — can you tell me …?".
+  plan_chat now gets 10 model calls (still inside the 130 s request deadline).
+- **Fewer wasted rounds:** courses_near takes `places: [...]` (up to 4 in one call); the library's size goes in as data.
+- **Logged why:** helper_log.error (40 chars) e.g. `too_many_rounds r8 past,course m2`, `salvaged r2 past`, `stuck r6 m2`
+  (rescued replies don't use up a question); a counts-only line in the function log. No new columns.
+- **In the Caddie:** a second mode "✨ Plan a trip" (tabs Ask | Plan a trip). Laptop: the side panel. Phone: a
+  non-modal sheet that folds to a bar ("Show the trip ↓"). The first draft makes a draft trip and opens the trip
+  builder; each draft is merged into trip_builds as ✨ suggestions (the organiser's own picks kept); what the page shows
+  goes back with the next question (`page` → `<data source="trip_page">`). Trips' "Plan it with AI" opens it. Without
+  the trip builder feature it shows the draft card + Create it as before.
+- **Files:** `supabase/functions/ai-helper/{logic,plan,providers,index}.ts`, `askfirst.test.ts` (new), `src/components/
+  {Caddie,CaddiePlan (new),AiChat}.jsx`, `caddie.css`, `src/lib/{planchat,aihelper}.js`, `caddieplan.test.js` (new),
+  `src/screens/AiPlanner.jsx`, `TripBuilder.jsx` (one listener to reload), e2e `plan-ux-test.mjs` (section A/G rewritten).
+- **Tested:** Deno 154 (askfirst 16 new); Vitest 1161; e2e plan-ux, ai-helper-v2, ai-helper, caddie, trip-builder pass.
+
+## Organise tidy-up (ov14), branch `ov14-organise-tidy`, 22 Oct 2026
+- **Why:** Josh: "The organiser screen is a bit messy for the trip. It's not clear where to start … Maybe only having
+  votes in the viewing screen would be cleaner too."
+- **Organise = six steps:** 1 Plan → 2 Vote → 3 Book → 4 Lock in → 5 Jobs & money → 6 On the day. The current step is
+  open with ONE big button (the Next step, worded for the step: "Start: plan where and when", "Pick the winner",
+  "Allocate the calls", "Lock it in"…); done steps fold to a ✓ line ("✓ Hunter Valley · Fri 13 – Sun 15 Mar"); later
+  steps are greyed but open. Everything else sits under its step (votes → Vote; calls and where to stay → Book; who's
+  in, trip plan, deposits → Lock in; Jobs / Kitty / Rooms & cars → Jobs & money; rounds, draw, checklist → On the day)
+  or in **More** (Chat, Details, organiser Checklist, Tribunal on a laptop). Old `?tab=` links still land in the right
+  place; `?step=` opens a step. Laptop: steps across the top, a slim status column (who's in, open votes) with no
+  buttons; the costs show once (the table). The stage bar, Lock-it-in card, checklist and builder cards at the top are
+  gone (folded into the steps).
+- **Overview:** the trip at a glance (where, when, who's in, and "Still being decided" instead of a wrong "Locked in"),
+  then the open votes front and centre ("Vote now" ballot, or "You've voted ✓ — see results"). Organisers see the
+  ballot here and the results on Organise → Vote. Nothing organiser-only (no organiser Next step, Build the trip, Same
+  as last time). Players always open on the Overview; a player's vote link (?tab=vote) lands there.
+- **Files:** `src/lib/organisesteps.js` (+test), `src/screens/OrganiseSteps.jsx`, `src/screens/organise.css`,
+  `src/components/OverviewVotes.jsx`, `Planner.jsx`, `TripPlan.jsx` (useNextStep / useStepActions), `OrganisePanels.jsx`,
+  `PlanTabs.jsx`, `TripOverview.jsx`, `TripExtras.jsx`, `VoteBatchCard.jsx`, `lib/tripsummary.js`.
+- **Tested:** Vitest 1159; e2e new `organise-tidy-test.mjs` (42 checks, new → planned → vote → booked → locked), and
+  plan-ux 67, trip-builder 48, trip-plan 43, trips 22, trip-overview 23, desktop 125, caddie 35, email-votes 28,
+  links 24, phone 17, stage10 15, trip-extras 36, tripfinder 30 pass (selectors updated where the layout moved).
+- **Merged with ov12 / ov13 / ov16 (next-after-v7):** late jobs (summary, badges, Waive) live under step 5 Jobs & money
+  → Jobs and the job sheet; a late Next step shows red in the step's big button; the laptop status column has a
+  "⚠️ Late jobs" count (tap → Jobs). Re-tested: Vitest 1223; organise-tidy 42, late-job 26, plan-ux 79, trip-plan 43,
+  desktop 125, caddie 35 pass.
+
+## Trip-centred navigation (ov15), branch `ov15-trip-centred`, 22 Oct 2026
+- **Why (Josh):** "The comps should just be part of the trip and the trophy room." "Leaderboard is part of a trip …
+  have an 'active or upcoming' trip … above Feed." "There should be a group list that has the players, handicaps (only
+  editable by admin, but disputable) … the players table, which is the most important, is hidden."
+- **Tabs (phone):** This trip · Feed · Trips · Players · More. **Sidebar (laptop):** This trip, Feed, Trips, Players &
+  group, Trophy Room, Tribunal, Rulebook, Courses, More. No Leaderboard, Comps or Cup tab any more.
+- **This trip (`#/`):** the trip with a live round or a round today, else on today, else the soonest coming, else one
+  finished in the last 7 days (`lib/activetrip.js`). Card: name, dates, "Day 2 of 3" / "In 12 days". Then its status
+  (`components/TripStatus.jsx`): today's round as a short leaderboard (→ full one), side comps to record, what we're
+  playing for (each comp with its leader → standings; Cup; games), the trip's feed, and its rounds (each → its
+  leaderboard). Nothing on: "No trip on — plan one". Loads from the one starting file (offline rule kept).
+- **Links kept:** `#/?r=<round>` is still that round's leaderboard (recaps in group chats); `#/leaderboard` = the
+  current round's; `#/comps?r=…` still the side comps screen; bare `#/comps` → the live round's side comps if any today,
+  else `#/comps-board?trip=<trip>`. `#/comps-board` and `#/feed` take `?trip=`. A trip's Overview mounts TripStatus
+  (one line in TripOverview.jsx) so past trips' leaderboards are Trips → past trip → Rounds.
+- **Players & group (`#/group`):** opens on the players list (`components/PlayersList.jsx`): photo, name, nickname,
+  role, on the app ✓ (organisers also: signed in ✓), handicap and last change. Organisers change it in place; others
+  tap → "⚖️ Dispute this" (players.handicap). Then invite links, then organiser settings. No email addresses anywhere
+  on it (personal links show "✓ Signed in", votes by email shows counts only; a player's card says "✓ has an email").
+- **Your profile** now holds your own settings: Save your spot, how you get votes + your vote email, Copy my link.
+- **Trophy Room:** each trophy says what decides it, with a link to the standings. (Every comp has a trip, so nothing
+  moved to History.)
+- **Migration 087** (`087_dispute_player_handicap.sql`, additive — three functions replaced with one more case each):
+  players.handicap can be disputed, checked −10 to 54, and an upheld verdict applied by an organiser is recorded in
+  the handicap history as "Tribunal verdict (dispute)". **Applied on staging only.**
+- **Also:** shortcuts `g h` This trip, `g l` → `#/leaderboard`; Caddie `trip_now` destination and "Players & group"
+  (routes.ts too — the ai-helper function needs a deploy for the new key); What's new; wording.
+- **Tested (merged with next-after-v7):** Vitest 1246 (activetrip 23 new). E2E new `nav-test.mjs` 37 checks; also
+  pass: organise-tidy 42, late-job 26, signin-first 59, save-spot 89, signin-home 76, phone 17, desktop 125, trips,
+  trip-overview, comps, cup, games, own-comps, stage2, governance, dispute, email-votes, features, awards, caddie,
+  ai-helper(-v2), rulebook-v3, setup-guide, trip-extras, commentary, view-as, notify-prompt, jokes, look, wishes,
+  plan-ux, trip-plan, links. Tests that meant "the leaderboard" now open `#/leaderboard`. beta-test's "same as the
+  product branch" pixel checks differ by design (new tab bar and first screen). quick, stage9, start and rulebook-v2
+  already failed on the base before this change.
+
+## ov17 — Course research (455 courses + region guide), branch `ov17-course-research`, 22 Oct 2026
+- **Data (088, additive):** `course_research` (one row per researched course, linked to `course_library`; typed fees,
+  access type, good-for-groups, drive time, booking / group-enquiry links, phone, sources, last checked; the rest in
+  `details`) and `region_guides` (the guide's sections, replaced by key; a section that's gone is switched off, never
+  deleted). Signed-in users read both; only the service role / platform admin writes (`import_course_research`).
+  Existing `course_facts` (063, organiser tips) is untouched — hence the name `course_research`.
+- **Import:** `node scripts/import-course-research.mjs <csv> <md> [outDir]` → SQL files run in order in the SQL editor.
+  Matching: exact (name + state + town) → near (same name within 40 km; or one name inside the other, same town) →
+  loose (same words in another order/spelling: St/Saint, Mt/Mount, "Public", "& Driving Range") → else a new listing
+  (no holes, no map position); closed / "note only" rows aren't added. Upsert by import key — re-runs change nothing.
+- **Staging load:** 455 rows: 263 exact, 149 near, 36 new listings, 7 unmatched (all closed or note-only); 17 guide
+  sections. 12 duplicate listings made before the loose step existed were re-pointed and hidden on staging.
+- **Used by:** the AI planner (facts in course search, new `region_guide` tool, ask-first rules on member times /
+  access / stay-and-play / deal sites); course page and trip builder "About this course for groups" block; tee-time
+  call job (phone, enquiry/booking links, member-times warning).

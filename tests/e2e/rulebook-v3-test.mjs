@@ -182,7 +182,7 @@ await page.screenshot({ path: `${SHOTS}/2-round-view.png`, fullPage: true });
 await page.getByRole('button', { name: 'Close' }).click();
 
 // 4. The leaderboard's "Rules for today" chip opens Friday's rules.
-await page.goto(`${BASE}#/`);
+await page.goto(`${BASE}#/leaderboard`);
 await page.getByTestId('rules-today').waitFor({ timeout: 15000 });
 await page.getByTestId('rules-today').click();
 await page.getByTestId('round-rules-title').waitFor({ timeout: 10000 });

@@ -5,8 +5,11 @@ import { formatName } from './board.js';
 import { formatToPar } from './scoring.js';
 import { todayISO } from './plan.js';
 
-/** Which view a trip page opens on: the overview once dates are locked in (coming, on, done), organise while deciding. */
-export function defaultView(stage) {
+/** Which view a trip page opens on: the overview once dates are locked in (coming, on, done), organise while deciding.
+ *  Players always open on the overview — the votes are there (ov14, 22 Oct). A called-off trip opens on organise. */
+export function defaultView(stage, organiser = true) {
+  if (stage === 'cancelled') return 'organise';
+  if (!organiser) return 'overview';
   return ['locked', 'on', 'done'].includes(stage) ? 'overview' : 'organise';
 }
 

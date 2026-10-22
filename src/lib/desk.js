@@ -202,7 +202,7 @@ export function deskForward(pathname = '') {
 
 /** Where a tool's back bar goes (screens/DeskNav.jsx), from its address. */
 export function toolHome(pathname = '') {
-  if (pathname.startsWith('/group/')) return { to: '/group', label: 'Group & invites' };
+  if (pathname.startsWith('/group/')) return { to: '/group', label: 'Players & group' };
   if (pathname.startsWith('/courses/')) return { to: '/courses', label: 'Courses' };
   const m = pathname.match(/^\/round\/([^/]+)\//);
   if (m) return { to: `/?r=${m[1]}`, label: 'Leaderboard' };

@@ -149,7 +149,7 @@ const noSideScroll = async (label) => {
 
 // 1. More → Group & invites (organiser).
 await page.goto(`${BASE}#/more`);
-await page.locator('.page').getByText('Group & invites').click();
+await page.locator('.page').getByText('Players & group').click();
 await page.getByText('Invite link').first().waitFor({ timeout: 15000 });
 await page.getByAltText(/QR code for the invite link/).waitFor({ timeout: 10000 });
 check((await page.locator('code').first().innerText()).endsWith('#/join/ABCDEFGH2345'), 'invite link shown');
@@ -207,9 +207,9 @@ check(!writes.some((w) => w.table === 'join_group_id' && w.body?.p_pin?.includes
 STATUS.v = { ...ORG, is_admin: false, role: 'player', group_id: GROUP2, group_name: 'Test Group B', legacy: false };
 await page.goto(`${BASE}#/more`);
 await page.reload();
-await page.locator('.page').getByText('Group & invites').waitFor({ timeout: 15000 });
+await page.locator('.page').getByText('Players & group').waitFor({ timeout: 15000 });
 check(!(await page.getByText("I'm the admin").count()), 'new group: no admin PIN entry');
-await page.locator('.page').getByText('Group & invites').click();
+await page.locator('.page').getByText('Players & group').click();
 await page.getByText('Join another group').waitFor({ timeout: 10000 });
 check(!(await page.getByText('✉️ Invite link', { exact: true }).count()) && !(await page.getByRole('button', { name: 'New link' }).count()), 'players see no invite controls');
 await page.getByPlaceholder('https://…/#/join/…').fill('https://x/#/join/ABCDEFGH2345');

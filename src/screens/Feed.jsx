@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { sendOrQueue } from '../lib/outbox.js';
 import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useRealtime, useSession, playerName } from '../lib/store.jsx';
@@ -18,9 +18,15 @@ export default function Feed() {
   const [reactions, setReactions] = useState([]);
   const [composing, setComposing] = useState(false);
   const [limit, setLimit] = useState(40);
+  // A trip's feed (ov15): #/feed?trip=<id> shows only that trip's posts.
+  const [params] = useSearchParams();
+  const tripId = params.get('trip');
+  const trip = tripId ? data.trips?.find((t) => t.id === tripId) : null;
 
   const load = useCallback(async () => {
-    const { data: ps } = await supabase.from('posts').select('*').order('created_at', { ascending: false }).limit(limit);
+    let q = supabase.from('posts').select('*');
+    if (tripId) q = q.eq('trip_id', tripId);
+    const { data: ps } = await q.order('created_at', { ascending: false }).limit(limit);
     const ids = (ps || []).map((p) => p.id);
     const [c, r] = ids.length
       ? await Promise.all([
@@ -31,7 +37,7 @@ export default function Feed() {
     setPosts(ps || []);
     setComments(c.data || []);
     setReactions(r.data || []);
-  }, [limit]);
+  }, [limit, tripId]);
 
   useEffect(() => { load(); }, [load]);
   useRealtime(['posts', 'comments', 'reactions'], load);
@@ -50,10 +56,11 @@ export default function Feed() {
   return (
     <div className="page">
       <Header
-        logo title="The Feed" sub={data.liveRound ? `${data.liveRound.name} · live` : data.currentTrip?.name}
+        logo title="The Feed" sub={trip ? `${trip.name} only` : data.liveRound ? `${data.liveRound.name} · live` : data.currentTrip?.name}
         right={<button type="button" className="btn gold sm" onClick={() => setComposing(true)}>{Icon.camera(18)}<span>Post</span></button>}
       />
       <div className="section stack">
+        {trip && <Link to="/feed" className="small" style={{ fontWeight: 700 }}>Showing {trip.name} — see every post →</Link>}
         <DinnerAwardsLink />
         {!posts.length && <div className="empty">Nothing yet. Birdies, photos and Tribunal news will show up here.</div>}
         {posts.map((p) => (

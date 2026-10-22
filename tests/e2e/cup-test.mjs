@@ -112,9 +112,11 @@ page.on('dialog', (d) => d.accept());
 
 // 1. The Cup tab is there; organiser makes the teams.
 await page.goto(`${BASE}#/`);
-await page.locator('.tabs a', { hasText: 'Cup' }).waitFor({ timeout: 15000 });
-check(true, 'Cup tab shows when the feature is on');
-await page.locator('.tabs a', { hasText: 'Cup' }).click();
+// ov15: the Cup is part of the trip — This trip → What we're playing for → The Cup (no tab of its own).
+const cupLink = page.getByTestId('trip-comps').getByRole('link', { name: /Cup/ }).first();
+await cupLink.waitFor({ timeout: 15000 });
+check(true, 'The Cup shows on This trip when the feature is on');
+await cupLink.click();
 await page.getByRole('button', { name: /Set up the cup/ }).click();
 await page.getByRole('button', { name: 'Make Team Blue and Team Red' }).click();
 await page.getByText('Team Blue link').waitFor({ timeout: 10000 });

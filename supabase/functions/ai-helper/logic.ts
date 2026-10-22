@@ -18,7 +18,7 @@ import { LIVE_TOOLS, liveTool, pickRound, pickTrip } from './live.ts';
 import { goToTool, checkGoTo, cleanContext, DESTINATIONS, type GoTo } from './routes.ts';
 import {
   PLAN_TOOLS, PLAN_TOOL_NAMES, planSystem, validateTripPlan, tripPlanSummary, applyTripPlan, tripPlanIds,
-  CHAT_TOOLS, CHAT_TOOL_NAMES, planChatSystem, validatePlanChat, chatMessages, chatDraftIn,
+  CHAT_TOOLS, CHAT_TOOL_NAMES, planChatSystem, validatePlanChat, chatMessages, chatDraftIn, fallbackChat, orList, wantsPlanNow, tripPageIn,
   type TripPlanContext, type PlanApplyDb,
 } from './plan.ts';
 
@@ -37,6 +37,9 @@ export const LIMITS = {
   groupPerMonth: 2000,
   personPerDay: 100,
   maxToolRounds: 8,
+  // The planning chat (ov16): a few more model calls, now that the last one is always an answer and the deadline
+  // (totalMs) still keeps the whole request under the edge function's ~150 s.
+  chatToolRounds: 10,
   maxTokens: 4096,
   planMaxTokens: 8192,
   callTimeoutMs: 60000,
@@ -92,8 +95,9 @@ How to plan:
 - One round per day per course named, on the day given. Formats: stableford (the default), ambrose (teams), stroke (stroke play, net), fourball (4BBB pairs).
 - "Closest to the pin on the par 3s" means ctp_par3s: true. Holes named by number go in ctp_holes (closest to the pin) or ld_holes (longest drive), 1 to 18.
 - No trip name given: make one from the place and year, e.g. "Hunter Valley 2026".
-- Call propose_setup once you have the courses. If it reports problems, fix them and call it again.
-- If a course can't be found, leave it out and say so in notes. If the request is too vague to plan anything, reply with one short question instead of a plan.
+- Look each course up once. If find_course finds nothing, try the town once — then stop searching for it.
+- Call propose_setup once you have the courses. If it reports problems, fix them and call it again — or leave the problem round out.
+- If a course can't be found, leave it out and say so in notes. If the request is too vague to plan anything (no dates or no courses), reply with one to three short questions instead of a plan.
 - You can't save anything. The organiser checks your plan and taps "Do it".
 - Only plan golf trips for this group. Politely decline anything else in one sentence.
 - Notes: at most two short sentences, plain Australian English.
@@ -296,6 +300,29 @@ export function validatePlan(raw: Any, ctx: PlanContext): { ok: boolean; errors:
   const notes = clean(raw.notes, 300);
   if (errors.length) return { ok: false, errors: [...new Set(errors)].slice(0, 12), plan: null };
   return { ok: true, errors: [], plan: { trip: trip!, courses: keep, rounds, notes, warnings } };
+}
+
+/**
+ * The setup plan with its problem rounds left out (ov16): when the helper keeps proposing a course that isn't in the
+ * group's courses or the library (or has no scorecard), the rounds on it are dropped with a warning, instead of
+ * going round again until it runs out of turns. Nothing left → not ok (the helper asks instead).
+ */
+export function salvagePlan(raw: Any, ctx: PlanContext): { ok: boolean; errors: string[]; plan: Plan | null } {
+  if (!raw || typeof raw !== 'object') return { ok: false, errors: ['There’s no plan.'], plan: null };
+  const known = (idRaw: unknown) => {
+    if (!isUuid(idRaw)) return false;
+    const id = String(idRaw).toLowerCase();
+    return ctx.courses.some((c) => c.id === id || c.library_id === id) || !!ctx.library[id]?.holes?.length;
+  };
+  const rounds = Array.isArray(raw.rounds) ? raw.rounds : [];
+  const keep = rounds.filter((r: Any) => known(r?.course));
+  const courses = (Array.isArray(raw.courses) ? raw.courses : []).filter((c: Any) => known(typeof c === 'string' ? c : c?.ref));
+  const v = validatePlan({ ...raw, courses, rounds: keep }, ctx);
+  if (v.ok && v.plan && keep.length < rounds.length) {
+    const n = rounds.length - keep.length;
+    v.plan.warnings.push(`${n === 1 ? 'One round was' : `${n} rounds were`} left out — I couldn’t find ${n === 1 ? 'its course' : 'their courses'} in the course list. Add ${n === 1 ? 'it' : 'them'} in the guided setup.`);
+  }
+  return v;
 }
 
 /** The confirm card, line by line: exactly what "Do it" will make. */
@@ -555,14 +582,65 @@ export function shapeOwnCourses(own: PlanContext['courses']) {
 
 // ------------------------------------------------------------------ The tool loop
 
+/** Why a request ended (ov16), for the usage log: how many model calls, how it ended, the last problems. */
+export type LoopInfo = { rounds: number; ended: string; errs: string[]; repeats: number; missing: string[] };
 export type LoopResult =
-  | { kind: 'stop'; value: Any; usage: Usage }
-  | { kind: 'text'; text: string; usage: Usage }
-  | { kind: 'error'; message: string; code: string; usage: Usage };
+  | { kind: 'stop'; value: Any; usage: Usage; info?: LoopInfo }
+  | { kind: 'text'; text: string; usage: Usage; info?: LoopInfo }
+  | { kind: 'error'; message: string; code: string; usage: Usage; info?: LoopInfo };
+/** What a mode can hand back when the helper is stuck (a reply built by the server, never a dead end). */
+export type Fallback = { kind: 'stop'; value: Any } | { kind: 'text'; text: string };
 
 /** Does this reply read like a question back to the person (so it's fine that there's no plan)? */
 export const asksBack = (text: string) => /\?\s*$/.test(text.trim()) || /\?\s*\n/.test(text);
 const BAD_JSON = 'The AI helper got its wires crossed — try again, or say it a bit more simply.';
+/** The last call is kept for the final, forced answer when less than this is left before the deadline. */
+export const FINAL_RESERVE_MS = 30000;
+const REPEAT_NOTE = '(You already asked exactly this — it’s the same answer as before. Don’t search for it again: use what you have.)';
+
+/** Same JSON whatever order the keys came in (so a repeated tool call is spotted). */
+export function stableJson(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(stableJson).join(',')}]`;
+  if (v && typeof v === 'object') return `{${Object.keys(v as Record<string, unknown>).sort().map((k) => `${JSON.stringify(k)}:${stableJson((v as Record<string, unknown>)[k])}`).join(',')}}`;
+  return JSON.stringify(v ?? null);
+}
+
+/** Course lookups that came back empty → what was searched for ("I couldn't find X"). */
+export function emptyLookups(name: string, input: Any, result: Any): string[] {
+  if (name !== 'find_course' && name !== 'courses_near') return [];
+  if (Array.isArray(result?.results)) {
+    return result.results.filter((x: Any) => Array.isArray(x?.courses) && !x.courses.length).map((x: Any) => clean(x.near, 40)).filter(Boolean);
+  }
+  const empty = Array.isArray(result) ? !result.length : Array.isArray(result?.courses) ? !result.courses.length : false;
+  if (!empty) return [];
+  const q = clean(input?.query ?? input?.place ?? (Array.isArray(input?.places) ? input.places[0] : ''), 40);
+  return q ? [q] : [];
+}
+
+/** The plan's problems as short tags for the log (never the words themselves: they can hold names). */
+export function errTags(errors: string[]): string[] {
+  const tags = (errors || []).map((e) =>
+    /in the past/.test(e) ? 'past' : /real date/.test(e) ? 'date' : /course library|in your courses|scorecard/.test(e) ? 'course'
+      : /questions/.test(e) ? 'noq' : /At most/.test(e) ? 'toomany' : /during the trip|before (its|the) first|at most \d+ days|years away/.test(e) ? 'span'
+        : /format/.test(e) ? 'format' : /needs a name/.test(e) ? 'name' : /hole/.test(e) ? 'hole' : /no rounds|at least one/.test(e) ? 'empty' : 'other');
+  return [...new Set(tags)];
+}
+/** "too_many_rounds r8 past,course" — fits helper_log.error (40 characters). */
+export function logDetail(code: string, info?: LoopInfo): string {
+  if (!info) return code;
+  const s = `${code} r${info.rounds}${info.repeats ? ` x${info.repeats}` : ''}${info.errs.length ? ` ${errTags(info.errs).join(',')}` : ''}${info.missing.length ? ` m${info.missing.length}` : ''}`;
+  return s.slice(0, 40);
+}
+
+/** Add a note for the model to the end of what it reads next (after the tool results, or the request). */
+function addNote(messages: Msg[], note: string) {
+  const last = messages[messages.length - 1];
+  if (last?.role === 'tool' && last.results.length) {
+    const r = last.results[last.results.length - 1];
+    r.content = `${r.content}\n\n${note}`;
+  } else if (last?.role === 'user') last.text = `${last.text}\n\n${note}`;
+  else messages.push({ role: 'user', text: note });
+}
 
 /**
  * Talk to the model until it answers in words or calls `stopTool` with something `onStop` accepts. At most
@@ -572,25 +650,71 @@ const BAD_JSON = 'The AI helper got its wires crossed — try again, or say it a
  *     time is a friendly error;
  *   * an answer in words when a plan was wanted gets one nudge to call the tool — then the words are returned
  *     (a question back to the organiser is fine straight away).
+ * Never a dead end (ov16, after "too_many_rounds" twice on live):
+ *   * the same tool call twice gets the first answer back with a note (no new lookup); a few repeats → last round;
+ *   * the LAST round (out of rounds, or under FINAL_RESERVE_MS before the deadline) tells the model to answer now
+ *     with what it has — and with `forceFinal`, makes it (the provider is told to call `stopTool`);
+ *   * the same problems twice in a row, or any on the last round → `salvage` (the plan with the bad parts left out);
+ *   * still nothing → `fallback` (a reply the server builds: what it couldn't find + a question).
+ *   `info` on the result says how it ended, for the usage log.
  */
 export async function runLoop(o: {
   ai: AiConfig; fetchFn: typeof fetch; system: string; tools: Any[]; allowed: Set<string>; userText: string;
   exec: (name: string, input: Any) => Promise<unknown>;
   stopTool?: string; onStop?: (input: Any) => Promise<{ ok: boolean; value?: Any; errors?: string[] }>;
+  salvage?: (input: Any) => Promise<{ ok: boolean; value?: Any }>;
+  fallback?: (s: { missing: string[] }) => Fallback | null;
+  forceFinal?: boolean; finalNote?: string;
   maxRounds?: number; maxTokens?: number; timeoutMs?: number; deadline?: number; now?: () => number;
 }): Promise<LoopResult> {
   const usage: Usage = { input_tokens: 0, output_tokens: 0 };
   const now = o.now || Date.now;
   const messages: Msg[] = [{ role: 'user', text: o.userText }];
   const maxRounds = o.maxRounds ?? LIMITS.maxToolRounds;
+  const info: LoopInfo = { rounds: 0, ended: '', errs: [], repeats: 0, missing: [] };
+  const end = (r: LoopResult, ended: string): LoopResult => { info.ended = ended; return { ...r, usage, info } as LoopResult; };
+  const cache = new Map<string, string>();
   let nudged = false;
   let badJson = 0;
+  let lastSig = '';
+  let lastStopInput: Any = undefined;
+  let goFinal = false;
+  /** Out of rounds or time: the last plan with its bad parts left out, else the mode's own reply. */
+  const giveUp = async (why: string): Promise<LoopResult | null> => {
+    if (lastStopInput !== undefined && o.salvage) {
+      const s = await o.salvage(lastStopInput).catch(() => ({ ok: false }) as { ok: boolean; value?: Any });
+      if (s.ok) return end({ kind: 'stop', value: s.value, usage }, `${why}_salvaged`);
+    }
+    const f = o.fallback?.({ missing: [...new Set(info.missing)] });
+    return f ? end({ ...f, usage } as LoopResult, `${why}_fallback`) : null;
+  };
+  const stuckMessage = () => {
+    const missing = [...new Set(info.missing)].slice(0, 3);
+    return missing.length
+      ? `I got stuck finding ${missing.length === 1 ? missing[0] : `${missing.slice(0, -1).join(', ')} or ${missing[missing.length - 1]}`} in the course list — can you tell me another name or town to try?`
+      : 'I got stuck on that one — can you tell me a bit more about what you want, e.g. when, where and how many?';
+  };
+
   for (let round = 0; round < maxRounds; round++) {
-    if (o.deadline && now() > o.deadline) return { kind: 'error', code: 'timeout', message: 'The helper took too long — try again with a shorter request.', usage };
+    const left = o.deadline ? o.deadline - now() : Infinity;
+    if (o.deadline && left <= 0) {
+      return (await giveUp('timeout')) || end({ kind: 'error', code: 'timeout', message: 'The helper took too long — try again with a shorter request.', usage }, 'timeout');
+    }
+    const final = !!o.stopTool && (round === maxRounds - 1 || goFinal || left < FINAL_RESERVE_MS);
+    if (final) {
+      addNote(messages, o.finalNote || (o.forceFinal
+        ? `This is your last turn — no more searches. Call ${o.stopTool} now with your best answer so far: leave out anything you couldn't find or that didn't check out, say plainly in your message what you couldn't find, and ask one short question about it.`
+        : `This is your last turn — no more searches. Call ${o.stopTool} now with your best plan so far, leaving out anything you couldn't find (say so in notes). If you really can't, reply with one short question instead.`));
+    }
     const per = o.timeoutMs ?? LIMITS.callTimeoutMs;
     const timeout = o.deadline ? Math.max(5000, Math.min(per, o.deadline - now())) : per; // never past the deadline
-    const r = await callModel(o.ai, { system: o.system, tools: o.tools, messages, maxTokens: o.maxTokens ?? LIMITS.maxTokens }, o.fetchFn, timeout);
-    if (!r.ok) return { kind: 'error', code: r.code, message: r.message, usage };
+    const r = await callModel(o.ai, { system: o.system, tools: o.tools, messages, maxTokens: o.maxTokens ?? LIMITS.maxTokens, ...(final && o.forceFinal ? { force: o.stopTool } : {}) }, o.fetchFn, timeout);
+    info.rounds = round + 1;
+    if (!r.ok) {
+      // Too slow on a later round: hand back what we have rather than nothing.
+      if (r.code === 'timeout' && round > 0) { const g = await giveUp('timeout'); if (g) return g; }
+      return end({ kind: 'error', code: r.code, message: r.message, usage }, r.code);
+    }
     usage.input_tokens += r.reply.usage.input_tokens;
     usage.output_tokens += r.reply.usage.output_tokens;
     if (r.reply.usage.estimated) usage.estimated = true;
@@ -598,12 +722,13 @@ export async function runLoop(o: {
     const text = r.reply.text.trim().slice(0, 3000);
     messages.push({ role: 'assistant', text: r.reply.text, calls });
     if (!calls.length) {
-      if (o.stopTool && !nudged && !(text && asksBack(text))) {
+      if (o.stopTool && !nudged && !final && !(text && asksBack(text))) {
         nudged = true;
         messages.push({ role: 'user', text: `Please call ${o.stopTool} now with your best plan. If you really can’t, ask me one short question instead.` });
         continue;
       }
-      return text ? { kind: 'text', text, usage } : { kind: 'error', code: 'no_answer', message: 'The AI helper didn’t have an answer — try asking another way.', usage };
+      if (text) return end({ kind: 'text', text, usage }, final ? 'final_text' : 'text');
+      return (await giveUp('no_answer')) || end({ kind: 'error', code: 'no_answer', message: 'The AI helper didn’t have an answer — try asking another way.', usage }, 'no_answer');
     }
     const results: ToolResult[] = [];
     let stop: LoopResult | null = null;
@@ -615,26 +740,49 @@ export async function runLoop(o: {
         continue;
       }
       if (c.bad) {
-        if (++badJson > 1) return { kind: 'error', code: 'bad_json', message: BAD_JSON, usage };
+        if (++badJson > 1) return end({ kind: 'error', code: 'bad_json', message: BAD_JSON, usage }, 'bad_json');
         results.push({ id: c.id, name, is_error: true, content: `The arguments for ${name} weren’t valid JSON. Call ${name} again with valid JSON only.` });
         continue;
       }
       if (name === o.stopTool && o.onStop) {
+        lastStopInput = c.input;
         const v = await o.onStop(c.input);
-        if (v.ok) { stop = { kind: 'stop', value: v.value, usage }; continue; }
-        results.push({ id: c.id, name, is_error: true, content: `The plan has problems — fix them and propose again: ${(v.errors || []).join(' ')}` });
+        if (v.ok) { stop = end({ kind: 'stop', value: v.value, usage }, final ? 'final_stop' : 'stop'); continue; }
+        const errs = v.errors || [];
+        info.errs = errs;
+        const sig = errs.join('|');
+        // The same problems again (or no turns left): leave the bad parts out rather than going round again.
+        if ((final || sig === lastSig) && o.salvage) {
+          const s = await o.salvage(c.input).catch(() => ({ ok: false }) as { ok: boolean; value?: Any });
+          if (s.ok) { stop = end({ kind: 'stop', value: s.value, usage }, final ? 'final_salvaged' : 'repeat_salvaged'); continue; }
+        }
+        lastSig = sig;
+        results.push({ id: c.id, name, is_error: true, content: `The plan has problems — fix them and propose again, or leave the problem part out: ${errs.join(' ')}` });
+        continue;
+      }
+      const key = `${name}:${stableJson(c.input || {})}`;
+      const seen = cache.get(key);
+      if (seen !== undefined) {
+        info.repeats++;
+        if (info.repeats >= 2) goFinal = true; // it's going round in circles: answer next time
+        results.push({ id: c.id, name, content: `${seen}\n${REPEAT_NOTE}` });
         continue;
       }
       try {
-        results.push({ id: c.id, name, content: asData(name, await o.exec(name, c.input || {})) });
+        const out = await o.exec(name, c.input || {});
+        info.missing.push(...emptyLookups(name, c.input || {}, out));
+        const content = asData(name, out);
+        cache.set(key, content);
+        results.push({ id: c.id, name, content });
       } catch (e) {
         results.push({ id: c.id, name, is_error: true, content: clean((e as Error)?.message || 'That didn’t work.', 200) });
       }
     }
     if (stop) return stop;
+    if (final) return (await giveUp('final')) || end({ kind: 'error', code: 'too_many_rounds', message: stuckMessage(), usage }, 'final');
     messages.push({ role: 'tool', results });
   }
-  return { kind: 'error', code: 'too_many_rounds', message: 'The helper couldn’t finish that — try saying it more simply.', usage };
+  return (await giveUp('too_many_rounds')) || end({ kind: 'error', code: 'too_many_rounds', message: stuckMessage(), usage }, 'too_many_rounds');
 }
 
 // ------------------------------------------------------------------ One request, start to finish
@@ -666,6 +814,8 @@ export type Deps = {
   tripPlanContext: (raw: Any) => Promise<TripPlanContext>;
   planTool: (name: string, input: Any) => Promise<unknown>;
   planDb: PlanApplyDb;
+  // How many courses the shared library has (ov16), so the helper knows whether searching is worth it. `more`: at least.
+  libraryInfo?: () => Promise<{ courses: number; more: boolean } | null>;
   // The Caddie (22 Oct): the group's trip plans (id, name), read with the person's own sign-in, for go_to.
   plans?: () => Promise<{ id: string; name?: string | null; trip_id?: string | null }[]>;
 };
@@ -726,41 +876,78 @@ export async function helperRequest(body: Any, d: Deps): Promise<Record<string, 
   let result: LoopResult = { kind: 'error', code: 'crash', message: 'Something went wrong.', usage: { input_tokens: 0, output_tokens: 0 } };
   try {
     const common = { ai: d.ai, fetchFn: d.fetchFn, deadline: started + LIMITS.totalMs };
+    // How big the course library is (ov16): with only a few courses the helper shouldn't keep searching.
+    const libNote = async () => {
+      const l = d.libraryInfo ? await d.libraryInfo().catch(() => null) : null;
+      if (!l) return '';
+      const small = !l.more && l.courses < 50;
+      return `${asData('course_library', {
+        courses: l.more ? `${l.courses}+` : l.courses,
+        note: small
+          ? `Only ${l.courses} courses in the list so far — most towns won't have any yet. Search each place once; if nothing comes back, suggest the town anyway and say so.`
+          : 'A big list. One search per place is enough; if a place comes back empty, it isn’t in the list yet — don’t search it again.',
+      })}\n`;
+    };
     if (mode === 'setup') {
       result = await runLoop({
         ...common, system: setupSystem(today, group), tools: SETUP_TOOLS, allowed: TOOL_NAMES.setup,
-        userText: `<request>${text}</request>`,
+        userText: `${await libNote()}<request>${text}</request>`,
         exec: (name, input) => d.setupTool(name, input),
         stopTool: 'propose_setup',
         onStop: async (input) => {
           const v = validatePlan(input, await d.planContext(input));
           return v.ok ? { ok: true, value: v.plan } : { ok: false, errors: v.errors };
         },
+        salvage: async (input) => {
+          const v = salvagePlan(input, await d.planContext(input));
+          return v.ok ? { ok: true, value: v.plan } : { ok: false };
+        },
+        fallback: ({ missing }) => ({ kind: 'text', text: missing.length
+          ? `I got stuck finding ${orList(missing.slice(0, 3))} in the course list — can you tell me the course’s full name, or the town it’s in?`
+          : 'I got stuck putting that together — can you tell me the dates, the courses and the format you want?' }),
       });
     } else if (mode === 'plan') {
       result = await runLoop({
         ...common, system: planSystem(today, group), tools: PLAN_TOOLS, allowed: PLAN_TOOL_NAMES, maxTokens: LIMITS.planMaxTokens,
-        userText: `<request>${text}</request>`,
+        userText: `${await libNote()}<request>${text}</request>`,
         exec: (name, input) => d.planTool(name, input),
         stopTool: 'propose_trip_plan',
         onStop: async (input) => {
           const v = validateTripPlan(input, await d.tripPlanContext(input));
           return v.ok ? { ok: true, value: v.plan } : { ok: false, errors: v.errors };
         },
+        salvage: async (input) => {
+          const v = validateTripPlan(input, await d.tripPlanContext(input), { lenient: true });
+          return v.ok ? { ok: true, value: v.plan } : { ok: false };
+        },
+        fallback: ({ missing }) => ({ kind: 'text', text: missing.length
+          ? `I got stuck finding courses near ${orList(missing.slice(0, 3))} — can you tell me another town or two to look at?`
+          : 'I got stuck putting that together — can you tell me roughly when, where and how many?' }),
       });
     } else if (mode === 'plan_chat') {
       const tctx = await d.tripPlanContext(body?.draft);
       const convo = chatMessages(body?.messages);
       const draftNow = chatDraftIn(body?.draft, tctx);
+      const page = tripPageIn(body?.page);
+      // "plan it" (Josh, 22 Oct): the organiser can stop the questions any time.
+      const steer = wantsPlanNow(text)
+        ? '\n(The organiser said to plan it now: build the draft this turn, guessing sensibly for anything still unknown, and say what you guessed.)'
+        : !convo.length && !draftNow ? '\n(This is the organiser’s first message.)' : '';
       result = await runLoop({
         ...common, system: planChatSystem(today, group), tools: CHAT_TOOLS, allowed: CHAT_TOOL_NAMES, maxTokens: LIMITS.planMaxTokens,
-        userText: `${convo.length ? `${asData('conversation', convo)}\n` : ''}${draftNow ? `${asData('current_draft', draftNow)}\n` : ''}<request>${text}</request>`,
+        maxRounds: LIMITS.chatToolRounds, forceFinal: true,
+        userText: `${await libNote()}${convo.length ? `${asData('conversation', convo)}\n` : ''}${draftNow ? `${asData('current_draft', draftNow)}\n` : ''}${page ? `${asData('trip_page', page)}\n` : ''}<request>${text}</request>${steer}`,
         exec: (name, input) => d.planTool(name, input),
         stopTool: 'reply_with_draft',
         onStop: async (input) => {
           const v = validatePlanChat(input, await d.tripPlanContext(input?.draft));
           return v.ok ? { ok: true, value: v.value } : { ok: false, errors: v.errors };
         },
+        salvage: async (input) => {
+          const v = validatePlanChat(input, await d.tripPlanContext(input?.draft), { lenient: true });
+          return v.ok ? { ok: true, value: v.value } : { ok: false };
+        },
+        fallback: ({ missing }) => ({ kind: 'stop', value: fallbackChat({ draft: draftNow, missing }) }),
       });
     } else {
       let ix: Ix | null = null;
@@ -786,9 +973,19 @@ export async function helperRequest(body: Any, d: Deps): Promise<Record<string, 
     console.error('ai-helper loop failed:', errorKind(e)); // only the kind of error: never values, text or keys
     result = { kind: 'error', code: 'crash', message: 'The AI helper hit a snag — try again in a minute.', usage: result.usage };
   } finally {
+    // Why it ended (ov16), in the 40 characters helper_log.error has, e.g. "too_many_rounds r8 past,course m2".
+    // A rescued reply (the bad parts left out, or the "I got stuck…" question) is logged as "salvaged …" / "stuck …",
+    // so Josh can see them — and like other answers that went wrong, it doesn't use up a question.
+    const ended = result.info?.ended || '';
+    const rescued = result.kind !== 'error' && /salvaged|fallback/.test(ended) ? (/fallback/.test(ended) ? 'stuck' : 'salvaged') : null;
+    const error = result.kind === 'error' ? logDetail(result.code, result.info) : rescued ? logDetail(rescued, result.info) : null;
+    if (result.info && (error || result.info.rounds > 4)) {
+      // The function's own log: counts and tags only, never words.
+      console.log('ai-helper ended:', JSON.stringify({ mode, ended, rounds: result.info.rounds, repeats: result.info.repeats, errs: errTags(result.info.errs), missing: result.info.missing.length }));
+    }
     await d.logEnd(logId, {
       ok: result.kind !== 'error', input_tokens: result.usage.input_tokens, output_tokens: result.usage.output_tokens, ms: Date.now() - started,
-      error: result.kind === 'error' ? result.code : null,
+      error,
     });
   }
   const remaining = afterOne(cap.remaining);
@@ -805,7 +1002,7 @@ export async function helperRequest(body: Any, d: Deps): Promise<Record<string, 
     return { message: result.text, remaining, log_id };
   }
   if (mode === 'plan_chat') {
-    if (result.kind === 'stop') return { chat: { ...result.value, summary: tripPlanSummary(result.value.draft) }, remaining, log_id };
+    if (result.kind === 'stop') return { chat: { ...result.value, summary: result.value.draft ? tripPlanSummary(result.value.draft) : [] }, remaining, log_id };
     return { message: result.text, remaining, log_id };
   }
   return { answer: result.kind === 'text' ? result.text : '', remaining, log_id, ...(go ? { go } : {}) };

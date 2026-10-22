@@ -1,5 +1,6 @@
-// Group (More → Group & invites): switch between your groups, how you're signed in, and — for organisers —
-// invite links with QR codes, and the people in the group with their roles.
+// Players & group (was Group & invites; ov15): the players list first (handicaps — organisers change them, everyone
+// else can dispute), then invite links with QR codes, then the organiser's settings (people and roles, votes by email,
+// look, features). SignInCard is used on your own profile, the start wizard and the quick round.
 import React, { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { useData, useSession, playerName } from '../lib/store.jsx';
@@ -23,43 +24,36 @@ import { GovernanceLink } from './Cases.jsx';
 import { GroupVoteEmailCard } from '../components/VoteEmail.jsx';
 import { Link } from 'react-router-dom';
 import { GroupTabs } from './DeskNav.jsx';
-import { TOOL } from '../lib/desk.js';
+import PlayersList from '../components/PlayersList.jsx';
 
 export default function Group() {
   const { status } = useSession();
+  const admin = status.is_admin;
+  // ov15 (Josh): "the players table, which is the most important, is hidden." Players first; then invites; then the
+  // organiser's settings. Your own things (Save your spot, how you get votes, your link) are on your profile now.
   return (
     <div className="page">
       <GroupTabs deskOnly />
-      <Header back title="Group & invites" sub={status.group_name} />
+      <Header back title="Players & group" sub={status.group_name} />
       <div className="section stack">
-        <MyGroups />
-        <SignInCard />
-        {status.is_admin && <InviteCard role="player" />}
-        {status.is_admin && <InviteCard role="guest" />}
-        {status.is_admin && <PersonalLinksCard />}
-        {status.is_admin && <Members />}
-        {status.is_admin && <PlayersTableLink />}
-        {status.is_admin && <GroupVoteEmailCard />}
-        {status.is_admin && <LookCard />}
-        {status.is_admin && <FeaturesCard />}
-        {status.is_admin && <ForgetJokes />}
+        <PlayersList />
+        {admin && <span className="label" style={{ marginTop: 8 }}>Invite people</span>}
+        {admin && <InviteCard role="player" />}
+        {admin && <InviteCard role="guest" />}
+        {admin && <PersonalLinksCard />}
+        {admin && <span className="label" style={{ marginTop: 8 }}>Organiser settings</span>}
+        {admin && <Members />}
+        {admin && <GroupVoteEmailCard />}
+        {admin && <LookCard />}
+        {admin && <FeaturesCard />}
+        {admin && <ForgetJokes />}
         <GovernanceLink />
+        <MyGroups />
         <JoinAnother />
         <YourData />
-        {!status.is_admin && <div className="small muted">You’re a {ROLE_LABEL[status.role] || 'member'} here — {ROLE_HELP[status.role] || ''} Any link you share from the app (a recap, a vote, a trip) lets someone new join and land on it.</div>}
+        {!admin && <div className="small muted">You’re a {ROLE_LABEL[status.role] || 'member'} here — {ROLE_HELP[status.role] || ''} Any link you share from the app (a recap, a vote, a trip) lets someone new join and land on it. Your own settings (sign-in, votes by email, your link) are on <Link to={`/player/${status.player_id}`}>your profile</Link>.</div>}
       </div>
     </div>
-  );
-}
-
-/** The players & handicaps table (was on the Trip desk): a tab on a laptop, this link everywhere. */
-function PlayersTableLink() {
-  return (
-    <Link to={TOOL.players} className="card pad row" style={{ gap: 12, textDecoration: 'none', color: 'inherit' }} data-testid="players-table-link">
-      <span style={{ fontSize: 24 }} aria-hidden="true">📋</span>
-      <span className="grow"><strong>Players table</strong><div className="small muted">Everyone’s handicap in a table — sort, filter, change in place, or paste a list.</div></span>
-      <span className="btn sm ghost">Open</span>
-    </Link>
   );
 }
 
@@ -265,7 +259,8 @@ function PersonalLinksCard() {
         {rows && signInOn && <div className="small" style={{ marginTop: 6, fontWeight: 700 }}>{done} of {players.length} signed in{done < players.length ? ' — “Remind” nudges someone on the app to save their spot' : ''}</div>}
       </div>
       {!rows ? <Loading /> : players.map((p) => {
-        const line = signInOn ? signInLine(rows[p.id]) : phoneLine(rows[p.id]);
+        // No email addresses on Players & group (ov15), not even the shortened one: just ✓ signed in.
+        const line = signInOn ? signInLine(rows[p.id] && { ...rows[p.id], email: null }) : phoneLine(rows[p.id]);
         return (
           <div key={p.id} className="row" style={{ gap: 10, padding: '10px 14px', borderTop: '1px solid var(--line-soft)', alignItems: 'center' }}>
             <Avatar player={p} size={34} />

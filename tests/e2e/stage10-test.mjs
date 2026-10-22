@@ -247,8 +247,8 @@ await page.getByText('When').first().waitFor({ timeout: 15000 });
 await page.waitForTimeout(500);
 check(!(await page.getByRole('button', { name: '🏨 Find accommodation' }).count()), 'no booking links with the switch off');
 
-// 3. A place vote with a partner course offers the enquiry.
-await page.goto(`${BASE}#/plan/${IDEA}`);
+// 3. A place vote with a partner course offers the enquiry (Organise → Vote, ov14).
+await page.goto(`${BASE}#/plan/${IDEA}?tab=vote`);
 await page.reload();
 await page.getByText('Where should we go?').waitFor({ timeout: 15000 });
 await page.getByRole('link', { name: /Ask about a group booking/ }).waitFor({ timeout: 8000 });

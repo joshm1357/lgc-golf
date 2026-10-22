@@ -78,7 +78,7 @@ async function fake(route) {
 
 const fails = [];
 // "Inside a group" checked positively: the tab bar is there (not just "the list isn't").
-const insideNow = async (page) => page.getByRole('link', { name: 'Leaderboard' }).first().isVisible().catch(() => false);
+const insideNow = async (page) => page.getByRole('link', { name: 'This trip' }).first().isVisible().catch(() => false);
 const check = (ok, msg) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${msg}`); if (!ok) fails.push(msg); };
 const browser = await chromium.launch();
 
@@ -360,7 +360,7 @@ const tapSize = async (page, locator, label) => {
   await page.goto(`${SIGNIN}#/group`);
   await page.getByText('🔗 Personal links').waitFor({ timeout: 15000 });
   check(await page.getByText('1 of 2 signed in').waitFor({ timeout: 10000 }).then(() => true, () => false), 'personal links: count signed in');
-  check(await page.getByText('✓ Signed in as j…@thegolftrip.club').isVisible(), 'personal links: shows who has signed in (email shortened)');
+  check(await page.getByText('✓ Signed in', { exact: true }).first().isVisible() && !(await page.locator('.page').innerText()).includes('@thegolftrip.club'), 'personal links: shows who has signed in (no email address, ov15)');
   check(await page.getByText('Not signed in yet (phone only)').isVisible(), 'personal links: shows who hasn’t');
   calls.length = 0;
   await page.getByRole('button', { name: 'Send a link to Mike' }).click();
@@ -370,7 +370,7 @@ const tapSize = async (page, locator, label) => {
   check(clip.includes('#/me/MYKEMYKE2345') && clip.includes("G'day Mike"), 'personal links: the message with Mike’s link is ready to paste');
   await page.getByText('🔗 Personal links').scrollIntoViewIfNeeded();
   await page.screenshot({ path: `${SHOTS}/s12-personal-links-card.png`, fullPage: false });
-  await noSideScroll(page, 'Group & invites');
+  await noSideScroll(page, 'Players & group');
   await ctx.close();
 }
 

@@ -93,7 +93,7 @@ page.on('pageerror', (e) => fails.push(`page error: ${e}`));
 
 // 1. Josh (a platform admin): More shows Wishes; it opens on the grouped wishes, most asked first.
 await page.goto(`${BASE}#/more`);
-await page.getByText('Group & invites').first().waitFor({ timeout: 15000 });
+await page.getByText('Players & group').first().waitFor({ timeout: 15000 });
 await page.getByText('Wishes', { exact: true }).waitFor({ timeout: 10000 });
 check(true, 'More shows the Wishes link to a platform admin');
 await page.getByText('Wishes', { exact: true }).click();
@@ -129,7 +129,7 @@ check(rpcs.some((r) => r.name === 'admin_connector_stats' && r.body.p_days === 3
 admin = false;
 await page.goto(`${BASE}#/more`);
 await page.reload();
-await page.getByText('Group & invites').first().waitFor({ timeout: 15000 });
+await page.getByText('Players & group').first().waitFor({ timeout: 15000 });
 await page.waitForTimeout(800);
 check(!(await page.getByText('Wishes', { exact: true }).count()), 'no Wishes link for someone who isn’t a platform admin');
 await page.goto(`${BASE}#/wishes`);

@@ -96,37 +96,45 @@ export async function makeTripJobs(pd, status) {
 
 // ---------------------------------------------------------------- The Next step card
 
-export function NextStepCard({ pd, stage, onTab, onView }) {
+/** The Next step (lib/tripjobs.js nextStep) for whoever's signed in. ex: useTripExtras(pd). */
+export function useNextStep(pd, stage, ex) {
   const data = useData();
   const { status } = useSession();
-  const nav = useNavigate();
   const tasksOn = useFeature('planner_tasks');
   const costsOn = useFeature('planner_costs');
-  const ex = useTripExtras(pd);
   const late = useLateJobs();
-  const [sheet, setSheet] = useState(null);
-  const [busy, run] = useRun();
   const plan = pd.plan;
   const names = useMemo(() => Object.fromEntries(data.players.map((p) => [p.id, playerName(p)])), [data.players]);
-  const step = useMemo(() => nextStep({
+  return useMemo(() => nextStep({
     plan: costsOn ? plan : { ...plan, deposit_pp: null, deposit_asked_at: null }, stage,
     items: tasksOn ? pd.items : [], polls: tasksOn ? pd.polls : [], options: pd.options, votes: pd.votes, rsvps: pd.rsvps,
     transfers: pd.transfers, playerIds: data.players.filter((p) => p.approved !== false).map((p) => p.id),
     me: status.player_id, isOrganiser: !!status.is_admin, names, builder: ex.builder,
     late: tasksOn ? late : null,
   }), [plan, stage, pd, data.players, status, names, ex.builder, tasksOn, costsOn, late]);
-  if (!step) return null;
-  const who = step.who ? data.playersById[step.who] : null;
+}
+
+/**
+ * What a Next step's button does: { act(action), busy, sheets, setSheet }. Render `sheets` once.
+ * onTab(tab) opens a part of Organise; actions it doesn't know go to onOther(action).
+ */
+export function useStepActions(pd, ex, { onTab, onOther } = {}) {
+  const { status } = useSession();
+  const nav = useNavigate();
+  const [sheet, setSheet] = useState(null);
+  const [busy, run] = useRun();
+  const late = useLateJobs();
+  const plan = pd.plan;
   const job = (id) => pd.items.find((i) => i.id === id);
-  const act = () => {
-    const a = step.action;
-    if (a.type === 'tab') { if (a.tab === 'stay') setSheet({ kind: 'stay' }); else onTab(a.tab); return; }
+  const act = (a) => {
+    if (!a) return;
+    if (a.type === 'tab') { if (a.tab === 'stay') setSheet({ kind: 'stay' }); else onTab?.(a.tab); return; }
     if (a.type === 'allocate') { setSheet({ kind: 'allocate', job: job(a.id) }); return; }
     if (a.type === 'job') { setSheet({ kind: 'job', job: job(a.id) }); return; }
     if (a.type === 'pay') { setSheet({ kind: 'pay' }); return; }
     if (a.type === 'deposits') { setSheet({ kind: 'deposits' }); return; }
     if (a.type === 'trip_plan') { setSheet({ kind: 'budget' }); return; }
-    if (a.type === 'builder') { onView('organise'); return; }
+    if (a.type === 'builder' || a.type === 'plan_builder') { nav(`/plan/${plan.id}/build`); return; }
     if (a.type === 'lock') {
       const openVotes = pd.polls.filter((p) => p.status === 'open').length;
       if (openVotes && !window.confirm(`${openVotes} vote${openVotes === 1 ? ' is' : 's are'} still open. Lock it in anyway?`)) return;
@@ -144,8 +152,25 @@ export function NextStepCard({ pd, stage, onTab, onView }) {
     if (a.type === 'make_jobs') {
       run(async () => { const n = await makeTripJobs(pd, status); pd.reload(); return n; })
         .then((n) => n != null && toast(n ? `Added ${n} jobs with due dates` : 'The jobs are already there'));
+      return;
     }
+    onOther?.(a);
   };
+  const sheets = <TripSheets sheet={sheet} setSheet={setSheet} pd={pd} ex={ex} onTab={onTab} late={late} />;
+  return { act, busy, sheets, setSheet };
+}
+
+/** The Next step card (Overview, for players: their own next thing — a deposit to pay, a job). hideVotes: skip
+ *  vote steps (the votes are on the page already). */
+export function NextStepCard({ pd, stage, onTab, hideVotes = false }) {
+  const data = useData();
+  const { status } = useSession();
+  const ex = useTripExtras(pd);
+  const step = useNextStep(pd, stage, ex);
+  const { act, busy, sheets } = useStepActions(pd, ex, { onTab });
+  if (!step) return null;
+  if (hideVotes && /^vote/.test(step.key)) return null;
+  const who = step.who ? data.playersById[step.who] : null;
   return (
     <div className="section" style={{ paddingBottom: 0 }}>
       <div className="card" data-testid="next-step" style={{ borderColor: 'var(--navy)', borderWidth: 2, overflow: 'hidden' }}>
@@ -159,17 +184,17 @@ export function NextStepCard({ pd, stage, onTab, onView }) {
           </div>
         </div>
         <div style={{ padding: '0 14px 12px' }}>
-          <button type="button" className="btn gold block" disabled={busy} onClick={act}>{step.label}</button>
+          <button type="button" className="btn gold block" disabled={busy} onClick={() => act(step.action)}>{step.label}</button>
         </div>
       </div>
-      <TripSheets sheet={sheet} setSheet={setSheet} pd={pd} ex={ex} onTab={onTab} late={late} />
+      {sheets}
     </div>
   );
 }
 
 // ---------------------------------------------------------------- Organise: where to stay, the trip plan, deposits
 
-export function TripPlanCards({ pd }) {
+export function TripPlanCards({ pd, only = null }) {
   const data = useData();
   const { status } = useSession();
   const tasksOn = useFeature('planner_tasks');
@@ -186,7 +211,7 @@ export function TripPlanCards({ pd }) {
     tasksOn && { k: 'stay', icon: '🏠', title: 'Where to stay', sub: chosen ? `${chosen.name}${chosen.total_cost != null ? ` · ${money(chosen.total_cost)}` : ''}` : ex.stays.length ? `${ex.stays.length} on the shortlist` : plan.start_date ? 'Find 2–3 places, then the group votes' : 'Once the dates are known' },
     costsOn && { k: 'budget', icon: '🧾', title: 'Trip plan', sub: ex.budget.length ? `${money(sum.total)} · ${money(sum.perPerson)} each${sum.basis === 'keen' ? ' if everyone keen comes' : ''}` : status.is_admin ? 'Costs, food plan and the deposit' : 'Not started yet' },
     costsOn && dep && { k: 'deposits', icon: '💳', title: `Deposits · ${money(plan.deposit_pp)} each`, sub: `${dep.people.filter((p) => p.state === 'paid').length} of ${dep.people.length} paid` },
-  ].filter(Boolean);
+  ].filter(Boolean).filter((r) => !only || only.includes(r.k));
   if (!rows.length) return null;
   return (
     <div className="card" style={{ overflow: 'hidden' }}>
@@ -396,7 +421,7 @@ export function TripJobsTab({ pd, AddSheet }) {
           })}
         </div>
       )}
-      <button type="button" className="btn gold block" onClick={() => setAdding(true)}>+ Add a job</button>
+      <button type="button" className="btn ghost block" onClick={() => setAdding(true)}>+ Add a job</button>
       {adding && AddSheet && <AddSheet plan={pd.plan} kind="job" item={null} onClose={() => setAdding(false)} onSaved={pd.reload} />}
       <TripSheets sheet={sheet} setSheet={setSheet} pd={pd} ex={ex} late={lateData} />
     </>

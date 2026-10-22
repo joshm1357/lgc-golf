@@ -1164,3 +1164,26 @@ screen, "Viewing as Mike · read only", and Stop.
 - **Used by:** the AI planner (facts in course search, new `region_guide` tool, ask-first rules on member times /
   access / stay-and-play / deal sites); course page and trip builder "About this course for groups" block; tee-time
   call job (phone, enquiry/booking links, member-times warning).
+
+## ov18 — v8 fixes, branch `ov18-v8-fixes`, 23 Oct 2026 (no database changes)
+- **Trips "March" missing:** not a filter bug. Live logs show the plan row was deleted on 22 Oct 10:05 UTC by an
+  organiser account (desktop Chrome, the Planner's Delete button). Trips now shows trips an organiser has started
+  (status planning, not proposed, dates or not) under **Being planned** (with the organiser's name), apart from
+  **Ideas** (suggestions). `sortTrips` gains `planning` / `suggested` (`ideas` kept for older callers).
+- **Score flicker:** scores came from the phone's copy straight away, side comp entries a moment later, so the board
+  first showed the total without the bonus. `useSideEntriesState` (saved copy + `loaded`, retries) and
+  `readyBoard` (board.js) — a board with bonus strokes waits (loading) until the side entries are known. Used by
+  This trip's short board, the full leaderboard and the Trophy Room.
+- **Organiser settings:** sign-ins without a name fold into "N old sign-ins without a name" (open to see, give a name);
+  not counted. Look preview: samples separated ("A gold button" / "🏆 2026"). Course research fees: `dollars()`
+  adds $ to bare amounts in green_fee_* / twilight text (not "9 holes", times, %, years; never $$).
+- **AI planning chat:** "Roughly when?" is one of the first questions unless they said when (prompt order: when >
+  how many > driving/flying/how far), with a code check (`whenFirst`) on the first reply.
+- **Josh, 07:01:** "🔗 Personal links" card removed. Players list header: "N not signed in yet" + 🔔 Remind. A player's
+  card: "Send <name> a sign-in link" only when that player isn't signed in (fallback).
+- **Josh, 07:07:** Running jokes (`in_jokes`) no longer a switch — follows Live commentary (app), and the database
+  key is switched with commentary and set the same in presets. Caddie (Ask): quiet line "Use your own AI? Connect
+  Claude or ChatGPT to your group →" (organisers → Players & group → Features, Claude connector highlighted; others
+  "ask your organiser…").
+- **Tested:** Vitest 1293 (80 files); Deno 162; e2e pass: trips, board-bonus (new), nav, trip-overview,
+  organise-tidy, course-research, plan-ux, phone, desktop, look, caddie, jokes, links, signin-home, save-spot.

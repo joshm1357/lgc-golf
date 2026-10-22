@@ -50,3 +50,20 @@ describe('presets for a new group', () => {
     expect(s.gps).toBe(true);
   });
 });
+
+import { followers, withFollowers } from './features.js';
+describe('v8: running jokes are a background part of commentary, not a switch', () => {
+  it('isn’t listed as a switch', () => {
+    expect(FEATURES.filter((f) => !f.hidden).map((f) => f.key)).not.toContain('in_jokes');
+  });
+  it('is on exactly when commentary is on, whatever was stored', () => {
+    expect(featureOn('in_jokes', { awards: true, commentary: true, in_jokes: false })).toBe(true);
+    expect(featureOn('in_jokes', { awards: true, commentary: false, in_jokes: true })).toBe(false);
+    expect(featureOn('in_jokes', { awards: false, in_jokes: true })).toBe(false); // commentary needs awards
+  });
+  it('the database copy is kept in step: switching commentary also switches it, and every preset matches', () => {
+    expect(followers('commentary')).toEqual(['in_jokes']);
+    expect(withFollowers({ commentary: true, in_jokes: false }).in_jokes).toBe(true);
+    for (const p of PRESETS) expect(!!p.switches.in_jokes).toBe(!!p.switches.commentary);
+  });
+});

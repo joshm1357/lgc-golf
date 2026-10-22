@@ -37,7 +37,9 @@ export const FEATURES = [
   { key: 'games', name: 'Games and side bets', description: 'Skins, Nassau and other games worked out from the scores, with a running tally.', newGroup: false },
   { key: 'tee_groups', name: 'Tee groups', description: 'Fair groups of four for each round — new partners each day, handicaps mixed.', newGroup: false },
   { key: 'replay', name: 'Round replay', description: 'Watch a finished round as a 60-second animated replay.', newGroup: true },
-  { key: 'in_jokes', name: 'Running jokes', description: 'The AI quietly picks up running jokes from the feed and trip chat to use in commentary and the replay. They’re never shown as a list.', newGroup: false },
+  // v8 (23 Oct, Josh): "Remove running jokes as that is a background thing." No switch any more: it's a background
+  // part of commentary — on when commentary is on (`follows`). The database key stays, kept in step with commentary.
+  { key: 'in_jokes', name: 'Running jokes', description: 'The AI quietly picks up running jokes from the feed and trip chat to use in commentary and the replay. They’re never shown as a list.', newGroup: false, hidden: true, follows: 'commentary' },
   { key: 'ai_helper', name: 'AI helper', description: 'Ask the app in plain words: set up a trip for you, or answer questions about your group’s history.', newGroup: true },
   { key: 'rule_challenges', name: 'Rule challenges', description: 'Anyone can challenge a rule: change it, scrap it or ask for a ruling.', parent: 'tribunal', newGroup: true },
   { key: 'other_cases', name: '“Anything else” cases', description: 'Raise anything with the Tribunal — that shirt on day 2.', parent: 'tribunal', newGroup: true },
@@ -58,8 +60,21 @@ export const FEATURE_BY_KEY = Object.fromEntries(FEATURES.map((f) => [f.key, f])
 export function featureOn(key, settings = {}) {
   const f = FEATURE_BY_KEY[key];
   if (!f) return true; // core / unknown keys are always on
+  if (f.follows) return featureOn(f.follows, settings); // a background part of another feature
   const own = key in settings ? !!settings[key] : f.newGroup;
   return own && (!f.parent || featureOn(f.parent, settings));
+}
+
+/** Background features that go on and off with this one (no switch of their own), e.g. commentary → in_jokes. */
+export function followers(key) {
+  return FEATURES.filter((f) => f.follows === key).map((f) => f.key);
+}
+
+/** A full set of switches with each background feature set the same as the one it follows (what the database keeps). */
+export function withFollowers(switches = {}) {
+  const out = { ...switches };
+  for (const f of FEATURES) if (f.follows && f.follows in out) out[f.key] = !!out[f.follows];
+  return out;
 }
 
 /** The features that depend on this one (switched off with it). */
@@ -92,4 +107,5 @@ export const PRESETS = [
     switches: Object.fromEntries(FEATURES.map((f) => [f.key, !f.soon])),
   },
 ];
+for (const p of PRESETS) p.switches = withFollowers(p.switches);
 export const PRESET_BY_KEY = Object.fromEntries(PRESETS.map((p) => [p.key, p]));

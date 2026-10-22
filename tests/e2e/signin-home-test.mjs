@@ -351,25 +351,32 @@ const tapSize = async (page, locator, label) => {
   await ctx.close();
 }
 
-// 5f. Organiser: Personal links card — who's signed in, and "Send link".
+// 5f. Organiser (v8, 23 Oct): no "Personal links" list of everyone. The players list says how many aren't signed in;
+// a player's card has "Send <name> a sign-in link" only when that player isn't signed in.
 {
   STATUS.v = { ...member(GROUPS[0], [GROUPS[0]]), is_admin: true };
   const { ctx, page } = await phone({ session: 'signed' });
   await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(SIGNIN).origin });
   await page.addInitScript(() => { try { delete navigator.share; } catch { /* fine */ } navigator.share = undefined; });
   await page.goto(`${SIGNIN}#/group`);
-  await page.getByText('🔗 Personal links').waitFor({ timeout: 15000 });
-  check(await page.getByText('1 of 2 signed in').waitFor({ timeout: 10000 }).then(() => true, () => false), 'personal links: count signed in');
-  check(await page.getByText('✓ Signed in', { exact: true }).first().isVisible() && !(await page.locator('.page').innerText()).includes('@thegolftrip.club'), 'personal links: shows who has signed in (no email address, ov15)');
-  check(await page.getByText('Not signed in yet (phone only)').isVisible(), 'personal links: shows who hasn’t');
+  await page.getByTestId('players-list').waitFor({ timeout: 15000 });
+  check(await page.getByTestId('not-signed-in').getByText('1 not signed in yet').waitFor({ timeout: 10000 }).then(() => true, () => false), 'players list: a small count of who hasn’t signed in');
+  check(!(await page.getByText('🔗 Personal links').isVisible().catch(() => false)), 'no Personal links card any more');
+  check(!(await page.locator('.page').innerText()).includes('@thegolftrip.club'), 'no email addresses shown (ov15)');
+  await page.getByRole('button', { name: /^Josh M/ }).click();
+  check(!(await page.getByTestId('send-sign-in-link').isVisible().catch(() => false)), 'Josh (signed in): no sign-in link on his card');
+  await page.getByRole('button', { name: /^Josh M/ }).click();
+  await page.getByRole('button', { name: /^Mike Morris/ }).click();
+  const send = page.getByRole('button', { name: 'Send Mike a sign-in link' });
+  check(await send.isVisible(), 'Mike (not signed in): “Send Mike a sign-in link” on his card');
   calls.length = 0;
-  await page.getByRole('button', { name: 'Send a link to Mike' }).click();
+  await send.click();
   await page.waitForTimeout(800);
-  check(calls.some((c) => c.path === '/rest/v1/rpc/create_player_link' && c.body.p_player === P2), 'personal links: makes Mike’s link');
+  check(calls.some((c) => c.path === '/rest/v1/rpc/create_player_link' && c.body.p_player === P2), 'sign-in link: makes Mike’s link');
   const clip = await page.evaluate(() => navigator.clipboard.readText()).catch(() => '');
-  check(clip.includes('#/me/MYKEMYKE2345') && clip.includes("G'day Mike"), 'personal links: the message with Mike’s link is ready to paste');
-  await page.getByText('🔗 Personal links').scrollIntoViewIfNeeded();
-  await page.screenshot({ path: `${SHOTS}/s12-personal-links-card.png`, fullPage: false });
+  check(clip.includes('#/me/MYKEMYKE2345') && clip.includes("G'day Mike"), 'sign-in link: the message with Mike’s link is ready to paste');
+  await page.getByTestId('players-list').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `${SHOTS}/s12-player-card-link.png`, fullPage: false });
   await noSideScroll(page, 'Players & group');
   await ctx.close();
 }

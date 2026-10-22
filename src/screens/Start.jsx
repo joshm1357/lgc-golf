@@ -5,7 +5,7 @@ import { useSession } from '../lib/store.jsx';
 import { setCurrentGroup } from '../lib/group.js';
 import { SIGN_IN } from '../lib/auth.js';
 import { STARTERS } from '../lib/starters.js';
-import { FEATURES, PRESETS, PRESET_BY_KEY, featureOn } from '../lib/features.js';
+import { FEATURES, PRESETS, PRESET_BY_KEY, featureOn, withFollowers } from '../lib/features.js';
 import { useRun, must } from '../lib/run.js';
 import { GolfTripCrest } from '../components/Logo.jsx';
 import { Toaster, toast } from '../components/ui.jsx';
@@ -314,7 +314,7 @@ function FeaturesStep({ onNext, gid }) {
   const [custom, setCustom] = useState(() => ({ ...PRESET_BY_KEY.full_trip.switches }));
   const switches = preset === 'custom' ? custom : PRESET_BY_KEY[preset].switches;
   // Says which group it's for: the server refuses if the phone has drifted to another group.
-  const save = () => run(async () => { await must(supabase.rpc('set_features', { p_switches: switches, p_group: gid })); onNext(); });
+  const save = () => run(async () => { await must(supabase.rpc('set_features', { p_switches: withFollowers(switches), p_group: gid })); onNext(); });
   return (
     <>
       <p style={{ margin: 0 }}>Pick how much of the app your group uses. Scores, the leaderboard, players and courses are always there. Change any of it later in Group &amp; invites.</p>

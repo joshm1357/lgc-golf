@@ -140,6 +140,7 @@ check(await visible(page.getByRole('button', { name: 'Who’s leading in Wednesd
 check(await visible(page.getByRole('button', { name: 'Change the teams' })), 'organisers get "Change the teams"');
 check((await page.getByTestId('caddie-chat').getAttribute('data-ai')) === 'on', 'AI on');
 await page.screenshot({ path: `${SHOTS}/2-sheet.png` });
+check(/Connect Claude or ChatGPT to your group/.test(await page.getByTestId('caddie-connector').innerText().catch(() => '')), 'v8: a quiet line at the bottom notes the Claude / ChatGPT connector (organiser)');
 await box(page).fill('How do I change the teams?');
 await page.getByRole('button', { name: 'Ask', exact: true }).click();
 await page.getByText('Tap Go there and change the teams').waitFor({ timeout: 10000 });
@@ -236,10 +237,26 @@ guest = true; organiser = false;
   await gp.getByRole('button', { name: 'Find it' }).click();
   await gp.getByRole('button', { name: /The Rulebook.*Go there/ }).waitFor({ timeout: 5000 });
   check(!(await visible(gp.getByRole('button', { name: /Teams & pairs/ }))), 'guest: no organiser-only places');
+  check(/ask your organiser to switch it on/.test(await gp.getByTestId('caddie-connector').innerText().catch(() => '')), 'v8: not an organiser → “ask your organiser to switch it on” (connector off)');
   await gp.screenshot({ path: `${SHOTS}/7-guest.png` });
   await g.close();
 }
 guest = false; organiser = true;
+
+// 7b. v8: the organiser's connector line goes to Players & group → Features, the Claude connector highlighted.
+{
+  const { ctx: o, page: op } = await newCtx({ width: 375, height: 812 });
+  await op.goto(`${BASE}#/rules`);
+  await op.getByTestId('caddie').click();
+  await op.getByTestId('caddie-connector').waitFor({ timeout: 15000 });
+  await op.getByTestId('caddie-connector').getByRole('button').click();
+  await op.waitForURL(/#\/group\?feature=connector/, { timeout: 10000 });
+  const row = op.locator('[data-feature="connector"]');
+  await row.waitFor({ timeout: 15000 });
+  check(await row.getAttribute('data-highlight') === 'true', 'v8: organiser → Features with the Claude connector highlighted');
+  await op.screenshot({ path: `${SHOTS}/7b-connector-highlight.png` });
+  await o.close();
+}
 
 // 8. No signal: says so; the search still works.
 {

@@ -7,11 +7,19 @@
 //     upheld verdict is applied by an organiser from the case (apply_dispute_verdict).
 //   * tap a name → their card: handicap history, profile link; for organisers, a player not on the app can be given
 //     an email for trip votes. Nobody's email address is ever shown here.
+//   * v8 (23 Oct, Josh): no list of personal links for everyone any more. New people come in through the group's
+//     join link (sign in → pick their name or "I'm not on the list" → an organiser approves). An organiser sees how
+//     many haven't signed in (with Remind) at the top, and — only for a player who isn't signed in / has no account
+//     yet — "Send <name> a sign-in link" on that player's card, as a fallback.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
 import { useData, useSession, useRealtime, useFeature, playerName } from '../lib/store.jsx';
 import { Avatar, toast } from './ui.jsx';
+import { SIGN_IN } from '../lib/auth.js';
+import { shareText, notify } from '../lib/push.js';
+import { personalLink, personalMessage, phoneMessage } from '../lib/personal.js';
+import { signInReminder, organiserAction } from '../lib/savespot.js';
 import { useRun, must } from '../lib/run.js';
 import { readHandicap } from '../lib/history.js';
 import { ROLE_LABEL } from '../lib/invite.js';
@@ -30,7 +38,7 @@ export default function PlayersList() {
   const tasksOn = useFeature('planner_tasks');
   const [busy, run] = useRun();
   const [members, setMembers] = useState([]);
-  const [signIns, setSignIns] = useState({});
+  const [signIns, setSignIns] = useState(null); // organisers: player_sign_ins by player (null until loaded / older database)
   const [channels, setChannels] = useState({});
   const [history, setHistory] = useState([]);
   const [edit, setEdit] = useState(null); // { id, value }
@@ -46,6 +54,7 @@ export default function PlayersList() {
     if (!admin) return;
     const { data: s, error } = await supabase.rpc('player_sign_ins');
     if (!error) setSignIns(Object.fromEntries((s || []).map((r) => [r.player_id, r])));
+    else setSignIns(null);
     if (tasksOn) {
       const { data: c, error: e2 } = await supabase.rpc('vote_channels');
       if (!e2) setChannels(Object.fromEntries((c || []).map((r) => [r.player_id, r])));
@@ -79,6 +88,24 @@ export default function PlayersList() {
     run(async () => { await must(supabase.from('players').update({ handicap: h }).eq('id', p.id)); await data.reload(); await loadHistory(); }, `${playerName(p)}: ${showHcp(h)}`);
   };
 
+  // Organisers: who hasn't signed in yet, as one small count, and Remind (a phone nudge to those on the app).
+  const signInOn = SIGN_IN.length > 0;
+  const notSignedIn = admin && signInOn && signIns ? players.filter((p) => !signIns[p.id]?.signed_in) : [];
+  const remindable = notSignedIn.filter((p) => organiserAction(signIns[p.id]) === 'remind');
+  const remindAll = () => run(async () => {
+    let sent = 0;
+    for (const p of remindable) {
+      const r = await notify('nudge_signin', { player_id: p.id });
+      if (!r?.error && r?.sent > 0) sent += 1;
+    }
+    if (sent) { toast(`Reminder sent to ${sent} phone${sent === 1 ? '' : 's'}`); return; }
+    // No phone notifications got through: a message for the group chat instead.
+    const msg = signInReminder('all', status.group_name, `${window.location.origin}${import.meta.env.BASE_URL}`);
+    const r = await shareText(msg, 'Save your spot');
+    if (r === 'copied') toast('No phone notifications went — a message is copied, paste it in the group chat');
+    else if (r === 'failed') window.prompt('Send the group this:', msg);
+  });
+
   return (
     <div className="card" data-testid="players-list">
       <div style={{ padding: '12px 14px 6px' }}>
@@ -86,6 +113,13 @@ export default function PlayersList() {
           <strong>Players · {players.length}</strong>
           {admin && <Link to="/group/players" className="small" style={{ fontWeight: 700 }} data-testid="players-table-link">Full table →</Link>}
         </div>
+        {notSignedIn.length > 0 && (
+          <div className="row small" data-testid="not-signed-in" style={{ gap: 8, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 700 }}>{notSignedIn.length} not signed in yet</span>
+            {remindable.length > 0 && <button type="button" className="btn ghost sm" disabled={busy} style={{ minHeight: 44 }} onClick={remindAll}
+              aria-label={`Remind the ${remindable.length} on the app to save their spot`}>🔔 Remind</button>}
+          </div>
+        )}
         <div className="small muted">{admin
           ? 'Tap a handicap to change it. Tap a name for their card.'
           : 'Handicaps are set by an organiser. Think one’s wrong? Tap it to dispute it.'}</div>
@@ -93,7 +127,7 @@ export default function PlayersList() {
       {players.map((p) => {
         const role = roleOf[p.id];
         const onApp = !!role;
-        const signedIn = signIns[p.id]?.signed_in;
+        const signedIn = signIns?.[p.id]?.signed_in;
         const last = lastOf[p.id];
         const name = playerName(p);
         return (
@@ -128,7 +162,7 @@ export default function PlayersList() {
               </span>
             </div>
             {open === p.id && <PlayerCard player={p} history={history.filter((h) => h.player_id === p.id)} admin={admin} onApp={onApp}
-              channel={channels[p.id]} onChanged={() => loadPeople().catch(() => {})} />}
+              channel={channels[p.id]} signIn={signIns ? signIns[p.id] || {} : null} signInOn={signInOn} onChanged={() => loadPeople().catch(() => {})} />}
           </div>
         );
       })}
@@ -138,11 +172,22 @@ export default function PlayersList() {
 }
 
 /** A player's card: handicap history, their profile; for organisers, a vote email for someone not on the app. */
-function PlayerCard({ player, history, admin, onApp, channel, onChanged }) {
+function PlayerCard({ player, history, admin, onApp, channel, signIn, signInOn, onChanged }) {
   const [draft, setDraft] = useState('');
   const [adding, setAdding] = useState(false);
   const [busy, run] = useRun();
+  const { status } = useSession();
   const name = playerName(player);
+  // The fallback sign-in link: only for someone who isn't signed in (sign-in on) / isn't on the app at all (sign-in off).
+  const needsLink = admin && signIn && (signInOn ? !signIn.signed_in : !(Number(signIn.phones || 0) > 0 || signIn.signed_in));
+  const sendLink = () => run(async () => {
+    const code = await must(supabase.rpc('create_player_link', { p_player: player.id }));
+    const link = personalLink(code);
+    const r = await shareText((signInOn ? personalMessage : phoneMessage)(name, status.group_name, link, signIn?.role), `${name}'s link`);
+    onChanged();
+    if (r === 'copied') toast(`${name}'s link copied — paste it in a message to them`);
+    else if (r === 'failed') window.prompt(`Copy ${name}'s link and send it to them:`, link);
+  });
   const save = (e) => run(async () => {
     const { error } = await supabase.rpc('set_invited_vote_email', { p_player: player.id, p_email: e });
     if (error) throw NOT_YET.test(`${error.code} ${error.message}`) ? new Error('Votes by email aren’t switched on yet') : error;
@@ -175,6 +220,14 @@ function PlayerCard({ player, history, admin, onApp, channel, onChanged }) {
             </div>
           )}
           <span className="muted">Only used for trip votes. The address isn’t shown to anyone.</span>
+        </div>
+      )}
+      {needsLink && (
+        <div className="small stack" data-testid="send-sign-in-link" style={{ gap: 4 }}>
+          <button type="button" className="btn ghost sm" disabled={busy} style={{ alignSelf: 'flex-start', minHeight: 44 }} onClick={sendLink}>
+            {signIn.link_waiting ? `Send ${name} a new sign-in link` : `Send ${name} a sign-in link`}
+          </button>
+          <span className="muted">{signIn.link_waiting ? 'A link was sent and hasn’t been used yet. ' : ''}Only if they can’t get in with the group’s join link. It works once and lasts 14 days.</span>
         </div>
       )}
       <Link to={`/player/${player.id}`} className="small" style={{ fontWeight: 700 }}>{name}’s profile →</Link>

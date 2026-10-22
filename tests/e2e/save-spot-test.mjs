@@ -449,7 +449,7 @@ async function joinAsKurt(page, base) {
   await ctx.close();
 }
 
-// 8. Organiser: who's saved their spot, and Remind.
+// 8. Organiser: who's saved their spot, and Remind (v8: a small count with Remind on the players list header).
 {
   const S = server();
   S.joined = true; S.player = K; S.admin = true; S.user.is_anonymous = false; S.user.email = 'kurt@example.com';
@@ -458,26 +458,26 @@ async function joinAsKurt(page, base) {
   await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(PW).origin });
   await page.addInitScript(() => { navigator.share = undefined; });
   await page.goto(`${PW}#/group`);
-  await page.getByText('🔗 Personal links').waitFor({ timeout: 15000 });
-  check(await page.getByText(/1 of 2 signed in/).waitFor({ timeout: 8000 }).then(() => true, () => false), 'organiser: how many have saved their spot');
-  check(await page.getByText('✓ Signed in', { exact: true }).isVisible(), 'organiser: ✓ signed in (no email address shown, ov15)');
-  const remind = page.getByRole('button', { name: 'Remind Mike to save their spot' });
-  check(await remind.isVisible(), 'organiser: Remind for Mike (on the app, not signed in)');
-  check(!(await page.getByRole('button', { name: 'Remind Kurt to save their spot' }).isVisible().catch(() => false)), 'no Remind for someone signed in');
+  await page.getByTestId('players-list').waitFor({ timeout: 15000 });
+  check(await page.getByTestId('not-signed-in').getByText('1 not signed in yet').waitFor({ timeout: 8000 }).then(() => true, () => false), 'organiser: how many haven’t saved their spot');
+  check(!(await page.getByText('🔗 Personal links').isVisible().catch(() => false)), 'organiser: no Personal links card');
+  check(!(await page.locator('.page').innerText()).includes('@example.com'), 'organiser: no email address shown (ov15)');
+  const remind = page.getByTestId('not-signed-in').getByRole('button', { name: /Remind/ });
+  check(await remind.isVisible(), 'organiser: Remind (Mike is on the app, not signed in)');
   await tapSize(remind, 'Remind');
-  await page.getByText('🔗 Personal links').scrollIntoViewIfNeeded();
   await page.screenshot({ path: `${SHOTS}/14-organiser.png` });
   await noSideScroll(page, 'Players & group');
   await remind.click();
-  await page.getByText('Reminder sent to Mike’s phone').waitFor({ timeout: 8000 }).catch(() => null);
+  await page.getByText('Reminder sent to 1 phone').waitFor({ timeout: 8000 }).catch(() => null);
   check(S.notify.some((n) => n.type === 'nudge_signin' && n.player_id === M), 'Remind sends the notification nudge to Mike');
-  check(await page.getByText('Reminder sent to Mike’s phone').isVisible().catch(() => false), 'Remind: says it went');
-  // The server hasn't got this kind yet (or Mike has notifications off): a message to paste instead.
+  check(!S.notify.some((n) => n.type === 'nudge_signin' && n.player_id === K), 'no nudge for Kurt (signed in)');
+  check(await page.getByText('Reminder sent to 1 phone').isVisible().catch(() => false), 'Remind: says it went');
+  // The server hasn't got this kind yet (or notifications are off): a message to paste instead.
   S.notifyReply = { error: 'Unknown notification' };
   await remind.click();
   await page.waitForTimeout(1000);
   const clip = await page.evaluate(() => navigator.clipboard.readText()).catch(() => '');
-  check(/G'day Mike/.test(clip) && /Save your spot/.test(clip), 'no notification possible: a chat message is copied instead');
+  check(/G'day all/.test(clip) && /Save your spot/.test(clip), 'no notification possible: a chat message is copied instead');
   await ctx.close();
 }
 

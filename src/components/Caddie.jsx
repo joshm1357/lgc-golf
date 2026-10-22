@@ -12,6 +12,7 @@
 import React, { useEffect, useLayoutEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Sheet } from './ui.jsx';
+import { useSession, useFeature } from '../lib/store.jsx';
 import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
 import { caddieHidden, usesPanel } from '../lib/caddie.js';
 import './caddie.css';
@@ -85,6 +86,29 @@ function useFabLift(active, pathname) {
   return lift;
 }
 
+/**
+ * v8 (23 Oct, Josh): "The Claude connector or other AI connector should be at the bottom of the Caddie to note the
+ * option." A quiet line under the Ask chat. Organisers go to the Claude connector switch (Players & group → Features,
+ * highlighted); everyone else is told to ask an organiser.
+ */
+function ConnectorNote({ onGo }) {
+  const { status } = useSession() || {};
+  const on = useFeature('connector');
+  const organiser = !!status?.is_admin && !status?.viewing;
+  return (
+    <div className="small muted" data-testid="caddie-connector" style={{ padding: '10px 2px 2px', borderTop: '1px solid var(--line-soft)', marginTop: 8 }}>
+      {organiser ? (
+        <button type="button" onClick={() => onGo('/group?feature=connector')}
+          style={{ border: 0, background: 'none', padding: 0, font: 'inherit', color: 'inherit', textDecoration: 'underline', textAlign: 'left', minHeight: 44 }}>
+          Use your own AI? Connect Claude or ChatGPT to your group →
+        </button>
+      ) : (
+        <span>Use your own AI? Claude or ChatGPT can connect to your group{on ? ' — ask your organiser for the link.' : ' — ask your organiser to switch it on.'}</span>
+      )}
+    </div>
+  );
+}
+
 export function Caddie() {
   const loc = useLocation();
   const navigate = useNavigate();
@@ -129,7 +153,7 @@ export function Caddie() {
   const go = (path) => { if (mode === 'plan') setFolded(true); else setOpen(false); navigate(path); };
   const chat = (
     <LazyArea fallback={<div className="small muted" style={{ padding: 12 }}>Opening…</div>} onClose={() => { setOpen(false); setPanelOpen(false); }}>
-      {mode === 'plan' ? <CaddiePlan onGo={go} /> : <CaddieChat onGo={go} ask={ask} />}
+      {mode === 'plan' ? <CaddiePlan onGo={go} /> : <><CaddieChat onGo={go} ask={ask} /><ConnectorNote onGo={go} /></>}
     </LazyArea>
   );
   const tabs = (

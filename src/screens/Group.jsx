@@ -8,21 +8,19 @@ import { Header, Avatar, Loading, toast } from '../components/ui.jsx';
 import { setCurrentGroup } from '../lib/group.js';
 import { inviteLink, ROLE_LABEL, ROLE_HELP } from '../lib/invite.js';
 import { readLink } from '../lib/links.js';
-import { SIGN_IN } from '../lib/auth.js';
 import { SaveSpotPanel } from '../components/SaveSpot.jsx';
-import { signInReminder, organiserAction } from '../lib/savespot.js';
-import { shareText, notify } from '../lib/push.js';
-import { FEATURES, featureOn, children } from '../lib/features.js';
+import { SIGN_IN } from '../lib/auth.js';
+import { shareText } from '../lib/push.js';
+import { FEATURES, featureOn, children, followers } from '../lib/features.js';
 import { FONTS, DEFAULT_LOOK, LGC_LOOK, lookProblems, themeVars, applyLook } from '../lib/theme.js';
 import { uploadPhoto } from '../lib/images.js';
 import { GroupCrest } from '../components/Logo.jsx';
 import { useRun, must } from '../lib/run.js';
-import { personalLink, personalMessage, signInLine, phoneMessage, phoneLine } from '../lib/personal.js';
 import { NEW_GROUPS } from '../lib/beta.js';
 import ForgetJokes from '../components/ForgetJokes.jsx';
 import { GovernanceLink } from './Cases.jsx';
 import { GroupVoteEmailCard } from '../components/VoteEmail.jsx';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { GroupTabs } from './DeskNav.jsx';
 import PlayersList from '../components/PlayersList.jsx';
 
@@ -40,7 +38,6 @@ export default function Group() {
         {admin && <span className="label" style={{ marginTop: 8 }}>Invite people</span>}
         {admin && <InviteCard role="player" />}
         {admin && <InviteCard role="guest" />}
-        {admin && <PersonalLinksCard />}
         {admin && <span className="label" style={{ marginTop: 8 }}>Organiser settings</span>}
         {admin && <Members />}
         {admin && <GroupVoteEmailCard />}
@@ -221,87 +218,6 @@ function Members() {
   );
 }
 
-/**
- * Personal links (organisers): send each player their own link. Sign-in on: they sign in and that sign-in is
- * connected to their player, with all their history (046). Sign-in off: the link opens the app as them on that phone
- * (083) — how someone gets back in on a new phone.
- */
-function PersonalLinksCard() {
-  const { status } = useSession();
-  const signInOn = SIGN_IN.length > 0;
-  const data = useData();
-  const [rows, setRows] = useState(null);
-  const [hidden, setHidden] = useState(false);
-  const [busy, run] = useRun();
-  const load = useCallback(async () => {
-    const { data: d, error } = await supabase.rpc('player_sign_ins');
-    if (error) {
-      if (/PGRST202|Could not find the function/i.test(`${error.code} ${error.message}`)) { setHidden(true); return; } // older database
-      throw error;
-    }
-    setRows(Object.fromEntries((d || []).map((r) => [r.player_id, r])));
-  }, []);
-  useEffect(() => { load().catch(() => setHidden(true)); }, [load]);
-  if (hidden) return null;
-  const players = data.players.filter((p) => p.approved !== false).sort((a, b) => playerName(a).localeCompare(playerName(b)));
-  const done = rows ? players.filter((p) => rows[p.id]?.signed_in).length : 0;
-  const send = (p) => run(async () => {
-    const code = await must(supabase.rpc('create_player_link', { p_player: p.id }));
-    const link = personalLink(code);
-    const r = await shareText((signInOn ? personalMessage : phoneMessage)(playerName(p), status.group_name, link, rows?.[p.id]?.role), `${playerName(p)}'s link`);
-    await load();
-    if (r === 'copied') toast(`${playerName(p)}'s link copied — paste it in a message to them`);
-    else if (r === 'failed') { window.prompt(`Copy ${playerName(p)}'s link and send it to them:`, link); }
-  });
-  // Remind: a phone notification to that player ("Save your spot"); if none can be sent (notifications off, or the
-  // server hasn't got this kind yet), a message for the chat instead.
-  const remind = (p) => run(async () => {
-    const r = await notify('nudge_signin', { player_id: p.id });
-    if (!r?.error && r?.sent > 0) { toast(`Reminder sent to ${playerName(p)}’s phone`); return; }
-    const msg = signInReminder(playerName(p), status.group_name, `${window.location.origin}${import.meta.env.BASE_URL}`);
-    const s = await shareText(msg, `Remind ${playerName(p)}`);
-    if (s === 'copied') toast(`No phone notification for ${playerName(p)} — a message is copied, paste it to them`);
-    else if (s === 'failed') window.prompt(`Send ${playerName(p)} this:`, msg);
-  });
-  return (
-    <div className="card">
-      <div style={{ padding: '12px 14px 4px' }}>
-        <strong>🔗 Personal links</strong>
-        <div className="small muted">{signInOn
-          ? 'Send each player their own link. They sign in, and they keep their name, scores and history on any phone. Each link works once and lasts 14 days.'
-          : 'Send a player their own link to get them in on a new phone — it opens the app as them, no name to pick. Each link works once and lasts 14 days.'}</div>
-        {rows && signInOn && <div className="small" style={{ marginTop: 6, fontWeight: 700 }}>{done} of {players.length} signed in{done < players.length ? ' — “Remind” nudges someone on the app to save their spot' : ''}</div>}
-      </div>
-      {!rows ? <Loading /> : players.map((p) => {
-        // No email addresses on Players & group (ov15), not even the shortened one: just ✓ signed in.
-        const line = signInOn ? signInLine(rows[p.id] && { ...rows[p.id], email: null }) : phoneLine(rows[p.id]);
-        return (
-          <div key={p.id} className="row" style={{ gap: 10, padding: '10px 14px', borderTop: '1px solid var(--line-soft)', alignItems: 'center' }}>
-            <Avatar player={p} size={34} />
-            <span className="grow" style={{ minWidth: 0 }}>
-              <strong style={{ display: 'block' }}>{playerName(p)}{rows[p.id]?.role === 'organiser' && <span className="small" style={{ fontWeight: 600, color: 'var(--muted)' }}> · organiser (their link makes them one)</span>}</strong>
-              <span className="small" style={{ color: line.done ? 'var(--up)' : 'var(--muted)' }}>{line.done ? '✓ ' : ''}{line.word}</span>
-            </span>
-            {!line.done && (
-              <span className="stack" style={{ gap: 4, flex: 'none' }}>
-                {/* On the app on a phone but not signed in: a nudge to "Save your spot" (22 Oct). */}
-                {signInOn && organiserAction(rows[p.id]) === 'remind' && (
-                  <button type="button" className="btn sm" disabled={busy} style={{ minHeight: 44 }} onClick={() => remind(p)}
-                    aria-label={`Remind ${playerName(p)} to save their spot`}>🔔 Remind</button>
-                )}
-                <button type="button" className="btn ghost sm" disabled={busy} style={{ minHeight: 44 }} onClick={() => send(p)}
-                  aria-label={`${line.waiting ? 'Send a new link to' : 'Send a link to'} ${playerName(p)}`}>
-                  {line.waiting ? 'Send again' : 'Send link'}
-                </button>
-              </span>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 /** Join another group by pasting its invite link (iPhone Home Screen apps can't open links from chats). */
 function JoinAnother() {
   const [text, setText] = useState('');
@@ -324,12 +240,23 @@ function JoinAnother() {
  *  in the group straight away (the database refuses writes to a switched-off feature, so it can't be got around). */
 function FeaturesCard() {
   const data = useData();
+  // #/group?feature=connector (from the Caddie): that switch is highlighted and scrolled to.
+  const want = new URLSearchParams(useLocation().search).get('feature');
+  useEffect(() => {
+    if (!want) return;
+    const t = setTimeout(() => document.querySelector(`[data-feature="${CSS.escape(want)}"]`)?.scrollIntoView({ block: 'center' }), 300);
+    return () => clearTimeout(t);
+  }, [want]);
   const [busy, run] = useRun();
   const settings = data.features || {};
   const flip = (f, on) => {
     const kids = children(f.key).filter((k) => featureOn(k, settings));
     if (!on && kids.length && !window.confirm(`Switching off ${f.name} also switches off: ${kids.map((k) => FEATURES.find((x) => x.key === k).name).join(', ')}. Go ahead?`)) return;
-    run(() => must(supabase.rpc('set_feature', { p_key: f.key, p_on: on })), on ? `${f.name} on` : `${f.name} off`);
+    run(async () => {
+      await must(supabase.rpc('set_feature', { p_key: f.key, p_on: on }));
+      // Background parts (e.g. running jokes with commentary) go on and off with it, so the server agrees.
+      for (const k of followers(f.key)) await supabase.rpc('set_feature', { p_key: k, p_on: on });
+    }, on ? `${f.name} on` : `${f.name} off`);
   };
   return (
     <div className="card">
@@ -348,7 +275,9 @@ function FeaturesCard() {
           );
         }
         return (
-          <label key={f.key} className="row" style={{ gap: 10, padding: '10px 14px', paddingLeft: f.parent ? 34 : 14, borderTop: '1px solid var(--line-soft)', opacity: parentOff ? 0.5 : 1 }}>
+          <label key={f.key} className="row" data-feature={f.key} data-highlight={want === f.key ? 'true' : undefined}
+            style={{ gap: 10, padding: '10px 14px', paddingLeft: f.parent ? 34 : 14, borderTop: '1px solid var(--line-soft)', opacity: parentOff ? 0.5 : 1,
+              ...(want === f.key ? { background: 'var(--gold-soft)', boxShadow: 'inset 4px 0 0 var(--gold)' } : {}) }}>
             <span className="grow" style={{ minWidth: 0 }}>
               <strong style={{ fontSize: 15 }}>{f.name}</strong>
               <div className="small muted">{parentOff ? `Needs ${FEATURES.find((x) => x.key === f.parent).name} on. ` : ''}{f.description}</div>

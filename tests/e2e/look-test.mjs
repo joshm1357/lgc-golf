@@ -61,6 +61,9 @@ const db = {
     { group_id: 'a0a0a0a0-0000-4000-8000-00000000000a', user_id: '99999999-9999-4999-8999-999999999999', player_id: P1, role: 'organiser', created_at: now },
     { group_id: 'a0a0a0a0-0000-4000-8000-00000000000a', user_id: '88888888-8888-4888-8888-888888888888', player_id: P2, role: 'player', created_at: now },
     { group_id: 'a0a0a0a0-0000-4000-8000-00000000000a', user_id: '77777777-7777-4777-8777-777777777777', player_id: null, role: 'guest', created_at: now },
+    // v8: old sign-ins from before the move to the new address (names freed) — folded into one line.
+    { group_id: 'a0a0a0a0-0000-4000-8000-00000000000a', user_id: '66666666-6666-4666-8666-666666666666', player_id: null, role: 'player', created_at: now },
+    { group_id: 'a0a0a0a0-0000-4000-8000-00000000000a', user_id: '55555555-5555-4555-8555-555555555555', player_id: null, role: 'player', created_at: now },
   ],
   plan_rsvps: [P1, P2, P3].map((p) => ({ plan_id: PLAN, player_id: p, status: 'in', updated_at: now })),
   plan_groups: [{ id: ROOM, plan_id: PLAN, kind: 'room', name: 'Bunk room', capacity: 2, sort: 0, created_at: now }],
@@ -178,6 +181,23 @@ await page.getByText('🎨 Look').scrollIntoViewIfNeeded();
 await page.screenshot({ path: `${SHOTS}/l2-look.png` });
 const sw = await page.evaluate(() => document.scrollingElement.scrollWidth);
 check(sw <= 375, `Look card: no sideways scroll (${sw}px)`);
+{
+  // v8: the preview read "Leaderboard · A gold button2026".
+  const prev = await page.getByTestId('look-preview-samples').innerText();
+  check(/A gold button\s+🏆 2026/.test(prev) && !/button2026/.test(prev), `Look preview: the samples are separated (${JSON.stringify(prev)})`);
+  // v8: sign-ins without a name fold into one line and aren't counted.
+  const members = page.getByTestId('members-card');
+  await members.scrollIntoViewIfNeeded();
+  const mt = await members.innerText();
+  check(/People in the group · 2\b/i.test(mt), 'organiser settings: only named people counted (2)');
+  const fold = members.getByTestId('nameless-sign-ins');
+  check(/3 old sign-ins without a name/.test(await fold.innerText()), 'organiser settings: “3 old sign-ins without a name” on one line');
+  check(!(await members.getByText('Hasn’t picked a name yet').first().isVisible()), 'folded: the nameless rows are hidden until opened');
+  await page.screenshot({ path: `${SHOTS}/l3-members-folded.png` });
+  await fold.locator('summary').click();
+  check(await members.getByText('Hasn’t picked a name yet').count() === 3, 'opened: the 3 nameless sign-ins are there (nothing deleted)');
+  await page.screenshot({ path: `${SHOTS}/l4-members-open.png` });
+}
 
 // L.G.C: exactly today's colours and its own crest.
 STATUS.v = { ...NEW, group_name: 'L.G.C', legacy: true, look: { short_name: 'L.G.C', crest_url: 'builtin:lgc', primary: '#1C2B3F', accent: '#D9A521', font: 'condensed' } };

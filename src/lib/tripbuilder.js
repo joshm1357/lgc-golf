@@ -667,6 +667,31 @@ export function startRange(st = {}, { courseMap = {}, accom = [], extras = null 
   return out;
 }
 
+/**
+ * The regions side by side (080): for each area option — its courses and places to stay on the table, accommodation
+ * ideas (with list links), rough cost each to stay (the cheapest idea's total ÷ people), the drive from where people
+ * come from (to the area's middle), and how many days of tee times are in for its courses.
+ * → [{ area, courses: [names], stays: [names], ideas, costEach, drive, driveText, teeDays }]
+ */
+export function compareAreas(st = {}, { areas = [], accom = [], people = 0, origin = null, tees = [] } = {}) {
+  const list = st.region ? [st.region] : (st.regionOptions || []);
+  const regs = regionsFrom(areas);
+  return list.map((area) => {
+    const ids = (st.areaCourses || {})[area] || [];
+    const stays = (st.areaStays || {})[area] || [];
+    const ideas = (accom || []).filter((a) => a.area === area);
+    const totals = ideas.map((a) => Number(a.total_cost)).filter((n) => Number.isFinite(n) && n > 0);
+    const reg = regs.find((r) => r.region === area);
+    const drive = origin && reg ? driveBetween(origin, reg) : null;
+    const days = new Set((tees || []).filter((t) => ids.includes(t.course_id) && (t.available === 'yes' || (t.times || []).length || (t.ranges || []).length)).map((t) => String(t.play_date).slice(0, 10)));
+    return {
+      area, courses: ids.map((id) => (st.courses || {})[id]?.name).filter(Boolean), stays: stays.map((s) => s.name), ideas,
+      costEach: totals.length && people > 0 ? Math.round(Math.min(...totals) / people) : null,
+      drive, driveText: drive != null ? fmtDrive(drive) : null, teeDays: days.size,
+    };
+  });
+}
+
 /** Points per course id for an area from the start vote ('areacourse:<area>:<id>'). */
 export function areaCourseVotes(points, area) {
   const out = {};

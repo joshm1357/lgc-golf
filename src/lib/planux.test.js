@@ -242,6 +242,23 @@ describe('each area has its own course set and places to stay', () => {
   });
 });
 
+describe('the regions side by side', () => {
+  it('courses, stays, cost each, drive and tee days per area', () => {
+    const st = { regionOptions: ['South Coast', 'Hunter'], areaCourses: { 'South Coast': ['a', 'b'], Hunter: [] }, areaStays: { 'South Coast': [{ key: 'Kiama', name: 'Kiama' }] },
+      courses: { a: { name: 'Kiama GC' }, b: { name: 'Gerringong GC' } } };
+    const r = TB.compareAreas(st, {
+      areas: [{ name: 'Kiama', region: 'South Coast', lat: -34.67, lng: 150.85 }, { name: 'Cessnock', region: 'Hunter', lat: -32.83, lng: 151.36 }],
+      accom: [{ id: 'x', area: 'South Coast', name: 'House', total_cost: 2400 }, { id: 'y', area: 'South Coast', name: 'List', is_list: true }],
+      people: 12, origin: { lat: -33.88, lng: 151.16 },
+      tees: [{ course_id: 'a', play_date: '2027-03-12', available: 'yes', ranges: ['08:00-09:00'] }, { course_id: 'b', play_date: '2027-03-12', available: 'no' }],
+    });
+    expect(r[0]).toMatchObject({ area: 'South Coast', courses: ['Kiama GC', 'Gerringong GC'], stays: ['Kiama'], costEach: 200, teeDays: 1 });
+    expect(r[0].ideas).toHaveLength(2);
+    expect(r[0].drive).toBeGreaterThan(60);
+    expect(r[1]).toMatchObject({ area: 'Hunter', courses: [], costEach: null, teeDays: 0 });
+  });
+});
+
 describe('tee times over the whole window', () => {
   const dates = TG.windowDates([{ start: '2027-03-12', end: '2027-03-14' }, { start: '2027-03-19', end: '2027-03-21' }]);
   it('every day of every weekend', () => {

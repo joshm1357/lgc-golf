@@ -31,10 +31,11 @@ function useAreaLib(pins) {
   return lib;
 }
 
-export default function AreaStart({ plan, st, save, org, areas, history, accom = [], reloadAccom, people = 0 }) {
+export default function AreaStart({ plan, st, save, org, areas, history, accom = [], reloadAccom, people = 0, origin = null, tees = [], onCallVote = null }) {
   const [busy, run] = useRun();
   const options = st.region ? [st.region] : st.regionOptions;
   const [tab, setTab] = useState(options[0] || null);
+  const comparing = tab === '__compare' && options.length > 1;
   const area = options.includes(tab) ? tab : options[0] || null;
   const [addPin, setAddPin] = useState(null);
   const [pinName, setPinName] = useState('');
@@ -53,6 +54,21 @@ export default function AreaStart({ plan, st, save, org, areas, history, accom =
     return m;
   }, [st.courses, lib]);
   if (!area) return null;
+  const tabs = options.length > 1 && (
+    <div className="tb-chips" role="tablist" aria-label="Area" data-testid="area-tabs">
+      {options.map((r) => <button key={r} type="button" role="tab" className="chip" aria-selected={!comparing && r === area} aria-pressed={!comparing && r === area} onClick={() => setTab(r)}>{r}</button>)}
+      <button type="button" role="tab" className="chip" aria-selected={comparing} aria-pressed={comparing} onClick={() => setTab('__compare')} data-testid="area-compare-tab">📊 Compare</button>
+    </div>
+  );
+  if (comparing) {
+    return (
+      <div className="stack" style={{ gap: 10 }} data-testid="area-start">
+        {tabs}
+        <AreaCompare st={st} areas={areas} accom={accom} people={people} origin={origin} tees={tees} org={org}
+          onChoose={(r) => { setTab(r); chooseArea(r); }} onCallVote={onCallVote} />
+      </div>
+    );
+  }
 
   const isSug = (k) => !!suggested[k];
   const keep = (k) => { const n = { ...suggested }; delete n[k]; return n; };
@@ -77,11 +93,12 @@ export default function AreaStart({ plan, st, save, org, areas, history, accom =
     const list = has ? onTableStays.filter((x) => (x.key || x.name) !== k) : [...onTableStays, { key: k, name: s.name, lat: s.lat, lng: s.lng }];
     save({ ...st, areaStays: { ...(st.areaStays || {}), [area]: list }, ...(area === st.region ? { stays: list.slice(0, TB.MAX_STAYS) } : {}), suggested: keep(`stay:${area}:${k}`) });
   };
-  const goingHere = () => {
-    const stays = onTableStays.slice(0, TB.MAX_STAYS);
-    const days = TB.prefillStayDays(st.days, onTableCourses, courseMap, { stays, stayMax: st.stayMax });
-    save({ ...st, region: area, regionOptions: [area], stays, days });
-  };
+  function chooseArea(r) {
+    const stays = ((st.areaStays || {})[r] || []).slice(0, TB.MAX_STAYS);
+    const days = TB.prefillStayDays(st.days, (st.areaCourses || {})[r] || [], { ...courseMap, ...(st.courses || {}) }, { stays, stayMax: st.stayMax });
+    save({ ...st, region: r, regionOptions: [r], stays, days });
+  }
+  const goingHere = () => chooseArea(area);
   const dropPin = () => {
     const p = { key: `pin:${Date.now()}`, name: pinName.trim(), lat: Math.round(addPin.lat * 1000) / 1000, lng: Math.round(addPin.lng * 1000) / 1000, custom: true, area };
     const list = onTableStays.length < TB.MAX_AREA_STAYS ? [...onTableStays, p] : onTableStays;
@@ -101,11 +118,7 @@ export default function AreaStart({ plan, st, save, org, areas, history, accom =
 
   return (
     <div className="stack" style={{ gap: 10 }} data-testid="area-start">
-      {options.length > 1 && (
-        <div className="tb-chips" role="tablist" aria-label="Area">
-          {options.map((r) => <button key={r} type="button" role="tab" className="chip" aria-selected={r === area} aria-pressed={r === area} onClick={() => setTab(r)}>{r}</button>)}
-        </div>
-      )}
+      {tabs}
       <BuilderMap className="tb-map" courses={mapCourses} stays={mapStays} onCourse={(c) => toggleCourse(courseMap[c.id] || c)} onStay={toggleStay}
         onTap={org && addPin === 'tap' ? (p) => { setAddPin(p); setPinName(''); } : undefined} />
       <span className="small muted">Tap ⛳ pins and 🏠 pins to put them on the table (or tick them below). ✨ = suggested — you choose.</span>
@@ -156,6 +169,32 @@ export default function AreaStart({ plan, st, save, org, areas, history, accom =
 
       {org && !st.region && options.length > 1 && <button type="button" className="btn block" onClick={goingHere} data-testid="going-here">We’re going to {area} (skip the area vote)</button>}
       {org && !st.region && options.length === 1 && <button type="button" className="btn block" onClick={goingHere} data-testid="going-here">✓ {area} it is</button>}
+    </div>
+  );
+}
+
+/** The regions side by side (080): courses, places to stay (with list links), rough cost each, the drive, tee times
+ *  known. Then "Choose this one" (the organiser decides) or "Call the vote" with the ones to send out. */
+function AreaCompare({ st, areas, accom, people, origin, tees, org, onChoose, onCallVote }) {
+  const rows = TB.compareAreas(st, { areas, accom, people, origin, tees });
+  return (
+    <div className="stack" style={{ gap: 8 }} data-testid="area-compare">
+      <span className="small muted">Side by side. Choose one yourself, or call the vote and let the group say.</span>
+      <div className="tb-compare">
+        {rows.map((r) => (
+          <div key={r.area} className="card pad stack" style={{ gap: 4 }} data-testid="compare-area">
+            <strong style={{ fontSize: 17 }}>📍 {r.area}</strong>
+            <div className="small"><strong>⛳ {r.courses.length} course{r.courses.length === 1 ? '' : 's'}:</strong> {r.courses.join(', ') || <span className="muted">none ticked yet</span>}</div>
+            <div className="small"><strong>🏠 Stay:</strong> {r.stays.join(', ') || <span className="muted">none ticked yet</span>}</div>
+            {r.ideas.map((a) => <div key={a.id} className="small">{a.is_list ? '📋' : '🏡'} {a.link ? <a href={a.link} target="_blank" rel="noreferrer noopener">{a.name} ↗</a> : a.name}</div>)}
+            <div className="small"><strong>💰</strong> {r.costEach != null ? `about $${r.costEach} each to stay` : <span className="muted">no accommodation costs yet</span>}</div>
+            <div className="small"><strong>🚗</strong> {r.drive != null ? `about ${r.driveText} from ${origin?.label?.split(' ×')[0] || 'home'}` : <span className="muted">drive not known</span>}</div>
+            <div className="small"><strong>⏱️</strong> {r.teeDays ? `${r.teeDays} day${r.teeDays === 1 ? '' : 's'} of tee times in` : <span className="muted">no tee times asked yet</span>}</div>
+            {org && <button type="button" className="btn sm" style={{ alignSelf: 'flex-start', marginTop: 4 }} onClick={() => onChoose(r.area)} data-testid="choose-area">Choose this one</button>}
+          </div>
+        ))}
+      </div>
+      {org && onCallVote && <button type="button" className="btn gold block" onClick={onCallVote} data-testid="compare-call-vote">🗳️ Call the vote — tick what goes out</button>}
     </div>
   );
 }

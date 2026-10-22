@@ -322,7 +322,8 @@ export default function TripBuilder() {
       )}
       {(st.region || st.regionOptions.length > 0) && (
         <AreaStart plan={plan} st={st} save={save} org={org} areas={areas} history={history} accom={accom} reloadAccom={loadAccom}
-          people={need.people || data.players.filter((p) => p.approved !== false).length} />
+          people={need.people || data.players.filter((p) => p.approved !== false).length} origin={origin} tees={tees}
+          onCallVote={org && votesOn && !v1 ? vote1 : null} />
       )}
       {org && (
         <div className="small muted">Coming from: <strong>{origin?.label || 'not set'}</strong>{!origin && ' — add starting points in “Find a course”, or people’s home suburbs.'}</div>

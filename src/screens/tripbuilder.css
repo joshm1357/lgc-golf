@@ -23,3 +23,6 @@
   .tb-layout > .tb-side { position: sticky; top: 12px; order: 2; margin: 0; }
   .tb-map { height: 78vh; }
 }
+/* The regions side by side (080): stacked on a phone, in columns on a wider screen. */
+.tb-compare { display: grid; grid-template-columns: 1fr; gap: 8px; }
+@media (min-width: 640px) { .tb-compare { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); } }

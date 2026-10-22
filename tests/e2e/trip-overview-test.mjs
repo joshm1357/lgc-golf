@@ -167,14 +167,17 @@ await page.getByText('🗓️ The plan').waitFor({ timeout: 15000 });
 await page.waitForTimeout(600);
 check(await page.getByText(/^In \d+ days$/).isVisible(), 'coming trip: countdown');
 check(await page.getByText('3 in').isVisible(), 'coming trip: who’s in');
-check(await page.getByText('Fri 15 Jan').isVisible() && await page.getByText('Sat 16 Jan').isVisible(), 'coming trip: the plan by day');
+check(await page.getByText('Fri 15 Jan', { exact: true }).isVisible() && await page.getByText('Sat 16 Jan', { exact: true }).isVisible(), 'coming trip: the plan by day');
 check(await page.getByText('Port Macquarie GC', { exact: true }).first().isVisible() && await page.getByText('Ambrose').first().isVisible(), 'coming trip: course and format per day');
-check(await page.getByText('📋 Book the minibus').isVisible() && await page.getByText('🎒 Bring list: 1 thing').isVisible(), 'coming trip: your bits');
+// ov25: an Upcoming trip shows The run-up — your to-dos replace "Your bits".
+check(await page.getByTestId('runup').isVisible() && /days to go · Port Macquarie · Fri 15 – Sun 17 Jan/.test(await page.getByTestId('runup-countdown').innerText()), 'coming trip: The run-up with its countdown');
+check(/Book the minibus/.test(await page.getByTestId('runup-todos').innerText()), 'coming trip: your job is in your to-dos');
+check(/your own list \(1: balls\)/i.test(await page.getByTestId('runup-bring').innerText()), 'coming trip: your own bring list is mentioned');
 await page.screenshot({ path: `${SHOTS}/2-next.png`, fullPage: true });
 await noSideScroll('coming overview');
-await page.getByRole('button', { name: 'See it all →' }).click();
+await page.getByTestId('todo-job').getByRole('button', { name: 'Open' }).click();
 await page.getByRole('tab', { name: '📋 Jobs' }).waitFor({ timeout: 5000 });
-check(await page.getByRole('tab', { name: '📋 Jobs' }).getAttribute('aria-selected') === 'true', '“See it all” opens Organise on Jobs');
+check(await page.getByRole('tab', { name: '📋 Jobs' }).getAttribute('aria-selected') === 'true', 'a job in your to-dos opens Organise on Jobs');
 
 // 4. A trip still being decided opens on Organise.
 await page.goto(`${BASE}#/plan/${IDEA}`);

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { NavLink, Link, useLocation } from 'react-router-dom';
 import { useFeature, useSession } from '../lib/store.jsx';
 import { GroupCrest } from './Logo.jsx';
@@ -6,8 +6,11 @@ import { Icon } from './ui.jsx';
 import { openFeedback } from './Feedback.jsx';
 import { DESKTOP } from '../lib/beta.js';
 import { useTripsMenu } from '../screens/TripNow.jsx';
-import { menuLabel, tripNowPath } from '../lib/activetrip.js';
+import { tripNowPath } from '../lib/activetrip.js';
+import { tripStage } from '../lib/trips.js';
+import { sideItems, soonestOrganising, stageLook } from '../lib/runup.js';
 import { openPlanner } from './Caddie.jsx';
+import './runup.css';
 
 /** Is the screen laptop-wide? Follows the window as it's resized. */
 export function useDesktop() {
@@ -71,35 +74,41 @@ function SidebarNav() {
   );
 }
 
-/** Trips, with its sub-items (ov21). */
+/** Trips, with its sub-items (ov21), labelled by stage (ov25): "Upcoming: Hunter · 16 days", "Being organised: March",
+ *  "Previous: South Coast" — at most three, then "All trips". */
 function TripsGroup({ planner }) {
   const menu = useTripsMenu();
   const loc = useLocation();
   const p = loc.pathname;
-  // Trips is lit on its own screens; a sub-item is lit when its trip's status page is open (or home shows it).
+  const organising = useMemo(() => soonestOrganising((menu.plans || []).map((pl) => ({ plan: pl, stage: tripStage(pl, null) }))), [menu.plans]);
+  const items = sideItems({ menu, organising });
+  // Trips is lit on its own screens; a sub-item is lit when its trip's status page (or its plan) is open.
   const homeTrip = p === '/' && !new URLSearchParams(loc.search).get('r') ? menu.now?.trip.id : null;
   const openTrip = p.startsWith('/trip-now/') ? p.slice('/trip-now/'.length) : homeTrip;
-  const tripsLit = !openTrip && (p === '/plan' || p.startsWith('/plan/') || p.startsWith('/trip/') || (p === '/' && menu.ready && !menu.now));
-  const sub = (trip, kind) => (
-    <Link key={kind} to={tripNowPath(trip)} data-testid={`side-${kind}`}
-      className={'side-link side-subitem' + (openTrip === trip.id ? ' active' : '') + (kind === 'on' ? ' side-on' : '')}
-      aria-current={openTrip === trip.id ? 'page' : undefined} title={menuLabel(kind, trip)}>
-      <span className="ellipsis">{menuLabel(kind, trip)}</span>
-    </Link>
-  );
+  const openPlan = p.startsWith('/plan/') ? p.slice('/plan/'.length).split('/')[0] : null;
+  const subLit = (x) => (x.trip ? openTrip === x.trip.id : openPlan === x.plan.id);
+  const anyLit = items.some(subLit);
+  const tripsLit = !anyLit && (p === '/plan' || p.startsWith('/plan/') || p.startsWith('/trip/') || (p === '/' && menu.ready && !menu.now));
+  const STAGE = { on: 'on', upcoming: 'locked', organising: 'deciding', previous: 'done' };
   return (
     <div className="side-group" data-testid="side-trips">
       <Link to={planner ? '/plan' : '/'} className={'side-link' + (tripsLit ? ' active' : '')} aria-current={tripsLit ? 'page' : undefined}>
         {Icon.calendar(20)}<span>Trips</span>
       </Link>
-      {menu.now && sub(menu.now.trip, menu.now.on ? 'on' : 'next')}
-      {menu.next && sub(menu.next, 'next')}
+      {/* Nothing on or coming up: ✨ Plan a trip comes first. */}
       {!menu.now && menu.ready && (
         <button type="button" className="side-link side-subitem" data-testid="side-plan" onClick={openPlanner}>
           <span>✨ Plan a trip</span>
         </button>
       )}
-      {menu.last && sub(menu.last, 'last')}
+      {items.map((x) => (
+        <Link key={`${x.kind}-${x.trip?.id || x.plan?.id}`} to={x.trip ? tripNowPath(x.trip) : `/plan/${x.plan.id}`} data-testid={`side-${x.kind}`}
+          className={'side-link side-subitem side-' + x.kind + (subLit(x) ? ' active' : '')}
+          aria-current={subLit(x) ? 'page' : undefined} title={x.label}>
+          <span className="ellipsis"><span aria-hidden="true">{stageLook(STAGE[x.kind]).icon} </span>{x.label}</span>
+        </Link>
+      ))}
+      {planner && <Link to="/plan" className="side-link side-subitem side-all" data-testid="side-all-trips"><span>All trips →</span></Link>}
     </div>
   );
 }

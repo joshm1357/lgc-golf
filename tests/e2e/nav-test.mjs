@@ -369,25 +369,27 @@ if (SHOTS_ONLY) {
   await page.getByTestId('side-on').waitFor({ timeout: 10000 });
   const side = await page.locator('nav.side .side-links .side-link').allInnerTexts();
   check(!side.includes('This trip'), `sidebar: no top-level This trip (${side.join(', ')})`);
-  check(side[0] === 'Trips' && side[1] === 'On now: Hunter Weekend' && side[2] === 'Last: Bowral 2025' && side[3] === 'Feed',
-    `sidebar: Trips › On now: Hunter Weekend, Last: Bowral 2025, then Feed (${side.join(', ')})`);
+  // ov25: sub-items labelled by stage, at most three, then All trips.
+  check(side[0] === 'Trips' && side[1] === '⛳ On now: Hunter Weekend' && side[2] === '🏁 Previous: Bowral 2025' && side[3] === 'All trips →' && side[4] === 'Feed',
+    `sidebar: Trips › ⛳ On now: Hunter Weekend, 🏁 Previous: Bowral 2025, All trips →, then Feed (${side.join(', ')})`);
   check(await page.getByTestId('side-on').evaluate((e) => e.classList.contains('active') && parseFloat(getComputedStyle(e).paddingLeft) > 30), 'On now is highlighted and indented under Trips');
   check(side.includes('Players & group') && !side.includes('Comps') && !side.includes('Leaderboard'), 'sidebar: Players & group; no Comps or Leaderboard');
   await page.screenshot({ path: `${SHOTS}/check-1440-trips-menu-on-now.png` });
-  // Last trip → its status page.
-  await page.getByTestId('side-last').click();
+  // Previous trip → its status page.
+  await page.getByTestId('side-previous').click();
   await page.waitForFunction((t) => location.hash.includes(`/trip-now/${t}`), OLD_TRIP, { timeout: 5000 });
   await page.getByTestId('this-trip').waitFor({ timeout: 10000 });
   const lt = await page.getByTestId('this-trip').innerText();
   check(/last trip/i.test(lt) && lt.includes('Bowral 2025'), `Last: Bowral 2025 → its status page (${lt.split('\n').slice(0, 2).join(' | ')})`);
-  check(await page.getByTestId('side-last').evaluate((e) => e.classList.contains('active')), 'the Last sub-item is lit on its page');
+  check(await page.getByTestId('side-previous').evaluate((e) => e.classList.contains('active')), 'the Previous sub-item is lit on its page');
   // Next trip: nothing on today, a trip coming up.
   const trip = db.trips.find((t) => t.id === TRIP);
   Object.assign(trip, { start_date: '2027-03-19', end_date: '2027-03-21', name: 'March · Blue Mts' });
   db.rounds = db.rounds.filter((r) => r.trip_id !== TRIP);
   await go(page, '/'); await page.reload();
-  await page.getByTestId('side-next').waitFor({ timeout: 15000 });
-  check((await page.getByTestId('side-next').innerText()) === 'Next: March · Blue Mts', 'nothing on: the sub-item says Next: March · Blue Mts');
+  await page.getByTestId('side-upcoming').waitFor({ timeout: 15000 });
+  const up = await page.getByTestId('side-upcoming').innerText();
+  check(/^🔒 Upcoming: March · Blue Mts · \d+ (days|weeks)$/.test(up), `nothing on: the sub-item says Upcoming with a countdown (${up})`);
   await page.getByTestId('this-trip').waitFor({ timeout: 10000 });
   check(/next trip/i.test(await page.getByTestId('this-trip').innerText()), 'home: the next trip’s status page');
   await page.screenshot({ path: `${SHOTS}/check-1440-trips-menu-next.png` });
@@ -397,7 +399,7 @@ if (SHOTS_ONLY) {
   await page.reload();
   await page.getByTestId('side-plan').waitFor({ timeout: 15000 });
   const side2 = await page.locator('nav.side .side-links .side-link').allInnerTexts();
-  check(side2[0] === 'Trips' && side2[1] === '✨ Plan a trip' && side2[2] === 'Last: Bowral 2025', `no next trip: Trips › ✨ Plan a trip, Last (${side2.slice(0, 3).join(', ')})`);
+  check(side2[0] === 'Trips' && side2[1] === '✨ Plan a trip' && side2[2] === '🏁 Previous: Bowral 2025', `no next trip: Trips › ✨ Plan a trip, Previous (${side2.slice(0, 3).join(', ')})`);
   await page.getByTestId('trips-plan-it').waitFor({ timeout: 10000 });
   check(true, 'home with no trip coming up: the Trips screen, with ✨ Plan a trip at the top');
   check(await page.locator('nav.side .side-link.active').first().innerText() === 'Trips', 'Trips is lit on home when it shows Trips');
@@ -422,8 +424,13 @@ if (SHOTS_ONLY) {
   const { ctx, page } = await open(375);
   await go(page, '/plan');
   await page.getByTestId('trips-on').waitFor({ timeout: 15000 });
-  const top = await page.getByTestId('trips-top').innerText();
-  check(top.indexOf('ON NOW') >= 0 && top.indexOf('ON NOW') < top.indexOf('LAST TRIP') && top.includes('Hunter Weekend') && top.includes('Bowral 2025'), 'Trips: On now card, then Last trip card');
+  // ov25: one section per stage — On now (gold) first, Previous (muted) further down.
+  const onCard = await page.getByTestId('trips-on').innerText();
+  const lastCard = await page.getByTestId('trips-last').innerText();
+  const onY = (await page.getByTestId('trips-on').boundingBox()).y;
+  const lastY = (await page.getByTestId('trips-last').boundingBox()).y;
+  check(/On now/i.test(onCard) && onCard.includes('Hunter Weekend') && /Previous/i.test(lastCard) && lastCard.includes('Bowral 2025') && onY < lastY, 'Trips: On now card first, Previous further down');
+  check(await page.getByTestId('trips-on').evaluate((e) => e.classList.contains('stage-on')), 'On now card has the gold look');
   check(!(await page.getByTestId('trips-plan-it').isVisible().catch(() => false)), 'a trip coming up: no Plan a trip card');
   await page.screenshot({ path: `${SHOTS}/check-375-trips-top.png`, fullPage: true });
   await page.getByTestId('trips-on').getByRole('link').first().click();
@@ -433,8 +440,9 @@ if (SHOTS_ONLY) {
   db.plans = db.plans.filter((p) => p.id === OLD_PLAN);
   await go(page, '/plan'); await page.reload();
   await page.getByTestId('trips-plan-it').waitFor({ timeout: 15000 });
-  const top2 = await page.getByTestId('trips-top').innerText();
-  check(top2.indexOf('LAST TRIP') >= 0 && top2.indexOf('LAST TRIP') < top2.indexOf('Plan a trip'), 'no next trip: Last trip, then ✨ Plan a trip');
+  const planY = (await page.getByTestId('trips-plan-it').boundingBox()).y;
+  const prevY = (await page.getByTestId('trips-last').boundingBox()).y;
+  check(planY < prevY && /Bowral 2025/.test(await page.getByTestId('trips-last').innerText()), 'no next trip: ✨ Plan a trip at the top, Previous below');
   await page.screenshot({ path: `${SHOTS}/check-375-trips-top-plan.png`, fullPage: true });
   await ctx.close();
 }

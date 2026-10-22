@@ -61,7 +61,8 @@ function RoundLine({ round, course, board, upcoming }) {
 }
 
 // votes: the open votes (OverviewVotes), shown straight after the trip at a glance.
-export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage = null, onOrganise = null, votes = null }) {
+// runUp (ov25): The run-up on an Upcoming trip (components/RunUp.jsx) — it carries the votes and your bits itself.
+export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage = null, onOrganise = null, votes = null, runUp = null }) {
   const data = useData();
   const { status } = useSession();
   const feedOn = useFeature('feed');
@@ -116,6 +117,7 @@ export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage 
         )}
       </div>
 
+      {runUp}
       {votes}
       {/* ov15: the trip's status — live board, what we're playing for (with leaders), and each round's leaderboard. */}
       {tripId && <TripStatus trip={trip || data.trips.find((t) => t.id === tripId)} overview />}
@@ -149,7 +151,7 @@ export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage 
 
 
       {/* Your bits (coming up) */}
-      {!done && plan && (myJobs.length > 0 || bring.length > 0) && (
+      {!done && plan && !runUp && (myJobs.length > 0 || bring.length > 0) && (
         <div className="card pad stack" style={{ gap: 6 }}>
           <strong>🙋 Your bits</strong>
           {myJobs.map((j) => <div key={j.id} className="small">📋 {j.title}{j.due ? <span className="muted"> · by {j.due}</span> : null}</div>)}

@@ -16,9 +16,11 @@ import { Header, toast } from '../components/ui.jsx';
 import { must } from '../lib/run.js';
 import { readHandicap } from '../lib/history.js';
 import { Rate, Remaining } from './AiHelper.jsx';
+import { withRetry } from '../lib/aihelper.js';
 import {
   MAX_TEXT, MAX_PHOTOS, IMPORT_EXAMPLE, SECTIONS, buildReview, itemLine, picked, handicapRows, startingHandicap, tripRow,
-  honourRows, ruleRows, summaryLine, readFileText, fitSize, readImportReply, rematch, itemProblem, findPlayer, findTrip,
+  honourRows, ruleRows, summaryLine, readFileText, fitSize, readImportReply, rematch, itemProblem, findTrip,
+  choosePlayer, chooseNickname, chooseTrophy, playerAliases,
 } from '../lib/aiimport.js';
 
 /** A photo, shrunk in the browser to 1600px on its longest side, as a JPEG data URL (kept in memory only). */
@@ -115,8 +117,12 @@ function ImportFlow({ about }) {
   const read = async () => {
     setBusy(true);
     setNote('');
-    const { data: d, error } = await supabase.functions.invoke('ai-helper', { body: { mode: 'import', text: text.trim(), images: photos, group_id: currentGroup() || undefined } });
-    const r = readImportReply(d, error);
+    // Busy / odd reply / too slow: one more go by itself before showing the error (a failed go doesn't use up a question).
+    const body = { mode: 'import', text: text.trim(), images: photos, group_id: currentGroup() || undefined };
+    const r = await withRetry(async () => {
+      const { data: d, error } = await supabase.functions.invoke('ai-helper', { body });
+      return readImportReply(d, error);
+    }, body);
     if (r.remaining) setRemaining(r.remaining);
     setReply(r);
     if (r.kind === 'import') {
@@ -128,27 +134,35 @@ function ImportFlow({ about }) {
 
   const add = async () => {
     setBusy(true);
-    const n = { players: 0, trips: 0, winners: 0, handicaps: 0, rules: 0, proposed: 0, skipped: 0 };
+    const n = { players: 0, nicknames: 0, trips: 0, winners: 0, handicaps: 0, rules: 0, proposed: 0, skipped: 0 };
     try {
       const p = picked(items);
-      // 1. New players (ones already in the group are never made again), starting on their latest handicap.
-      const newPlayers = p.players.filter((x) => !x.existingId && !findPlayer(x.data.name, x.data.nickname, data.players));
+      // 1. New players (the organiser said "someone new", or nobody matched), starting on their latest handicap.
+      //    Never made twice: a second "Add these" finds the one made the first time by its exact name.
+      const newPlayers = p.players.filter((x) => !x.existingId && !data.players.some((q) => q.name.trim().toLowerCase() === x.data.name.trim().toLowerCase()));
       const made = [];
       for (const x of newPlayers) {
         const id = await must(supabase.rpc('admin_create_player', { p_name: x.data.name.trim(), p_nickname: x.data.nickname?.trim() || null, p_handicap: startingHandicap(x, p.handicaps), p_avatar_url: null }));
-        made.push({ id, name: x.data.name.trim(), nickname: x.data.nickname?.trim() || null });
+        made.push({ itemId: x.id, id, name: x.data.name.trim(), nickname: x.data.nickname?.trim() || null });
         n.players++;
       }
+      // Nicknames for players already in the group (the same organiser path as editing a player).
+      for (const x of p.players.filter((y) => y.existingId && y.canAddNick && y.addNick)) {
+        await must(supabase.from('players').update({ nickname: x.nickToAdd }).eq('id', x.existingId));
+        n.nicknames++;
+      }
       const allPlayers = [...data.players, ...made];
+      // Names → the player the organiser picked (so "Josh Moran"'s handicaps go to Joshua Moran).
+      const aliases = playerAliases(items, made);
       // 2. Past trips (locked, so none becomes the current trip).
       const newTrips = p.trips.filter((x) => !x.existingId && !findTrip(x.data, data.trips));
       const madeTrips = newTrips.length ? await must(supabase.from('trips').insert(newTrips.map(tripRow)).select('id,name,start_date')) : [];
       n.trips = madeTrips.length;
       const allTrips = [...data.trips, ...madeTrips];
       // 3. Winners onto the honour board (needs the Trophy Room switched on).
-      if (p.winners.length && trophiesOn) n.winners = await must(supabase.rpc('import_honours', { p_rows: honourRows(p.winners, allPlayers, allTrips) }));
+      if (p.winners.length && trophiesOn) n.winners = await must(supabase.rpc('import_honours', { p_rows: honourRows(p.winners, allPlayers, allTrips, aliases) }));
       // 4. Past handicaps, for players now in the group (including the ones just made).
-      const { rows: hcRows, skipped } = handicapRows(p.handicaps, allPlayers);
+      const { rows: hcRows, skipped } = handicapRows(p.handicaps, allPlayers, aliases);
       n.skipped = skipped;
       if (hcRows.length) n.handicaps = await must(supabase.rpc('import_handicaps', { p_rows: hcRows }));
       // 5. Rules, as normal rules (version 1).
@@ -252,8 +266,12 @@ function ImportFlow({ about }) {
                 <section key={s.key} className="card pad stack" style={{ gap: 6 }} aria-label={s.title}>
                   <div className="row between"><strong>{s.icon} {s.title}</strong><span className="small muted">{on} of {list.length} ticked</span></div>
                   {s.key === 'winners' && !trophiesOn && <span className="small err" style={{ margin: 0 }}>The Trophy Room is switched off, so winners won’t be added. Switch it on in More → Group &amp; invites → Features.</span>}
-                  {list.map((it) => <ItemRow key={it.id} it={it} onTick={(v) => setItem(it.id, (x) => ({ ...x, ticked: v }))}
-                    onSave={(d) => setItem(it.id, (x) => rematch({ ...x, data: { ...x.data, ...d } }, group))} />)}
+                  {list.map((it) => <ItemRow key={it.id} it={it} players={data.players}
+                    // A matched player's tick is "add the nickname".
+                    onTick={(v) => setItem(it.id, (x) => (x.section === 'players' && x.canAddNick ? chooseNickname(x, v, data.players) : { ...x, ticked: v }))}
+                    onSave={(d) => setItem(it.id, (x) => rematch({ ...x, data: { ...x.data, ...d } }, group))}
+                    onChoosePlayer={(c) => setItem(it.id, (x) => choosePlayer(x, c, data.players))}
+                    onChooseTrophy={(t) => setItem(it.id, (x) => chooseTrophy(x, t, data.honour_board))} />)}
                 </section>
               );
             })}
@@ -279,7 +297,7 @@ const FIELDS = {
   rules: [['title', 'Rule'], ['value', 'Worth / amount'], ['wording', 'Wording']],
 };
 
-function ItemRow({ it, onTick, onSave }) {
+function ItemRow({ it, players = [], onTick, onSave, onChoosePlayer, onChooseTrophy }) {
   const [editing, setEditing] = useState(false);
   const [v, setV] = useState(it.data);
   const problem = it.ticked ? itemProblem(it) : '';
@@ -297,6 +315,25 @@ function ItemRow({ it, onTick, onSave }) {
           style={{ width: 24, height: 24, flex: 'none', marginTop: 2 }} />
         <div className="grow stack" style={{ gap: 2, minWidth: 0 }}>
           <span style={{ lineHeight: 1.35, overflowWrap: 'anywhere' }}>{itemLine(it)}</span>
+          {it.guess && <span className="small" style={{ fontWeight: 700, color: 'var(--gold-dark, #8a6a00)' }}>⚠️ a guess — check it before ticking</span>}
+          {it.ask && (
+            <label className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span className="small" style={{ fontWeight: 700 }}>{it.ask}</span>
+              <select className="input" style={{ minHeight: 40, padding: '4px 8px', width: 'auto', maxWidth: '100%' }} aria-label={`Who is ${it.data.name}?`}
+                value={it.choice || 'new'} onChange={(e) => onChoosePlayer(e.target.value)}>
+                {players.filter((p) => p.id === it.candidateId).map((p) => <option key={p.id} value={p.id}>Yes — {p.name}</option>)}
+                <option value="new">No — someone new</option>
+                {players.filter((p) => p.id !== it.candidateId).sort((a, b) => a.name.localeCompare(b.name)).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </label>
+          )}
+          {it.section === 'winners' && it.trophyOptions?.length > 0 && (
+            <select className="input" style={{ minHeight: 40, padding: '4px 8px', width: 'auto', maxWidth: '100%' }} aria-label={`Trophy for ${itemLine(it)}`}
+              value={it.trophyChoice || ''} onChange={(e) => onChooseTrophy(e.target.value)}>
+              {it.trophyOptions.map((t) => <option key={t} value={t}>🏆 {t}</option>)}
+              <option value="">New trophy: {it.data.trophy}</option>
+            </select>
+          )}
           <span className="small" style={{ color: it.already ? 'var(--muted)' : 'var(--navy)', fontWeight: 700 }}>→ {it.match}{it.already ? ' · already there' : ''}</span>
           {it.section === 'rules' && it.data.wording && !editing && <span className="small muted" style={{ whiteSpace: 'pre-wrap' }}>{it.data.wording}</span>}
           {problem && <span className="small err" style={{ margin: 0 }}>{problem}</span>}

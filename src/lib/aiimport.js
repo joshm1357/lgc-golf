@@ -19,14 +19,102 @@ const yearOfDate = (d) => (d ? Number(String(d).slice(0, 4)) : null);
 
 // ------------------------------------------------------------------ Matching against the group
 
-/** An existing player for a name: full name or nickname, either way round ("Kurt" finds Kurt Dahl / nickname Kurt). */
+// Common short forms of first names (Josh = Joshua, Rob = Robert = Bob …). Each list is one name.
+const SHORT_FORMS = [
+  ['joshua', 'josh'], ['michael', 'mike', 'mick'], ['christopher', 'chris'], ['matthew', 'matt'], ['david', 'dave'],
+  ['thomas', 'tom'], ['daniel', 'dan', 'danny'], ['nicholas', 'nick'], ['robert', 'rob', 'bob', 'robbie'],
+  ['william', 'will', 'bill'], ['james', 'jim', 'jimmy'], ['andrew', 'andy'], ['anthony', 'tony'], ['benjamin', 'ben'],
+  ['samuel', 'sam'], ['alexander', 'alex'], ['peter', 'pete'], ['stephen', 'steve', 'steven'], ['jonathan', 'jono'],
+];
+const FORM = new Map(SHORT_FORMS.flatMap((g) => g.map((n) => [n, g[0]])));
+/** A first name in its long form ("josh" → "joshua"), so short and long forms compare equal. */
+export const firstForm = (n) => FORM.get(low(n)) || low(n);
+/** A name's words, lower case, punctuation gone ("O'Brien, Kurt" → ["obrien", "kurt"]). */
+const nameWords = (s) => low(s).replace(/[^a-z0-9\s-]/g, '').split(/[\s-]+/).filter(Boolean);
+
+/**
+ * How an imported name matches the group's players:
+ *   { player, sure: true }  — the same full name; the same nickname; or a lone first name / nickname only one has
+ *   { player, sure: false } — likely but not certain: first name + surname with a short form (Josh Moran → Joshua
+ *                             Moran), the same surname and first initial, or a first name matching a player who has no
+ *                             surname yet ("Mike Morris" → "Mike")
+ *   null                    — someone new
+ * Only one candidate counts: two possibles are treated as nobody (the organiser picks).
+ */
+export function matchPlayer(name, nickname, players = []) {
+  const n = low(name);
+  const nick = low(nickname);
+  const one = (list) => (list.length === 1 ? list[0] : null);
+  if (!n && !nick) return null;
+  // 1. The same full name.
+  let hit = one(players.filter((p) => low(p.name) === n));
+  if (hit) return { player: hit, sure: true };
+  // 2. The same nickname (either way round: their nickname is my name, or my nickname is their name or nickname).
+  const keys = [n, nick].filter(Boolean);
+  hit = one(players.filter((p) => (p.nickname && keys.includes(low(p.nickname))) || (nick && low(p.name) === nick)));
+  if (hit) return { player: hit, sure: true };
+  const w = nameWords(name);
+  // 3. A lone first name (or nickname): only when exactly one player has it.
+  if (w.length === 1) {
+    hit = one(players.filter((p) => nameWords(p.name)[0] === w[0] || low(p.nickname) === w[0]));
+    if (hit) return { player: hit, sure: true };
+    // …or as a short form ("Josh" → the only Joshua): likely.
+    hit = one(players.filter((p) => firstForm(nameWords(p.name)[0]) === firstForm(w[0])));
+    return hit ? { player: hit, sure: false } : null;
+  }
+  if (w.length < 2) return null;
+  const first = w[0];
+  const last = w[w.length - 1];
+  const withSurname = players.filter((p) => nameWords(p.name).length >= 2 && nameWords(p.name).at(-1) === last);
+  // 4. First name (or their nickname) + surname, with short forms: likely.
+  hit = one(withSurname.filter((p) => firstForm(nameWords(p.name)[0]) === firstForm(first) || (p.nickname && firstForm(p.nickname) === firstForm(first))));
+  if (hit) return { player: hit, sure: false };
+  // 5. The same surname and first initial (J. Moran, Jo Moran): likely.
+  hit = one(withSurname.filter((p) => nameWords(p.name)[0][0] === first[0]));
+  if (hit) return { player: hit, sure: false };
+  // 6. A player with no surname yet whose name or nickname is this first name ("Mike Morris" → "Mike"): likely.
+  hit = one(players.filter((p) => nameWords(p.name).length === 1 && [p.name, p.nickname].filter(Boolean).some((x) => firstForm(x) === firstForm(first))));
+  if (hit) return { player: hit, sure: false };
+  return null;
+}
+
+/** An existing player for a name, only when it's certain (see matchPlayer): full name, nickname, or a lone first
+ *  name only one player has ("Kurt" finds Kurt Dahl / nickname Kurt). */
 export function findPlayer(name, nickname, players = []) {
-  const keys = [low(name), low(nickname)].filter(Boolean);
-  const hits = players.filter((p) => [p.name, p.nickname].filter(Boolean).some((n) => keys.includes(low(n))));
-  if (hits.length === 1) return hits[0];
-  // "Kurt" against "Kurt Dahl" (first name), only when it's the only one.
-  const first = players.filter((p) => keys.some((k) => !k.includes(' ') && low(p.name).split(' ')[0] === k));
-  return hits.length === 0 && first.length === 1 ? first[0] : null;
+  const m = matchPlayer(name, nickname, players);
+  return m?.sure ? m.player : null;
+}
+
+/** A name's player: what the organiser chose on the confirm screen first (aliases: lower-case name → id), else a
+ *  certain match. */
+export function resolvePlayer(name, players = [], aliases = {}) {
+  const id = aliases[low(name)];
+  if (id) return players.find((p) => p.id === id) || null;
+  return findPlayer(name, null, players);
+}
+
+// ------------------------------------------------------------------ Trophies
+
+const TROPHY_FILLER = new Set(['the', 'trophy', 'cup', 'shield', 'award', 'awards', 'plate', 'medal']);
+/** A trophy's name for matching: lower case, no punctuation, without "the / trophy / cup / shield / award". */
+export function trophyKey(name) {
+  const w = low(name).replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
+  const core = w.filter((x) => !TROPHY_FILLER.has(x));
+  return (core.length ? core : w).join(' ');
+}
+/** The group's trophy for an imported trophy name: the same name, then the same without the filler words
+ *  ("BD Trophy" → "BD"), then one inside the other ("The Spoon" → "Wooden Spoon"). Only one may match. */
+export function matchTrophy(name, names = []) {
+  const exact = names.filter((t) => low(t) === low(name));
+  if (exact.length === 1) return exact[0];
+  const k = trophyKey(name);
+  if (!k) return null;
+  const same = names.filter((t) => trophyKey(t) === k);
+  if (same.length === 1) return same[0];
+  if (same.length > 1) return null;
+  const inside = (a, b) => ` ${a} `.includes(` ${b} `);
+  const near = names.filter((t) => { const tk = trophyKey(t); return tk && (inside(tk, k) || inside(k, tk)); });
+  return near.length === 1 ? near[0] : null;
 }
 
 /** An existing trip for a past trip: the same name, or the same year with a word in common (place or name). */
@@ -75,32 +163,27 @@ export function buildReview(proposal, group = {}) {
   const items = [];
 
   (p.players || []).forEach((x, i) => {
-    const hit = findPlayer(x.name, x.nickname, players);
-    items.push({
-      id: `pl${i}`, section: 'players', data: { name: x.name, nickname: x.nickname || '' },
-      match: hit ? `already a player${low(hit.name) !== low(x.name) ? ` (${hit.name})` : ''}` : 'new player',
-      existingId: hit?.id || null, already: !!hit, ticked: !hit,
-    });
+    const m = matchPlayer(x.name, x.nickname, players);
+    items.push(playerItem({
+      id: `pl${i}`, section: 'players', data: { name: x.name, nickname: x.nickname || '' }, guess: !!x.guess,
+      candidateId: m?.player.id || null, sure: !!m?.sure, choice: m ? m.player.id : 'new', addNick: true,
+    }, players));
   });
   (p.trips || []).forEach((x, i) => {
     const hit = findTrip(x, trips);
     items.push({
       id: `tr${i}`, section: 'trips', data: { name: x.name, year: x.year, place: x.place || '', courses: x.courses || [], start_date: x.start_date || null, end_date: x.end_date || null },
       match: hit ? `existing trip${low(hit.name) !== low(x.name) ? ` (${hit.name})` : ''}` : 'new past trip',
-      existingId: hit?.id || null, already: !!hit, ticked: !hit,
+      existingId: hit?.id || null, already: !!hit, ticked: !hit && !x.guess, guess: !!x.guess,
     });
   });
+  const trophyList = [...trophies.values()];
   (p.winners || []).forEach((x, i) => {
-    const known = trophies.get(low(x.trophy));
-    const trophy = known || x.trophy;
-    const label = honourLabel(x);
-    const already = board.some((h) => sameHonour({ trophy, label, winners: x.winners }, h))
-      || board.some((h) => low(h.trophy_name) === low(trophy) && String(h.label).includes(String(x.year)) && low(h.winner_names) === low(x.winners));
-    items.push({
-      id: `wn${i}`, section: 'winners', data: { trophy, year: x.year, trip: x.trip || '', winners: x.winners, score: x.score || '' },
-      match: already ? 'already on the honour board' : known ? 'existing trophy' : 'new trophy',
-      already, ticked: !already,
-    });
+    const known = matchTrophy(x.trophy, trophyList);
+    items.push(winnerItem({
+      id: `wn${i}`, section: 'winners', data: { trophy: x.trophy, year: x.year, trip: x.trip || '', winners: x.winners, score: x.score || '' },
+      guess: !!x.guess, trophyChoice: known || '', trophyOptions: trophyList,
+    }, board));
   });
   (p.handicaps || []).forEach((x, i) => {
     const hit = findPlayer(x.player, null, players);
@@ -108,17 +191,64 @@ export function buildReview(proposal, group = {}) {
     items.push({
       id: `hc${i}`, section: 'handicaps', data: { player: x.player, date: x.date, handicap: x.handicap },
       match: already ? 'already in their history' : hit ? `${hit.name}’s history` : 'a new player’s history',
-      existingId: hit?.id || null, already, ticked: !already,
+      existingId: hit?.id || null, already, ticked: !already && !x.guess, guess: !!x.guess,
     });
   });
   (p.rules || []).forEach((x, i) => {
     const already = rules.some((r) => (r.status === 'active' || r.status === 'proposed') && low(r.title) === low(x.title));
+    // The wording only when it says more than the title (an older function sent the title again underneath).
+    const wording = bareWords(x.wording) && bareWords(x.wording) !== bareWords(x.title) ? x.wording : '';
     items.push({
-      id: `ru${i}`, section: 'rules', data: { title: x.title, wording: x.wording || '', category: x.category || 'other', value: x.value || '' },
-      match: already ? 'already in the Rulebook' : 'new rule', already, ticked: !already,
+      id: `ru${i}`, section: 'rules', data: { title: x.title, wording, category: x.category || 'other', value: x.value || '' },
+      match: already ? 'already in the Rulebook' : 'new rule', already, ticked: !already && !x.guess, guess: !!x.guess,
     });
   });
   return items;
+}
+
+const bareWords = (s) => low(s).replace(/[^a-z0-9$%+-]+/g, ' ').trim();
+
+/** A player item's match words and tick, from the organiser's choice (an existing player's id, or 'new'):
+ *   - certain match, nothing to add → "already a player", unticked (nothing to do);
+ *   - likely match → "Is this Joshua Moran?" with a picker (that player picked; "someone new" is the other choice);
+ *   - an existing player with no nickname yet, and one in the import → "add nickname Macca" (ticked: it's saved);
+ *   - someone new → "new player", ticked (unless it was a guess).
+ * `players` are the group's players. */
+export function playerItem(it, players = []) {
+  const chosen = it.choice && it.choice !== 'new' ? players.find((p) => p.id === it.choice) || null : null;
+  const candidate = it.candidateId ? players.find((p) => p.id === it.candidateId) || null : null;
+  const nick = String(it.data.nickname || '').trim();
+  const canAddNick = !!chosen && !String(chosen.nickname || '').trim() && !!nick
+    && ![chosen.name, ...String(chosen.name).split(/\s+/)].some((x) => low(x) === low(nick));
+  const ask = candidate && !it.sure ? `Is this ${candidate.name}?` : '';
+  let match;
+  if (!chosen) match = candidate && !it.sure ? 'someone new' : 'new player';
+  else if (canAddNick && it.addNick) match = `${chosen.name} · add nickname ${nick}`;
+  else match = `already a player${low(chosen.name) !== low(it.data.name) ? ` (${chosen.name})` : ''}`;
+  const work = !chosen || (canAddNick && it.addNick); // something to save
+  return {
+    ...it, ask, match, canAddNick, nickToAdd: canAddNick ? nick : '',
+    existingId: chosen?.id || null, already: !work,
+    // Ticked when there’s something to save, except a guess (the organiser decides on those).
+    ticked: work && !it.guess,
+  };
+}
+
+/** The trophy an imported winner goes on: the organiser's pick (an existing trophy), else the name as written. */
+export const trophyOf = (it) => it.trophyChoice || it.data.trophy;
+
+/** A winner item's match words and tick: "existing trophy BD" or "new trophy", or already on the honour board. */
+export function winnerItem(it, board = []) {
+  const x = it.data;
+  const trophy = trophyOf(it);
+  const label = honourLabel(x);
+  const already = board.some((h) => sameHonour({ trophy, label, winners: x.winners }, h))
+    || board.some((h) => low(h.trophy_name) === low(trophy) && String(h.label).includes(String(x.year)) && low(h.winner_names) === low(x.winners));
+  return {
+    ...it,
+    match: already ? 'already on the honour board' : it.trophyChoice ? `existing trophy ${it.trophyChoice}` : 'new trophy',
+    already, ticked: !already && !it.guess,
+  };
 }
 
 export const SECTIONS = [
@@ -133,8 +263,8 @@ export const SECTIONS = [
 export function itemLine(it) {
   const d = it.data;
   if (it.section === 'players') return d.nickname ? `${d.name} (“${d.nickname}”)` : d.name;
-  if (it.section === 'trips') return [d.name, d.place && !low(d.name).includes(low(d.place)) ? d.place : '', d.courses?.length ? d.courses.join(', ') : ''].filter(Boolean).join(' · ');
-  if (it.section === 'winners') return `${d.trophy} ${honourLabel(d)} — ${d.winners}${d.score ? ` (${d.score})` : ''}`;
+  if (it.section === 'trips') return [d.name, d.start_date ? '' : `${d.year} (date unknown)`, d.place && !low(d.name).includes(low(d.place)) ? d.place : '', d.courses?.length ? d.courses.join(', ') : ''].filter(Boolean).join(' · ');
+  if (it.section === 'winners') return `${trophyOf(it)} ${honourLabel(d)} — ${d.winners}${d.score ? ` (${d.score})` : ''}`;
   if (it.section === 'handicaps') return `${d.player} · ${hcpText(d.handicap)} · ${d.date.endsWith('-01-01') ? d.date.slice(0, 4) : d.date}`;
   return d.value ? `${d.title} (${d.value})` : d.title;
 }
@@ -149,18 +279,18 @@ export function picked(items) {
 }
 
 /** Can a handicap be saved: its player is in the group, or is a ticked new player? */
-export function handicapPlayer(h, players, newPlayers) {
-  return findPlayer(h.data.player, null, players)
+export function handicapPlayer(h, players, newPlayers, aliases = {}) {
+  return resolvePlayer(h.data.player, players, aliases)
     || newPlayers.find((n) => [n.data.name, n.data.nickname].filter(Boolean).some((x) => low(x) === low(h.data.player))) || null;
 }
 
 /** import_handicaps rows for the ticked handicaps, once every player is in the group (`players` includes the ones
  *  just made). Ones with no player by that name are skipped and counted. */
-export function handicapRows(handicaps, players) {
+export function handicapRows(handicaps, players, aliases = {}) {
   const rows = [];
   let skipped = 0;
   for (const h of handicaps) {
-    const p = findPlayer(h.data.player, null, players);
+    const p = resolvePlayer(h.data.player, players, aliases);
     if (p) rows.push({ player_id: p.id, date: h.data.date, handicap: Number(h.data.handicap) });
     else skipped++;
   }
@@ -174,26 +304,28 @@ export function startingHandicap(player, handicaps) {
   return mine.length ? Number(mine[0].data.handicap) : 18;
 }
 
-/** A past trip row for the trips table: locked (it's over), dated from what's known (1 January of its year if not). */
+/** A past trip row for the trips table: locked (it's over), dated from what's known. With only a year it's saved as
+ *  1 January of that year (so it sorts by year and, being locked, never becomes the current trip); the app shows
+ *  such a trip as "2019 (date unknown)" (isYearOnly in trips.js). */
 export function tripRow(t) {
   const start = t.data.start_date || `${t.data.year}-01-01`;
   return { name: String(t.data.name).trim().slice(0, 60), start_date: start, end_date: t.data.end_date || start, status: 'locked' };
 }
 
 /** import_honours rows for the ticked winners, matched to players (after the new ones exist) and trips. */
-export function honourRows(winners, players, trips) {
+export function honourRows(winners, players, trips, aliases = {}) {
   return winners.map((w) => {
     const d = w.data;
     const trip = d.trip ? (trips.find((t) => low(t.name) === low(d.trip)) || findTrip({ name: d.trip, year: d.year }, trips)) : null;
     // Each winner name: an exact name / nickname match, or a first-name match when it's the only one.
     const ids = [];
     for (const n of winnerNames(d.winners)) {
-      const hit = findPlayer(n, null, players);
+      const hit = resolvePlayer(n, players, aliases);
       if (hit && !ids.includes(hit.id)) ids.push(hit.id);
     }
     const exact = matchPlayers(d.winners, players);
     return {
-      label: honourLabel(d, trip?.name || d.trip), trophy: String(d.trophy).trim().slice(0, 60), winners: String(d.winners).trim().slice(0, 200),
+      label: honourLabel(d, trip?.name || d.trip), trophy: String(trophyOf(w)).trim().slice(0, 60), winners: String(d.winners).trim().slice(0, 200),
       player_ids: ids.length >= exact.length ? ids : exact, trip_id: trip?.id || null,
     };
   });
@@ -208,6 +340,7 @@ export function ruleRows(rules) {
 export function summaryLine(n) {
   const parts = [
     n.players ? plural(n.players, 'player') : '',
+    n.nicknames ? plural(n.nicknames, 'nickname') : '',
     n.trips ? plural(n.trips, 'past trip') : '',
     n.winners ? plural(n.winners, 'winner') : '',
     n.handicaps ? plural(n.handicaps, 'past handicap') : '',
@@ -356,7 +489,43 @@ export function rematch(item, group) {
   }[item.section];
   const fresh = buildReview(one, group)[0];
   if (!fresh) return item;
+  if (item.section === 'players') {
+    // Matched again from the new name; the tick follows (something to save → ticked).
+    return { ...fresh, id: item.id, guess: item.guess, ticked: fresh.already ? false : (item.guess ? item.ticked : fresh.ticked) };
+  }
+  if (item.section === 'winners') {
+    // A trophy the organiser picked stays picked.
+    const next = winnerItem({ ...item, data: { ...item.data, ...fresh.data }, trophyChoice: item.trophyPicked ? item.trophyChoice : fresh.trophyChoice, trophyOptions: fresh.trophyOptions }, group.honour_board || []);
+    return { ...next, ticked: next.already ? false : item.ticked };
+  }
   return { ...item, data: { ...item.data, ...fresh.data }, match: fresh.match, existingId: fresh.existingId || null, already: fresh.already, ticked: fresh.already ? false : item.ticked };
+}
+
+/** The organiser picked who a player is on the confirm screen ('new', or an existing player's id). */
+export function choosePlayer(item, choice, players = []) {
+  return playerItem({ ...item, choice }, players);
+}
+/** The organiser ticked / unticked "add nickname". */
+export function chooseNickname(item, addNick, players = []) {
+  return playerItem({ ...item, addNick }, players);
+}
+/** The organiser picked a trophy for a winner ('' = a new trophy by the name as written). */
+export function chooseTrophy(item, trophyChoice, board = []) {
+  const next = winnerItem({ ...item, trophyChoice, trophyPicked: true }, board);
+  return { ...next, ticked: next.already ? false : (item.already ? true : item.ticked) };
+}
+
+/** Names → player ids from the organiser's choices on the players section (incl. ones just made), so handicaps and
+ *  winners written under that name go to the same player. `made` = [{ itemId, id }]. */
+export function playerAliases(items, made = []) {
+  const out = {};
+  for (const it of items) {
+    if (it.section !== 'players') continue;
+    const id = it.existingId || made.find((m) => m.itemId === it.id)?.id;
+    if (!id) continue;
+    for (const n of [it.data.name, it.data.nickname]) if (String(n || '').trim()) out[low(n)] = id;
+  }
+  return out;
 }
 
 /** Is an edited item still good enough to save? (Words for the screen, or '' when fine.) */

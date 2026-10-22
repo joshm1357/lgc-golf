@@ -61,7 +61,7 @@ export function readReply(data, error) {
   const d = data && typeof data === 'object' ? data : {};
   const remaining = d.remaining || null;
   const log = d.log_id != null ? { logId: d.log_id } : {};
-  if (d.error) return { kind: 'error', text: String(d.error), off: !!d.off, capped: !!d.capped, remaining, ...log };
+  if (d.error) return { kind: 'error', text: String(d.error), off: !!d.off, capped: !!d.capped, remaining, ...(d.code ? { code: String(d.code) } : {}), ...log };
   if (d.done) {
     return d.plan_id
       ? { kind: 'done', planId: d.plan_id, made: Array.isArray(d.made) ? d.made : [], remaining }
@@ -76,4 +76,56 @@ export function readReply(data, error) {
   if (typeof d.message === 'string' && d.message) return { kind: 'message', text: d.message, remaining, ...log };
   if (typeof d.answer === 'string' && d.answer) return { kind: 'answer', text: d.answer, remaining, ...log };
   return { kind: 'error', text: 'The helper didn’t have an answer — try asking another way.', remaining };
+}
+
+// ------------------------------------------------------------------ One automatic retry
+
+/** The failures worth one more go by themselves (the AI company busy, an odd reply, too slow). Failed answers
+ *  don't use up a question, so the retry is free. Never for "Do it" / "Create it" (they write). */
+export const RETRY_CODES = ['provider_busy', 'odd_reply', 'timeout'];
+export const shouldRetry = (r, body) => r?.kind === 'error' && RETRY_CODES.includes(r.code) && !/apply$/.test(String(body?.mode || ''));
+
+/** Call once, and once more if it's worth it. `call` returns what readReply / readImportReply made. */
+export async function withRetry(call, body) {
+  const first = await call();
+  if (!shouldRetry(first, body)) return first;
+  const second = await call();
+  return second;
+}
+
+// ------------------------------------------------------------------ The Ask conversation, kept for the session
+
+export const ASK_PREFIX = 'tgt-ask:';
+export const ASK_KEEP = 20;
+const store = (s) => {
+  try { return s || (typeof sessionStorage !== 'undefined' ? sessionStorage : null); } catch { return null; }
+};
+
+/** The Ask conversation for this group (newest first), from this tab's session; [] if none or unreadable. */
+export function loadAsk(groupId, s) {
+  const st = store(s);
+  if (!st || !groupId) return [];
+  try {
+    const list = JSON.parse(st.getItem(ASK_PREFIX + groupId) || '[]');
+    return Array.isArray(list) ? list.filter((x) => x && typeof x.q === 'string' && x.reply && typeof x.reply.text === 'string').slice(0, ASK_KEEP) : [];
+  } catch { return []; }
+}
+
+/** Keep the last 20 questions and answers for this group (only what's shown: words, kind, rating id). */
+export function saveAsk(groupId, thread, s) {
+  const st = store(s);
+  if (!st || !groupId) return;
+  const slim = (thread || []).slice(0, ASK_KEEP).map(({ q, reply }) => ({ q, reply: { kind: reply.kind, text: reply.text, ...(reply.logId != null ? { logId: reply.logId } : {}) } }));
+  try { st.setItem(ASK_PREFIX + groupId, JSON.stringify(slim)); } catch { /* full or blocked: it just isn't kept */ }
+}
+
+/** Forget every group's Ask conversation (signing out, or switching group). */
+export function clearAsk(s) {
+  const st = store(s);
+  if (!st) return;
+  try {
+    const keys = [];
+    for (let i = 0; i < st.length; i++) { const k = st.key(i); if (k && k.startsWith(ASK_PREFIX)) keys.push(k); }
+    keys.forEach((k) => st.removeItem(k));
+  } catch { /* fine */ }
 }

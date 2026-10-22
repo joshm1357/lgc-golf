@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { tripStage, sortTrips, stillToDecide, closesLabel, canDecide, suggestionOptions, defaultCloses } from './trips.js';
+import { tripStage, sortTrips, stillToDecide, closesLabel, canDecide, suggestionOptions, defaultCloses, lastTripDay, isYearOnly, tripWhen } from './trips.js';
 
 const T = '2026-10-18'; // a Sunday
 
@@ -98,4 +98,41 @@ describe('suggestionOptions', () => {
 
 describe('defaultCloses', () => {
   it('ten days out', () => { expect(defaultCloses(T)).toBe('2026-10-28'); });
+});
+
+// 22 Oct: South Coast Trip 2026 (16–18 Oct) still said "On now" on the 22nd because its trip was still 'active'.
+describe('a finished trip is done even if its trip in the app is still active', () => {
+  const plan = { status: 'confirmed', start_date: '2026-10-16', end_date: '2026-10-18' };
+  const trip = { id: 't', status: 'active', start_date: '2026-10-16', end_date: '2026-10-18' };
+  it('on during the trip, done the day after the last day', () => {
+    expect(tripStage(plan, trip, '2026-10-16')).toBe('on');
+    expect(tripStage(plan, trip, '2026-10-18')).toBe('on');
+    expect(tripStage(plan, trip, '2026-10-19')).toBe('done');
+    expect(tripStage(plan, trip, '2026-10-22')).toBe('done');
+  });
+  it('uses the later of the plan’s and the trip’s last day; an undated active trip is still on', () => {
+    expect(lastTripDay({ end_date: '2026-10-18' }, { end_date: '2026-10-20' })).toBe('2026-10-20');
+    expect(tripStage(plan, { ...trip, end_date: '2026-10-23' }, '2026-10-22')).toBe('on');
+    expect(tripStage({ status: 'confirmed' }, { status: 'active', start_date: '2026-10-16', end_date: '2026-10-18' }, '2026-10-22')).toBe('done');
+    expect(tripStage({ status: 'confirmed' }, { status: 'active' }, '2026-10-22')).toBe('on');
+  });
+  it('the Trips tab puts it with the past trips, not in the big "on now" card', () => {
+    const s = sortTrips([{ id: 'p', trip_id: 't', ...plan }], [trip], '2026-10-22');
+    expect(s.now).toBe(null);
+    expect(s.past.map((x) => [x.plan.id, x.stage])).toEqual([['p', 'done']]);
+  });
+});
+
+describe('year-only past trips (brought in from history)', () => {
+  it('show the year, not a made-up 1 January', () => {
+    const t = { status: 'locked', start_date: '2019-01-01', end_date: '2019-01-01' };
+    expect(isYearOnly(t)).toBe(true);
+    expect(isYearOnly({ ...t, end_date: null })).toBe(true);
+    expect(tripWhen(t)).toBe('2019 (date unknown)');
+    expect(isYearOnly({ ...t, status: 'active' })).toBe(false);
+    expect(isYearOnly({ ...t, end_date: '2019-01-03' })).toBe(false);
+    expect(isYearOnly({ status: 'locked', start_date: '2019-06-01', end_date: '2019-06-01' })).toBe(false);
+    expect(tripWhen({ status: 'locked', start_date: '2026-10-16', end_date: '2026-10-18' })).toBe('Fri 16 – Sun 18 Oct 2026');
+    expect(tripWhen({}, 'Dates TBC')).toBe('Dates TBC');
+  });
 });

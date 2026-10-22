@@ -8,6 +8,7 @@ import { Header, Seg, Avatar, Icon, Sheet, timeAgo, toast, PhotoButtons } from '
 import CourseMap, { avatarIcon, teeIcon } from '../components/CourseMap.jsx';
 import { useRoundChoice, RoundChips } from './Leaderboard.jsx';
 import { OwnComp, useRoundOwnComps } from './OwnComps.jsx';
+import { ConditionsLine } from '../components/CompConditions.jsx';
 
 const LABEL = { ctp: 'Closest to pin', ld: 'Longest drive' };
 
@@ -111,6 +112,7 @@ export default function Comps() {
           {markers.length > 0 && <CourseMap markers={markers} osm={!!holeInfo?.osm} />}
 
           <div className="section stack">
+            <ConditionsLine comp={kind} />
             {leader ? (
               <div className="card pad row" style={{ background: 'var(--gold-soft)', borderColor: 'var(--gold)', gap: 12 }}>
                 {leader.photo_url
@@ -275,6 +277,7 @@ function EntryForm({ round, kind, hole, holeInfo, leader, playerIds, onClose, on
   return (
     <Sheet title={`${LABEL[kind]} · hole ${hole}`} onClose={onClose}>
       <div className="stack">
+        <ConditionsLine comp={kind} />
         <label className="field"><span>Player</span>
           <select className="select" value={playerId} onChange={(e) => setPlayerId(e.target.value)}>
             {options.map((p) => <option key={p.id} value={p.id}>{playerName(p)}{p.id === me ? ' (me)' : ''}</option>)}

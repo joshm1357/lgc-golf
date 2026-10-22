@@ -14,7 +14,7 @@ const S = (key, group, emoji, title, rules) => ({ key, group, emoji, title, rule
 
 export const STANDARD_SECTIONS = [
   S('golf', 'golf', '⛳', 'Rules of golf, simplified', [
-    ['as_it_lies', 'Play it as it lies', 'Hit the ball from where it ended up. Don’t move it, press down behind it or break branches to improve your shot — unless a rule (or one of our rules) says you can.'],
+    ['as_it_lies', 'Play it as it lies', 'Hit the ball from where it ended up. Don’t move it, press down behind it or break branches to improve your shot — unless a rule (or your group’s local rule) says you can.'],
     ['ball', 'Play your own ball', 'Know which ball is yours (put a mark on it). Hitting someone else’s ball costs two shots in stroke play and the hole in match play — then go back and play yours.'],
     ['order', 'Ready golf', 'Whoever’s ready plays first, as long as it’s safe. On the tee, the lowest score on the last hole usually goes first, but ready golf is fine.'],
     ['ob', 'Out of bounds', 'Past the white stakes or the boundary fence is out of bounds. The standard rule: one penalty shot and play again from where you hit it (stroke and distance). Hit a provisional if you think it’s gone.'],

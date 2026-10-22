@@ -84,7 +84,7 @@ function cleanOne(spec, v) {
   if (spec.type === 'enum') return spec.values.includes(v) ? v : spec.def;
   if (spec.type === 'money') {
     if (v == null || v === '') return null;
-    const n = Number(v);
+    const n = Number(String(v).replace(/[$,\s]/g, ''));
     return Number.isFinite(n) && n >= 0 && n <= 1000 ? Math.round(n * 100) / 100 : spec.def;
   }
   return spec.def;

@@ -11,13 +11,15 @@ import { Link } from 'react-router-dom';
 import { useGovernance } from './Cases.jsx';
 import { ruleLine, closesIn } from '../lib/governance.js';
 import { ImportLink } from './AiImport.jsx';
+import { StandardRules, RuleIdeas } from '../components/StandardRules.jsx';
+import { standardOptions, standardRule } from '../lib/standardrules.js';
 
 const CATS = [
   ['format', 'Format & scoring'], ['side_comp', 'Side comps'], ['bonus', 'Bonuses'], ['handicap', 'Handicaps'],
   ['etiquette', 'On the course'], ['fines', 'Fines'], ['other', 'Other'],
 ];
 const CAT = Object.fromEntries(CATS);
-const APPLIES = [['all', 'Everything'], ['stableford', 'Stableford'], ['ambrose', 'Ambrose'], ['stroke', 'Stroke play'], ['fourball', '4BBB'], ['trip', 'Trips']];
+const APPLIES = [['all', 'Everything'], ['stableford', 'Stableford'], ['ambrose', 'Ambrose'], ['stroke', 'Stroke play'], ['fourball', '4BBB'], ['cup', 'The Cup'], ['trip', 'Trips']];
 const APPLY = Object.fromEntries(APPLIES);
 const VOTE = { for: '👍 For', against: '👎 Against', abstain: 'Abstain' };
 
@@ -55,6 +57,8 @@ export default function Rulebook() {
     <div className="page">
       <Header logo title="The Rulebook" sub="How we play, what counts, and what’s up for a vote" />
       <div className="section stack">
+        <StandardRules localRules={rb.rules} />
+        <div data-testid="our-rules"><strong style={{ fontSize: 17 }}>🏌️ Local and special rules</strong><div className="small muted">Your group’s own rules — they beat the standard ones.</div></div>
         <div className="seg light" role="group">
           {[['all', 'All'], ['stableford', 'Stableford'], ['ambrose', 'Ambrose']].map(([k, l]) => <button key={k} type="button" aria-pressed={filter === k} onClick={() => setFilter(k)}>{l}</button>)}
         </div>
@@ -82,6 +86,7 @@ export default function Rulebook() {
         {active.length === 0 && !showPicker && <div className="empty">No rules for this comp yet.{!status.is_admin && rb.rules.length === 0 ? ' Your organiser can start from a ready-made Rulebook.' : ''}</div>}
 
         {(status.is_admin || (votingOn && status.role !== 'guest')) && <button type="button" className="btn gold block" onClick={() => setEditing({})}>{votingOn ? '+ Propose a rule' : '+ Add a rule'}</button>}
+        {(status.is_admin || (votingOn && status.role !== 'guest')) && <RuleIdeas localRules={rb.rules} onPropose={(r) => setEditing({ start: r })} />}
 
         {status.is_admin && <ImportLink label="✨ Import rules from a photo or text" about="rules" />}
 
@@ -92,7 +97,7 @@ export default function Rulebook() {
           </details>
         )}
       </div>
-      {editing && <RuleSheet rule={editing.id ? editing : null} settings={gov?.settings} onClose={() => setEditing(null)} onSaved={rb.reload} />}
+      {editing && <RuleSheet rule={editing.id ? editing : null} start={editing.start} settings={gov?.settings} onClose={() => setEditing(null)} onSaved={rb.reload} />}
     </div>
   );
 }
@@ -102,6 +107,7 @@ export function Chips({ rule }) {
     <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
       {rule.value && <span className="small" style={{ padding: '2px 10px', borderRadius: 999, background: 'var(--gold-soft)', border: '1px solid var(--gold)', fontWeight: 800 }}>{rule.value}</span>}
       {rule.applies_to.map((a) => <span key={a} className="small" style={{ padding: '2px 10px', borderRadius: 999, background: '#EEF1F5', fontWeight: 600 }}>{APPLY[a] || a}</span>)}
+      {standardRule(rule.overrides) && <span className="small" data-testid="changes-standard" style={{ padding: '2px 10px', borderRadius: 999, border: '1px solid var(--line)', fontWeight: 600 }}>Changes: {standardRule(rule.overrides).title}</span>}
     </div>
   );
 }
@@ -192,13 +198,13 @@ function ProposedCard({ rule, votes, reload, onEdit, c }) {
   );
 }
 
-export function RuleSheet({ rule, onClose, onSaved, settings }) {
+export function RuleSheet({ rule, start, onClose, onSaved, settings }) {
   const { status } = useSession();
   const isAdmin = status.is_admin;
   // Stage 11b: an organiser adds, changes or retires rules directly only where the group's decision rule says an
   // organiser decides (L.G.C does). Otherwise it's a vote / a challenge — the database refuses the shortcut.
   const direct = (k) => !settings || settings[k]?.decides === 'organiser';
-  const [v, set] = useState(() => rule || { category: 'side_comp', applies_to: ['ambrose'], status: 'proposed' });
+  const [v, set] = useState(() => rule || start || { category: 'side_comp', applies_to: ['ambrose'], status: 'proposed' });
   const [busy, run] = useRun();
   const f = (k) => ({ value: v[k] ?? '', onChange: (e) => set({ ...v, [k]: e.target.value }) });
   const toggle = (a) => {
@@ -208,6 +214,8 @@ export function RuleSheet({ rule, onClose, onSaved, settings }) {
   };
   const save = (asStatus) => run(async () => {
     const row = { title: v.title.trim(), detail: v.detail?.trim() || null, category: v.category, applies_to: v.applies_to, value: v.value?.trim() || null };
+    // Which standard rule it changes (073). Only sent when set (or being cleared), so an older database still works.
+    if (v.overrides || rule?.overrides) row.overrides = v.overrides || null;
     if (rule) {
       const extra = isAdmin && asStatus && asStatus !== rule.status ? { status: asStatus, decided_at: asStatus === 'proposed' ? null : new Date().toISOString() } : {};
       await must(supabase.from('rules').update({ ...row, ...extra }).eq('id', rule.id));
@@ -230,6 +238,12 @@ export function RuleSheet({ rule, onClose, onSaved, settings }) {
         <label className="field"><span>Details</span><textarea className="textarea" rows={4} style={{ padding: 12 }} {...f('detail')} placeholder="How it works, when it counts" /></label>
         <label className="field"><span>Type</span>
           <select className="select" {...f('category')}>{CATS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+        </label>
+        <label className="field"><span>Changes a standard rule? (optional)</span>
+          <select className="select" value={v.overrides || ''} onChange={(e) => set({ ...v, overrides: e.target.value || null })} data-testid="overrides-select">
+            <option value="">No — it’s an extra rule</option>
+            {standardOptions().map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+          </select>
         </label>
         <span className="label">Applies to</span>
         <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>

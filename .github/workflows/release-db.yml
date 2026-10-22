@@ -1,0 +1,127 @@
+name: Release database and functions
+
+# Josh runs this by hand (Actions → "Release database and functions" → Run workflow).
+#  - rehearse: runs every migration that isn't on the target yet, in order, inside ONE transaction that is then
+#    rolled back. Nothing changes. It reports the first file that fails, if any.
+#  - apply: runs them for real, one file at a time (each in its own transaction), recording each in the
+#    migration history, and stops at the first error. For the live project you must type LIVE in "confirm".
+#  - deploy_functions: after a successful apply, deploys the edge functions to the same project.
+# Needs the repo secret SUPABASE_ACCESS_TOKEN. Uses Supabase's management API; no database password needed.
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'staging or live'
+        type: choice
+        options: [staging, live]
+        default: staging
+      mode:
+        description: 'rehearse (rolled back, changes nothing) or apply'
+        type: choice
+        options: [rehearse, apply]
+        default: rehearse
+      from:
+        description: 'First migration to consider (number prefix)'
+        default: '053'
+      deploy_functions:
+        description: 'After apply, deploy the edge functions too'
+        type: boolean
+        default: false
+      confirm:
+        description: 'Type LIVE to apply to the live project'
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-db
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      TARGET: ${{ inputs.target }}
+      MODE: ${{ inputs.mode }}
+      FROM: ${{ inputs.from }}
+      CONFIRM: ${{ inputs.confirm }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check
+        run: |
+          set -euo pipefail
+          [ -n "${SUPABASE_ACCESS_TOKEN:-}" ] || { echo "::error::Add the SUPABASE_ACCESS_TOKEN repo secret first."; exit 1; }
+          if [ "$TARGET" = live ]; then echo "REF=luogyzvrbedmicjejilr" >> "$GITHUB_ENV"; else echo "REF=ttkaojaqhckiwpgrpxkh" >> "$GITHUB_ENV"; fi
+          if [ "$TARGET" = live ] && [ "$MODE" = apply ] && [ "$CONFIRM" != "LIVE" ]; then echo "::error::To apply to live, type LIVE in confirm."; exit 1; fi
+      - name: Work out what's pending
+        run: |
+          set -euo pipefail
+          q() { jq -n --arg q "$1" '{query:$q}' | curl -sS -f -X POST "https://api.supabase.com/v1/projects/$REF/database/query" \
+                 -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H 'Content-Type: application/json' --data-binary @-; }
+          q "select name from supabase_migrations.schema_migrations" | jq -r '.[].name' > applied.txt
+          python3 - <<'PY'
+          import os, re
+          frm = os.environ['FROM']
+          applied = set(l.strip() for l in open('applied.txt') if l.strip())
+          def key(f):
+              m = re.match(r'^(\d+)([a-z]?)_', f)
+              return (int(m.group(1)), m.group(2)) if m else (9999, f)
+          files = sorted([f for f in os.listdir('supabase/migrations') if f.endswith('.sql') and re.match(r'^\d+[a-z]?_', f)], key=key)
+          start = key(frm + '_')
+          pending = [f for f in files if key(f) >= start and f[:-4] not in applied]
+          open('pending.txt', 'w').write('\n'.join(pending) + ('\n' if pending else ''))
+          print('Already on the target (from %s on): %s' % (frm, ', '.join(sorted(n for n in applied if key(n + '.sql') >= start)) or 'none'))
+          print('Pending, in order: %s' % (', '.join(pending) or 'nothing'))
+          PY
+      - name: Rehearse (rolled back)
+        if: inputs.mode == 'rehearse'
+        run: |
+          set -uo pipefail
+          run_all() { # $1 = how many pending files to include
+            { echo 'begin;'; head -n "$1" pending.txt | while read -r f; do cat "supabase/migrations/$f"; echo; echo ';'; done; echo 'rollback;'; } > rehearse.sql
+            jq -n --rawfile q rehearse.sql '{query:$q}' | curl -sS -o out.json -w '%{http_code}' -X POST "https://api.supabase.com/v1/projects/$REF/database/query" \
+              -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H 'Content-Type: application/json' --data-binary @-
+          }
+          n=$(grep -c . pending.txt || true)
+          [ "$n" -gt 0 ] || { echo "Nothing pending."; exit 0; }
+          code=$(run_all "$n")
+          if [ "$code" -lt 300 ]; then echo "::notice title=Rehearsal passed::All $n migrations ran cleanly on $TARGET and were rolled back. Nothing changed."; exit 0; fi
+          echo "Full rehearsal failed ($code): $(head -c 1500 out.json)"
+          for i in $(seq 1 "$n"); do
+            code=$(run_all "$i")
+            if [ "$code" -ge 300 ]; then echo "::error title=Rehearsal failed::$(sed -n "${i}p" pending.txt) fails: $(head -c 1500 out.json)"; exit 1; fi
+          done
+          exit 1
+      - name: Apply
+        if: inputs.mode == 'apply'
+        run: |
+          set -uo pipefail
+          i=0
+          while read -r f; do
+            [ -n "$f" ] || continue
+            i=$((i+1)); name="${f%.sql}"
+            ver=$(date -u -d "+$i seconds" +%Y%m%d%H%M%S)
+            { echo 'begin;'; cat "supabase/migrations/$f"; echo; echo ';';
+              echo "insert into supabase_migrations.schema_migrations (version, name) values ('$ver', '$name');";
+              echo 'commit;'; } > apply.sql
+            code=$(jq -n --rawfile q apply.sql '{query:$q}' | curl -sS -o out.json -w '%{http_code}' -X POST "https://api.supabase.com/v1/projects/$REF/database/query" \
+              -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H 'Content-Type: application/json' --data-binary @-)
+            if [ "$code" -ge 300 ]; then echo "::error title=Stopped at $f::$(head -c 1500 out.json)"; exit 1; fi
+            echo "Applied $f"
+            sleep 1
+          done < pending.txt
+          echo "::notice title=Applied::$(grep -c . pending.txt || echo 0) migrations applied to $TARGET."
+      - uses: supabase/setup-cli@v1
+        if: inputs.mode == 'apply' && inputs.deploy_functions
+        with:
+          version: latest
+      - name: Deploy functions
+        if: inputs.mode == 'apply' && inputs.deploy_functions
+        run: |
+          set -euo pipefail
+          for d in supabase/functions/*/; do
+            fn=$(basename "$d"); [ -f "$d/index.ts" ] || continue
+            echo "::group::$fn"; supabase functions deploy "$fn" --project-ref "$REF" --use-api; echo "::endgroup::"
+          done

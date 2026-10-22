@@ -211,7 +211,9 @@ describe('nextStep', () => {
     // Mike sees his job.
     expect(nextStep({ ...org, items: handed, me: P2, isOrganiser: false }).title).toBe('Your job: Shortlist accommodation');
     // Shortlist done → reserve.
-    expect(nextStep({ ...org, items: done(jobs, 'shortlist_stay') }).title).toBe('Reserve accommodation');
+    const res = nextStep({ ...org, items: done(jobs, 'shortlist_stay') });
+    expect(res.title).toBe('Reserve accommodation');
+    expect(res.action).toEqual({ type: 'job', id: jobs.find((j) => j.formula_key === 'reserve_stay').id });
     // Reserved → set the deposit.
     const s4 = nextStep({ ...org, items: done(jobs, 'shortlist_stay', 'reserve_stay') });
     expect(s4.title).toBe('Set the deposit and ask everyone');
@@ -244,6 +246,8 @@ describe('nextStep', () => {
     expect(mike.title).toBe('Confirm you’re in and pay your $150 deposit');
     expect(mike.action).toEqual({ type: 'pay' });
     const org = nextStep({ ...ctx, me: ORG, isOrganiser: true });
+    // The organiser isn't asked to pay themselves.
+    expect(nextStep({ ...ctx, transfers: [], me: ORG, isOrganiser: true }).title).toBe('3 deposits to collect');
     // Nothing overdue → deposits to collect comes before the next job.
     expect(org.title).toBe('2 deposits to collect');
     // Adam says he's paid → the organiser ticks it off first.

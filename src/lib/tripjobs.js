@@ -256,7 +256,8 @@ export function nextStep(ctx) {
   const deposit = Number(plan.deposit_pp) || 0;
   const dep = deposit > 0 && plan.deposit_asked_at ? depositStatus({ deposit, rsvps, transfers }) : null;
   const mineDep = dep?.people.find((p) => p.player_id === me);
-  if (dep && keen && mineDep && mineDep.state === 'unpaid') {
+  // The organiser holds the money, so they tick themselves off on the deposits list rather than "paying".
+  if (dep && keen && !isOrganiser && mineDep && mineDep.state === 'unpaid') {
     return step({ key: 'pay', icon: '💳', title: `Confirm you’re in and pay your ${money(deposit)} deposit`, detail: myRsvp === 'in' ? 'Pay the organiser, then tap “I’ve paid”.' : 'Accommodation is booked — lock in your spot.', who: me, label: 'Confirm and pay', action: { type: 'pay' } });
   }
   if (!isOrganiser) {
@@ -269,7 +270,7 @@ export function nextStep(ctx) {
     return step({ key: 'wait', icon: '🔒', title: days != null && days > 0 ? `${plural(days, 'day')} to go` : 'Locked in', detail: open[0] ? `Next up: ${open[0].title}${open[0].owner_id ? ` (${nameOf(names, open[0].owner_id)})` : ''}.` : 'All sorted.', label: 'See the details', action: { type: 'tab', tab: 'details' } });
   }
 
-  if (phase === 'locked') return step({ key: 'make_jobs', icon: '📋', title: 'Make the to-do list', detail: 'The usual jobs with due dates counted back from the trip — accommodation, deposits, transport, the draw.', label: 'Make it', action: { type: 'make_jobs' } });
+  if (phase === 'locked' && plan.kind !== 'round') return step({ key: 'make_jobs', icon: '📋', title: 'Make the to-do list', detail: 'The usual jobs with due dates counted back from the trip — accommodation, deposits, transport, the draw.', label: 'Make it', action: { type: 'make_jobs' } });
   const v = voteStep();
   if (v) return v;
   if (dep && dep.pending.length) return step({ key: 'confirm-deposits', icon: '✅', title: `Tick off ${plural(dep.pending.length, 'deposit')}`, detail: 'They say they’ve paid — check it landed.', label: 'Check deposits', action: { type: 'deposits' } });
@@ -281,7 +282,8 @@ export function nextStep(ctx) {
     if (!j.owner_id) return step({ key: `allocate:${j.id}`, icon: '👉', title: `Allocate: ${j.title}`, detail: j.due ? `Due ${fmtRange(j.due)}${j.due < today ? ' — overdue' : ''}.` : 'Hand it to someone.', label: 'Allocate', action: { type: 'allocate', id: j.id } });
     if (j.owner_id === me) {
       if (j.formula_key === 'shortlist_stay' || j.formula_key === 'reserve_stay') {
-        return step({ key: `job:${j.id}`, icon: '🏠', title: j.title, detail: j.due ? `Due ${fmtRange(j.due)}${j.due < today ? ' — overdue' : ''}.` : '', who: me, label: j.formula_key === 'shortlist_stay' ? 'Find places' : 'Reserve it', action: { type: 'tab', tab: 'stay' } });
+        return step({ key: `job:${j.id}`, icon: '🏠', title: j.title, detail: j.due ? `Due ${fmtRange(j.due)}${j.due < today ? ' — overdue' : ''}.` : '', who: me,
+          label: j.formula_key === 'shortlist_stay' ? 'Find places' : 'Reserve it', action: j.formula_key === 'shortlist_stay' ? { type: 'tab', tab: 'stay' } : { type: 'job', id: j.id } });
       }
       return step({ key: `job:${j.id}`, icon: '📋', title: j.title, detail: j.due ? `Due ${fmtRange(j.due)}${j.due < today ? ' — overdue' : ''}.` : '', who: me, label: 'Open the job', action: { type: 'job', id: j.id } });
     }

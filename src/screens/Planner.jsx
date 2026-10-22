@@ -17,6 +17,8 @@ import { TripSetupCard } from './TripSetup.jsx';
 import TripExtras from './TripExtras.jsx';
 import { TripFinderCard } from '../components/TripFinderCard.jsx';
 import { TripOverview } from './TripOverview.jsx';
+import { NextStepCard, TripPlanCards, TripJobsTab, makeTripJobs } from './TripPlan.jsx';
+import { ItemSheet } from './PlanTabs.jsx';
 import { defaultView } from '../lib/tripsummary.js';
 import { STAGES, STAGE_LABEL, tripStage, canDecide } from '../lib/trips.js';
 
@@ -145,6 +147,7 @@ export function PlanDetail() {
           ))}
         </div>}
       </Header>
+      {plan.status !== 'cancelled' && <NextStepCard pd={pd} stage={stage} onTab={setTab} onView={setView} />}
       {view === 'overview' && plan.status !== 'cancelled' ? (
         <div className="section">
           <TripOverview trip={trip} plan={plan} rsvps={pd.rsvps} items={pd.items} stage={stage} onOrganise={(t) => setView('organise', t)} />
@@ -157,6 +160,7 @@ export function PlanDetail() {
         {plan.status !== 'cancelled' && <StageBar pd={pd} />}
         {plan.proposed && plan.status !== 'cancelled' && <ProposalBanner plan={plan} reload={pd.reload} />}
         <LockInCard pd={pd} />
+        <TripPlanCards pd={pd} />
         {on.planner_tasks && <Checklist pd={pd} onGo={setTab} />}
         <TripSetupCard plan={plan} reload={pd.reload} />
         <TripExtras pd={pd} />
@@ -165,7 +169,7 @@ export function PlanDetail() {
         {current === 'chat' && <ChatTab pd={pd} />}
         {current === 'people' && <PeopleTab pd={pd} />}
         {current === 'details' && <DetailsTab pd={pd} />}
-        {current === 'jobs' && <JobsTab pd={pd} />}
+        {current === 'jobs' && <TripJobsTab pd={pd} AddSheet={ItemSheet} />}
         {current === 'kitty' && <KittyTab pd={pd} />}
         {current === 'groups' && <GroupsTab pd={pd} />}
       </div>
@@ -751,8 +755,9 @@ function LockInCard({ pd }) {
           await must(supabase.from('plans').update({ status: 'confirmed' }).eq('id', plan.id));
           await feedPost(status.player_id, plan, `🔒 ${plan.name} is locked in: ${fmtRange(plan.start_date, plan.end_date)}${plan.location_name ? ` at ${plan.location_name}` : ''}. Say if you’re in.`);
           await notify('trip_locked', { plan_id: plan.id });
+          await makeTripJobs({ ...pd, plan: { ...plan, status: 'confirmed' } }, status).catch(() => 0);
           pd.reload();
-        }, 'Locked in — it’s a trip in the app now');
+        }, 'Locked in — the to-do list is ready');
       }}>
       <span style={{ fontSize: 26 }}>🔒</span>
       <span className="grow"><strong>Lock it in</strong><div className="small muted">{fmtRange(plan.start_date, plan.end_date)} · {plan.location_name || 'place TBC'} — makes it a trip in the app, ready for rounds.</div></span>

@@ -59,12 +59,25 @@ export function EffectiveRules({ ctx, localRules, names, search = '', layers: on
   return (
     <div className="stack" data-testid="effective-rules">
       {eff.overriddenCount > 0 && !only && <div className="small muted">Struck-through rules are changed by a more specific rule — the one that applies is named underneath.</div>}
-      {layers.map((l) => (
-        <div key={l.key} className="stack" style={{ gap: 6 }} data-testid={`layer-${l.key}`}>
-          <span className="label">{l.emoji} {l.title}</span>
-          {l.items.map((i) => <EffectiveItem key={i.id} i={i} />)}
-        </div>
-      ))}
+      {/* Most specific first (what's special about today), the rules of golf folded away at the end. */}
+      {(only ? layers : [...layers].reverse()).map((l) => {
+        const list = l.items.map((i) => <EffectiveItem key={i.id} i={i} />);
+        const changed = l.items.filter((i) => i.overriddenBy).length;
+        if (l.key === 'golf' && !only && !search.trim()) {
+          return (
+            <details key={l.key} className="stack" data-testid={`layer-${l.key}`}>
+              <summary className="label" style={{ cursor: 'pointer', minHeight: 44, display: 'flex', alignItems: 'center' }}>{l.emoji} {l.title} ({l.items.length}{changed ? `, ${changed} changed` : ''}) — tap to open</summary>
+              <div className="stack" style={{ gap: 6 }}>{list}</div>
+            </details>
+          );
+        }
+        return (
+          <div key={l.key} className="stack" style={{ gap: 6 }} data-testid={`layer-${l.key}`}>
+            <span className="label">{l.emoji} {l.title}</span>
+            {list}
+          </div>
+        );
+      })}
     </div>
   );
 }

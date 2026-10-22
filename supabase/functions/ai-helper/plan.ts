@@ -9,7 +9,7 @@ import { clean, isUuid, isoDate, dayNumber, addDays, longDate } from './util.ts'
 // deno-lint-ignore no-explicit-any
 type Any = any;
 
-export const PLAN_LIMITS = { dates: 4, places: 4, jobs: 12, bring: 15, costs: 8, maxEach: 20000, maxDays: 10 };
+export const PLAN_LIMITS = { dates: 4, places: 4, jobs: 12, bring: 15, costs: 8, maxEach: 20000, maxDays: 10, coursesEach: 6, extras: 12, questions: 3, quick: 4 };
 
 const obj = (properties: Record<string, unknown>, required: string[] = []) => ({ type: 'object', properties, required, additionalProperties: false });
 
@@ -27,7 +27,7 @@ export const PLAN_TOOLS = [
       dates: { type: 'array', description: '2 to 4 date options to vote on', items: obj({ start_date: { type: 'string', description: 'YYYY-MM-DD' }, end_date: { type: 'string', description: 'YYYY-MM-DD' }, note: { type: 'string' } }, ['start_date']) },
       places: { type: 'array', description: '2 to 4 place options to vote on', items: obj({
         place: { type: 'string', description: 'Town or area, e.g. "Port Stephens"' },
-        courses: { type: 'array', items: { type: 'string' }, description: 'Library course ids from courses_near / find_course (optional)' },
+        courses: { type: 'array', items: { type: 'string' }, description: 'Library course ids from courses_near / find_course: 4 to 6 per place, so there are options' },
         cost_each: { type: 'number', description: 'Rough cost per person in AUD' },
         note: { type: 'string', description: 'One short line, e.g. "2.5 hrs drive, two good courses"' },
       }, ['place']) },
@@ -109,7 +109,7 @@ export function tripPlanIds(raw: Any): string[] {
   for (const p of Array.isArray(raw?.places) ? raw.places : []) {
     for (const c of Array.isArray(p?.courses) ? p.courses : []) if (isUuid(c)) ids.add(String(c).toLowerCase());
   }
-  return [...ids].slice(0, 16);
+  return [...ids].slice(0, 24);
 }
 
 /**
@@ -117,11 +117,13 @@ export function tripPlanIds(raw: Any): string[] {
  * are cleaned and cut, dates are real, in the future and at most 10 days long, money is a sane number, course ids
  * must really be in the library (others are dropped with a warning), lists are capped.
  */
-export function validateTripPlan(raw: Any, ctx: TripPlanContext): { ok: boolean; errors: string[]; plan: TripPlan | null } {
+export function validateTripPlan(raw: Any, ctx: TripPlanContext, opts: { partial?: boolean } = {}): { ok: boolean; errors: string[]; plan: TripPlan | null } {
   const errors: string[] = [];
   const warnings: string[] = [];
   if (!raw || typeof raw !== 'object') return { ok: false, errors: ['There’s no plan.'], plan: null };
-  const name = clean(raw.name, 60);
+  // A draft in the planning chat (plan_chat) can still be missing dates or places — they're asked about.
+  const partial = !!opts.partial;
+  const name = clean(raw.name, 60) || (partial ? 'Golf trip' : '');
   if (name.length < 2) errors.push('The trip needs a name.');
   const kind: 'trip' | 'round' = raw.kind === 'round' ? 'round' : 'trip';
 
@@ -142,7 +144,7 @@ export function validateTripPlan(raw: Any, ctx: TripPlanContext): { ok: boolean;
     if (dates.some((x) => x.start_date === start && x.end_date === end)) return;
     dates.push({ start_date: start, end_date: end, note: clean(d?.note, 60) });
   });
-  if (!dates.length && !errors.length) errors.push('Give at least one date option.');
+  if (!dates.length && !errors.length && !partial) errors.push('Give at least one date option.');
   if (dates.length === 1) warnings.push('Only one date option — the group can add more on the Vote tab.');
 
   // Places to vote on.
@@ -154,7 +156,7 @@ export function validateTripPlan(raw: Any, ctx: TripPlanContext): { ok: boolean;
     const label = clean(typeof p === 'string' ? p : p?.place ?? p?.label, 60);
     if (label.length < 2) { errors.push(`Place option ${i + 1} needs a name.`); return; }
     const ids: string[] = [];
-    for (const c of Array.isArray(p?.courses) ? p.courses.slice(0, 4) : []) {
+    for (const c of Array.isArray(p?.courses) ? p.courses.slice(0, PLAN_LIMITS.coursesEach) : []) {
       const id = isUuid(c) ? String(c).toLowerCase() : null;
       if (id && ctx.library[id]) { if (!ids.includes(id)) ids.push(id); } else dropped++;
     }
@@ -162,7 +164,7 @@ export function validateTripPlan(raw: Any, ctx: TripPlanContext): { ok: boolean;
     if (places.some((x) => x.label.toLowerCase() === label.toLowerCase())) return;
     places.push({ label, courses: ids, address: names.length ? clean(names.join(' + '), 120) : null, cost_pp: money(p?.cost_each ?? p?.cost_pp), notes: clean(p?.note ?? p?.notes, 100) || null });
   });
-  if (!places.length && !errors.length) errors.push('Give at least one place option.');
+  if (!places.length && !errors.length && !partial) errors.push('Give at least one place option.');
   if (places.length === 1) warnings.push('Only one place option — the group can add more on the Vote tab.');
   if (dropped) warnings.push(`${dropped === 1 ? 'A course' : `${dropped} courses`} the helper named isn’t in the course library, so ${dropped === 1 ? 'it was' : 'they were'} left off.`);
 
@@ -290,4 +292,121 @@ export function shapePastTrips(trips: Any[], plans: Any[], rounds: Any[], course
 /** Library courses near a place, made small for the model. */
 export function shapeNear(rows: Any[]) {
   return (rows || []).slice(0, 10).map((r) => ({ id: r.id, name: clean(r.name, 60), area: clean(r.area, 40) || null, holes: Number(r.holes) || 0, km: r.km != null ? Number(r.km) : null }));
+}
+
+// ------------------------------------------------------------------ The planning chat (plan_chat, 22 Oct)
+// Josh: "Plan it with AI should be a chat with responses and questions, clarifications — 'these are the locations,
+// any others? these dates, or outside of it?'". And: "the AI is a helper, never a decider". Each turn the helper
+// replies with its current DRAFT — a shortlist of options (places, each with 4–6 courses; weekends; extras; rough
+// costs) — and 1–3 short questions with tappable quick answers. Nothing is saved: the organiser taps "Use this plan"
+// and plan_apply checks it again.
+
+export const CHAT_TOOL = {
+  name: 'reply_with_draft',
+  description: 'Reply to the organiser: a short message, your current draft (a shortlist of options for the organiser and the group to choose from) and 1 to 3 short questions with quick answers. Nothing is saved.',
+  input_schema: obj({
+    message: { type: 'string', description: 'One or two short sentences, e.g. "Here are some options — want to add any?". Never "I\'ve picked".' },
+    draft: obj({
+      name: { type: 'string', description: 'A working name, e.g. "March Away 2027"' },
+      kind: { type: 'string', enum: ['trip', 'round'] },
+      dates: { type: 'array', description: '2 to 4 weekend options (YYYY-MM-DD)', items: obj({ start_date: { type: 'string' }, end_date: { type: 'string' }, note: { type: 'string' } }, ['start_date']) },
+      places: { type: 'array', description: '2 to 4 places, each with 4 to 6 library course ids', items: obj({
+        place: { type: 'string' }, courses: { type: 'array', items: { type: 'string' } }, cost_each: { type: 'number' }, note: { type: 'string' },
+      }, ['place']) },
+      extras: { type: 'array', description: 'Optional extras to offer (shirts, a bus, a group dinner…), each with a rough cost each', items: obj({ label: { type: 'string' }, pp: { type: 'number' } }, ['label']) },
+      costs: { type: 'array', items: obj({ item: { type: 'string' }, each: { type: 'number' } }, ['item', 'each']) },
+      budget_each: { type: 'number' },
+      jobs: { type: 'array', items: { type: 'string' } },
+      bring: { type: 'array', items: { type: 'string' } },
+      notes: { type: 'string' },
+    }),
+    questions: { type: 'array', description: '1 to 3 short questions, each with 2 to 4 quick answers. A quick answer that needs typing ends with "…" (e.g. "Add another…").', items: obj({
+      id: { type: 'string' }, text: { type: 'string' }, quick: { type: 'array', items: { type: 'string' } },
+    }, ['text', 'quick']) },
+    done: { type: 'boolean', description: 'true when the organiser says it looks right and you have nothing left to ask' },
+  }, ['message', 'draft', 'questions']),
+};
+export const CHAT_TOOLS = [...PLAN_TOOLS.filter((t) => t.name !== 'propose_trip_plan'), CHAT_TOOL];
+export const CHAT_TOOL_NAMES = new Set(CHAT_TOOLS.map((t) => t.name));
+export const CHAT_KEEP = 12;
+
+export function planChatSystem(today: string, groupName: string): string {
+  return `You are the trip planning helper inside The Golf Trip, an app that runs golf trips for groups of mates. You are chatting with the organiser of the group "${clean(groupName, 60)}" to put together options for their next trip. You are a HELPER, never a decider: you suggest a shortlist and ask; the organiser (and then the group, by vote) chooses.
+
+Today is ${longDate(today)} (${today}), Sydney time. A month with no year means the next time it comes around.
+
+Every reply calls reply_with_draft with:
+- message: one or two short sentences. Say "Here are some options…", "Want to add any?" — never "I've picked" or "I've chosen".
+- draft: the whole current shortlist, updated with what the organiser just said:
+  - 2 to 4 places (golf towns or areas). For each, use courses_near and list 4 to 6 real library course ids — never just one course for a place.
+  - 2 to 4 weekend options (Friday to Sunday unless they say otherwise).
+  - rough costs each and a rough budget each (AUD, estimates), and a few optional extras worth offering (shirts or caps, a bus, a group dinner, a chef at the house, a brewery tour…) with rough costs.
+  - keep everything the organiser already agreed to; only change what they asked about.
+- questions: 1 to 3 short questions about what's still open, each with 2 to 4 quick answers. Examples:
+  "These are the places I'd look at — any others?" [Looks good] [Add another…]
+  "Weekends: 13–15 Mar or 20–22 Mar — or other weekends?" [Those work] [Different dates…]
+  "Budget about $800 each?" [Yes] [Less] [More]
+  A quick answer that needs typing ends with "…".
+- done: true only when the organiser says it looks right and nothing's left to ask (then questions can be empty).
+
+The conversation so far and the current draft come inside <data> tags; the organiser's latest words are inside <request> tags.
+Only plan golf trips for this group. Politely decline anything else in one sentence (still call reply_with_draft with the current draft).
+Plain Australian English, short.
+
+${GUARD}`;
+}
+
+export type ChatReply = {
+  message: string;
+  draft: TripPlan & { extras: { label: string; pp: number | null }[] };
+  questions: { id: string; text: string; quick: string[] }[];
+  done: boolean;
+};
+
+/** Check a chat reply from the model: the draft like a plan (partial allowed), extras and questions capped and cleaned. */
+export function validatePlanChat(raw: Any, ctx: TripPlanContext): { ok: boolean; errors: string[]; value: ChatReply | null } {
+  if (!raw || typeof raw !== 'object') return { ok: false, errors: ['There’s no reply.'], value: null };
+  const v = validateTripPlan(raw.draft || {}, ctx, { partial: true });
+  if (!v.ok || !v.plan) return { ok: false, errors: v.errors, value: null };
+  const extras: { label: string; pp: number | null }[] = [];
+  for (const e of Array.isArray(raw.draft?.extras) ? raw.draft.extras.slice(0, PLAN_LIMITS.extras) : []) {
+    const label = clean(typeof e === 'string' ? e : e?.label, 60);
+    if (label.length >= 2 && !extras.some((x) => x.label.toLowerCase() === label.toLowerCase())) extras.push({ label, pp: money(e?.pp, 5000) });
+  }
+  const questions: ChatReply['questions'] = [];
+  const rawQs = Array.isArray(raw.questions) ? raw.questions : [];
+  rawQs.slice(0, PLAN_LIMITS.questions).forEach((q: Any, i: number) => {
+    const text = clean(q?.text, 160);
+    if (text.length < 3) return;
+    const quick: string[] = [];
+    for (const x of Array.isArray(q?.quick) ? q.quick : []) {
+      const t = clean(x, 30);
+      if (t && !quick.includes(t)) quick.push(t);
+    }
+    const id = (clean(q?.id, 30).toLowerCase().replace(/[^a-z0-9_-]+/g, '-') || `q${i + 1}`).slice(0, 30);
+    questions.push({ id, text, quick: quick.slice(0, PLAN_LIMITS.quick) });
+  });
+  const done = raw.done === true;
+  if (!questions.length && !done) return { ok: false, errors: ['Ask 1 to 3 short questions with quick answers (or set done when the organiser is happy).'], value: null };
+  let message = clean(raw.message, 300) || 'Here are some options — want to change anything?';
+  // A helper, never a decider.
+  message = message.replace(/\bI(?:’|')?ve (picked|chosen|decided)( on)?\b/gi, 'Here are some options —');
+  return { ok: true, errors: [], value: { message, draft: { ...v.plan, extras }, questions, done } };
+}
+
+/** The conversation so far, slimmed for the model (it goes in as data, never instructions). */
+export function chatMessages(raw: Any): { role: 'organiser' | 'helper'; text: string }[] {
+  const out: { role: 'organiser' | 'helper'; text: string }[] = [];
+  for (const m of (Array.isArray(raw) ? raw : []).slice(-CHAT_KEEP)) {
+    const text = clean(String(m?.text ?? '').replace(/[<>]/g, ' '), 600);
+    if (text) out.push({ role: m?.role === 'user' ? 'organiser' : 'helper', text });
+  }
+  return out;
+}
+
+/** The draft the app sent back (it was ours last turn, but it comes from the phone: checked like anything else). */
+export function chatDraftIn(raw: Any, ctx: TripPlanContext) {
+  if (!raw || typeof raw !== 'object') return null;
+  const v = validateTripPlan({ ...raw, places: (raw.places || []).map((p: Any) => ({ place: p?.label ?? p?.place, courses: p?.courses, cost_each: p?.cost_pp ?? p?.cost_each, note: p?.notes ?? p?.note })), budget_each: raw.budget_pp ?? raw.budget_each }, ctx, { partial: true });
+  return v.ok && v.plan ? { ...v.plan, extras: Array.isArray(raw.extras) ? raw.extras.slice(0, PLAN_LIMITS.extras).map((e: Any) => ({ label: clean(e?.label, 60), pp: money(e?.pp, 5000) })).filter((e: Any) => e.label.length >= 2) : [] } : null;
 }

@@ -62,7 +62,7 @@ async function sendOne(db: Db, opts: { app: string; g: string; plan: Row; polls:
   const closes = opts.polls.map((p) => p.closes_on).filter(Boolean).sort()[0];
   const msg = buildVoteEmail({
     app: opts.app, token: `${tok.id}.${secret}`, first: opts.person.first, planName: opts.plan.name, planId: opts.plan.id,
-    polls: opts.polls.map((p) => ({ id: p.id, question: p.question, kind: (p as { kind?: string }).kind || null, purpose: (p as { purpose?: string }).purpose || null, choice: p.choice || null, options: opts.options.filter((o) => o.poll_id === p.id).map((o) => ({ id: o.id, label: o.label })) })),
+    polls: opts.polls.map((p) => ({ id: p.id, question: p.question, kind: (p as { kind?: string }).kind || null, purpose: (p as { purpose?: string }).purpose || null, choice: p.choice || null, options: opts.options.filter((o) => o.poll_id === p.id).map((o) => ({ id: o.id, label: o.label, link: o.link || null })) })),
     rsvp: opts.rsvp, reminder: opts.kind === 'reminder', closes: fmtDay(closes),
   });
   const res = await sendEmail({ to: opts.person.email, ...msg });
@@ -80,7 +80,7 @@ export async function emailVoteOpen(db: Db, app: string, g: string, poll: Row, e
   const { data: plan } = await db.from('plans').select('id,name,rsvp_locked,status').eq('id', poll.plan_id).eq('group_id', g).maybeSingle();
   if (!plan) return { emailed: 0, note: '' };
   const [{ data: options }, { data: rsvps }] = await Promise.all([
-    db.from('plan_options').select('id,poll_id,label,start_date').in('poll_id', polls.map((p) => p.id)).order('start_date', { nullsFirst: false }).order('created_at'),
+    db.from('plan_options').select('id,poll_id,label,start_date,link').in('poll_id', polls.map((p) => p.id)).order('start_date', { nullsFirst: false }).order('created_at'),
     db.from('plan_rsvps').select('player_id').eq('plan_id', plan.id),
   ]);
   const replied = new Set((rsvps || []).map((x) => x.player_id));
@@ -114,7 +114,7 @@ export async function emailVoteReminders(db: Db, app: string, g: string, planId:
     const polls = seed[0].vote_batch ? await batchPolls(db, seed[0]) : seed;
     const ids = polls.map((p) => p.id);
     const [{ data: options }, { data: votes }, { data: sent }] = await Promise.all([
-      db.from('plan_options').select('id,poll_id,label,start_date').in('poll_id', ids).order('start_date', { nullsFirst: false }).order('created_at'),
+      db.from('plan_options').select('id,poll_id,label,start_date,link').in('poll_id', ids).order('start_date', { nullsFirst: false }).order('created_at'),
       db.from('plan_votes').select('option_id,poll_id,player_id').in('poll_id', ids),
       db.from('vote_email_tokens').select('player_id').eq('batch_key', batch).eq('kind', 'reminder'),
     ]);

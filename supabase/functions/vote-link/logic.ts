@@ -5,7 +5,7 @@
 // address), which calls this with { t } to show the vote, then { t, o, r } / { t, rsvp } to record an answer, or
 // { t, stop: true } to stop vote emails. Every reply is JSON; the page writes the words.
 import { splitToken, sha256Hex, safeEqual } from '../_shared/tokens.ts';
-import { ANSWERS, RSVP_ANSWERS, firstName } from '../_shared/emailvotes.js';
+import { ANSWERS, RSVP_ANSWERS, firstName, safeLink } from '../_shared/emailvotes.js';
 
 export type TokenRow = { id: string; group_id: string; plan_id: string; player_id: string; poll_ids: string[]; secret_hash: string; expires_at: string };
 export type Poll = { id: string; plan_id: string; group_id: string; question: string; kind: string; status: string; closes_on?: string | null; choice?: string | null; purpose?: string | null };
@@ -81,7 +81,7 @@ export async function handle(input: unknown, d: Deps): Promise<Reply> {
     recorded,
     polls: polls.map((p) => ({
       id: p.id, question: p.question, kind: p.kind, purpose: p.purpose || null, choice: p.choice || null, open: p.status === 'open',
-      options: options.filter((o) => o.poll_id === p.id).map((o) => ({ id: o.id, label: o.label })),
+      options: options.filter((o) => o.poll_id === p.id).map((o) => ({ id: o.id, label: o.label, link: safeLink((o as { link?: string | null }).link) })),
       mine: Object.fromEntries(mine.filter((v) => v.poll_id === p.id).map((v) => [v.option_id, v.response])),
     })),
     rsvp: { asked: rsvpAsk && openPolls.length > 0, mine: rsvp },

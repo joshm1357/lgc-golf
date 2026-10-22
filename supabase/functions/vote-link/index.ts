@@ -30,7 +30,7 @@ const deps: Deps = {
     return must(await db.from('plan_polls').select('*').in('id', ids)) || [];
   },
   async options(pollIds) {
-    return must(await db.from('plan_options').select('id,poll_id,label,start_date').in('poll_id', pollIds).order('start_date', { nullsFirst: false }).order('created_at')) || [];
+    return must(await db.from('plan_options').select('id,poll_id,label,start_date,link').in('poll_id', pollIds).order('start_date', { nullsFirst: false }).order('created_at')) || [];
   },
   async votes(pollIds, playerId) {
     return must(await db.from('plan_votes').select('option_id,poll_id,response').in('poll_id', pollIds).eq('player_id', playerId)) || [];

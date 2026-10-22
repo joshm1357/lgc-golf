@@ -31,6 +31,8 @@ export { useRun, must } from '../lib/run.js';
 import { useRun, must } from '../lib/run.js';
 import { NotifyCard } from '../components/NotifyCard.jsx';
 import { PollCard } from '../components/PollCard.jsx';
+import { HowItGoesOut } from '../components/CallVote.jsx';
+import { defaultCloses } from '../lib/callvote.js';
 
 export { NotifyCard };
 
@@ -252,10 +254,10 @@ function VoteTab({ pd }) {
       {pd.polls.length === 0 && <div className="empty">No votes yet.{status.is_admin ? ' Put one up — dates, place, or anything else.' : ' The admin will put one up.'}</div>}
       <VoteBatches pd={pd} />
       {open.map((p) => <PollCard key={p.id} poll={p} pd={pd} />)}
-      {status.is_admin && <button type="button" className="btn gold block" onClick={() => setCreating(true)}>+ New vote</button>}
+      {status.is_admin && <button type="button" className="btn gold block" onClick={() => setCreating(true)} data-testid="call-a-vote">🗳️ Call a vote</button>}
       {closed.length > 0 && <span className="label">Decided</span>}
       {closed.map((p) => <PollCard key={p.id} poll={p} pd={pd} />)}
-      <p className="note" style={{ margin: 0 }}>Mark every option ✓ Can, ? Maybe or ✗ Can’t. ✓ = 2 points, ? = 1. Anyone can add an option. {pd.voteDecider === 'admin_or_organiser' ? 'The admin or the trip’s organiser' : 'The admin'} closes the vote and picks the winner.</p>
+      <p className="note" style={{ margin: 0 }}>Dates: ✓ Can · ? Maybe · ✗ Can’t. Places: ⭐ Prefer · 👍 Option · 👎 Don’t like. The first is 2 points, the middle 1. Anyone can add an option. {pd.voteDecider === 'admin_or_organiser' ? 'The admin or the trip’s organiser' : 'The admin'} closes the vote and picks the winner.</p>
       {creating && <PollSheet pd={pd} onClose={() => setCreating(false)} />}
     </>
   );
@@ -330,20 +332,28 @@ function PollSheet({ pd, onClose }) {
   const { status } = useSession();
   const [kind, setKind] = useState(pd.polls.some((p) => p.kind === 'dates') ? 'location' : 'dates');
   const [question, setQuestion] = useState(QUESTION[kind]);
-  const [closes, setCloses] = useState('');
+  const [closes, setCloses] = useState(() => defaultCloses(todayISO()));
   const [opts, setOpts] = useState([{}, {}]);
   const [busy, run] = useRun();
+  const [called, setCalled] = useState(null);
   const good = opts.map((o) => cleanOption(kind, o)).filter(Boolean);
   const pick = (k) => { setKind(k); setQuestion(QUESTION[k]); setOpts([{}, {}]); };
+  if (called) {
+    return (
+      <Sheet title="The vote’s out" onClose={onClose}>
+        <div className="stack"><HowItGoesOut plan={pd.plan} title={called.question} closes={called.closes_on} /><button type="button" className="btn ghost block" onClick={onClose}>Done</button></div>
+      </Sheet>
+    );
+  }
   return (
-    <Sheet title="New vote" onClose={onClose}>
+    <Sheet title="Call a vote" onClose={onClose}>
       <div className="stack">
         <div className="seg light" role="group">
           {[['dates', 'Dates'], ['location', 'Location'], ['other', 'Anything else']].map(([k, l]) => <button key={k} type="button" aria-pressed={kind === k} onClick={() => pick(k)}>{l}</button>)}
         </div>
         <label className="field"><span>Question</span><input className="input" value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="e.g. Shirt colour?" /></label>
-        <label className="field"><span>Closes on (optional — reminder goes out the day before)</span><input className="input" type="date" value={closes} min={todayISO()} onChange={(e) => setCloses(e.target.value)} /></label>
-        <span className="label">Options {kind !== 'other' && '(the lads can add more)'}</span>
+        <label className="field"><span>Closes (a reminder goes out the day before)</span><input className="input" type="date" value={closes} min={todayISO()} onChange={(e) => setCloses(e.target.value)} /></label>
+        <span className="label">What goes on the ballot {kind !== 'other' && '(the lads can add more)'}</span>
         {opts.map((o, i) => (
           <div key={i} className="card pad stack" style={{ gap: 8 }}>
             <OptionFields kind={kind} v={o} set={(nv) => setOpts(opts.map((x, j) => (j === i ? nv : x)))} />
@@ -354,10 +364,10 @@ function PollSheet({ pd, onClose }) {
           const poll = await must(supabase.from('plan_polls').insert({ plan_id: pd.plan.id, kind, question: question.trim(), closes_on: closes || null }).select().single());
           if (good.length) await must(supabase.from('plan_options').insert(good.map((g) => ({ ...g, poll_id: poll.id }))));
           await feedPost(status.player_id, pd.plan, `🗳️ New vote for ${pd.plan.name}: ${poll.question} — have your say.`);
-          const r = await notify('poll_open', { poll_id: poll.id });
-          pd.reload(); onClose();
-          toast(`Vote is up${r.sent ? ` — ${r.sent} phone${r.sent === 1 ? '' : 's'} notified` : ''}`);
-        })}>Put it up</button>
+          notify('poll_open', { poll_id: poll.id }).catch(() => {});
+          pd.reload();
+          setCalled(poll);
+        })}>🗳️ Call the vote</button>
       </div>
     </Sheet>
   );

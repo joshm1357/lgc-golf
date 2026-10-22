@@ -3,7 +3,7 @@
 export {
   CHANNELS, CHANNEL_LABEL, CHANNEL_HELP, VOTE_KINDS, ANSWERS, RSVP_ANSWERS,
   cleanEmail, isEmail, maskEmail, effectiveChoice, routeFor, usableEmail, firstName, planVoteSends,
-  hasAnswered, reminderTargets, PLACE_ANSWERS, EXTRA_ANSWERS, EXTRA_QUESTION, answerKind, answersFor, answeredByEmail, batchKeyOf, tokenExpiry, voteLink, parseVoteLink, escapeHtml, buildVoteEmail,
+  hasAnswered, reminderTargets, PLACE_ANSWERS, EXTRA_ANSWERS, EXTRA_QUESTION, answerKind, answersFor, safeLink, linkWord, answeredByEmail, batchKeyOf, tokenExpiry, voteLink, parseVoteLink, escapeHtml, buildVoteEmail,
 } from '../../supabase/functions/_shared/emailvotes.js';
 import { CHANNEL_LABEL, answerKind, answersFor } from '../../supabase/functions/_shared/emailvotes.js';
 

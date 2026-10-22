@@ -168,6 +168,16 @@ export function parseVoteLink(token, search = '') {
   };
 }
 
+/** A link that's safe to show (http/https only), or null. Accommodation lists and listings go with their option. */
+export function safeLink(u) {
+  const s = String(u || '').trim();
+  return /^https?:\/\/[^\s<>"]{3,600}$/i.test(s) ? s : null;
+}
+/** "View places" for a place or stay option; "Have a look" for anything else. */
+export function linkWord(poll) {
+  return answerKind(poll) === 'place' ? 'View places ↗' : 'Have a look ↗';
+}
+
 export function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -198,15 +208,16 @@ export function buildVoteEmail({ app, token, first, planName, planId, polls = []
     h.push(`<h2 style="font-size:18px;margin:18px 0 6px;">${escapeHtml(poll.question)}</h2>`);
     t.push(poll.question);
     for (const o of poll.options || []) {
+      const view = safeLink(o.link);
       if (poll.choice === 'single') {
-        h.push(`<div>${button(link({ o: o.id, r: 'yes' }), o.label, 'pick')}</div>`);
-        t.push(`  ${o.label}: ${link({ o: o.id, r: 'yes' })}`);
+        h.push(`<div>${button(link({ o: o.id, r: 'yes' }), o.label, 'pick')}${view ? ` <a href="${escapeHtml(view)}">${escapeHtml(linkWord(poll))}</a>` : ''}</div>`);
+        t.push(`  ${o.label}: ${link({ o: o.id, r: 'yes' })}${view ? ` (${linkWord(poll).replace(' ↗', '')}: ${view})` : ''}`);
       } else {
-        h.push(`<div style="margin:10px 0 2px;font-weight:700;">${escapeHtml(o.label)}</div><div>`);
+        h.push(`<div style="margin:10px 0 2px;font-weight:700;">${escapeHtml(o.label)}${view ? ` <a href="${escapeHtml(view)}" style="font-weight:600;">${escapeHtml(linkWord(poll))}</a>` : ''}</div><div>`);
         const words = answersFor(poll);
         h.push(['yes', 'maybe', 'no'].map((r) => button(link({ o: o.id, r }), words[r], r)).join(''));
         h.push('</div>');
-        t.push(`  ${o.label}`);
+        t.push(`  ${o.label}${view ? ` — ${linkWord(poll).replace(' ↗', '')}: ${view}` : ''}`);
         for (const r of ['yes', 'maybe', 'no']) t.push(`    ${words[r]}: ${link({ o: o.id, r })}`);
       }
     }

@@ -4,7 +4,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
-import { ANSWERS, RSVP_ANSWERS, parseVoteLink, recordedLine, answersFor } from '../lib/emailvotes.js';
+import { ANSWERS, RSVP_ANSWERS, parseVoteLink, recordedLine, answersFor, safeLink, linkWord } from '../lib/emailvotes.js';
 
 // Josh can switch this on to record the tapped answer as soon as the page opens (truly one tap). Off by default:
 // some work email systems open every link in an email to check it, which would record every answer in turn.
@@ -114,6 +114,7 @@ export default function VoteLink() {
             {p.options.map((o) => (
               <div key={o.id} style={{ padding: '10px 14px', borderBottom: '1px solid var(--line-soft)' }}>
                 <div style={{ fontWeight: 700 }}>{o.label}</div>
+                {safeLink(o.link) && <a href={safeLink(o.link)} target="_blank" rel="noreferrer noopener" className="small" style={{ fontWeight: 700 }} data-testid="option-link">{linkWord(p)}</a>}
                 {p.open && (
                   <div style={{ display: 'grid', gridTemplateColumns: p.choice === 'single' ? '1fr' : '1fr 1fr 1fr', gap: 6, marginTop: 6 }}>
                     {(p.choice === 'single' ? ['yes'] : ['yes', 'maybe', 'no']).map((r) => {

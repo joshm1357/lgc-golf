@@ -33,8 +33,8 @@ export const LIMITS = {
   groupPerMonth: 60,
   personPerDay: 10,
   maxToolRounds: 6,
-  maxTokens: 1024,
-  planMaxTokens: 2048,
+  maxTokens: 2048,
+  planMaxTokens: 4096,
   callTimeoutMs: 25000,
   totalMs: 55000,
 };

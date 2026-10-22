@@ -9,6 +9,17 @@ type Env = { get(name: string): string | undefined };
 
 export const RESEND_URL = 'https://api.resend.com/emails';
 
+/** EMAIL_FROM as Resend wants it. Copes with the angle brackets going missing when the secret was typed in
+ *  ("The Golf Trip votes@thegolftrip.club" → "The Golf Trip <votes@thegolftrip.club>"). */
+export function normaliseFrom(raw: string): string {
+  const s = String(raw || '').trim().replace(/^["']|["']$/g, '').trim();
+  if (!s || s.includes('<')) return s;
+  const m = /^(.*?)[\s,]*([^\s<>"]+@[^\s<>"]+\.[a-z]{2,})$/i.exec(s);
+  if (!m) return s;
+  const name = m[1].trim().replace(/[<>"]/g, '');
+  return name ? `${name} <${m[2]}>` : m[2];
+}
+
 /** The request Resend expects (exported for tests). */
 export function resendRequest(msg: Email, from: string, key: string): { url: string; init: RequestInit } {
   const headers: Record<string, string> = {};
@@ -25,7 +36,7 @@ export function resendRequest(msg: Email, from: string, key: string): { url: str
 
 export async function sendEmail(msg: Email, env: Env = Deno.env, fetchFn: typeof fetch = fetch): Promise<SendResult> {
   const key = env.get('RESEND_API_KEY') || '';
-  const from = env.get('EMAIL_FROM') || '';
+  const from = normaliseFrom(env.get('EMAIL_FROM') || '');
   if (!key || !from) {
     console.log('vote email skipped: email not set up');
     return { ok: false, skipped: 'email not set up' };

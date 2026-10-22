@@ -1,7 +1,7 @@
 // Deno tests for the email sender (079): nothing goes without the key; the Resend request is the right shape.
 // Fake fetch only — no real email is sent.
 import nodeAssert from 'node:assert/strict';
-import { sendEmail, resendRequest, RESEND_URL } from './email.ts';
+import { sendEmail, resendRequest, RESEND_URL, normaliseFrom } from './email.ts';
 
 const env = (vals: Record<string, string>) => ({ get: (k: string) => vals[k] });
 const msg = { to: 'mike@example.com', subject: '🗳️ Hunter: Which weekend?', html: '<p>Hi</p>', text: 'Hi', unsubscribe: 'https://app.thegolftrip.club/#/v/t?stop=1' };
@@ -40,4 +40,13 @@ Deno.test('Resend says no, or the network fails: reported, not thrown, and the k
 Deno.test('request builder has no unsubscribe header when none is given', () => {
   const { init } = resendRequest({ ...msg, unsubscribe: undefined }, 'a <a@b.co>', 'k');
   nodeAssert.deepEqual(JSON.parse(String(init.body)).headers, {});
+});
+
+Deno.test('EMAIL_FROM: missing angle brackets are put back; good values are left alone', () => {
+  const eq = (a: string, b: string) => { if (a !== b) throw new Error(`${a} !== ${b}`); };
+  eq(normaliseFrom('The Golf Trip votes@thegolftrip.club'), 'The Golf Trip <votes@thegolftrip.club>');
+  eq(normaliseFrom('The Golf Trip <votes@thegolftrip.club>'), 'The Golf Trip <votes@thegolftrip.club>');
+  eq(normaliseFrom(' votes@thegolftrip.club '), 'votes@thegolftrip.club');
+  eq(normaliseFrom('"The Golf Trip, votes@thegolftrip.club"'), 'The Golf Trip <votes@thegolftrip.club>');
+  eq(normaliseFrom(''), '');
 });

@@ -69,6 +69,7 @@ const Stats = lazyScreen(() => import('./screens/Stats.jsx'));
 const DinnerAwards = lazyScreen(() => import('./screens/DinnerAwards.jsx'));
 const Desk = lazyScreen(() => import('./screens/Desk.jsx')); // Stage 11c: the full desktop (Trip desk, tables, paper cards)
 const TripFinder = lazyScreen(() => import('./screens/TripFinder.jsx'));
+const TripBuilder = lazyScreen(() => import('./screens/TripBuilder.jsx'));
 const Notifications = lazyScreen(() => import('./screens/Notifications.jsx'));
 const CompsBoard = lazyScreen(() => import('./screens/CompsBoard.jsx'));
 const TripOverviewScreen = lazyScreen(() => import('./screens/TripOverview.jsx')); // a trip's overview (trips with no plan)
@@ -245,6 +246,7 @@ function Inside() {
         <Route path="/plan" element={<FeatureRoute feature="planner" label="The Trips planner"><Planner /></FeatureRoute>} />
         <Route path="/plan/:planId" element={<FeatureRoute feature="planner" label="The Trips planner"><PlanDetailRoute /></FeatureRoute>} />
         <Route path="/plan/:planId/find" element={<FeatureRoute feature="trip_finder" label="The trip finder"><TripFinder /></FeatureRoute>} />
+        <Route path="/plan/:planId/build" element={<FeatureRoute feature="trip_finder" label="The trip builder"><TripBuilder /></FeatureRoute>} />
         <Route path="/rules" element={<Rulebook />} />
         <Route path="/rules/:ruleId" element={<RulePage />} />
         <Route path="/courses/:courseId/greens" element={<GreenMapper />} />

@@ -16,6 +16,8 @@ import { DetailsTab, JobsTab, KittyTab, GroupsTab } from './PlanTabs.jsx';
 import { TripSetupCard } from './TripSetup.jsx';
 import TripExtras from './TripExtras.jsx';
 import { TripFinderCard } from '../components/TripFinderCard.jsx';
+import { TripBuilderCard } from '../components/TripBuilderCard.jsx';
+import { VoteBatches } from '../components/VoteBatchCard.jsx';
 import { TripOverview } from './TripOverview.jsx';
 import { defaultView } from '../lib/tripsummary.js';
 import { STAGES, STAGE_LABEL, tripStage, canDecide } from '../lib/trips.js';
@@ -147,6 +149,7 @@ export function PlanDetail() {
       </Header>
       {view === 'overview' && plan.status !== 'cancelled' ? (
         <div className="section">
+          {plan.status === 'planning' && <TripBuilderCard pd={pd} first />}
           <TripOverview trip={trip} plan={plan} rsvps={pd.rsvps} items={pd.items} stage={stage} onOrganise={(t) => setView('organise', t)} />
           {/* After the trip: rate the course, dinner awards, and "same as last time" belong with the summary. */}
           {stage === 'done' && <div className="stack" style={{ marginTop: 14 }}><TripFinderCard pd={pd} /><TripExtras pd={pd} /></div>}
@@ -160,6 +163,7 @@ export function PlanDetail() {
         {on.planner_tasks && <Checklist pd={pd} onGo={setTab} />}
         <TripSetupCard plan={plan} reload={pd.reload} />
         <TripExtras pd={pd} />
+        <TripBuilderCard pd={pd} />
         <TripFinderCard pd={pd} />
         {current === 'vote' && <VoteTab pd={pd} />}
         {current === 'chat' && <ChatTab pd={pd} />}
@@ -236,11 +240,12 @@ function Checklist({ pd, onGo }) {
 function VoteTab({ pd }) {
   const { status } = useSession();
   const [creating, setCreating] = useState(false);
-  const open = pd.polls.filter((p) => p.status === 'open');
-  const closed = pd.polls.filter((p) => p.status === 'closed');
+  const open = pd.polls.filter((p) => p.status === 'open' && !p.vote_batch); // combined cards (077) show in VoteBatches
+  const closed = pd.polls.filter((p) => p.status === 'closed' && !p.vote_batch);
   return (
     <>
       {pd.polls.length === 0 && <div className="empty">No votes yet.{status.is_admin ? ' Put one up — dates, place, or anything else.' : ' The admin will put one up.'}</div>}
+      <VoteBatches pd={pd} />
       {open.map((p) => <PollCard key={p.id} poll={p} pd={pd} />)}
       {status.is_admin && <button type="button" className="btn gold block" onClick={() => setCreating(true)}>+ New vote</button>}
       {closed.length > 0 && <span className="label">Decided</span>}
@@ -256,7 +261,7 @@ function optionTitle(poll, o) {
   return o.label;
 }
 
-function PollCard({ poll, pd }) {
+export function PollCard({ poll, pd }) {
   const data = useData();
   const { status } = useSession();
   const me = status.player_id;

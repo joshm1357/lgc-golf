@@ -219,7 +219,8 @@ check(call && call.body.p_options.length === 2 && call.body.p_options.every((o) 
 const poll = db.plan_polls.find((x) => x.plan_id === PLAN && x.kind === 'location');
 check(poll && db.plan_options.filter((o) => o.poll_id === poll.id).length === 2, 'a place vote is created with the two courses');
 await page.getByText('Where should we play?').first().waitFor({ timeout: 8000 });
-const voteText = await page.locator('.section').first().innerText();
+// The trip now opens with the organiser's next step card first; the vote card (with its options) is further down.
+const voteText = await page.locator('body').innerText();
 check(voteText.includes('Central Coast GC') || voteText.includes('Gosford GC'), 'the vote shows on the trip');
 check(db.posts.some((x) => /up for a vote/.test(x.body)), 'posted to the feed');
 await page.screenshot({ path: `${SHOTS}/5-vote.png`, fullPage: true });

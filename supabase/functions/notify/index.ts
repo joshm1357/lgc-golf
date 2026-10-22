@@ -47,7 +47,7 @@ const ALWAYS_NOW = new Set(['draw_open', 'test']);
 // 'award_minor': closest to the pin / longest drive — not "important".
 // Tribunal (061, queued from the database): a case about you, your committee's case, a case over to the organisers or
 // needing a casting vote, a report, a term ending, and "voting closes tomorrow".
-const IMPORTANT = new Set(['draw_open', 'test', 'job_assigned', 'job_due', 'payment_recorded', 'nudge_kitty', 'trip_tomorrow', 'award',
+const IMPORTANT = new Set(['draw_open', 'test', 'job_assigned', 'job_due', 'payment_recorded', 'nudge_kitty', 'deposit_ask', 'nudge_deposit', 'trip_tomorrow', 'award',
   'case_about_you', 'case_committee', 'case_fallback', 'case_casting', 'case_report', 'case_closing', 'term_ending']);
 
 /** Which feature each kind of message belongs to (Stage 3): nothing goes out for a switched-off feature. */
@@ -57,6 +57,7 @@ const KIND_FEATURE: Record<string, string> = {
   plan_new: 'planner', plan_proposed: 'planner', trip_locked: 'planner', rsvp_locked: 'planner', rsvp_deadline: 'planner',
   nudge_rsvp: 'planner', trip_week: 'planner', trip_tomorrow: 'planner', comment: 'planner',
   nudge_kitty: 'planner_costs', payment_recorded: 'planner_costs', groups_set: 'planner_rooms',
+  deposit_ask: 'planner_costs', nudge_deposit: 'planner_costs',
   rule_proposed: 'rule_voting', draw_open: 'draw', award: 'awards', award_minor: 'awards', commentary: 'commentary',
   case_new: 'tribunal', case_about_you: 'tribunal', case_committee: 'tribunal', case_fallback: 'tribunal', case_casting: 'tribunal',
   case_report: 'tribunal', case_closing: 'tribunal', case_verdict: 'tribunal', term_ending: 'committees',
@@ -338,7 +339,7 @@ Deno.serve(async (req) => {
     if (!m) return json({ error: 'Join the group first' }, 403);
     const g = m.group_id as string;
     const me = { player_id: m.player_id as string | null, is_admin: m.role === 'organiser' };
-    const adminOnly = ['plan_new', 'trip_locked', 'rsvp_locked', 'nudge_votes', 'nudge_rsvp', 'nudge_kitty', 'groups_set', 'draw_open'];
+    const adminOnly = ['plan_new', 'trip_locked', 'rsvp_locked', 'nudge_votes', 'nudge_rsvp', 'nudge_kitty', 'groups_set', 'draw_open', 'deposit_ask', 'nudge_deposit'];
     if (adminOnly.includes(body.type) && !me.is_admin) return json({ error: 'Admin only' }, 403);
     const from = me.player_id as string | null;
     // Someone who hasn't picked their name yet can't send anything to others (only the test buzz to themselves).
@@ -421,12 +422,30 @@ Deno.serve(async (req) => {
       case 'job_assigned': {
         const j = await mine(g, 'plan_items', body.item_id);
         if (!j?.owner_id) break;
-        // Only whoever made the job (or the admin) can send this, and only once per job and owner.
-        if (j.created_by !== from && !me.is_admin) return json({ error: 'Not your job' }, 403);
+        // Only whoever made the job, whoever just handed it on (078: handed_by), or the admin can send this, once per job and owner.
+        if (j.created_by !== from && j.handed_by !== from && !me.is_admin) return json({ error: 'Not your job' }, 403);
         if (!(await once(`job-assigned:${j.id}:${j.owner_id}`))) break;
         const pl = await plan(g, j.plan_id);
         const ppl = await players(g);
         sent = await send(g, [j.owner_id], { title: `📋 New job: ${j.title}`, body: `${pl.name} — from ${name(ppl.find((p) => p.id === from))}`, url: planUrl(pl.id, 'jobs') }, from, 'job_assigned');
+        break;
+      }
+      // 078: the organiser asks everyone keen to confirm and pay the deposit (once per trip), and nudges who hasn't.
+      case 'deposit_ask':
+      case 'nudge_deposit': {
+        const pl = await plan(g, body.plan_id);
+        const dep = Number(pl.deposit_pp || 0);
+        if (!dep || !pl.deposit_asked_at) break;
+        if (body.type === 'deposit_ask' && !(await once(`deposit-ask:${pl.id}`))) break;
+        if (body.type === 'nudge_deposit' && !(await once(`deposit-nudge:${pl.id}:${sydneyDate(0)}`))) break;
+        const [{ data: rs }, { data: ts }] = await Promise.all([
+          db.from('plan_rsvps').select('player_id,status').eq('plan_id', pl.id).in('status', ['in', 'maybe']),
+          db.from('plan_transfers').select('from_id,amount').eq('plan_id', pl.id).is('to_id', null),
+        ]);
+        const paid = (pid: string) => (ts || []).filter((t) => t.from_id === pid).reduce((s, t) => s + Number(t.amount), 0);
+        const owe = (rs || []).filter((r) => paid(r.player_id) < dep - 0.5).map((r) => r.player_id);
+        const amt = `$${dep.toFixed(2).replace(/\.00$/, '')}`;
+        sent = await send(g, owe, { title: body.type === 'deposit_ask' ? `🏠 ${pl.name}: accommodation’s booked` : `💳 ${pl.name}: deposit reminder`, body: `Confirm you’re in and pay your ${amt} deposit.`, url: planUrl(pl.id) }, from, body.type);
         break;
       }
       case 'plan_proposed': {

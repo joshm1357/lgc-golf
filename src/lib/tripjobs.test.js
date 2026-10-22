@@ -122,17 +122,23 @@ describe('job stages and locks', () => {
 
 describe('combined votes', () => {
   const polls = [
-    { id: 'q1', status: 'open', vote_group: 'where_when', question: 'Where?', closes_on: '2026-11-06' },
-    { id: 'q2', status: 'open', vote_group: 'where_when', question: 'When?', closes_on: '2026-11-06' },
+    { id: 'q1', status: 'open', vote_batch: 'b1', question: 'Where?', closes_on: '2026-11-06' },
+    { id: 'q2', status: 'open', vote_batch: 'b1', question: 'When?', closes_on: '2026-11-06' },
     { id: 'q3', status: 'closed', question: 'Old' },
   ];
   const options = [{ id: 'o1', poll_id: 'q1' }, { id: 'o2', poll_id: 'q2' }];
   it('counts polls in one batch as one vote', () => {
     const votes = [{ option_id: 'o1', player_id: ORG }, { option_id: 'o2', player_id: ORG }, { option_id: 'o1', player_id: P2 }];
-    const b = voteBatches(polls, options, votes, [ORG, P2, P3]);
+    const b = voteBatches(polls, options, votes, [ORG, P2, P3], [{ id: 'b1', title: 'Where and when?' }]);
     expect(b.length).toBe(1);
     expect(b[0].label).toBe('Where and when?');
     expect(b[0].waiting).toEqual([P2, P3]);
+  });
+  it('a batch with no card title is "The vote"; older databases have no batches', () => {
+    expect(voteBatches(polls, options, [], [ORG])[0].label).toBe('The vote');
+  });
+  it('a linked tee-time job counts as a call job', () => {
+    expect(callJobs([{ id: 'j9', kind: 'job', title: 'Ring Nowra GC' }], ['j9']).length).toBe(1);
   });
   it('a poll with no batch stands alone', () => {
     const b = voteBatches([{ id: 's', status: 'open', question: 'Which place to stay?' }], [{ id: 'x', poll_id: 's' }], [], [ORG]);
@@ -161,7 +167,8 @@ describe('nextStep', () => {
     expect(nextStep(org).title).toBe('Pick 1–3 weekends');
     expect(nextStep(org).action.type).toBe('builder');
 
-    const polls = [{ id: 'q1', status: 'open', vote_group: 'where_when', closes_on: '2026-11-06' }];
+    const polls = [{ id: 'q1', status: 'open', vote_batch: 'b1', closes_on: '2026-11-06' }];
+    org.builder = { cards: [{ id: 'b1', title: 'Where and when?' }] };
     const options = [{ id: 'o1', poll_id: 'q1' }];
     const votes = [{ option_id: 'o1', player_id: ORG }];
     const v = nextStep({ ...org, polls, options, votes });

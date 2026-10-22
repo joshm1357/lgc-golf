@@ -50,9 +50,10 @@ export function addDays(date, n) {
 
 const jobsOf = (items) => (items || []).filter((i) => i.kind === 'job');
 
-/** The trip builder's "Call the course" jobs (or any tee-time job someone added by hand). */
-export function callJobs(items) {
-  return jobsOf(items).filter((j) => !j.formula_key && /(^|\s|📞)call\b|tee[ -]?time/i.test(j.title || ''));
+/** The trip builder's "Call the course" jobs (linked from its tee-time options, or named like one). */
+export function callJobs(items, callJobIds = []) {
+  const ids = new Set(callJobIds);
+  return jobsOf(items).filter((j) => !j.formula_key && (ids.has(j.id) || /(^|\s|📞)call\b|tee[ -]?time/i.test(j.title || '')));
 }
 
 /** When a formula job is due: counted back from the start, never before today and never after the start. */
@@ -71,10 +72,10 @@ export function dueFor(f, plan, today = todayISO()) {
  * jobs made in the same go). Nothing if the trip has no dates yet (the accommodation jobs need them).
  *   items: the trip's plan_items; organiserId: who gets the organiser's jobs.
  */
-export function buildJobs(plan, items, { today = todayISO(), organiserId = null, uuid = () => crypto.randomUUID() } = {}) {
+export function buildJobs(plan, items, { today = todayISO(), organiserId = null, uuid = () => crypto.randomUUID(), callJobIds = [] } = {}) {
   if (!plan?.start_date || plan.kind === 'round') return [];
   const have = new Map(jobsOf(items).filter((j) => j.formula_key).map((j) => [j.formula_key, j]));
-  const calls = callJobs(items).length > 0;
+  const calls = callJobs(items, callJobIds).length > 0;
   const out = [];
   FORMULA.forEach((f, i) => {
     if (have.has(f.key)) return;
@@ -129,17 +130,16 @@ export function allocateOrder(players, rsvps) {
 
 // ---------------------------------------------------------------- Votes, one combined vote at a time
 
-export const VOTE_GROUP_LABEL = { where_when: 'Where and when?', which_trip: 'Which trip?', vote1: 'Where and when?', vote2: 'Which trip?' };
-
 /**
- * Open votes, batched: polls that share a vote_group (the trip builder's combined vote cards) count as one vote.
+ * Open votes, batched: polls on the same vote card (plan_polls.vote_batch → vote_batches, the trip builder's combined
+ * votes, migration 077) count as one vote. `cards` is the vote_batches rows (for their titles); none on older databases.
  * Returns [{ key, label, polls, closes_on, waiting: [player ids who haven't answered everything] }], soonest first.
  */
-export function voteBatches(polls, options, votes, playerIds) {
+export function voteBatches(polls, options, votes, playerIds, cards = []) {
   const open = (polls || []).filter((p) => p.status === 'open');
   const by = new Map();
   for (const p of open) {
-    const k = p.vote_group || p.id;
+    const k = p.vote_batch || p.id;
     if (!by.has(k)) by.set(k, []);
     by.get(k).push(p);
   }
@@ -151,8 +151,9 @@ export function voteBatches(polls, options, votes, playerIds) {
       const answered = new Set((votes || []).filter((v) => v.player_id === pid && optIds.has(v.option_id)).map((v) => v.option_id));
       return answered.size < optIds.size;
     }) : [];
-    const closes = ps.map((p) => p.closes_on).filter(Boolean).sort()[0] || null;
-    const label = VOTE_GROUP_LABEL[ps[0].vote_group] || (ps[0].vote_group ? 'The vote' : ps[0].question);
+    const card = ps[0].vote_batch ? (cards || []).find((c) => c.id === ps[0].vote_batch) : null;
+    const closes = [card?.closes_on, ...ps.map((p) => p.closes_on)].filter(Boolean).sort()[0] || null;
+    const label = card?.title || (ps.length > 1 ? 'The vote' : ps[0].question);
     return { key, label, polls: ps, closes_on: closes, waiting };
   });
   return out.sort((a, b) => String(a.closes_on || '9999').localeCompare(String(b.closes_on || '9999')));
@@ -181,7 +182,7 @@ const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 /**
  * The one "Next step" for this person on this trip.
  * ctx: { plan, stage, items, polls, options, votes, rsvps, transfers, playerIds, me, isOrganiser, today, names,
- *        builder: { weekends, teeOptions } (from the trip builder's tables when they exist; 0 if not) }
+ *        builder: { weekends, teeOptions, cards, callJobIds } (from the trip builder's tables when they exist; empty if not) }
  * Returns { key, icon, title, detail, who, label, action } or null.
  *   action: { type: 'tab', tab } | { type: 'allocate', id } | { type: 'job', id } | { type: 'make_jobs' } | { type: 'lock' }
  *         | { type: 'builder' } | { type: 'pay' } | { type: 'deposits' } | { type: 'trip_plan' } | { type: 'go', to }
@@ -206,7 +207,7 @@ export function nextStep(ctx) {
   }
 
   // The vote (one combined vote at a time).
-  const batch = voteBatches(polls, options, votes, playerIds)[0];
+  const batch = voteBatches(polls, options, votes, playerIds, builder.cards)[0];
   const voteStep = () => {
     if (!batch) return null;
     const closes = batch.closes_on ? closesLabel(batch.closes_on, today) : 'open';
@@ -230,7 +231,7 @@ export function nextStep(ctx) {
     const v = voteStep();
     if (v) return v;
     if (!isOrganiser && !myRsvp) return step({ key: 'keen', icon: '🙋', title: 'Are you keen?', detail: 'Say In, Maybe or Out so the organiser knows numbers.', label: 'Answer', action: { type: 'tab', tab: 'people' } });
-    const calls = callJobs(items).filter((j) => jobStage(j) !== 'done');
+    const calls = callJobs(items, builder.callJobIds).filter((j) => jobStage(j) !== 'done');
     if (!plan.start_date && !(builder.weekends > 0) && !calls.length) {
       return isOrganiser
         ? step({ key: 'weekends', icon: '📅', title: 'Pick 1–3 weekends', detail: 'Courses can’t give you times until you know the dates.', label: 'Build the trip', action: { type: 'builder' } })

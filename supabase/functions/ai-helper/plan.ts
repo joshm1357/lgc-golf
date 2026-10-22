@@ -342,6 +342,7 @@ export const CHAT_TOOL = {
     }),
     questions: { type: 'array', description: '1 to 3 short questions, each with 2 to 4 quick answers. A quick answer that needs typing ends with "…" (e.g. "Add another…").', items: obj({
       id: { type: 'string' }, text: { type: 'string' }, quick: { type: 'array', items: { type: 'string' } },
+      multi: { type: 'boolean', description: 'true when several quick answers make sense together (e.g. regions, extras, weekends, what matters) — the organiser can tick several then send. Leave out (false) for one-answer questions (driving or flying, how many).' },
     }, ['text', 'quick']) },
     done: { type: 'boolean', description: 'true when the organiser says it looks right and you have nothing left to ask' },
   }, ['message', 'questions']),
@@ -398,6 +399,7 @@ The reply:
   "These are the places I'd look at — any others?" [Looks good] [Add another…]
   "Budget about $800 each?" [Yes] [Less] [More]
   A quick answer that needs typing ends with "…".
+  Set multi: true when several answers make sense together (e.g. regions, extras, weekends, what matters most) — the organiser can tick several, then send. One-answer questions (driving or flying, how many) leave it out.
 - done: true only when the organiser says it looks right; still offer one question about anything else to tweak.
 (The app always shows "Or just say 'plan it' and I'll put a plan together now" under your reply — you don't need to write it.)
 
@@ -414,7 +416,7 @@ export type ChatDraft = TripPlan & { extras: { label: string; pp: number | null 
 export type ChatReply = {
   message: string;
   draft: ChatDraft | null; // null: still asking the key facts (ov16)
-  questions: { id: string; text: string; quick: string[] }[];
+  questions: { id: string; text: string; quick: string[]; multi?: true }[]; // multi (ov22): pick several, then send
   done: boolean;
 };
 
@@ -503,7 +505,7 @@ export function validatePlanChat(raw: Any, ctx: TripPlanContext, opts: { lenient
       if (t && !quick.includes(t)) quick.push(t);
     }
     const id = (clean(q?.id, 30).toLowerCase().replace(/[^a-z0-9_-]+/g, '-') || `q${i + 1}`).slice(0, 30);
-    questions.push({ id, text, quick: quick.slice(0, PLAN_LIMITS.quick) });
+    questions.push({ id, text, quick: quick.slice(0, PLAN_LIMITS.quick), ...(q?.multi === true ? { multi: true as const } : {}) });
   });
   const done = raw.done === true && !!draft;
   if (!questions.length && !done) {

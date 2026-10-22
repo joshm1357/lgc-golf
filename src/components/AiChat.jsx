@@ -1,8 +1,10 @@
 // A chat with the AI helper (080): messages back and forth, each helper turn can carry a card (e.g. the trip draft)
 // and 1–3 questions with tappable quick answers. A quick answer ending in "…" opens the box to type instead.
 // Reusable: "Plan it with AI" uses it now; the Caddie can later. No maths here — see lib/planchat.js.
+// ov22 (Josh 23 Oct): a question the helper marks multi (regions, extras, weekends…) has toggle chips — tap several,
+// then "Send (3)" sends them together. One-answer questions (driving or flying, how many) still send on tap.
 import React, { useEffect, useRef, useState } from 'react';
-import { quickChoice } from '../lib/planchat.js';
+import { quickChoice, togglePick, multiSend, multiOther, typesIt } from '../lib/planchat.js';
 import Thinking from './Thinking.jsx';
 import './planux.css';
 
@@ -14,16 +16,26 @@ import './planux.css';
  */
 export default function AiChat({ turns = [], onSend, busy = false, left = null, placeholder = 'Type here…', footer = null, intro = null, hint = null, maxLength = 600, thinkingSteps = undefined }) {
   const [text, setText] = useState('');
+  const [picks, setPicks] = useState({}); // question id → quick answers picked (pick-several questions)
   const box = useRef(null);
   const end = useRef(null);
   useEffect(() => { end.current?.scrollIntoView?.({ block: 'nearest' }); }, [turns.length, busy]);
   const last = turns[turns.length - 1];
+  // A new reply: nothing picked yet.
+  useEffect(() => { setPicks({}); }, [turns.length]);
   const send = (t) => { const v = String(t || '').trim(); if (!v || busy) return; onSend(v); setText(''); };
+  const openBox = (prefix) => { setText(prefix); setTimeout(() => { const el = box.current; if (!el) return; el.focus(); const n = el.value.length; el.setSelectionRange?.(n, n); }, 0); };
   const tapQuick = (q, quick) => {
+    if (q.multi) {
+      if (typesIt(quick)) { const c = multiOther(q, picks[q.id] || [], quick); if (c.send) send(c.send); else openBox(c.ask); return; }
+      setPicks((p) => ({ ...p, [q.id]: togglePick(p[q.id] || [], quick) }));
+      return;
+    }
     const c = quickChoice(q, quick);
     if (c.send) send(c.send);
-    else { setText(c.ask); setTimeout(() => { const el = box.current; if (!el) return; el.focus(); const n = el.value.length; el.setSelectionRange?.(n, n); }, 0); }
+    else openBox(c.ask);
   };
+  const sendPicks = (q) => { const c = multiSend(q, picks[q.id] || []); if (c) { send(c.send); setPicks((p) => ({ ...p, [q.id]: [] })); } };
   const out = left != null && left <= 0;
   return (
     <div className="stack" style={{ gap: 10 }} data-testid="ai-chat">
@@ -37,14 +49,29 @@ export default function AiChat({ turns = [], onSend, busy = false, left = null, 
             }}>{t.role === 'user' ? t.text : `✨ ${t.text}`}</div>
           )}
           {t.card}
-          {t === last && t.role === 'assistant' && (t.questions || []).map((q) => (
-            <div key={q.id} className="card pad stack" style={{ gap: 6 }} data-testid="chat-question">
-              <span className="small" style={{ fontWeight: 700 }}>{q.text}</span>
-              <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-                {q.quick.map((x) => <button key={x} type="button" className="chip" style={{ minHeight: 40 }} disabled={busy || out} onClick={() => tapQuick(q, x)}>{x}</button>)}
+          {t === last && t.role === 'assistant' && (t.questions || []).map((q) => {
+            const mine = picks[q.id] || [];
+            return (
+              <div key={q.id} className="card pad stack" style={{ gap: 6 }} data-testid="chat-question" data-multi={q.multi ? 'yes' : undefined}>
+                <span className="small" style={{ fontWeight: 700 }}>{q.text}</span>
+                {q.multi && <span className="small muted">Pick any, then send.</span>}
+                <div className="row" style={{ gap: 6, flexWrap: 'wrap' }} role={q.multi ? 'group' : undefined} aria-label={q.multi ? q.text : undefined}>
+                  {q.quick.map((x) => {
+                    const toggle = q.multi && !typesIt(x);
+                    const on = toggle && mine.includes(x);
+                    return (
+                      <button key={x} type="button" className="chip" style={{ minHeight: 40 }} disabled={busy || out}
+                        aria-pressed={toggle ? on : undefined} onClick={() => tapQuick(q, x)}>{on ? '✓ ' : ''}{x}</button>
+                    );
+                  })}
+                </div>
+                {q.multi && (
+                  <button type="button" className="btn gold sm" style={{ alignSelf: 'flex-start', minHeight: 44 }} disabled={busy || out || !mine.length}
+                    onClick={() => sendPicks(q)} data-testid="chat-multi-send">{mine.length ? `Send (${mine.length})` : 'Send'}</button>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
           {t === last && t.role === 'assistant' && hint}
         </div>
       ))}

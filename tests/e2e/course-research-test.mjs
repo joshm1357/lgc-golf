@@ -59,7 +59,7 @@ async function open(width, signedIn) {
   await ctx.route('https://*.supabase.co/**', fake);
   await ctx.route('https://server.arcgisonline.com/**', (r) => r.fulfill({ status: 204, body: '' }));
   await ctx.addInitScript(([uid, on]) => {
-    localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-notify-prompt', String(Date.now()));
+    localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */ localStorage.setItem('tgt-notify-prompt', String(Date.now()));
     if (!on) return;
     const exp = Math.floor(Date.now() / 1000) + 86400;
     const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');

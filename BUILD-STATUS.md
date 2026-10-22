@@ -1281,3 +1281,46 @@ then have Plan it." And: a live trip ("March") was hard-deleted last night throu
   new `calloff-test` 17 checks pass; `organise-tidy`, `desktop`, `plan-ux` pass. `phone`, `trips`, `features`,
   `signin-home`, `save-spot`, `board-bonus`, `trip-overview` fail at the same step on release-v9 too (stale
   fixtures/env) — their "This trip" references were updated anyway.
+## ov22 — Caddie says hello, pick several answers, planning maps, branch `ov22-caddie-hello`, 23 Oct 2026
+Front end only; no database change (one small change to the ai-helper function's planning chat — see 2).
+- **1. Caddie says hello (Josh 08:10):** the first time someone's in the app on a device (after joining and picking a
+  name — never on join / sign-in screens, never over another pop-up such as the notifications sheet), a speech bubble
+  pops from the Caddie button (phone, above it — never over the tab bar) or beside the docked Caddie tab (laptop):
+  "👋 Hi, I'm Caddie. Ask me anything about the group, the rules or the next trip — or say 'plan a trip'. I'm here to
+  help." [Ask me something] opens the Caddie; [Got it] closes it. Once per device (`tgt-caddie-hello`, try/catch);
+  opening the Caddie yourself counts too. The empty Ask chat starts with the same hello; typing "plan a trip" there
+  switches to ✨ Plan a trip. No pop-in animation with reduced motion. Rules in `lib/caddie.js` (helloSeen,
+  markHelloSeen, shouldSayHello, isPlanATrip). Every e2e test seeds `tgt-caddie-hello` so the bubble stays out of
+  their way; `hello-maps-test` checks it.
+- **2. Pick several quick answers, then send (08:14):** a planning-chat question the helper marks `multi: true`
+  (regions, extras, weekends, what matters) has toggle chips — tap several, then "Send (3)" sends "Which areas? →
+  Hunter Valley, South Coast, Central West". One-answer questions still send on tap; "Other…" still opens the box
+  (with the picks so far). `ai-helper/plan.ts`: `multi` (boolean, optional) on the reply tool's questions, one prompt
+  line saying when to use it, and validation keeps `multi: true` only. Client: `planchat.js` (cleanQuestions keeps
+  multi; togglePick, multiSend, multiOther), `AiChat.jsx`.
+- **3. Maps zoom with the scroll wheel (08:24):** planning maps (trip builder, area start, trip finder) zoom with the
+  wheel after a click on the map (until the pointer leaves it), or any time with Ctrl/⌘; a "Scroll to zoom" hint shows
+  on the first hover. Pinch and +/− as before. `PlanMapTools.jsx` WheelZoom.
+- **4. Hover a course ↔ its pin (08:25):** hover a course or place-to-stay row (or the "+ course" / "Stay near"
+  chips) → its pin grows, bounces once and shows its name, and the map pans to it if it's off-screen; hover a pin →
+  its row lights up.
+- **5. Club names (08:25):** a small "Club names" switch top-right of the planning maps, on by default, remembered
+  per device (`tgt-map-names`); short names ("Kiama", "The Vintage") beside course pins; labels that would overlap are
+  hidden (the more important pin keeps its label; 🏠 stay labels always show; the pointed-at pin always shows).
+- **6. Hover for a quick summary, click for everything (08:26):** pins and rows. Summary card — a course: style,
+  ★ good for groups, weekday/weekend fee, drive, visitor times; a place to stay: type, places saved, sleeps, price,
+  nearest courses. Click (or on a phone: first tap = summary, second tap or "More →" = details) → the course sheet
+  (moved from TripBuilder.jsx to `components/PlaceSheets.jsx`, used by the area start too): on-the-table / add-to-day
+  button, the group's history and rating, "About this course for groups" (fees + group rates, visitor & member times,
+  how to book with links and phone, stay and play, sources, "Researched … — check with the club"), "More about it"
+  (every other researched field: signature, practice, food & drink, pace, dress code, best months, weather, crowds,
+  nearby courses, accommodation…, club website), shared booking info, the group's social golf times, holes / par /
+  where, "See it on a map". A stay sheet: courses nearby with drive times, saved places with sleeps, cost, notes and
+  links, a stay / don't-stay button. In the area start, ticking the box still puts things on the table; a click on a
+  pin now opens its details (the toggle is in the sheet). Tap vs mouse is judged per press (touch laptops work both
+  ways). Pure rules in `lib/placeinfo.js`.
+- **Fixed on the way:** Leaflet's layers (z-index 400+) could sit over sheets opened on top of a map — the planning
+  maps now keep them inside (`isolation: isolate`).
+- **Tested:** Vitest 1379 (83 files; new `hello-multi-maps.test.js` 22); Deno 165 across the functions (3 new for
+  `multi`); e2e new `hello-maps-test.mjs` 79 checks; plan-ux, caddie, trip-builder (updated for first tap / second
+  tap), nav, phone, desktop, tripfinder pass.

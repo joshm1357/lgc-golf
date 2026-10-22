@@ -79,7 +79,36 @@ export function cleanQuestions(list) {
     id: String(q?.id || `q${i + 1}`).slice(0, 30),
     text: String(q?.text || '').slice(0, 160),
     quick: (Array.isArray(q?.quick) ? q.quick : []).map((x) => String(x).slice(0, 30)).filter(Boolean).slice(0, MAX_QUICK),
+    // ov22: the helper says when several answers make sense together (regions, extras, weekends…).
+    ...(q?.multi === true ? { multi: true } : {}),
   })).filter((q) => q.text);
+}
+
+// ------------------------------------------------------------------ pick several, then send (ov22, Josh 23 Oct)
+// "When Plan the trip has multiple pre-filled options you can select, allow the selection of multiple, then click
+// submit." A question with multi: true has toggle chips and a "Send (3)" button; one-answer questions still send on tap.
+/** A quick answer that opens the box to type ("Other…") rather than being picked. */
+export const typesIt = (quick) => /(…|\.\.\.)$/.test(String(quick || '').trim());
+/** Tap a chip on a pick-several question: on → off, off → on (in the order they were picked). */
+export function togglePick(picks = [], quick) {
+  const q = String(quick || '').trim();
+  if (!q || typesIt(q)) return picks;
+  return picks.includes(q) ? picks.filter((x) => x !== q) : [...picks, q];
+}
+/** "Send (3)": the picks, sent together → { send } (null with nothing picked). */
+export function multiSend(question, picks = []) {
+  const list = (picks || []).map((x) => String(x).trim()).filter((x) => x && !typesIt(x));
+  if (!list.length) return null;
+  const about = String(question?.text || '').trim();
+  const words = list.join(', ');
+  return { send: about ? `${about} → ${words}` : words };
+}
+/** "Other…" on a pick-several question: the box opens with what's picked so far, ready to add to. */
+export function multiOther(question, picks = [], quick = 'Other…') {
+  const list = (picks || []).filter((x) => x && !typesIt(x));
+  if (!list.length) return quickChoice(question, quick);
+  const about = String(question?.text || '').trim();
+  return { ask: `${about ? `${about} → ` : ''}${list.join(', ')}, ` };
 }
 
 /** How many questions are left in this chat. */

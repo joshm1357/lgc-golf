@@ -165,7 +165,7 @@ await ctx.addInitScript(([uid]) => {
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
   if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated' } }));
-  localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-notify-prompt', String(Date.now()));
+  localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */ localStorage.setItem('tgt-notify-prompt', String(Date.now()));
 }, ['99999999-9999-4999-8999-999999999999']);
 const page = await ctx.newPage();
 page.on('pageerror', (e) => fails.push(`page error: ${e}`));
@@ -250,7 +250,12 @@ const chipsText = await page.locator('[data-testid="tb-stay-chips"]').innerText(
 check(/Stay near:/.test(chipsText) && chipsText.includes('Nowra') && chipsText.includes('Jervis Bay'), `stay suggestions as chips (${chipsText.replace(/\s+/g, ' ').slice(0, 80)})`);
 await page.locator('[data-testid="tb-stay-chips"]').getByRole('button', { name: 'Nowra', exact: true }).click(); await wait();
 await page.locator('[data-testid="tb-map"]').scrollIntoViewIfNeeded();
-await page.locator('.tb-stay', { hasText: 'Jervis Bay' }).click(); await wait();
+// ov22: on a phone the first tap on a pin shows its summary, the second its details — "Stay at …" is in there.
+await page.locator('.tb-stay', { hasText: 'Jervis Bay' }).tap(); await wait(300);
+check(await page.getByTestId('place-tip').isVisible() && !(await page.getByTestId('stay-sheet').count()), 'ov22: first tap on a 🏠 pin → its summary card (not the details yet)');
+await page.locator('.tb-stay', { hasText: 'Jervis Bay' }).tap(); await wait(300);
+await page.getByTestId('stay-sheet').waitFor({ timeout: 5000 });
+await page.getByTestId('sheet-toggle').click(); await wait();
 check(state().stays?.map((s) => s.name).join(',') === 'Nowra,Jervis Bay (Huskisson)', `stay areas: ${state().stays?.map((s) => s.name).join(', ')}`);
 
 // 5. Day 1 — on the way: suggestions along the drive.
@@ -280,7 +285,12 @@ await page.screenshot({ path: `${SHOTS}/3-stay-day.png`, fullPage: true });
 await page.screenshot({ path: `${RSHOTS}/trip-builder-rows-375.png`, fullPage: true });
 
 // The course sheet: history, booking info, "✨ Look it up" as a draft.
-await days.nth(1).getByRole('button', { name: 'Nowra GC', exact: true }).click();
+// ov22: on a phone, the first tap on a course row's name shows its summary; the second opens everything.
+await days.nth(1).getByRole('button', { name: 'Nowra GC', exact: true }).tap(); await wait(300);
+const rowTip = await page.getByTestId('place-tip').innerText();
+check(rowTip.includes('Nowra GC') && rowTip.includes('★★★★☆ for groups') && !(await page.locator('[data-testid="tb-course"]').count()), `ov22: first tap on a course row → its summary card (${rowTip.replace(/\s+/g, ' ').slice(0, 90)})`);
+await page.screenshot({ path: `${SHOTS}/ov22-row-tip-375.png` });
+await days.nth(1).getByRole('button', { name: 'Nowra GC', exact: true }).tap();
 const sheet = page.locator('[data-testid="tb-course"]');
 await sheet.waitFor({ timeout: 5000 });
 const sheetText = await sheet.innerText();

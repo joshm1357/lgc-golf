@@ -16,6 +16,7 @@ import { readReply, canSend, remainingLabel, MAX_TEXT } from '../lib/aihelper.js
 import { pickDeskPlan } from '../lib/desk.js';
 import {
   caddieContext, caddieSuggestions, caddieMode, fallbackIntro, sessionFlag, caddieIds, searchDestinations, goButton,
+  HELLO_TEXT, isPlanATrip,
 } from '../lib/caddie.js';
 import { Rate } from '../screens/AiHelper.jsx';
 import Thinking from './Thinking.jsx';
@@ -97,6 +98,8 @@ export default function CaddieChat({ onGo, ask: askNow }) {
     const q = String(raw || '').trim();
     if (!q || busy) return;
     setText('');
+    // "plan a trip" (the hello says to): over to ✨ Plan a trip.
+    if (isPlanATrip(q)) { window.dispatchEvent(new CustomEvent('caddie:open', { detail: { plan: true } })); return; }
     if (!mode.ai) {
       setThread((t) => [{ q, local: true, intro: fallbackIntro(mode), matches: find(q) }, ...t].slice(0, 10));
       return;
@@ -123,6 +126,10 @@ export default function CaddieChat({ onGo, ask: askNow }) {
 
   return (
     <div className="stack caddie-chat" style={{ gap: 10 }} data-testid="caddie-chat" data-ai={mode.ai ? 'on' : 'off'}>
+      {!thread.length && (
+        // ov22: the empty chat starts with Caddie saying hello — the same words as the first-visit bubble.
+        <div className="caddie-hello-msg" data-testid="caddie-greeting"><span aria-hidden="true">👋 </span>{HELLO_TEXT}</div>
+      )}
       {!mode.ai && <div className="small caddie-why" role="note">{fallbackIntro(mode).replace(/:$/, '.')}</div>}
       <div className="chips" style={{ padding: 0, flexWrap: 'wrap' }} role="group" aria-label="Try asking">
         {suggestions.map((q) => <button key={q} type="button" className="chip" disabled={busy} onClick={() => ask(q)}>{q}</button>)}

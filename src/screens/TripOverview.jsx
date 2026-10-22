@@ -19,6 +19,7 @@ import { CourseGuideChip } from '../components/CourseGuideLink.jsx';
 import TripHistory from '../components/TripHistory.jsx';
 import { ImportLink } from './AiImport.jsx';
 import TripStatus from '../components/TripStatus.jsx'; // ov15: the trip's leaderboards and comps
+import { AwardsRunUp } from '../components/AwardsFines.jsx'; // ov24: what's up for grabs
 
 function useTripPhotos(tripId, on) {
   const [photos, setPhotos] = useState([]);
@@ -118,6 +119,9 @@ export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage 
       {votes}
       {/* ov15: the trip's status — live board, what we're playing for (with leaders), and each round's leaderboard. */}
       {tripId && <TripStatus trip={trip || data.trips.find((t) => t.id === tripId)} overview />}
+
+      {/* ov24: the trip's awards and fines, before the trip ("What's up for grabs"). */}
+      {!done && <AwardsRunUp trip={trip || data.trips.find((t) => t.id === tripId) || null} title="🎁 What’s up for grabs" overview />}
 
       {/* Results (done) */}
       {done && honours.length > 0 && (

@@ -16,10 +16,11 @@ import { standardOptions, standardRule } from '../lib/standardrules.js';
 import { useRuleData, RulesFilterBar, RoundRules, TargetRules, RuleScopeFields, scopeRow, ScopeBadge } from '../components/RuleLayers.jsx';
 import { filterLocal, loadFilter, saveFilter, chipTarget, scopeFromValue } from '../lib/rulelayers.js';
 import { lateRulePatch, LATE_KEY } from '../lib/latejobs.js';
+import { LEFTOVER, LEFTOVER_KEY, REWARD_TYPES, signedAmount } from '../lib/awardsfines.js';
 
 const CATS = [
   ['format', 'Format & scoring'], ['side_comp', 'Side comps'], ['bonus', 'Bonuses'], ['handicap', 'Handicaps'],
-  ['etiquette', 'On the course'], ['fines', 'Fines'], ['other', 'Other'],
+  ['etiquette', 'On the course'], ['fines', 'Fines & awards'], ['other', 'Other'],
 ];
 const CAT = Object.fromEntries(CATS);
 const APPLIES = [['all', 'Everything'], ['stableford', 'Stableford'], ['ambrose', 'Ambrose'], ['stroke', 'Stroke play'], ['fourball', '4BBB'], ['cup', 'The Cup'], ['trip', 'Trips']];
@@ -234,6 +235,8 @@ export function RuleSheet({ rule, start, onClose, onSaved, settings, localRules 
   const direct = (k) => !settings || settings[k]?.decides === 'organiser';
   const [v, set] = useState(() => rule || start || { category: 'side_comp', applies_to: ['ambrose'], status: 'proposed' });
   const isLate = rule?.system_key === LATE_KEY; // the standard late job rule: two numbers instead of "Worth" 
+  const isLeftover = rule?.system_key === LEFTOVER_KEY; // 093: the leftover kitty — a choice instead of "Worth"
+  const isAward = !!rule?.award_kind; // 093: an award or fine — its worth comes from the reward
   const [busy, run] = useRun();
   const f = (k) => ({ value: v[k] ?? '', onChange: (e) => set({ ...v, [k]: e.target.value }) });
   const toggle = (a) => {
@@ -243,6 +246,18 @@ export function RuleSheet({ rule, start, onClose, onSaved, settings, localRules 
   };
   const save = (asStatus) => run(async () => {
     const row = { title: v.title.trim(), detail: v.detail?.trim() || null, category: v.category, applies_to: v.applies_to, value: v.value?.trim() || null };
+    if (isLeftover) {
+      Object.assign(row, { leftover: v.leftover || 'bar', leftover_note: v.leftover === 'other' ? (v.leftover_note || '').trim() || null : null });
+      delete row.value; // the server writes the words from the choice
+      if (row.detail === (rule.detail || '').trim()) row.detail = rule.detail;
+    }
+    if (isAward) {
+      const t = REWARD_TYPES.find((x) => x.key === rule.reward_type);
+      if (t?.amount) row.reward_amount = signedAmount(rule.award_kind, rule.reward_type, v.reward_abs ?? Math.abs(rule.reward_amount || 0));
+      row.reward_note = (v.reward_note || '').trim() || null;
+      delete row.value; // the server writes "−1 stroke" / "$5" from the reward
+      row.category = 'fines';
+    }
     if (isLate) {
       const p = lateRulePatch(v.late_strokes, v.late_days);
       if (p.error) throw new Error(p.error);
@@ -277,6 +292,23 @@ export function RuleSheet({ rule, start, onClose, onSaved, settings, localRules 
             <label className="field"><span>Penalty strokes (0 = off)</span><input className="input" inputMode="numeric" data-testid="late-strokes" {...f('late_strokes')} /></label>
             <label className="field"><span>Days overdue before it counts</span><input className="input" inputMode="numeric" data-testid="late-days" {...f('late_days')} /></label>
           </div>
+        ) : isLeftover ? (
+          <div className="stack" style={{ gap: 6 }} data-testid="leftover-fields">
+            <label className="field"><span>What happens to the leftover kitty</span>
+              <select className="select" value={v.leftover || 'bar'} onChange={(e) => set({ ...v, leftover: e.target.value })} data-testid="leftover-choice">
+                {LEFTOVER.map((l) => <option key={l.key} value={l.key}>{l.label}</option>)}
+              </select>
+            </label>
+            {v.leftover === 'other' && <label className="field"><span>In words</span><input className="input" maxLength={80} {...f('leftover_note')} placeholder="e.g. Goes to the greenkeeper’s Christmas fund" /></label>}
+          </div>
+        ) : isAward ? (
+          <div className="stack" style={{ gap: 6 }} data-testid="award-fields">
+            {REWARD_TYPES.find((x) => x.key === rule.reward_type)?.amount && (
+              <label className="field"><span>{rule.reward_type === 'money' ? 'How much ($)' : rule.reward_type === 'strokes' ? (rule.award_kind === 'fine' ? 'Strokes added' : 'Strokes off') : 'Points'}</span>
+                <input className="input" inputMode="decimal" value={v.reward_abs ?? Math.abs(rule.reward_amount || 0)} onChange={(e) => set({ ...v, reward_abs: e.target.value.replace(/[^\d.]/g, '') })} data-testid="award-amount" /></label>
+            )}
+            <label className="field"><span>In words (optional)</span><input className="input" maxLength={80} value={v.reward_note || ''} onChange={(e) => set({ ...v, reward_note: e.target.value })} /></label>
+          </div>
         ) : <label className="field"><span>Worth / amount (optional)</span><input className="input" {...f('value')} placeholder="e.g. −1 stroke, +2 points, $5" /></label>}
         <label className="field"><span>Details</span><textarea className="textarea" rows={4} style={{ padding: 12 }} {...f('detail')} placeholder="How it works, when it counts" /></label>
         <label className="field"><span>Type</span>
@@ -306,7 +338,7 @@ export function RuleSheet({ rule, start, onClose, onSaved, settings, localRules 
         {rule && isAdmin && rule.status === 'active' && direct('scrap_rule') && <button type="button" className="btn ghost block" disabled={busy} onClick={() => save('retired')}>Retire this rule</button>}
         {rule && isAdmin && (rule.status === 'retired' || rule.status === 'rejected') && <button type="button" className="btn ghost block" disabled={busy} onClick={() => save('active')}>Bring it back</button>}
         {isLate && <span className="small muted">A standard rule — switch it off with 0 strokes (or retire it); it can’t be deleted.</span>}
-        {rule && !isLate && (isAdmin || rule.status === 'proposed') && (
+        {rule && !isLate && !isLeftover && (isAdmin || rule.status === 'proposed') && (
           <button type="button" className="btn ghost block" onClick={() => { if (window.confirm('Delete this rule completely?')) run(async () => { await must(supabase.from('rules').delete().eq('id', rule.id)); onSaved(); onClose(); toast('Deleted'); }); }}>Delete</button>
         )}
       </div>

@@ -1281,3 +1281,17 @@ then have Plan it." And: a live trip ("March") was hard-deleted last night throu
   new `calloff-test` 17 checks pass; `organise-tidy`, `desktop`, `plan-ux` pass. `phone`, `trips`, `features`,
   `signin-home`, `save-spot`, `board-bonus`, `trip-overview` fail at the same step on release-v9 too (stale
   fixtures/env) — their "This trip" references were updated anyway.
+
+## ov24 — Awards and fines (23 Oct 2026, branch `ov24-awards-fines`, migration 093, staging only)
+- Propose an award or fine (Rulebook rule, Fines & awards; group's usual decision rule), with a reward (strokes /
+  points / $ / drink / title / bragging / words) and the proof a claim needs (photo / time / number, "latest wins").
+- Opinions on a fine's size (Too much / About right / Too little + comment); dispute the amount with RuleTag.
+- Run-up "Awards & fines for this trip" (Organise → On the day) and "What's up for grabs" on the Overview; a week-out
+  reminder to everyone and "N proposals waiting" to organisers (cron `lgc-awards-runup`, once per trip).
+- "🏷 Fine / award" on any feed post or comment → chip on the post → into the dinner vote; organiser removes,
+  the fined person appeals (dispute on the nomination). Closing the vote settles it on the server: result post and
+  strokes on the winner's next round (`award_strokes`, shown on the leaderboard with late-job penalties).
+- Standard "Leftover kitty" rule for every group (on the bar / split / roll over / trophy winner / words); shown
+  on the kitty near the trip's end (split shows each share; roll over shows the next trip's starting balance).
+- Tests: `src/lib/awardsfines.test.js` (17); SQL `supabase/tests/093_awards_fines.sql` (part A run; part B needs a
+  person to confirm UPDATE/DELETE in the MCP); Playwright `tests/e2e/awards-fines-test.mjs` (all pass).

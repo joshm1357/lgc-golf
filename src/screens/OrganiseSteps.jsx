@@ -21,6 +21,7 @@ import { TripSetupCard } from './TripSetup.jsx';
 import TripExtras, { RepeatInfo } from './TripExtras.jsx';
 import { TripBuilderCard } from '../components/TripBuilderCard.jsx';
 import { TripFinderCard } from '../components/TripFinderCard.jsx';
+import { AwardsRunUp } from '../components/AwardsFines.jsx'; // ov24
 import { VoteTab, PeopleTab, ChatTab, PollSheet, CloseSheet, ProposalBanner, LockInCard, Checklist, CalledOffBanner } from './Planner.jsx';
 import './organise.css';
 
@@ -268,6 +269,7 @@ function StepBody({ k, pd, ex, stage, trip, isOrg, on, desk, wide, moneyTab, onM
       {wide && isOrg && <LazyArea fallback={null} quiet><DayPanels pd={pd} trip={trip} goTab={onMoneyTab} /></LazyArea>}
       {!wide && isOrg && trip && <Link to="/setup" className="btn ghost block">⛳ Teams, draw and side comps →</Link>}
       {!trip && <div className="small muted">Rounds, teams and the draw get set up once the trip is locked in.</div>}
+      {stage !== 'done' && <AwardsRunUp trip={trip} />}
       {stage === 'done' && <TripExtras pd={pd} />}
     </>
   );

@@ -17,6 +17,7 @@ export const DISPUTABLE = {
   custom_games: ['rules_text', 'settings'],
   rules: ['value', 'title', 'detail', 'late_strokes', 'late_days'],
   score_adjustments: ['strokes'],
+  dinner_award_nominations: ['player_id'], // 093: appeal a fine or award from the Feed ("who's fined")
   standard: ['rule'],
 };
 
@@ -26,6 +27,7 @@ export const SOURCE = {
   trips: 'Trip setting', comps: 'Comp setting', side_comp_defs: 'Side comp setting', trophies: 'Trophy rule',
   custom_games: 'Game rules', rules: 'Rulebook rule', standard: 'Standard rule (built into the app)',
   score_adjustments: 'Penalty on the scorecard',
+  dinner_award_nominations: 'A fine or award from the Feed',
 };
 
 /** Is this reference something that can be disputed at all? */

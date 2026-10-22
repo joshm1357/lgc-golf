@@ -7,6 +7,7 @@ import { fmtRange, countdown, icsFor, nudgeText, mapsLink, kitty, money, DEFAULT
 import { REVEAL_MS } from '../lib/draw.js';
 import { notify, appLink, downloadFile } from '../lib/push.js';
 import { useRun, must, feedPost, everyone, shareNudge } from './Planner.jsx';
+import { LeftoverKitty, useRolledIn } from '../components/AwardsFines.jsx'; // 093: the leftover kitty rule
 
 const canEdit = (item, me, isAdmin) => isAdmin || item.created_by === me || item.owner_id === me;
 
@@ -293,6 +294,7 @@ export function KittyTab({ pd, table = false }) {
   const [busy, run] = useRun();
   const inIds = pd.rsvps.filter((r) => r.status === 'in').map((r) => r.player_id);
   const k = kitty(pd.costs, pd.payments, inIds, pd.transfers);
+  const rolledIn = useRolledIn(pd.plan, kitty);
   const mine = k.people.find((p) => p.player_id === me);
   const owing = k.people.filter((p) => p.balance > 0.5);
   const who = (id) => (id === 'kitty' ? 'the kitty' : playerName(data.playersById[id]));
@@ -349,6 +351,8 @@ export function KittyTab({ pd, table = false }) {
           <div key={l} className="card pad"><div className="num" style={{ fontSize: 22 }}>{v}</div><div className="small muted">{l}</div></div>
         ))}
       </div>
+      {/* Near the end of the trip (the last night on), what's left goes where the group's rule says. */}
+      <LeftoverKitty pot={pd.plan.status === 'done' || (pd.plan.end_date && daysUntil(pd.plan.end_date) <= 1) ? k.kitty : 0} people={inIds.length} money={money} rolledIn={rolledIn} />
       {pd.plan.kitty_note && <div className="card pad"><div className="label">Paying into the kitty</div><div style={{ fontSize: 16, fontWeight: 600 }}>{pd.plan.kitty_note}</div></div>}
 
       <div className="row between"><span className="label">{table ? 'A cost with the details (who shares it, per head, a note)' : 'Costs'}</span><button type="button" className="btn ghost sm" onClick={() => setCostFor({})}>+ Add a cost {status.is_admin ? '' : 'I paid'}</button></div>

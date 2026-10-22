@@ -56,6 +56,8 @@ export const GROUP_TABLES = new Set([
   'commentary', 'commentary_settings',
   // Custom games and closest-to-pin / longest-drive conditions (migration 073)
   'custom_games', 'side_comp_conditions',
+  // History brought in with "Bring your history": stories, awards, cups … (migration 081)
+  'history_notes',
 ]);
 
 let current = (() => {

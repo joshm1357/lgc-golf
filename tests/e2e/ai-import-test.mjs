@@ -161,8 +161,8 @@ page.on('dialog', (d) => d.accept());
 
 // 1. The ways in: History, the guided setup, the Rulebook and the Ask screen.
 await page.goto(`${BASE}#/history`);
-await page.getByRole('link', { name: '✨ Import with AI' }).waitFor({ timeout: 15000 });
-check(true, 'History has "✨ Import with AI"');
+await page.getByRole('link', { name: '📥 Add past trips, scorecards, cups…' }).waitFor({ timeout: 15000 });
+check(true, 'History has "📥 Add past trips, scorecards, cups…"');
 await page.goto(`${BASE}#/setup`);
 await page.getByLabel('Bring your history').waitFor({ timeout: 15000 });
 check(true, 'the guided setup has a "Bring your history" card');
@@ -288,7 +288,7 @@ await page.goto(`${BASE}#/history`);
 await page.reload();
 await page.getByText('Past winners').first().waitFor({ timeout: 15000 });
 await page.waitForTimeout(400);
-check(!(await page.getByRole('link', { name: '✨ Import with AI' }).isVisible().catch(() => false)), 'switched off: no Import with AI on History');
+check(!(await page.getByRole('link', { name: '📥 Add past trips, scorecards, cups…' }).isVisible().catch(() => false)), 'switched off: no Import with AI on History');
 await page.goto(`${BASE}#/setup`);
 await page.getByText('Set up your trip').first().waitFor({ timeout: 15000 });
 await page.waitForTimeout(400);

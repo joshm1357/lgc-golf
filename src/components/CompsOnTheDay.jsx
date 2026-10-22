@@ -7,7 +7,11 @@
 //     change" (Governance → Rulebook / Tribunal).
 //   * Handicaps check — everyone's handicap and its last change, open handicap disputes (the existing dispute flow:
 //     tap a handicap), and a "Review handicaps" prompt for organisers before the first round.
-// The pure bits are in lib/runup.js.
+// The pure bits are in lib/compsday.js.
+//
+// compact (the v10 merge): inside the run-up's own "What's up for grabs" part on the Overview, only the grabs list —
+// the run-up already has its heading and its own Rules part, and the handicaps check stays on Organise step 6.
+// Test ids are comps-* (the run-up's own parts are runup-*).
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
@@ -52,12 +56,52 @@ function useProposedRules() {
   return rows;
 }
 
-export default function CompsOnTheDay({ pd, trip, isOrg }) {
+/** The trip's trophies and comps (tick which are on), or, before the trip's set up, what the group usually plays for. */
+function GrabsList({ trip, isOrg }) {
   const data = useData();
-  const { status } = useSession();
   const cupOn = useFeature('cup');
   const trophiesOn = useFeature('trophies');
   const [comps, reloadComps] = useTripComps(trip?.id || null);
+  const [busy, run] = useRun();
+  const grabs = useMemo(() => (trip ? upForGrabs({ comps: comps || [], trophies: data.trophies || [], tripId: trip.id, cupOn }) : []), [trip, comps, data.trophies, cupOn]);
+  const usual = useMemo(() => (trip ? [] : usualComps({ trips: data.trips, trophies: data.trophies || [], cupOn })), [trip, data.trips, data.trophies, cupOn]);
+  const toggleComp = (c) => run(async () => {
+    if (c.virtual) { toast('Set it up on the comps page first'); return; }
+    await must(supabase.from('comps').update({ retired: !c.retired }).eq('id', c.id));
+    await reloadComps();
+  });
+  return trip ? (
+    <>
+      {comps === null && <span className="small muted">Loading…</span>}
+      {comps !== null && !grabs.length && <span className="small muted">No trophies or comps for this trip yet.</span>}
+      {grabs.map((c) => (
+        <label key={c.id} className="row" style={{ gap: 10, minHeight: 44, alignItems: 'center' }} data-testid="grab">
+          <input type="checkbox" checked={!c.retired} disabled={!isOrg || busy || c.virtual} onChange={() => toggleComp(c)} style={{ width: 22, height: 22, flex: 'none' }} aria-label={c.name} />
+          <span className="grow"><strong>{c.name}</strong><span className="small muted" style={{ display: 'block' }}>{c.what}</span></span>
+        </label>
+      ))}
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+        <Link to="/comps-board" className="btn ghost sm">📊 The standings</Link>
+        {isOrg && <Link to="/comps" className="btn ghost sm">+ Add or change comps</Link>}
+      </div>
+    </>
+  ) : (
+    <>
+      <span className="small">{usual.length ? <>Usually up for grabs: <strong>{usual.join(', ')}</strong>.</> : 'Nothing from past trips yet.'}</span>
+      <span className="small muted">You tick which are on once the trip’s locked in and set up in the app.</span>
+      {trophiesOn && <Link to="/trophies" className="small" style={{ fontWeight: 700 }}>The Trophy Room →</Link>}
+    </>
+  );
+}
+
+export default function CompsOnTheDay({ pd, trip, isOrg, compact = false }) {
+  if (compact) return <div className="stack" style={{ gap: 6 }} data-testid="comps-grabs-compact"><GrabsList trip={trip} isOrg={isOrg} /></div>;
+  return <CompsDayFull pd={pd} trip={trip} isOrg={isOrg} />;
+}
+
+function CompsDayFull({ pd, trip, isOrg }) {
+  const data = useData();
+  const { status } = useSession();
   const rules = useActiveRules();
   const proposed = useProposedRules();
   const cases = useOpenDisputes();
@@ -65,8 +109,6 @@ export default function CompsOnTheDay({ pd, trip, isOrg }) {
   const [busy, run] = useRun();
   const plan = pd.plan;
 
-  const grabs = useMemo(() => (trip ? upForGrabs({ comps: comps || [], trophies: data.trophies || [], tripId: trip.id, cupOn }) : []), [trip, comps, data.trophies, cupOn]);
-  const usual = useMemo(() => (trip ? [] : usualComps({ trips: data.trips, trophies: data.trophies || [], cupOn })), [trip, data.trips, data.trophies, cupOn]);
   const inIds = pd.rsvps.filter((r) => r.status === 'in').map((r) => r.player_id);
   const hcps = handicapRows({ players: data.players, inIds, history, cases });
   const ruleCases = ruleDisputes(cases);
@@ -78,11 +120,6 @@ export default function CompsOnTheDay({ pd, trip, isOrg }) {
   }, [plan.id]);
   const due = reviewDue({ firstRound: firstRound || plan.start_date, today: todayISO(), reviewed });
 
-  const toggleComp = (c) => run(async () => {
-    if (c.virtual) { toast('Set it up on the comps page first'); return; }
-    await must(supabase.from('comps').update({ retired: !c.retired }).eq('id', c.id));
-    await reloadComps();
-  });
   const markReviewed = () => run(async () => {
     const { data: b } = await supabase.from('trip_builds').select('state').eq('plan_id', plan.id).maybeSingle();
     const mark = { at: new Date().toISOString(), by: status.player_id };
@@ -91,34 +128,13 @@ export default function CompsOnTheDay({ pd, trip, isOrg }) {
   }, 'Handicaps reviewed — noted for the trip');
 
   return (
-    <div className="stack" style={{ gap: 12 }} data-testid="run-up">
-      <section className="card pad stack" style={{ gap: 6 }} data-testid="runup-grabs">
+    <div className="stack" style={{ gap: 12 }} data-testid="comps-day">
+      <section className="card pad stack" style={{ gap: 6 }} data-testid="comps-grabs">
         <strong>🏆 What’s up for grabs</strong>
-        {trip ? (
-          <>
-            {comps === null && <span className="small muted">Loading…</span>}
-            {comps !== null && !grabs.length && <span className="small muted">No trophies or comps for this trip yet.</span>}
-            {grabs.map((c) => (
-              <label key={c.id} className="row" style={{ gap: 10, minHeight: 44, alignItems: 'center' }} data-testid="grab">
-                <input type="checkbox" checked={!c.retired} disabled={!isOrg || busy || c.virtual} onChange={() => toggleComp(c)} style={{ width: 22, height: 22, flex: 'none' }} aria-label={c.name} />
-                <span className="grow"><strong>{c.name}</strong><span className="small muted" style={{ display: 'block' }}>{c.what}</span></span>
-              </label>
-            ))}
-            <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-              <Link to="/comps-board" className="btn ghost sm">📊 The standings</Link>
-              {isOrg && <Link to="/comps" className="btn ghost sm">+ Add or change comps</Link>}
-            </div>
-          </>
-        ) : (
-          <>
-            <span className="small">{usual.length ? <>Usually up for grabs: <strong>{usual.join(', ')}</strong>.</> : 'Nothing from past trips yet.'}</span>
-            <span className="small muted">You tick which are on once the trip’s locked in and set up in the app.</span>
-            {trophiesOn && <Link to="/trophies" className="small" style={{ fontWeight: 700 }}>The Trophy Room →</Link>}
-          </>
-        )}
+        <GrabsList trip={trip} isOrg={isOrg} />
       </section>
 
-      <section className="card pad stack" style={{ gap: 6 }} data-testid="runup-rules">
+      <section className="card pad stack" style={{ gap: 6 }} data-testid="comps-rules">
         <strong>📖 Rules for this trip</strong>
         <span className="small">{rules.length ? `${rules.length} rule${rules.length === 1 ? '' : 's'} in the Rulebook` : 'The Rulebook is empty — the standard rules apply.'}{rules.length ? `: ${rules.slice(0, 4).map((r) => r.title).join(', ')}${rules.length > 4 ? '…' : ''}` : ''}</span>
         {proposed.length > 0 && <span className="small" data-testid="rules-proposed">🗳️ Up for a vote: {proposed.map((r) => r.title).join(', ')}</span>}
@@ -130,7 +146,7 @@ export default function CompsOnTheDay({ pd, trip, isOrg }) {
         </div>
       </section>
 
-      <section className="card pad stack" style={{ gap: 6 }} data-testid="runup-handicaps">
+      <section className="card pad stack" style={{ gap: 6 }} data-testid="comps-handicaps">
         <strong>⛳ Handicaps check</strong>
         {isOrg && due && (
           <div className="stack" style={{ gap: 6, background: 'var(--gold-soft)', borderRadius: 10, padding: '8px 10px' }} data-testid="review-handicaps">
@@ -147,7 +163,7 @@ export default function CompsOnTheDay({ pd, trip, isOrg }) {
           <div key={h.id} className="row between small" style={{ gap: 8, minHeight: 36 }} data-testid="hcp-row">
             <span className="grow">{h.name}{h.dispute && <span style={{ color: 'var(--under)', fontWeight: 700 }}> · ⚖️ disputed</span>}
               <span className="muted" style={{ display: 'block' }}>{h.lastChange}</span></span>
-            <RuleTag testId="runup-hcp" rule={{ table: 'players', id: h.id, field: 'handicap', label: `${h.name}’s handicap`, value: h.handicap, where: { path: `/plan/${plan.id}?view=organise&step=day` } }}
+            <RuleTag testId="comps-hcp" rule={{ table: 'players', id: h.id, field: 'handicap', label: `${h.name}’s handicap`, value: h.handicap, where: { path: `/plan/${plan.id}?view=organise&step=day` } }}
               explain="Handicaps are set by an organiser. If you think one’s wrong, dispute it: the group decides at the Tribunal.">
               <strong className="num">{h.text}</strong>
             </RuleTag>

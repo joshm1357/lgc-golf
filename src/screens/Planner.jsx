@@ -273,7 +273,8 @@ export function Checklist({ pd, onGo, open: startOpen = false }) {
 // ---------------------------------------------------------------- Vote
 
 // The Vote step on Organise: the votes (organiser results), Call a vote, and the decided ones.
-export function VoteTab({ pd }) {
+// showCall=false: the screen already has its own Call a vote button (Organise step 1 while planning), so one per screen.
+export function VoteTab({ pd, showCall = true }) {
   const { status } = useSession();
   const [creating, setCreating] = useState(false);
   const open = pd.polls.filter((p) => p.status === 'open' && !p.vote_batch); // combined cards (077) show in VoteBatches
@@ -283,7 +284,7 @@ export function VoteTab({ pd }) {
       {pd.polls.length === 0 && <div className="empty">No votes yet.{status.is_admin ? ' Put one up — dates, place, or anything else.' : ' The admin will put one up.'}</div>}
       <VoteBatches pd={pd} />
       {open.map((p) => <PollCard key={p.id} poll={p} pd={pd} />)}
-      {status.is_admin && <button type="button" className="btn ghost block" onClick={() => setCreating(true)} data-testid="call-a-vote">🗳️ Call a vote</button>}
+      {status.is_admin && showCall && <button type="button" className="btn ghost block" onClick={() => setCreating(true)} data-testid="call-a-vote">🗳️ Call a vote</button>}
       {closed.length > 0 && <span className="label">Decided</span>}
       {closed.map((p) => <PollCard key={p.id} poll={p} pd={pd} />)}
       <p className="note" style={{ margin: 0 }}>Dates: ✓ Can · ? Maybe · ✗ Can’t. Places: ⭐ Prefer · 👍 Option · 👎 Don’t like. The first is 2 points, the middle 1. Anyone can add an option. {pd.voteDecider === 'admin_or_organiser' ? 'The admin or the trip’s organiser' : 'The admin'} closes the vote and picks the winner.</p>

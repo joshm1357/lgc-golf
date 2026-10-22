@@ -122,8 +122,9 @@ export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage 
       {/* ov15: the trip's status — live board, what we're playing for (with leaders), and each round's leaderboard. */}
       {tripId && <TripStatus trip={trip || data.trips.find((t) => t.id === tripId)} overview />}
 
-      {/* ov24: the trip's awards and fines, before the trip ("What's up for grabs"). */}
-      {!done && <AwardsRunUp trip={trip || data.trips.find((t) => t.id === tripId) || null} title="🎁 What’s up for grabs" overview />}
+      {/* ov24: the trip's awards and fines, before the trip ("What's up for grabs"). Once the run-up shows, they're in its
+          own "What's up for grabs" part instead (v10 merge: one place per screen). */}
+      {!done && !runUp && <AwardsRunUp trip={trip || data.trips.find((t) => t.id === tripId) || null} title="🎁 What’s up for grabs" overview />}
 
       {/* Results (done) */}
       {done && honours.length > 0 && (

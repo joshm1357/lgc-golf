@@ -97,6 +97,9 @@ async function fake(route) {
   if (method === 'OPTIONS') return json({});
   const p = url.pathname;
   if (p.startsWith('/rest/v1/rpc/my_status')) return json({ is_member: true, is_admin: true, player_id: K, group_name: 'Hunter Crew', group_id: GROUP, role: 'organiser', legacy: false, groups: [{ id: GROUP, name: 'Hunter Crew', slug: 'hunter', role: 'organiser' }] });
+  // ov24 (093): closing an award is settled on the server (settle_dinner_award posts the result; awards-fines-test
+  // checks that). This fake is an older database without it, so the app's own fallback posts the result line.
+  if (p.startsWith('/rest/v1/rpc/settle_dinner_award')) return json({ code: 'PGRST202', message: 'Could not find the function public.settle_dinner_award(p_award) in the schema cache', details: null, hint: null }, 404);
   if (p.startsWith('/rest/v1/rpc/')) return json(null);
   if (p.startsWith('/functions/')) return json({ sent: 0 });
   if (p.startsWith('/rest/v1/')) {

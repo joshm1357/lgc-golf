@@ -233,7 +233,7 @@ function StepBody({ k, pd, ex, stage, trip, isOrg, on, desk, wide, moneyTab, onM
           </div>
         )}
         {!isOrg && <div className="small muted">The organiser works out where and when — you’ll get a vote.</div>}
-        {on.planner_tasks && <VoteTab pd={pd} />}
+        {on.planner_tasks && <VoteTab pd={pd} showCall={!(isOrg && plan.status === 'planning')} />}
       </>
     );
   }

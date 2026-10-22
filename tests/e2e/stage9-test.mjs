@@ -23,7 +23,7 @@ const PAST = 'eeeeeeee-0000-4000-8000-000000000004';
 const POLL1 = 'abababab-0000-4000-8000-000000000001';
 const POLL2 = 'abababab-0000-4000-8000-000000000002';
 const now = new Date().toISOString();
-const today = now.slice(0, 10);
+const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney' }).format(new Date()); // the app's 'today' is Sydney time
 const holes = Array.from({ length: 18 }, (_, i) => ({ n: i + 1, par: 4, si: i + 1, green: { lat: -35.0 + i * 0.001, lng: 150.5 } }));
 
 const db = {
@@ -254,7 +254,7 @@ await page.getByRole('button', { name: 'Cancel' }).click();
 
 // 5. Share pictures: the finished round's winner and leaderboard.
 db.rounds[0].status = 'locked';
-await page.goto(`${BASE}#/`);
+await page.goto(`${BASE}#/leaderboard`); // ov21: home (#/) is the Trips menu; the share pictures are on the leaderboard
 await page.reload();
 await page.getByRole('button', { name: '🖼️ Winner picture' }).waitFor({ timeout: 15000 });
 const pic = page.waitForEvent('download', { timeout: 8000 }).catch(() => null);

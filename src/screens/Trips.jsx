@@ -18,6 +18,7 @@ import { TripsAi } from './AiPlanner.jsx';
 import { ReplayChips } from '../components/ReplayChips.jsx';
 import { tripsMenu, tripNowPath, tripPath, tripDayWords } from '../lib/activetrip.js';
 import { openPlanner } from '../components/Caddie.jsx';
+import { SaveSpotBanner } from '../components/SaveSpot.jsx';
 
 const TABLES = ['plans', 'plan_rsvps', 'plan_polls', 'plan_options'];
 
@@ -93,6 +94,8 @@ export default function Trips() {
   return (
     <div className="page">
       <Header logo title="Trips" sub="Every trip, from first idea to the record books" />
+      {/* ov21 made Trips the Home screen when no trip's on; the phone-only "Save your spot" reminder belongs on Home. */}
+      <SaveSpotBanner />
       <div className="section stack trips-stage">
         {notifyOn && <NotifyCard compact />}
         {rows.offline && <div className="small muted">No signal — showing the list from last time.</div>}

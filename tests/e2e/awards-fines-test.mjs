@@ -175,8 +175,10 @@ const runup = await page.getByTestId('awards-runup').innerText();
 check(runup.includes('Wrong-ball fine') && runup.includes('$5') && runup.includes('Latest out') && runup.includes('−1 stroke') && runup.includes('Needs 📷 photo + ⏱ time'), 'run-up lists both with worth and proof');
 await shot('3-runup-375');
 await go(`/plan/${PC}?view=overview`, 'awards-runup');
-const ov = await page.getByTestId('awards-runup').innerText();
-check(ov.includes('What’s up for grabs') && ov.includes('Wrong-ball fine') && ov.includes('Latest out'), 'Overview: What’s up for grabs');
+// v10 merge: a locked-in trip's Overview shows the run-up, and the awards sit in its "What's up for grabs" part (once).
+check(await page.getByTestId('awards-runup').count() === 1, 'Overview: the awards card shows once');
+const ov = await page.getByTestId('runup-grabs').innerText();
+check(ov.includes('What’s up for grabs') && (await page.getByTestId('runup-grabs').getByTestId('awards-runup').count()) === 1 && ov.includes('Wrong-ball fine') && ov.includes('Latest out'), 'Overview: What’s up for grabs');
 await shot('4-overview-375');
 
 // 6. Fine Al's post from the Feed.

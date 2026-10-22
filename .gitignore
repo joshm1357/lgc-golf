@@ -10,3 +10,5 @@ dist
 dist-flags/
 shots-*/
 shots/
+dist-pw/
+dist-code/

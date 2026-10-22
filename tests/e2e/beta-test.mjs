@@ -3,6 +3,8 @@
 //   liveStyleBase: this branch built like live (no sign-in, new groups off), e.g. http://localhost:4301/lgc-golf/
 //   signInBase:    this branch built like staging (VITE_SIGN_IN=google,email, VITE_NEW_GROUPS=on), e.g. http://localhost:4302/
 //   productBase:   the product branch before this change, built like live, e.g. http://localhost:4303/lgc-golf/
+//                  (once Stage 1 is in the product branch, the same branch's live-style build: other features change these screens)
+// #/rules opens Governance → Rulebook, so its header (and the sidebar link) say Governance.
 import { chromium } from '/opt/npm-tools/node_modules/playwright/index.mjs';
 import fs from 'node:fs';
 
@@ -17,7 +19,7 @@ const COURSE = 'cccccccc-0000-4000-8000-000000000001';
 const ROUND = 'dddddddd-0000-4000-8000-000000000001';
 const PLAN = 'eeeeeeee-0000-4000-8000-000000000001';
 const now = '2026-10-20T08:00:00.000Z';
-const today = '2026-10-20';
+const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney' }).format(new Date()); // the app's 'today' is Sydney time (a live round from an earlier day isn't 'on now')
 const holes = Array.from({ length: 18 }, (_, i) => ({ n: i + 1, par: 4, si: i + 1 }));
 const db = {
   players: [
@@ -117,7 +119,7 @@ const visible = (page, sel) => page.evaluate((s) => { const el = document.queryS
 
 // 1. Phone screens unchanged: pixel-compare this branch with the product branch at 375 px (live-style builds).
 const title = (page, text) => page.locator('.page .hdr-title', { hasText: text }).first().waitFor({ timeout: 15000 });
-for (const [hash, text, name] of [['#/', 'Saturday', 'leaderboard'], ['#/feed', 'Feed', 'feed'], ['#/plan', 'Spring Trip', 'trips'], ['#/rules', 'Rulebook', 'rulebook']]) {
+for (const [hash, text, name] of [['#/', 'Saturday', 'leaderboard'], ['#/feed', 'Feed', 'feed'], ['#/plan', 'Spring Trip', 'trips'], ['#/rules', 'Governance', 'rulebook']]) {
   const shots = [];
   for (const base of [PRODUCT, LIVE]) {
     const { ctx, page } = await newPage(375, 812, { phone: true });
@@ -165,7 +167,7 @@ for (const w of [768, 1280, 1920]) {
     check(true, `${w} px: sidebar Trips opens the Trips tab`);
     await page.screenshot({ path: `${SHOTS}/${w}-trips.png` });
     check(await page.locator('.side .side-link.active').innerText() === 'Trips', `${w} px: Trips is marked as the current page`);
-    for (const [label, text] of [['Trophy Room', 'Trophy'], ['Rulebook', 'Rulebook'], ['Feed', 'Feed']]) {
+    for (const [label, text] of [['Trophy Room', 'Trophy'], ['Governance', 'Governance'], ['Feed', 'Feed']]) {
       await page.locator('.side').getByText(label, { exact: true }).click();
       let ok = false; try { await page.locator('.page .hdr-title', { hasText: text }).first().waitFor({ timeout: 6000 }); ok = true; } catch { /* below */ }
       check(ok && await noSideScroll(page), `${w} px: ${label} opens, no sideways scroll`);

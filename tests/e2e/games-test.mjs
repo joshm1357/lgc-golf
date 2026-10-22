@@ -17,6 +17,9 @@ const COURSE = 'cccccccc-0000-4000-8000-000000000001';
 const R1 = 'dddddddd-0000-4000-8000-000000000001';
 const R2 = 'dddddddd-0000-4000-8000-000000000002';
 const now = '2026-10-21T08:00:00.000Z';
+// The trip runs around Sydney's today (the app's 'today'), so it is never over when the test runs.
+const sydToday = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney' }).format(new Date());
+const addDays = (ymd, n) => { const t = new Date(`${ymd}T12:00:00Z`); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
 const holes = [[5, 17], [4, 9], [3, 8], [4, 3], [3, 11], [5, 16], [4, 18], [4, 15], [4, 1], [4, 6], [3, 14], [4, 5], [4, 10], [5, 7], [3, 12], [5, 2], [4, 13], [4, 4]]
   .map(([par, si], i) => ({ n: i + 1, par, si }));
 // Everyone makes par except: hole 1 Kurt birdie (a skin); hole 2 Al and Bo both birdie (tie — carries);
@@ -38,14 +41,14 @@ const db = {
     { id: A, name: 'Al Blue', nickname: null, handicap: 0, approved: true, created_at: now },
     { id: B, name: 'Bo Red', nickname: null, handicap: 0, approved: true, created_at: now },
   ],
-  trips: [{ id: TRIP, name: 'Hunter Weekend', start_date: '2026-10-20', end_date: '2026-10-22', status: 'active', created_at: now }],
+  trips: [{ id: TRIP, name: 'Hunter Weekend', start_date: addDays(sydToday, -1), end_date: addDays(sydToday, 1), status: 'active', created_at: now }],
   trophies: [], teams: [], team_players: [], quick_results: [], honour_board: [], round_pins: [],
   round_players: [K, A, B].flatMap((p) => [R1, R2].map((r) => ({ round_id: r, player_id: p, playing_handicap: 0 }))),
   scores,
   courses: [{ id: COURSE, name: 'Cypress Lakes', holes, created_at: now }],
   rounds: [
-    { id: R1, trip_id: TRIP, course_id: COURSE, name: 'Friday — Cypress Lakes', play_date: '2026-10-21', format: 'stableford', status: 'live', ld_holes: [], ctp_holes: [], comp_bonus: 0, own_comps: [], created_at: now },
-    { id: R2, trip_id: TRIP, course_id: COURSE, name: 'Saturday — Cypress Lakes', play_date: '2026-10-22', format: 'stableford', status: 'setup', ld_holes: [], ctp_holes: [], comp_bonus: 0, own_comps: [], created_at: now },
+    { id: R1, trip_id: TRIP, course_id: COURSE, name: 'Friday — Cypress Lakes', play_date: sydToday, format: 'stableford', status: 'live', ld_holes: [], ctp_holes: [], comp_bonus: 0, own_comps: [], created_at: now },
+    { id: R2, trip_id: TRIP, course_id: COURSE, name: 'Saturday — Cypress Lakes', play_date: addDays(sydToday, 1), format: 'stableford', status: 'setup', ld_holes: [], ctp_holes: [], comp_bonus: 0, own_comps: [], created_at: now },
   ],
   plans: [], plan_rsvps: [], plan_groups: [], plan_group_members: [], tribunal_cases: [], tribunal_votes: [], posts: [], rules: [],
   cup_sides: [], cup_matches: [], side_entries: [], side_comp_defs: [], side_comp_entries: [],

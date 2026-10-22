@@ -2,7 +2,7 @@
 // rounds, players, extras — each ticked off from what's already in the group, so you can do them in any order and
 // come back to change one. Admin stays for fine-tuning. The step logic is in lib/setupguide.js.
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
 import { useData, useSession, useFeature } from '../lib/store.jsx';
 import { useRun, must } from '../lib/run.js';
@@ -35,7 +35,8 @@ export default function SetupGuide() {
   const { status } = useSession();
   const cupOn = useFeature('cup');
   const sideCompsOn = useFeature('side_comps');
-  const [tripId, setTripId] = useState(null); // the trip being set up (default: the nearest one that isn't over)
+  const [params] = useSearchParams();
+  const [tripId, setTripId] = useState(() => params.get('trip')); // the trip being set up (default: the nearest one that isn't over; ?trip= from the Caddie)
   const candidates = data.ready ? upcomingTrips(data.trips, todayIso()) : [];
   const trip = (tripId && tripId !== 'new' && data.trips?.find((t) => t.id === tripId)) || (tripId === 'new' ? null : candidates[0] || null);
   const [comps] = useTripComps(trip?.id);

@@ -5,7 +5,8 @@ name: Release database and functions
 #    rolled back. Nothing changes. It reports the first file that fails, if any.
 #  - apply: runs them for real, one file at a time (each in its own transaction), recording each in the
 #    migration history, and stops at the first error. For the live project you must type LIVE in "confirm".
-#  - deploy_functions: after a successful apply, deploys the edge functions to the same project.
+#  - deploy_functions: deploys the edge functions to the same project first (CLI, so config.toml's verify_jwt applies),
+#    then the migrations run — the new every-minute / daily jobs call the functions straight away.
 # Needs the repo secret SUPABASE_ACCESS_TOKEN. Uses Supabase's management API; no database password needed.
 on:
   workflow_dispatch:
@@ -94,6 +95,18 @@ jobs:
             if [ "$code" -ge 300 ]; then echo "::error title=Rehearsal failed::$(sed -n "${i}p" pending.txt) fails: $(head -c 1500 out.json)"; exit 1; fi
           done
           exit 1
+      - uses: supabase/setup-cli@v1
+        if: inputs.mode == 'apply' && inputs.deploy_functions
+        with:
+          version: latest
+      - name: Deploy functions (first, so the new database jobs find them)
+        if: inputs.mode == 'apply' && inputs.deploy_functions
+        run: |
+          set -euo pipefail
+          for d in supabase/functions/*/; do
+            fn=$(basename "$d"); [ -f "$d/index.ts" ] || continue
+            echo "::group::$fn"; supabase functions deploy "$fn" --project-ref "$REF" --use-api; echo "::endgroup::"
+          done
       - name: Apply
         if: inputs.mode == 'apply'
         run: |
@@ -113,15 +126,3 @@ jobs:
             sleep 1
           done < pending.txt
           echo "::notice title=Applied::$(grep -c . pending.txt || echo 0) migrations applied to $TARGET."
-      - uses: supabase/setup-cli@v1
-        if: inputs.mode == 'apply' && inputs.deploy_functions
-        with:
-          version: latest
-      - name: Deploy functions
-        if: inputs.mode == 'apply' && inputs.deploy_functions
-        run: |
-          set -euo pipefail
-          for d in supabase/functions/*/; do
-            fn=$(basename "$d"); [ -f "$d/index.ts" ] || continue
-            echo "::group::$fn"; supabase functions deploy "$fn" --project-ref "$REF" --use-api; echo "::endgroup::"
-          done

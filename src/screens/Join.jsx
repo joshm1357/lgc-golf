@@ -3,6 +3,7 @@ import { supabase, friendlyError } from '../lib/supabase.js';
 import { useSession } from '../lib/store.jsx';
 import { setCurrentGroup } from '../lib/group.js';
 import { inviteCode } from '../lib/invite.js';
+import { voteTarget } from '../lib/callvote.js';
 import { personalCode } from '../lib/personal.js';
 import { SIGN_IN, signInWith, signInWithEmail, verifyEmailCode } from '../lib/auth.js';
 import { cleanEmailCode, looksLikeEmail, clearFreshSignIn, markFreshSignIn } from '../lib/home.js';
@@ -22,7 +23,9 @@ export async function ensureSignedIn() {
 
 /** Joining by invite link (#/join/CODE): used before you're in any group, and inside the app for another group. */
 export function InviteJoin({ code, inside = false, onLook }) {
-  const { refresh } = useSession();
+  const { refresh, status } = useSession();
+  // A vote link (#/join/CODE?vote=<plan>): after joining, land on the vote rather than the home screen (080).
+  const after = voteTarget(window.location.hash) || '#/';
   const [info, setInfo] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -38,6 +41,8 @@ export function InviteJoin({ code, inside = false, onLook }) {
         if (live && data?.group_id && !data.already_in) rememberSource({ from_group: data.group_id, placement: 'invite' });
         // Show the group's own crest and colours (not when already inside another group's app).
         if (live && data?.look && !inside) { paintLook(data.look, data.group_name); onLook?.(data.look); }
+        // Already in this group and it's the one open: a vote link goes straight to the vote.
+        if (live && data?.already_in && inside && after !== '#/' && data.group_id === status?.group_id) window.location.hash = after;
       } catch (e) {
         if (live) { setErr(friendlyError(e)); setInfo({ bad: true }); }
       }
@@ -55,11 +60,11 @@ export function InviteJoin({ code, inside = false, onLook }) {
       setCurrentGroup(data);
       if (inside) {
         // Everything on screen belongs to the old group: start fresh in the new one.
-        window.location.hash = '#/';
+        window.location.hash = after;
         window.location.reload();
         return;
       }
-      window.location.hash = '#/';
+      window.location.hash = after;
       await refresh();
     } catch (e) {
       setErr(friendlyError(e));
@@ -80,7 +85,7 @@ export function InviteJoin({ code, inside = false, onLook }) {
           {err && <div className="err" style={{ color: '#FFB4AB' }}>{err}</div>}
           {info.team && info.my_team && <div className="small" style={{ color: 'var(--on-navy-muted)' }}>You’re already on {info.my_team} — a link never moves you to another team.</div>}
           {info.already_in && !(info.team && !info.my_team)
-            ? <button type="button" className="btn gold block" onClick={() => { setCurrentGroup(info.group_id); window.location.hash = '#/'; window.location.reload(); }}>You’re already in — open it</button>
+            ? <button type="button" className="btn gold block" onClick={() => { setCurrentGroup(info.group_id); window.location.hash = after; window.location.reload(); }}>{after !== '#/' ? 'You’re already in — open the vote' : 'You’re already in — open it'}</button>
             : <button type="button" className="btn gold block" disabled={busy} onClick={join}>{busy ? 'Joining…' : info.already_in && info.team ? `Join ${info.team}` : 'Join'}</button>}
         </>
       )}
@@ -194,7 +199,7 @@ function SignInHome() {
         <InviteJoin code={code} onLook={setInviteLook} />
         {!status?.signed_in && <div className="stack" style={{ width: '100%', maxWidth: 340, gap: 8, borderTop: '1px solid rgba(255,255,255,.2)', paddingTop: 14 }}>
           <span className="small" style={{ color: 'var(--on-navy-muted)', textAlign: 'center' }}>Got an account already? Sign in first and your scores stay with you on any phone.</span>
-          <SignInButtons returnHash={`#/join/${code}`} quiet />
+          <SignInButtons returnHash={`#/join/${code}${(window.location.hash.match(/\?vote=[0-9a-fA-F-]{36}$/) || [''])[0]}`} quiet />
         </div>}
       </div>
     );

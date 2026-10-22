@@ -3,9 +3,9 @@
 export {
   CHANNELS, CHANNEL_LABEL, CHANNEL_HELP, VOTE_KINDS, ANSWERS, RSVP_ANSWERS,
   cleanEmail, isEmail, maskEmail, effectiveChoice, routeFor, usableEmail, firstName, planVoteSends,
-  hasAnswered, reminderTargets, answeredByEmail, batchKeyOf, tokenExpiry, voteLink, parseVoteLink, escapeHtml, buildVoteEmail,
+  hasAnswered, reminderTargets, PLACE_ANSWERS, EXTRA_ANSWERS, EXTRA_QUESTION, answerKind, answersFor, answeredByEmail, batchKeyOf, tokenExpiry, voteLink, parseVoteLink, escapeHtml, buildVoteEmail,
 } from '../../supabase/functions/_shared/emailvotes.js';
-import { CHANNEL_LABEL } from '../../supabase/functions/_shared/emailvotes.js';
+import { CHANNEL_LABEL, answerKind, answersFor } from '../../supabase/functions/_shared/emailvotes.js';
 
 /** "3 people answered by email" / "1 person …" / '' for none. */
 export function emailAnswerLine(n) {
@@ -29,10 +29,11 @@ export function channelSummary(rows = []) {
 }
 
 /** The words for an answer the page just recorded. */
-export function recordedLine(name, rec) {
+export function recordedLine(name, rec, poll = null) {
   if (!rec) return '';
   const who = name && name !== 'there' ? `Thanks ${name}` : 'Thanks';
   if (rec.kind === 'rsvp') return `${who} — you’re ${rec.response === 'in' ? 'keen' : rec.response === 'out' ? 'out' : 'a maybe'}.`;
+  if (poll && answerKind(poll) !== 'dates') return `${who} — ${answersFor(poll)[rec.response] || ''} for ${rec.label}.`;
   const mark = { yes: '✓', maybe: '?', no: '✗' }[rec.response] || '';
   return `${who} — you’re a ${mark} for ${rec.label}.`;
 }

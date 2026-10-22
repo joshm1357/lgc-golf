@@ -62,7 +62,7 @@ async function sendOne(db: Db, opts: { app: string; g: string; plan: Row; polls:
   const closes = opts.polls.map((p) => p.closes_on).filter(Boolean).sort()[0];
   const msg = buildVoteEmail({
     app: opts.app, token: `${tok.id}.${secret}`, first: opts.person.first, planName: opts.plan.name, planId: opts.plan.id,
-    polls: opts.polls.map((p) => ({ id: p.id, question: p.question, choice: p.choice || null, options: opts.options.filter((o) => o.poll_id === p.id).map((o) => ({ id: o.id, label: o.label })) })),
+    polls: opts.polls.map((p) => ({ id: p.id, question: p.question, kind: (p as { kind?: string }).kind || null, purpose: (p as { purpose?: string }).purpose || null, choice: p.choice || null, options: opts.options.filter((o) => o.poll_id === p.id).map((o) => ({ id: o.id, label: o.label })) })),
     rsvp: opts.rsvp, reminder: opts.kind === 'reminder', closes: fmtDay(closes),
   });
   const res = await sendEmail({ to: opts.person.email, ...msg });

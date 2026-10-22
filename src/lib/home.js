@@ -6,6 +6,8 @@
 
 const FRESH_KEY = 'tgt-fresh-sign-in';
 const RETURN_KEY = 'tgt-return-to';
+// An app address, optionally with a plain query ("#/join/CODE?vote=<id>" — the vote link, 080). Nothing else.
+const SAFE_HASH = /^#\/[A-Za-z0-9/_-]*(\?[A-Za-z0-9=&_-]*)?$/;
 const FRESH_FOR_MS = 15 * 60 * 1000; // a sign-in left half-done (e.g. Google cancelled) stops counting after 15 minutes
 
 /**
@@ -51,7 +53,7 @@ export function clearFreshSignIn(store = safeStore()) {
  * "#/join/CODE" would clash with. Only app addresses like "#/join/ABC" are kept.
  */
 export function rememberReturn(hash, store = safeStore(), now = Date.now()) {
-  if (!/^#\/[A-Za-z0-9/_-]*$/.test(String(hash || ''))) return;
+  if (!SAFE_HASH.test(String(hash || ''))) return;
   try { store?.setItem(RETURN_KEY, JSON.stringify({ hash, at: now })); } catch { /* fine: they land on the home screen */ }
 }
 /** Back from signing in: the address to go to (once), or null. */
@@ -59,7 +61,7 @@ export function takeReturn(store = safeStore(), now = Date.now()) {
   try {
     const v = JSON.parse(store?.getItem(RETURN_KEY) || 'null');
     store?.removeItem(RETURN_KEY);
-    if (!v || !/^#\/[A-Za-z0-9/_-]*$/.test(String(v.hash || ''))) return null;
+    if (!v || !SAFE_HASH.test(String(v.hash || ''))) return null;
     return now - v.at >= 0 && now - v.at < FRESH_FOR_MS ? v.hash : null;
   } catch { return null; }
 }

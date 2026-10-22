@@ -19,10 +19,15 @@ describe('tripSpan', () => {
 
 describe('pickActiveTrip', () => {
   const today = '2026-12-05';
-  it('a trip with a live round wins, even if another is on today', () => {
+  it('a trip with a live round today wins, even if another is on today', () => {
+    const trips = [T('on', '2026-12-04', '2026-12-06'), T('old', '2026-11-01', '2026-11-02')];
+    const rounds = [R('x', 'old', today, 'live')];
+    expect(pickActiveTrip({ trips, rounds, today })).toEqual({ trip: trips[1], why: 'live' });
+  });
+  it('a round left live from an earlier day does not win', () => {
     const trips = [T('on', '2026-12-04', '2026-12-06'), T('old', '2026-11-01', '2026-11-02')];
     const rounds = [R('x', 'old', '2026-11-02', 'live')];
-    expect(pickActiveTrip({ trips, rounds, today })).toEqual({ trip: trips[1], why: 'live' });
+    expect(pickActiveTrip({ trips, rounds, today }).trip.id).toBe('on');
   });
   it('then a trip with a round today', () => {
     const trips = [T('a', '2026-12-10', '2026-12-12'), T('b', null, null)];
@@ -152,7 +157,7 @@ describe('tripsMenu (ov21: the sub-items under Trips)', () => {
     expect(m.last).toBe(lastWeek);
   });
   it('no trips at all: Plan a trip and no last', () => {
-    expect(tripsMenu({ trips: [], rounds: [], today })).toEqual({ now: null, last: null, planIt: true });
+    expect(tripsMenu({ trips: [], rounds: [], today })).toEqual({ now: null, next: null, last: null, planIt: true });
   });
   it('a called-off plan’s trip is neither next nor last', () => {
     const off = T('March', '2027-03-19', '2027-03-21');
@@ -169,5 +174,29 @@ describe('tripsMenu (ov21: the sub-items under Trips)', () => {
   it('sub-items open the trip’s status page', () => {
     expect(tripNowPath({ id: 'x' })).toBe('/trip-now/x');
     expect(tripNowPath(null)).toBe('/plan');
+  });
+});
+
+describe('tripDayWords for older trips', () => {
+  it('weeks, then month and year', async () => {
+    const { tripDayWords } = await import('./activetrip.js');
+    expect(tripDayWords({ start_date: '2026-09-01', end_date: '2026-09-03' }, [], '2026-10-01')).toBe('Finished 4 weeks ago');
+    expect(tripDayWords({ start_date: '2025-10-16', end_date: '2025-10-18' }, [], '2026-10-23')).toBe('Oct 2025');
+  });
+});
+
+describe('trips menu: stale live round and next while on', () => {
+  it('a round left live from yesterday does not make a finished trip on now', async () => {
+    const { tripsMenu } = await import('./activetrip.js');
+    const trips = [{ id: 'a', name: 'Test', start_date: '2026-10-22', end_date: '2026-10-22', status: 'active' }, { id: 'b', name: 'Summer', start_date: '2026-12-05', end_date: '2026-12-07', status: 'active' }];
+    const rounds = [{ id: 'r1', trip_id: 'a', play_date: '2026-10-22', status: 'live' }];
+    const m = tripsMenu({ trips, rounds, today: '2026-10-23' });
+    expect(m.now.trip.id).toBe('b'); expect(m.now.on).toBe(false); expect(m.last.id).toBe('a');
+  });
+  it('while a trip is on, the next one gets its own line', async () => {
+    const { tripsMenu } = await import('./activetrip.js');
+    const trips = [{ id: 'a', name: 'On', start_date: '2026-10-22', end_date: '2026-10-24', status: 'active' }, { id: 'b', name: 'Summer', start_date: '2026-12-05', end_date: '2026-12-07', status: 'active' }];
+    const m = tripsMenu({ trips, rounds: [], today: '2026-10-23' });
+    expect(m.now.trip.id).toBe('a'); expect(m.now.on).toBe(true); expect(m.next.id).toBe('b');
   });
 });

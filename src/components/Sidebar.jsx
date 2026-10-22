@@ -93,6 +93,7 @@ function TripsGroup({ planner }) {
         {Icon.calendar(20)}<span>Trips</span>
       </Link>
       {menu.now && sub(menu.now.trip, menu.now.on ? 'on' : 'next')}
+      {menu.next && sub(menu.next, 'next')}
       {!menu.now && menu.ready && (
         <button type="button" className="side-link side-subitem" data-testid="side-plan" onClick={openPlanner}>
           <span>✨ Plan a trip</span>

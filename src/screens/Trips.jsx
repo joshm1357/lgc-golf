@@ -69,7 +69,8 @@ export default function Trips() {
   const nowTripId = menu.now?.trip.id;
   // The Next / On now card covers its plan; a locked-in plan with no trip in the app yet keeps the old card.
   const nowPlan = nowTripId ? null : now;
-  const later = nowTripId ? [now, ...lockedLater].filter((x) => x && x.plan.trip_id !== nowTripId) : lockedLater;
+  const nextTripId = menu.next?.id;
+  const later = nowTripId ? [now, ...lockedLater].filter((x) => x && x.plan.trip_id !== nowTripId && x.plan.trip_id !== nextTripId) : lockedLater;
   // Called off: tucked into its own folded section, so it isn't mistaken for a past trip — or lost.
   const calledOff = allPast.filter((x) => x.stage === 'cancelled');
   const past = allPast.filter((x) => x.stage !== 'cancelled');
@@ -84,6 +85,7 @@ export default function Trips() {
 
         <div className="trips-top stack" data-testid="trips-top" style={{ gap: 10 }}>
           {menu.now && <MenuCard kind={menu.now.on ? 'on' : 'next'} trip={menu.now.trip} plans={rows.plans} rounds={data.rounds} />}
+          {menu.next && <MenuCard kind="next" trip={menu.next} plans={rows.plans} rounds={data.rounds} />}
           {nowPlan && <NowCard plan={nowPlan.plan} stage={nowPlan.stage} rsvps={rsvpsOf(nowPlan.plan.id)} me={status.player_id} />}
           {menu.last && <MenuCard kind="last" trip={menu.last} plans={rows.plans} rounds={data.rounds} />}
           {!menu.now && !nowPlan && (

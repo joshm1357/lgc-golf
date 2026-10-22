@@ -41,7 +41,8 @@ export function pickActiveTrip({ trips = [], rounds = [], today = todayISO(), re
   const latest = (rs) => [...rs].sort((a, b) => String(b.play_date || '').localeCompare(String(a.play_date || '')) || String(b.created_at || '').localeCompare(String(a.created_at || '')))[0];
 
   // 1. A round in progress, else a round today.
-  const live = latest(ofTrip((rounds || []).filter((r) => r.status === 'live')));
+  // A round left 'live' from an earlier day (nobody locked it) doesn't make its trip "on now".
+  const live = latest(ofTrip((rounds || []).filter((r) => r.status === 'live' && (!r.play_date || day(r.play_date) >= today))));
   if (live) return { trip: byId.get(live.trip_id), why: 'live' };
   const todays = latest(ofTrip((rounds || []).filter((r) => day(r.play_date) === today)));
   if (todays) return { trip: byId.get(todays.trip_id), why: 'today' };
@@ -83,7 +84,11 @@ export function tripDayWords(trip, rounds = [], today = todayISO()) {
   }
   const ago = -daysUntil(end, today);
   if (ago === 1) return 'Finished yesterday';
-  return `Finished ${ago} days ago`;
+  if (ago < 21) return `Finished ${ago} days ago`;
+  if (ago < 60) return `Finished ${Math.round(ago / 7)} weeks ago`;
+  // Older: the month and year it finished, e.g. "Oct 2025".
+  const [y, m] = String(end).split('-').map(Number);
+  return `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][(m || 1) - 1]} ${y}`;
 }
 
 /**
@@ -131,11 +136,17 @@ export function tripsMenu({ trips = [], rounds = [], plans = [], today = todayIS
   // recentDays -1: never fall back to a finished trip here — that's `last`.
   const pick = pickActiveTrip({ trips: list, rounds, today, recentDays: -1 });
   const now = pick ? { trip: pick.trip, on: pick.why !== 'upcoming' } : null;
-  const done = list.filter((t) => t.id !== now?.trip.id)
+  // While a trip is on, the next one still gets its own line.
+  let next = null;
+  if (now?.on) {
+    const ahead = pickActiveTrip({ trips: list.filter((t) => t.id !== now.trip.id), rounds: [], today, recentDays: -1 });
+    if (ahead && ahead.why === 'upcoming') next = ahead.trip;
+  }
+  const done = list.filter((t) => t.id !== now?.trip.id && t.id !== next?.id)
     .map((t) => ({ t, end: tripSpan(t, rounds).end }))
     .filter((x) => x.end && x.end < today)
     .sort((a, b) => b.end.localeCompare(a.end) || String(b.t.created_at || '').localeCompare(String(a.t.created_at || '')));
-  return { now, last: done[0]?.t || null, planIt: !now };
+  return { now, next, last: done[0]?.t || null, planIt: !now };
 }
 
 /** The words on a Trips sub-item: "On now: March", "Next: March", "Last: South Coast 2026". */

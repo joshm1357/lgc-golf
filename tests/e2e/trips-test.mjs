@@ -137,7 +137,7 @@ const noSideScroll = async (label) => {
 
 // 1. The Trips tab.
 await page.goto(`${BASE}#/plan`);
-await page.getByText('NEXT UP').first().waitFor({ timeout: 15000 });
+await page.getByText(/NEXT (UP|TRIP)/).first().waitFor({ timeout: 15000 });
 await page.waitForTimeout(600);
 check(await page.getByText('Summer Classic').first().isVisible(), 'now and next: the next locked-in trip is the big card');
 check(await page.getByText('Ideas and voting').isVisible(), 'ideas section shows');
@@ -159,7 +159,7 @@ await noSideScroll('Trips tab');
   check(!/on now/i.test(planText) && /Done/.test(planText), 'its page says Done, not On now');
   await page.screenshot({ path: `${SHOTS}/t1b-finished-active.png`, fullPage: true });
   await page.goto(`${BASE}#/plan`);
-  await page.getByText('NEXT UP').first().waitFor({ timeout: 15000 });
+  await page.getByText(/NEXT (UP|TRIP)/).first().waitFor({ timeout: 15000 });
 }
 
 // 2. Suggest a trip: makes the plan, opens its votes.

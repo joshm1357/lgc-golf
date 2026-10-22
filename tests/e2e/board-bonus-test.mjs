@@ -22,7 +22,7 @@ const TA = 'abababab-0000-4000-8000-00000000000a';
 const TB = 'abababab-0000-4000-8000-00000000000b';
 const GROUP = 'a0a0a0a0-0000-4000-8000-00000000000a';
 const now = new Date().toISOString();
-const today = now.slice(0, 10);
+const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney' }).format(new Date()); // the app's 'today' is Sydney time
 const holes = Array.from({ length: 18 }, (_, i) => ({ n: i + 1, par: 4, si: i + 1 }));
 // Josh & Hamish: 7 birdies, rest pars, handicap 0 → −7 before the bonus, −9 with the longest drive on 9.
 const teamCard = (team, birdies) => holes.map((h) => ({ round_id: ROUND, subject_id: team, subject_type: 'team', hole: h.n, strokes: h.n <= birdies ? 3 : 4, picked_up: false, updated_at: now }));

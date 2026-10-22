@@ -10,6 +10,7 @@ import { HOW, compsForRound, sortOwnEntries, beats, parseHoles } from '../lib/si
 import { compKind, wonText } from '../lib/sidecomplib.js';
 import { CompLibrary, TallyComp, AutoComp } from './SideCompLibrary.jsx';
 import { ConditionsLine, ConditionsButton, BuiltinConditionsAdmin } from '../components/CompConditions.jsx';
+import RuleTag from '../components/RuleTag.jsx';
 
 /** The group's own side comps, live. */
 export function useOwnDefs() {
@@ -104,7 +105,8 @@ function MeasuredComp({ round, comp, playerIds }) {
             ))}
           </div>
         )}
-        <p className="note" style={{ margin: 0 }}>{HOW.find((h) => h.value === comp.how)?.label}.{comp.how === 'pick' ? ' The organiser confirms the winner.' : ' A confirmed winner beats any number.'}</p>
+        <p className="note" style={{ margin: 0 }}><RuleTag testId="own-comp-how" rule={{ table: 'side_comp_defs', id: comp.id, field: 'how', label: `${comp.name}: ${HOW.find((h) => h.value === comp.how)?.label || comp.how}`, value: comp.how, where: { round_id: round.id, path: `/comps?r=${round.id}&kind=${comp.id}` } }}
+          explain={`How ${comp.name} is won: ${(HOW.find((h) => h.value === comp.how)?.label || comp.how).toLowerCase()}. Set by the organiser.`}>{HOW.find((h) => h.value === comp.how)?.label}.</RuleTag>{comp.how === 'pick' ? ' The organiser confirms the winner.' : ' A confirmed winner beats any number.'}</p>
       </div>
       {round.status !== 'locked' && <button type="button" className="btn gold fab" onClick={() => setAdding(true)}>{comp.how === 'pick' ? 'Nominate' : 'Enter'}{whole ? '' : ` — hole ${hole}`}</button>}
       {adding && <OwnEntryForm round={round} comp={comp} hole={hole} leader={leader} playerIds={playerIds} onClose={() => setAdding(false)} onSaved={load} />}

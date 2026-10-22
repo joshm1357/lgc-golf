@@ -12,6 +12,7 @@ import { ReplayChips } from '../components/ReplayChips.jsx';
 import { useTripComps } from '../components/CompsChip.jsx';
 import { useCompData, CompStandingsView } from './CompsBoard.jsx';
 import { compStandings } from '../lib/comps.js';
+import RuleTag from '../components/RuleTag.jsx';
 
 /** Is this trophy's comp the classic kind the Trophy Room always showed (all the trip's Stableford / Ambrose rounds,
  *  or awarded)? Then it's shown exactly as before; any other comp shows its own standings (lib/comps.js). */
@@ -148,7 +149,8 @@ export default function Trophies() {
                   ))}
                 </div>
               )}
-              <p className="note" style={{ margin: 0 }}>Raw Stableford points added across every Stableford round.{sBoard.rounds.map((r, i) => ` R${i + 1} = ${r.name}.`).join('')} Ties: more points in the last round, then countback.</p>
+              <p className="note" style={{ margin: 0 }}>Raw Stableford points added across every Stableford round.{sBoard.rounds.map((r, i) => ` R${i + 1} = ${r.name}.`).join('')} <RuleTag testId="tie-break" rule={{ table: 'standard', field: 'rule', key: 'stableford.tie_break', label: 'Ties: more points in the last round, then countback', value: 'Ties: more points in the last round, then countback (back 9, 6, 3, last hole).', where: { path: '/trophies' } }}
+                explain="If players finish level on points, whoever scored more in the last round wins; if still level, countback over the last round decides.">Ties: more points in the last round, then countback.</RuleTag></p>
             </>
           )}
 

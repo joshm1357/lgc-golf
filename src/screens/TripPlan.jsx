@@ -55,6 +55,9 @@ export function useTripExtras(pd) {
       builder: {
         weekends: countWeekends(state), areas: stateNames(state), cards,
         weekendList: Array.isArray(state?.weekends) ? state.weekends : [],
+        // Areas on the table with places to stay picked but no accommodation idea or list yet (080).
+        noStayList: Object.entries(state?.areaStays || {}).filter(([area, pins]) => (pins || []).length && (!state.region || state.region === area)
+          && !stays.some((x) => x.area === area || (!x.area && state.region === area))).map(([area]) => area),
         teeOptions: tees.filter((t) => (t.times || []).length || (t.ranges || []).length).length,
         callJobIds: [...new Set([...tees.map((t) => t.job_id), ...Object.values(state?.callJobs || {})].filter(Boolean))],
       },

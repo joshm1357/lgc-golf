@@ -300,6 +300,22 @@ describe('calling the courses: one person for all, or per course', () => {
   });
 });
 
+describe('links travel with the vote; reminders for missing lists', () => {
+  it('the vote email carries a View places link for a place with a list', () => {
+    const m = buildVoteEmail({ app: 'https://x/', token: 't', first: 'Jo', planName: 'March', planId: PLAN, polls: [
+      { id: 'p', question: 'Where should we stay?', kind: 'other', purpose: 'stay', options: [{ id: 'o', label: 'Kiama list', link: 'https://www.airbnb.com.au/wishlists/v/1' }, { id: 'o2', label: 'Bad', link: 'javascript:alert(1)' }] },
+    ] });
+    expect(m.html).toContain('View places ↗');
+    expect(m.html).toContain('https://www.airbnb.com.au/wishlists/v/1');
+    expect(m.html).not.toContain('javascript:');
+    expect(m.text).toContain('View places: https://www.airbnb.com.au/wishlists/v/1');
+  });
+  it('the organiser is reminded when an area has places to stay but no list', () => {
+    const s = nextStep({ plan: { id: PLAN, status: 'planning', start_date: null }, stage: 'deciding', items: [], rsvps: [], me: 'o', isOrganiser: true, playerIds: ['o'], builder: { weekends: 1, noStayList: ['Kiama'] } });
+    expect(s.title).toBe('Find places to stay in Kiama');
+  });
+});
+
 describe('stay search links from the real requests', () => {
   const base = { town: 'Kiama', start: '2027-03-12', end: '2027-03-14', people: 12, bedrooms: 6, maxPerNight: 400 };
   it('each site gets bedrooms and the price cap', () => {

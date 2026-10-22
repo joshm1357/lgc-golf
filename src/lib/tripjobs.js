@@ -264,6 +264,11 @@ export function nextStep(ctx) {
       const first = calls[0];
       return step({ key: 'calls-wait', icon: '📞', title: `Waiting on ${plural(calls.length, 'call')} for tee times`, detail: `${nameOf(names, first.owner_id)} is on ${first.title.replace(/^📞\s*/, '')}.`, who: first.owner_id, label: 'See jobs', action: { type: 'tab', tab: 'jobs' } });
     }
+    // Places to stay on the table but no accommodation list yet (080): remind whoever's running it.
+    if (isOrganiser && (builder.noStayList || []).length) {
+      const area = builder.noStayList[0];
+      return step({ key: `stay-list:${area}`, icon: '🏠', title: `Find places to stay in ${area}`, detail: 'Search with the links, save a few to a list on Airbnb or Stayz, then paste the list link — it goes on the vote.', label: 'Build the trip', action: { type: 'builder' } });
+    }
     if (builder.teeOptions > 0 && isOrganiser) return step({ key: 'configs', icon: '🧩', title: 'Pick a trip or put it to a vote', detail: 'The tee times are in — choose the combination that works.', label: 'See the options', action: { type: 'builder' } });
     if (plan.start_date && isOrganiser) return step({ key: 'lock', icon: '🔒', title: 'Lock it in', detail: `${fmtRange(plan.start_date, plan.end_date)}${plan.location_name ? ` · ${plan.location_name}` : ''}. Then the to-do list is made.`, label: 'Lock it in', action: { type: 'lock' } });
     if (isOrganiser) return step({ key: 'weekends', icon: '📅', title: 'Pick 1–3 weekends', detail: 'Then put them to the group.', label: 'Build the trip', action: { type: 'builder' } });

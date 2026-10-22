@@ -19,6 +19,8 @@ import { answersFor, answerKind } from '../lib/emailvotes.js';
 import { sectionResults, organiserView, timeLeft, closesWord } from '../lib/callvote.js';
 import { EmailVoteLine } from './VoteEmail.jsx';
 import { ShareVoteButton } from './CallVote.jsx';
+import { addExtrasToPlan } from './ExtrasPanel.jsx';
+import { extraWins, extrasFromOptions } from '../lib/extras.js';
 import { OptionSheet, CloseSheet, optionTitle, everyone, shareNudge } from '../screens/Planner.jsx';
 
 const TONE = { yes: 'var(--navy)', maybe: '#7A5A00', no: 'var(--under)' };
@@ -159,6 +161,14 @@ export function PollCard({ poll, pd, inCard = false, asVoter = false }) {
               <button type="button" className="btn ghost sm" onClick={() => setSuggesting(true)}>+ Add an option</button>
               {decider && <button type="button" className="btn sm" onClick={() => setClosing(true)} data-testid="close-pick">Close now & pick the winner</button>}
             </div>
+          )}
+          {kind === 'extra' && decider && results.rows.some((r) => extraWins(r)) && (
+            <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} disabled={busy} data-testid="extras-winners"
+              onClick={() => run(async () => {
+                const won = results.rows.filter((r) => extraWins(r)).map((r) => r.option);
+                const r = await addExtrasToPlan(pd.plan, extrasFromOptions(won));
+                return r.budgetRows.length || r.jobRows.length ? `Added ${won.length} to the trip plan` : 'Already in the trip plan';
+              }).then((m) => m && toast(m))}>+ Add the winners to the trip plan ({results.rows.filter((r) => extraWins(r)).map((r) => r.option.label).join(', ')})</button>
           )}
           {!inCard && isOpen && <ShareVoteButton plan={pd.plan} title={poll.question} closes={poll.closes_on} />}
           {isOpen && me && (

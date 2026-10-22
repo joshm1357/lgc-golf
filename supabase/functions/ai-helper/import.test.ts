@@ -169,7 +169,7 @@ Deno.test('import: who can, the switch, the cap, and bad photos', async () => {
   const capped = await run({ usage: async () => ({ month: 61, today: 1 }) });
   assert(capped.capped);
   assertMatch((await run({}, { mode: 'import', text: 'hi' })).error, /Paste some text or add a photo/);
-  assertMatch((await run({}, { mode: 'import', images: [PHOTO, PHOTO, PHOTO, PHOTO, PHOTO] })).error, /Up to 4 photos/);
+  assertMatch((await run({}, { mode: 'import', images: Array(13).fill(PHOTO) })).error, /Up to 12 photos/);
   assertMatch((await run({}, { mode: 'import', images: ['data:text/html;base64,PHNjcmlwdD4='] })).error, /didn’t come through/);
   assertEquals(readImages(['data:image/png;base64,AAAA']), { ok: true, images: ['data:image/png;base64,AAAA'] });
   assertEquals(importConfig(OPENAI, 'vision-model', false).model, 'cheap-text');

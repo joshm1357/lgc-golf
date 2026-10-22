@@ -8,7 +8,7 @@ import { useFeature, useSession } from '../lib/store.jsx';
 import { isRoundFinished } from '../lib/replay.js';
 import { roundRecap, recapText, recapShare } from '../lib/roundrecap.js';
 import { shareText, appLink } from '../lib/push.js';
-import { inviteLink } from '../lib/invite.js';
+import { joinCodeNow, loadJoinCode } from '../lib/joincode.js';
 import { toast } from './ui.jsx';
 
 function useRoundReport(roundId, on) {
@@ -23,32 +23,20 @@ function useRoundReport(roundId, on) {
   return line;
 }
 
-/** The group's player join link, for organisers (only organisers can make one). Null for everyone else. */
-function useJoinLink(on) {
-  const [link, setLink] = useState(null);
-  useEffect(() => {
-    if (!on) return undefined;
-    let live = true;
-    supabase.rpc('group_invite', { p_role: 'player' })
-      .then(({ data }) => { if (live && data) setLink(inviteLink(data)); }, () => {});
-    return () => { live = false; };
-  }, [on]);
-  return link;
-}
-
 export default function RoundRecap({ round, board, course }) {
   const { status } = useSession();
   const replayOn = useFeature('replay');
   const commentaryOn = useFeature('commentary');
   const done = isRoundFinished(round, board);
   const report = useRoundReport(done ? round.id : null, commentaryOn);
-  const joinLink = useJoinLink(done && !!status?.is_admin && !status?.viewing);
   const lines = roundRecap(board, { done, courseName: course?.name || '' });
   if (!done || (!lines.length && !report)) return null;
   const share = async () => {
     const text = `${report ? `🎙️ ${report}\n\n` : ''}${recapText(lines, `${round.name}${course?.name && !round.name.includes(course.name) ? ` — ${course.name}` : ''}`)}`;
+    // The leaderboard link carries the group's join code (083): anyone not on the app joins, then lands on it.
+    if (!joinCodeNow() && !status?.viewing) await loadJoinCode(supabase, { role: status?.role, group: status?.group_id });
     const r = await shareText(recapShare(text, {
-      boardLink: appLink(`/?r=${round.id}`), joinLink, groupName: status?.look?.short_name || status?.group_name || '',
+      boardLink: appLink(`/?r=${round.id}`), groupName: status?.look?.short_name || status?.group_name || '',
     }));
     if (r === 'copied') toast('Copied — paste it into the group chat');
   };

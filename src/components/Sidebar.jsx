@@ -7,7 +7,7 @@ import { openFeedback } from './Feedback.jsx';
 import { DESKTOP } from '../lib/beta.js';
 
 /** Is the screen laptop-wide? Follows the window as it's resized. */
-function useDesktop() {
+export function useDesktop() {
   const q = `(min-width: ${DESKTOP}px)`;
   const [on, setOn] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.(q).matches);
   useEffect(() => {
@@ -36,7 +36,6 @@ function SidebarNav() {
   const look = status?.look || (status && status.legacy !== false ? { crest_url: 'builtin:lgc' } : null);
   const items = [
     { to: '/', label: 'Leaderboard', icon: Icon.board, end: true },
-    status?.is_admin && { to: '/desk', label: on.planner ? 'Trip desk' : 'Desk', icon: Icon.cog }, // Stage 11c
     on.cup && { to: '/cup', label: 'The Cup', icon: Icon.trophy },
     on.feed && { to: '/feed', label: 'Feed', icon: Icon.feed },
     on.side_comps && { to: '/comps', label: 'Comps', icon: Icon.flag },

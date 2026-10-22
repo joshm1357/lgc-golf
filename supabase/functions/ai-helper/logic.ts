@@ -18,6 +18,7 @@ import { LIVE_TOOLS, liveTool, pickRound, pickTrip } from './live.ts';
 import { goToTool, checkGoTo, cleanContext, DESTINATIONS, type GoTo } from './routes.ts';
 import {
   PLAN_TOOLS, PLAN_TOOL_NAMES, planSystem, validateTripPlan, tripPlanSummary, applyTripPlan, tripPlanIds,
+  CHAT_TOOLS, CHAT_TOOL_NAMES, planChatSystem, validatePlanChat, chatMessages, chatDraftIn,
   type TripPlanContext, type PlanApplyDb,
 } from './plan.ts';
 
@@ -50,6 +51,8 @@ export const MODES: Record<string, { area: string; logMode: string; organiser: b
   history: { area: 'ask', logMode: 'history', organiser: false },
   ask: { area: 'ask', logMode: 'history', organiser: false },
   plan: { area: 'plan', logMode: 'setup', organiser: true, planner: true },
+  // The planning chat (080): one turn = one question against the cap, like the other modes.
+  plan_chat: { area: 'plan', logMode: 'setup', organiser: true, planner: true },
   apply: { area: 'apply', logMode: 'apply', organiser: true },
   plan_apply: { area: 'plan_apply', logMode: 'apply', organiser: true, planner: true },
 };
@@ -694,7 +697,7 @@ export async function helperRequest(body: Any, d: Deps): Promise<Record<string, 
 
   if (!d.ai) return { error: NOT_ON_YET };
   const text = String(body?.text ?? '').replace(/[<>]/g, ' ').trim().slice(0, 600);
-  if (text.length < 3) return { error: mode === 'setup' ? 'Say a bit about the trip first.' : mode === 'plan' ? 'Say a bit about the trip you want first.' : 'Ask a question first.' };
+  if (text.length < 3) return { error: mode === 'setup' ? 'Say a bit about the trip first.' : mode === 'plan' || mode === 'plan_chat' ? 'Say a bit about the trip you want first.' : 'Ask a question first.' };
 
   // The cap, safe against many questions at once: this question's row goes in FIRST, then the count (which
   // includes it and any others in flight). Over the limit → the row is marked as a cap hit (which never counts)
@@ -745,6 +748,20 @@ export async function helperRequest(body: Any, d: Deps): Promise<Record<string, 
           return v.ok ? { ok: true, value: v.plan } : { ok: false, errors: v.errors };
         },
       });
+    } else if (mode === 'plan_chat') {
+      const tctx = await d.tripPlanContext(body?.draft);
+      const convo = chatMessages(body?.messages);
+      const draftNow = chatDraftIn(body?.draft, tctx);
+      result = await runLoop({
+        ...common, system: planChatSystem(today, group), tools: CHAT_TOOLS, allowed: CHAT_TOOL_NAMES, maxTokens: LIMITS.planMaxTokens,
+        userText: `${convo.length ? `${asData('conversation', convo)}\n` : ''}${draftNow ? `${asData('current_draft', draftNow)}\n` : ''}<request>${text}</request>`,
+        exec: (name, input) => d.planTool(name, input),
+        stopTool: 'reply_with_draft',
+        onStop: async (input) => {
+          const v = validatePlanChat(input, await d.tripPlanContext(input?.draft));
+          return v.ok ? { ok: true, value: v.value } : { ok: false, errors: v.errors };
+        },
+      });
     } else {
       let ix: Ix | null = null;
       const asker = d.status.player_name ? clean(d.status.player_name, 40) : null;
@@ -785,6 +802,10 @@ export async function helperRequest(body: Any, d: Deps): Promise<Record<string, 
   }
   if (mode === 'plan') {
     if (result.kind === 'stop') return { trip_plan: result.value, summary: tripPlanSummary(result.value), remaining, log_id };
+    return { message: result.text, remaining, log_id };
+  }
+  if (mode === 'plan_chat') {
+    if (result.kind === 'stop') return { chat: { ...result.value, summary: tripPlanSummary(result.value.draft) }, remaining, log_id };
     return { message: result.text, remaining, log_id };
   }
   return { answer: result.kind === 'text' ? result.text : '', remaining, log_id, ...(go ? { go } : {}) };

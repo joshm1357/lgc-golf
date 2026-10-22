@@ -188,13 +188,20 @@ for (const [name, cost, sleeps] of [['Beach House', '2400', '12'], ['Farm Stay',
   await sheet().getByText(name, { exact: true }).waitFor({ timeout: 5000 });
 }
 await shot('tp4-shortlist');
-await sheet().getByRole('button', { name: 'Put it to the group' }).click();
-await page.waitForTimeout(800);
+// Call the vote (080): the shortlist with tick boxes, then How it goes out.
+await sheet().first().getByTestId('stays-call-vote').click();
+await page.getByTestId('call-vote').waitFor({ timeout: 5000 });
+check((await page.getByTestId('call-vote').locator('input[type=checkbox]').count()) === 2, 'Call the vote lists both places, ticked');
+await page.getByTestId('call-the-vote').click();
+await page.getByTestId('how-it-goes-out').waitFor({ timeout: 5000 });
+check(true, 'after calling: How it goes out');
+await page.getByRole('button', { name: 'Done' }).click();
+await page.waitForTimeout(400);
 const stayPoll = db.plan_polls.find((p) => p.purpose === 'stay');
 check(!!stayPoll && db.plan_options.filter((o) => o.poll_id === stayPoll.id).length === 2, 'a vote with the two places');
 check(notes.filter((n) => n.type === 'poll_open').length === 1, 'one vote notification');
 await page.keyboard.press('Escape');
-await waitNext(/Have your say: Where should we stay\?/, 'the stay vote (the organiser hasn’t voted yet)');
+await waitNext(/Where should we stay\? vote/, 'the stay vote: the organiser sees the results step (080), not "Have your say"');
 
 // The vote closes: Beach House wins.
 stayPoll.status = 'closed';

@@ -1,0 +1,55 @@
+/* ---------- Organising on a desktop (080, Josh: "the organising is likely to mostly occur on the desktop") ----------
+   Organiser screens use the width: the region page has a big map with the lists beside it, Compare is a real table,
+   Call the vote and the planning chat open as a wide two-pane panel, results are a table, tee times a grid.
+   Phones (under 1024 px) keep the stacked layout. */
+.as-grid { display: block; }
+.as-grid > .as-map { margin-bottom: 10px; }
+.cmp-table { display: none; }
+.res-table, .tee-grid { display: none; }
+.pc-aside, .cv-preview { display: none; }
+@media (min-width: 1024px) {
+  .app.with-side > .page.tb-wide { max-width: 1440px; padding-left: 24px; padding-right: 24px; }
+  .tb-layout.single { display: block; }
+  .as-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; align-items: start; }
+  .as-grid > .as-map { position: sticky; top: 12px; margin: 0; }
+  .as-grid .tb-map.tb-map-tall { height: 72vh; }
+  .tb-compare { display: none; }
+  .cmp-table { display: table; width: 100%; border-collapse: separate; border-spacing: 0; background: var(--card, #fff); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .cmp-table th, .cmp-table td { padding: 10px 12px; border-bottom: 1px solid var(--line-soft); vertical-align: top; text-align: left; font-size: 14px; }
+  .cmp-table thead th { background: var(--navy); color: #fff; font-size: 16px; }
+  .cmp-table tbody th { width: 140px; color: var(--muted); font-weight: 700; white-space: nowrap; }
+  .res-rows { display: none; }
+  .res-table { display: block; overflow-x: auto; }
+  .res-table table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .res-table th, .res-table td { padding: 6px 8px; border-bottom: 1px solid var(--line-soft); text-align: center; white-space: nowrap; }
+  .res-table th:first-child, .res-table td:first-child { text-align: left; white-space: normal; min-width: 180px; }
+  .res-table tr.lead td { background: #FBFAF4; }
+  .tee-grid { display: block; overflow-x: auto; }
+  .tee-grid table { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--card, #fff); }
+  .tee-grid th, .tee-grid td { padding: 8px; border: 1px solid var(--line-soft); text-align: center; vertical-align: top; }
+  .tee-grid th:first-child, .tee-grid td:first-child { text-align: left; }
+  .sheet.wide { max-width: min(1180px, 96vw); }
+  .pc-grid, .cv-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  .pc-aside, .cv-preview { display: block; position: sticky; top: 0; }
+  .pc-inline-card { display: none; }
+}
+@media (min-width: 1280px) {
+  .sheet.wide { height: 100vh; }
+}
+
+/* ---------- Organise on a laptop (22 Oct: the Trip desk folded into Trips) ----------
+   For the trip's organisers at 1024 px and up: the Organise tabs on the left, the trip's panels down the right
+   (screens/OrganisePanels.jsx). Phones keep the one column. */
+@media (min-width: 1024px) {
+  .app.with-side > .page.org-desk-page { max-width: 1440px; padding-left: 24px; padding-right: 60px; } /* room for the folded Caddie tab */
+  .org-desk { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 420px); gap: 20px; align-items: start; }
+  .org-desk > .org-main { min-width: 0; }
+  .org-desk > .org-main > .section { padding-left: 0; padding-right: 0; }
+  .org-side { display: flex; flex-direction: column; gap: 12px; padding: 12px 0 16px; min-width: 0; }
+  .org-glance { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--card, #fff); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+  .org-glance .desk-count { font-size: 26px; white-space: nowrap; }
+  .org-glance .desk-switch { flex: 1 1 100%; max-width: none; }
+}
+@media (min-width: 1600px) {
+  .org-desk { grid-template-columns: minmax(0, 1fr) 480px; }
+}

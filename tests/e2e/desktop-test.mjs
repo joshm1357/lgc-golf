@@ -1,9 +1,12 @@
 // Stage 11c full desktop browser check, 21 Oct 2026. Fake database only.
 // Usage: node desktop-test.mjs <base> <shotDir> [baselineBase]
 //   e.g. node desktop-test.mjs http://localhost:4323/lgc-golf/ ./shots-desktop http://localhost:4329/lgc-golf/
-// At 1280 and 1920 px (laptop), 768 px (tablet) and 375 px (phone): open the Trip desk, close a vote, add a cost,
-// enter a paper card with the keyboard only, paste players with a preview. With a baseline build's address, the
-// main phone screens are also compared at 375 px, before and after, to show phones haven't changed.
+// At 1280 and 1920 px (laptop), 768 px (tablet) and 375 px (phone): an old /desk link opens the trip's Organise view
+// (on a laptop with the trip's panels down the right: close a vote, "n" for a new cost), enter a paper card from the
+// round's tools with the keyboard only, paste players from Group & invites with a preview. Updated 22 Oct when the
+// Trip desk folded into Trips (old /desk links forward; the sidebar has no Trip desk). With a baseline build's
+// address, the main phone screens are also compared at 375 px, before and after. SHOTS_1440=<dir> sets where the
+// 1440 × 900 screenshots go (default <shotDir>/1440).
 import { chromium } from '/opt/npm-tools/node_modules/playwright/index.mjs';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
@@ -167,48 +170,83 @@ async function open(width, { mobile = false } = {}) {
 }
 const go = async (page, hash) => { await page.goto(`${BASE}#${hash}`); };
 
-// The four jobs, at a given width.
+const SHOTS_1440 = process.env.SHOTS_1440 || `${SHOTS}/1440`;
+fs.mkdirSync(SHOTS_1440, { recursive: true });
+const hashOf = (page) => decodeURIComponent(new URL(page.url()).hash);
+
+// The jobs, at a given width. Laptop (1024 px and up): the trip's panels are part of Trips → Organise.
+// Tablet and phone: Organise is unchanged (no panels), and the tools are reached from their new homes.
 async function flow(width, mobile = false) {
   db = freshDb();
   const tag = `${width}`;
+  const laptop = width >= 1024;
   const { ctx, page } = await open(width, { mobile });
 
-  // 1. The Trip desk opens on the trip that matters now.
+  // 1. An old /desk link forwards to the trip that matters now, on its Organise view.
   await go(page, '/desk');
-  await page.getByTestId('trip-desk').waitFor({ timeout: 15000 });
-  await page.getByTestId('panel-costs').getByText('House').waitFor({ timeout: 10000 });
-  const panels = await page.locator('.desk-panel').evaluateAll((els) => els.map((e) => e.dataset.testid));
-  check(['panel-people', 'panel-votes', 'panel-costs', 'panel-jobs', 'panel-rooms', 'panel-checklist', 'panel-rounds', 'panel-tribunal'].every((p) => panels.includes(p)), `${tag}: every panel is on the Trip desk (${panels.join(', ')})`);
-  check((await page.getByTestId('desk-countdown').innerText()).includes('6 weeks'), `${tag}: the countdown says in 6 weeks`);
-  check((await page.getByTestId('panel-people').innerText()).includes('Haven’t said'), `${tag}: who's in shows who hasn't said`);
-  check((await page.getByTestId('panel-rounds').innerText()).includes('8:00'), `${tag}: rounds show tee times`);
-  check((await page.getByTestId('panel-tribunal').innerText()).includes('Di'), `${tag}: the open Tribunal case is listed`);
-  await page.screenshot({ path: `${SHOTS}/${tag}-1-desk.png`, fullPage: true });
+  await page.waitForFunction((p) => location.hash.includes(`/plan/${p}`), PLAN, { timeout: 15000 });
+  check(hashOf(page).includes('view=organise'), `${tag}: /desk forwards to the trip's Organise view (${hashOf(page)})`);
+  if (laptop) {
+    await page.getByTestId('organise-panels').waitFor({ timeout: 15000 });
+    await page.getByTestId('panel-kitty').waitFor({ timeout: 10000 });
+    const panels = await page.locator('.org-side .desk-panel').evaluateAll((els) => els.map((e) => e.dataset.testid));
+    check(['panel-people', 'panel-votes', 'panel-kitty', 'panel-jobs', 'panel-rooms', 'panel-checklist', 'panel-rounds', 'panel-tribunal'].every((p) => panels.includes(p)), `${tag}: every panel is on Organise (${panels.join(', ')})`);
+    check((await page.getByTestId('desk-countdown').innerText()).includes('6 weeks'), `${tag}: the countdown says in 6 weeks`);
+    check((await page.getByTestId('panel-people').innerText()).includes('Haven’t said'), `${tag}: who's in shows who hasn't said`);
+    check((await page.getByTestId('panel-rounds').innerText()).includes('8:00'), `${tag}: rounds show tee times`);
+    check((await page.getByTestId('panel-tribunal').innerText()).includes('Di'), `${tag}: the open Tribunal case is listed`);
+    check((await page.getByTestId('panel-kitty').innerText()).includes('$1,200'), `${tag}: the kitty panel shows the total`);
+    const main = await page.locator('.org-main').boundingBox();
+    const side = await page.getByTestId('organise-panels').boundingBox();
+    check(main && side && side.x > main.x + main.width - 1, `${tag}: the panels sit down the right of the tabs`);
+    await page.screenshot({ path: `${SHOTS}/${tag}-1-organise.png`, fullPage: true });
 
-  // 2. Close a vote (the leading option is picked by default).
-  await page.getByTestId('panel-votes').getByRole('button', { name: 'Close & pick' }).click();
-  await page.getByTestId('panel-votes').getByText('No votes open').waitFor({ timeout: 8000 });
-  check(db.plan_polls[0].status === 'closed' && db.plan_polls[0].winner_option_id === 'o1', `${tag}: the vote is closed with Navy as the winner`);
+    // 2. Close a vote from its panel (the leading option is picked by default).
+    await page.getByTestId('panel-votes').getByRole('button', { name: 'Close & pick' }).click();
+    await page.getByTestId('panel-votes').getByText('No votes open').waitFor({ timeout: 8000 });
+    check(db.plan_polls[0].status === 'closed' && db.plan_polls[0].winner_option_id === 'o1', `${tag}: the vote is closed with Navy as the winner`);
 
-  // 3. Add a cost with the keyboard: n, type, Tab, amount, Enter.
-  await page.locator('body').click({ position: { x: 5, y: 5 } }).catch(() => {});
-  await page.keyboard.press('Escape');
-  await page.keyboard.press('n');
-  const focused = await page.evaluate(() => document.activeElement?.getAttribute('aria-label'));
-  check(focused === 'New cost: what for', `${tag}: "n" starts a new cost (${focused})`);
-  if (focused !== 'New cost: what for') await page.getByLabel('New cost: what for').focus();
-  await page.keyboard.type('Green fees');
-  await page.keyboard.press('Tab');
-  await page.keyboard.type('600');
-  await page.keyboard.press('Enter');
-  await page.getByTestId('costs-table').getByText('Green fees').waitFor({ timeout: 8000 });
-  check(db.plan_costs.some((c) => c.title === 'Green fees' && Number(c.amount) === 600), `${tag}: the cost is saved`);
-  check((await page.getByTestId('who-owes').innerText()).includes('→'), `${tag}: who pays whom is shown`);
-  await page.screenshot({ path: `${SHOTS}/${tag}-2-cost.png`, fullPage: true });
+    // 3. Add a cost with the keyboard: n opens the Kitty tab's costs table, type, Tab, amount, Enter.
+    await page.locator('body').click({ position: { x: 5, y: 5 } }).catch(() => {});
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('n');
+    await page.getByTestId('costs-table').waitFor({ timeout: 8000 });
+    await page.waitForTimeout(300);
+    const focused = await page.evaluate(() => document.activeElement?.getAttribute('aria-label'));
+    check(focused === 'New cost: what for', `${tag}: "n" starts a new cost (${focused})`);
+    check(hashOf(page).includes('tab=kitty'), `${tag}: "n" opens the Kitty tab`);
+    if (focused !== 'New cost: what for') await page.getByLabel('New cost: what for').focus();
+    await page.keyboard.type('Green fees');
+    await page.keyboard.press('Tab');
+    await page.keyboard.type('600');
+    await page.keyboard.press('Enter');
+    await page.getByTestId('costs-table').getByText('Green fees').waitFor({ timeout: 8000 });
+    check(db.plan_costs.some((c) => c.title === 'Green fees' && Number(c.amount) === 600), `${tag}: the cost is saved`);
+    check((await page.getByTestId('who-owes').innerText()).includes('→'), `${tag}: who pays whom is shown`);
+    await page.screenshot({ path: `${SHOTS}/${tag}-2-cost.png`, fullPage: true });
+  } else {
+    await page.getByRole('tablist', { name: 'Sections' }).waitFor({ timeout: 15000 });
+    await page.waitForTimeout(800);
+    check(await page.getByTestId('organise-panels').count() === 0, `${tag}: Organise on a ${mobile ? 'phone' : 'tablet'} is unchanged (no panels)`);
+    await page.screenshot({ path: `${SHOTS}/${tag}-1-organise.png`, fullPage: true });
+  }
 
-  // 4. A paper card, keyboard only: Friday Stableford, 3 players.
-  await go(page, `/desk/card/${R1}`);
+  // 4. Paper cards from the round's tools on the leaderboard (buttons on a laptop, ⋯ on a phone), keyboard only.
+  await go(page, '/');
+  await page.getByTestId('round-tools').waitFor({ timeout: 15000 });
+  if (laptop) {
+    check(await page.getByTestId('round-tools').getByRole('link', { name: /Present/ }).isVisible(), `${tag}: the round's tools are buttons`);
+    await page.getByTestId('round-tools').getByRole('link', { name: /Paper cards/ }).click();
+  } else {
+    check(!(await page.getByTestId('round-tools').getByRole('link', { name: /Present/ }).isVisible()), `${tag}: the round's tools are tucked in a ⋯ menu`);
+    await page.getByRole('button', { name: 'Round tools' }).click();
+    const sheet = page.locator('.sheet');
+    check(await sheet.getByRole('link', { name: /Paper cards/ }).count() === 1 && await sheet.getByRole('link', { name: /Present/ }).count() === 1 && await sheet.getByRole('link', { name: /Print/ }).count() === 1, `${tag}: the ⋯ menu has paper cards, Present and Print`);
+    await page.screenshot({ path: `${SHOTS}/${tag}-3-round-menu.png` });
+    await sheet.getByRole('link', { name: /Paper cards/ }).click();
+  }
   await page.getByTestId('pc-0-1').waitFor({ timeout: 10000 });
+  check(hashOf(page) === `#/round/${R1}/cards`, `${tag}: paper cards live on the round (${hashOf(page)})`);
   await page.getByTestId('pc-0-1').focus();
   const card = [5, 4, 3, 6, 4, 'p', 3, 5, 5, 4, 4, 4, 5, 4, 3, 4, 6, 4];
   for (const v of card) { await page.keyboard.type(String(v)); await page.keyboard.press('Tab'); }
@@ -228,16 +266,19 @@ async function flow(width, mobile = false) {
   check(await page.getByTestId('pc-2-1').getAttribute('aria-invalid') === 'true', `${tag}: the bad box is marked`);
   const pts = await page.getByTestId('pc-score-0').innerText();
   check(pts === '41', `${tag}: Kurt's Stableford points add up as you type (${pts})`);
-  await page.screenshot({ path: `${SHOTS}/${tag}-3-card.png`, fullPage: true });
+  await page.screenshot({ path: `${SHOTS}/${tag}-4-card.png`, fullPage: true });
 
-  // 5. Paste players with a preview.
-  await go(page, '/desk/players');
+  // 5. Paste players with a preview — from Group & invites (a tab on a laptop, a link on a phone).
+  await go(page, '/group');
+  if (laptop) await page.getByRole('navigation', { name: 'Group' }).getByRole('link', { name: 'Players table' }).click();
+  else await page.getByTestId('players-table-link').click();
   await page.getByTestId('players-table').waitFor({ timeout: 10000 });
+  check(hashOf(page) === '#/group/players', `${tag}: the players table lives in Group & invites (${hashOf(page)})`);
   await page.getByLabel('Paste players').fill('Name\tHandicap\nZed New\t11\nBig Al\t15\nBo Test\t8\nGus\t77');
   const prev = await page.getByTestId('paste-preview').innerText();
   check(prev.includes('New') && prev.includes('20 → 15') && prev.includes('No change') && prev.includes('Skipped'), `${tag}: the preview shows new, change, no change and skipped`);
   check(db.players.length === 6, `${tag}: nothing saved before Save`);
-  await page.screenshot({ path: `${SHOTS}/${tag}-4-paste.png`, fullPage: true });
+  await page.screenshot({ path: `${SHOTS}/${tag}-5-paste.png`, fullPage: true });
   await page.getByRole('button', { name: 'Save 2 players' }).click();
   await page.getByTestId('players-table').getByText('Zed New').waitFor({ timeout: 8000 });
   check(db.players.some((p) => p.name === 'Zed New' && p.handicap === 11) && db.players.find((p) => p.id === pid(1)).handicap === 15, `${tag}: the new player is added and Al's handicap changed`);
@@ -255,27 +296,41 @@ await flow(375, true);
   const { ctx, page } = await open(1280);
   await go(page, '/');
   await page.locator('.side').waitFor({ timeout: 15000 });
-  check(await page.locator('.side').getByText('Trip desk').count() === 1, 'the sidebar has the Trip desk');
+  const side = await page.locator('.side').innerText();
+  check(!/Trip desk|\bDesk\b/.test(side), 'the sidebar has no Trip desk');
+  check(side.includes('Trips') && side.includes('Courses') && side.includes('Group & invites'), 'the sidebar still has Trips, Courses and Group & invites');
   // Shortcuts: ? list, Esc, g t, g l, / finder.
   await page.keyboard.press('?');
   await page.getByTestId('shortcut-list').waitFor({ timeout: 4000 });
-  await page.screenshot({ path: `${SHOTS}/1280-5-shortcuts.png` });
+  check(!(await page.getByTestId('shortcut-list').innerText()).includes('desk'), 'the shortcut list doesn’t mention the desk');
+  await page.screenshot({ path: `${SHOTS}/1280-6-shortcuts.png` });
   await page.keyboard.press('Escape');
   check(await page.getByTestId('shortcut-list').count() === 0, 'Esc closes the shortcut list');
   await page.keyboard.press('g'); await page.keyboard.press('t');
-  await page.getByTestId('trip-desk').waitFor({ timeout: 8000 });
-  check(page.url().includes('#/desk'), 'g t opens the Trip desk');
+  await page.waitForTimeout(800);
+  check(hashOf(page) === '#/plan', `g t opens Trips (${hashOf(page)})`);
   await page.keyboard.press('g'); await page.keyboard.press('l');
   await page.waitForTimeout(500);
   check(/#\/$/.test(page.url()), `g l goes to the leaderboard (${page.url()})`);
+  await page.keyboard.press('g'); await page.keyboard.press('p');
+  await page.getByTestId('players-table').waitFor({ timeout: 8000 });
+  check(hashOf(page) === '#/group/players', 'g p opens the players table');
   await page.keyboard.press('/');
   await page.getByRole('textbox', { name: 'Find a screen or a player' }).fill('big al');
   await page.keyboard.press('Enter');
   await page.waitForTimeout(500);
   check(page.url().includes(`/player/${pid(1)}`), 'the / finder finds a player by nickname');
 
-  // Costs table: inline edit, sort, CSV.
-  await go(page, '/desk');
+  // Every old /desk address forwards.
+  for (const [from, to] of [[`/desk/trip/${PLAN}`, `#/plan/${PLAN}?view=organise`], ['/desk/players', '#/group/players'], ['/desk/courses', '#/courses/paste'],
+    ['/desk/cards', '#/cards'], [`/desk/card/${R1}`, `#/round/${R1}/cards`], [`/desk/present/${R1}`, `#/round/${R1}/present`], [`/desk/print/${R1}`, `#/round/${R1}/print`]]) {
+    await go(page, from);
+    await page.waitForFunction((t) => decodeURIComponent(location.hash) === t, to, { timeout: 10000 }).catch(() => {});
+    check(hashOf(page) === to, `${from} forwards to ${to.slice(1)} (${hashOf(page)})`);
+  }
+
+  // Costs table on Organise → Kitty: inline edit, CSV.
+  await go(page, `/plan/${PLAN}?view=organise&tab=kitty`);
   await page.getByTestId('costs-table').getByText('House').waitFor({ timeout: 10000 });
   await page.getByTestId('costs-table').getByRole('button', { name: '$1,200' }).click();
   await page.getByLabel('Edit amount').fill('1500');
@@ -289,7 +344,7 @@ await flow(375, true);
   check(file.suggestedFilename() === 'hunter-weekend-costs.csv' && csv.includes('House,1500.00,Total,Kurt Test'), `the costs CSV downloads (${file.suggestedFilename()})`);
 
   // Players table: sort, filter, edit a handicap, history.
-  await go(page, '/desk/players');
+  await go(page, '/group/players');
   await page.getByTestId('players-table').waitFor({ timeout: 10000 });
   await page.getByRole('button', { name: 'Handicap', exact: true }).click();
   const firstSorted = await page.getByTestId('player-row').first().innerText();
@@ -305,54 +360,118 @@ await flow(375, true);
   await page.getByRole('button', { name: 'History' }).first().click();
   check((await page.getByTestId('handicap-history').innerText()).includes('22 → 20'), 'handicap history shows');
 
-  // Course scorecard paste.
-  await go(page, '/desk/courses');
+  // Course scorecard paste, from the Courses screen.
+  await go(page, '/courses');
+  await page.getByTestId('paste-scorecard').click();
+  await page.getByLabel('Paste the scorecard').waitFor({ timeout: 10000 });
+  check(hashOf(page) === '#/courses/paste', 'Paste a scorecard is on Courses');
   await page.getByLabel('New course name').fill('Pasted Links');
   const row = (label, vals) => [label, ...vals].join('\t');
   await page.getByLabel('Paste the scorecard').fill([row('Hole', holes.map((h) => h.n)), row('Par', PAR), row('Index', SI)].join('\n'));
   check((await page.getByTestId('course-preview').innerText()).includes('72'), 'the scorecard preview shows par 72');
-  await page.screenshot({ path: `${SHOTS}/1280-6-course.png`, fullPage: true });
+  await page.screenshot({ path: `${SHOTS}/1280-7-course.png`, fullPage: true });
   await page.getByRole('button', { name: 'Add this course' }).click();
   await page.waitForTimeout(600);
   const added = db.courses.find((c) => c.name === 'Pasted Links');
   check(added && added.holes.length === 18 && added.holes[4].si === 1, 'the pasted course is saved');
+  await page.getByRole('link', { name: '‹ Courses' }).click();
+  await page.waitForTimeout(400);
+  check(hashOf(page) === '#/courses', 'the paste page leads back to Courses');
 
-  // Present and print.
+  // Present and print, from the round's tools.
   db.scores.push({ id: crypto.randomUUID(), round_id: R1, subject_id: pid(0), subject_type: 'player', hole: 1, strokes: 4, picked_up: false, updated_at: now });
-  await go(page, `/desk/present/${R1}`);
+  await go(page, '/');
+  await page.getByTestId('round-tools').getByRole('link', { name: /Present/ }).click();
   await page.getByTestId('present-board').waitFor({ timeout: 10000 });
+  check(hashOf(page) === `#/round/${R1}/present`, 'Present opens from the round');
   check(await page.getByTestId('present-board').locator('tbody tr').count() === 3, 'Present shows the leaderboard big');
-  await page.screenshot({ path: `${SHOTS}/1280-7-present.png` });
+  await page.screenshot({ path: `${SHOTS}/1280-8-present.png` });
   await page.keyboard.press('Escape');
-  await go(page, `/desk/print/${R1}`);
+  await page.waitForTimeout(400);
+  await page.getByTestId('round-tools').getByRole('link', { name: /Print/ }).click();
   await page.getByTestId('print-results').waitFor({ timeout: 10000 });
+  check(hashOf(page) === `#/round/${R1}/print`, 'Print opens from the round');
   check(await page.getByTestId('print-cards').locator('tbody tr').count() === 3, 'the print page has every scorecard');
   await page.emulateMedia({ media: 'print' });
-  check(!(await page.locator('.side').isVisible()) && !(await page.locator('.desk-nav').isVisible()), 'printing hides the sidebar and tabs');
-  await page.screenshot({ path: `${SHOTS}/1280-8-print.png`, fullPage: true });
+  check(!(await page.locator('.side').isVisible()) && !(await page.locator('.desk-nav').isVisible()), 'printing hides the sidebar and the back bar');
+  await page.screenshot({ path: `${SHOTS}/1280-9-print.png`, fullPage: true });
   await page.emulateMedia({ media: 'screen' });
   await ctx.close();
 }
 
-// Sheets as a side panel on a wide screen, and three columns at 1920.
+// Sheets as a side panel on a wide screen.
 {
   db = freshDb();
   const { ctx, page } = await open(1920);
-  await go(page, '/desk');
-  await page.getByTestId('panel-costs').waitFor({ timeout: 15000 });
-  const xs = await page.locator('.desk-panel').evaluateAll((els) => [...new Set(els.map((e) => Math.round(e.getBoundingClientRect().left)))]);
-  check(xs.length === 3, `three columns of panels at 1920 (${xs.join(', ')})`);
   await go(page, `/plan/${PLAN}?tab=kitty`);
   await page.getByRole('button', { name: /Add a cost/ }).first().click();
   const box = await page.locator('.sheet').boundingBox();
   check(box && Math.abs(box.x + box.width - 1920) < 2 && box.height > 1000, `a sheet opens as a side panel on the right (${box && Math.round(box.x)})`);
-  await page.screenshot({ path: `${SHOTS}/1920-9-side-panel.png` });
+  await page.screenshot({ path: `${SHOTS}/1920-10-side-panel.png` });
   await ctx.close();
 }
 
-// Phones unchanged: the main screens, before and after, at 375 px.
+// A player (not an organiser) on a laptop: no panels on Organise, no round tools, no Players table tab.
+{
+  db = freshDb();
+  const { ctx, page } = await open(1280);
+  await page.route('https://*.supabase.co/rest/v1/rpc/my_status*', (route) => route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' },
+    body: JSON.stringify({ is_member: true, is_admin: false, player_id: pid(1), group_name: 'Hunter Weekend', group_id: GROUP, role: 'player', legacy: false, groups: [{ id: GROUP, name: 'Hunter Weekend', slug: 'hunter', role: 'player' }] }) }));
+  await go(page, `/plan/${PLAN}?view=organise`);
+  await page.getByRole('tablist', { name: 'Sections' }).waitFor({ timeout: 15000 });
+  await page.waitForTimeout(800);
+  check(await page.getByTestId('organise-panels').count() === 0, 'a player sees Organise as before (no organiser panels)');
+  await go(page, '/');
+  await page.locator('.side').waitFor({ timeout: 10000 });
+  await page.waitForTimeout(600);
+  check(await page.getByTestId('round-tools').count() === 0, 'a player has no round tools');
+  await go(page, '/group');
+  await page.waitForTimeout(800);
+  check(await page.getByRole('navigation', { name: 'Group' }).count() === 0 && await page.getByTestId('players-table-link').count() === 0, 'a player has no Players table tab');
+  await ctx.close();
+}
+
+// Screenshots at 1440 × 900 (the window as seen): Organise, the players table, pasting a scorecard, the round's tools.
+{
+  db = freshDb();
+  const { ctx, page } = await open(1440);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await go(page, `/plan/${PLAN}?view=organise`);
+  await page.getByTestId('panel-tribunal').waitFor({ timeout: 15000 });
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: `${SHOTS_1440}/1-organise.png` });
+  await go(page, `/plan/${PLAN}?view=organise&tab=kitty`);
+  await page.getByTestId('costs-table').waitFor({ timeout: 10000 });
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: `${SHOTS_1440}/2-organise-kitty.png` });
+  await go(page, '/group');
+  await page.getByRole('navigation', { name: 'Group' }).waitFor({ timeout: 10000 });
+  await page.waitForTimeout(1200);
+  await page.screenshot({ path: `${SHOTS_1440}/3-group-tabs.png` });
+  await page.getByRole('navigation', { name: 'Group' }).getByRole('link', { name: 'Players table' }).click();
+  await page.getByTestId('players-table').waitFor({ timeout: 10000 });
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: `${SHOTS_1440}/4-group-players-table.png` });
+  await go(page, '/courses');
+  await page.getByTestId('paste-scorecard').waitFor({ timeout: 10000 });
+  await page.screenshot({ path: `${SHOTS_1440}/5-courses.png` });
+  await page.getByTestId('paste-scorecard').click();
+  await page.getByLabel('New course name').fill('Pasted Links');
+  const row = (label, vals) => [label, ...vals].join('\t');
+  await page.getByLabel('Paste the scorecard').fill([row('Hole', holes.map((h) => h.n)), row('Par', PAR), row('Index', SI)].join('\n'));
+  await page.getByTestId('course-preview').waitFor({ timeout: 5000 });
+  await page.screenshot({ path: `${SHOTS_1440}/6-courses-paste.png` });
+  await go(page, '/');
+  await page.getByTestId('round-tools').waitFor({ timeout: 10000 });
+  await page.getByTestId('round-tools').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `${SHOTS_1440}/7-round-tools.png` });
+  await ctx.close();
+}
+
+// Phones: the main screens, before and after, at 375 px. (The leaderboard gains the organiser's ⋯ Round tools
+// button and Group & invites a Players table link — the rest should match.)
 if (BASELINE) {
-  const screens = [['/', 'leaderboard'], [`/score/${R1}`, 'score'], ['/feed', 'feed'], ['/more', 'more'], ['/plan', 'trips'], [`/plan/${PLAN}`, 'plan'], ['/admin', 'admin']];
+  const screens = [['/', 'leaderboard'], [`/score/${R1}`, 'score'], ['/feed', 'feed'], ['/more', 'more'], ['/plan', 'trips'], [`/plan/${PLAN}`, 'plan'], [`/plan/${PLAN}?view=organise`, 'organise'], ['/admin', 'admin']];
   for (const [base, label] of [[BASELINE, 'before'], [BASE, 'after']]) {
     db = freshDb();
     const { ctx, page } = await open(375, { mobile: true });
@@ -364,6 +483,7 @@ if (BASELINE) {
     await ctx.close();
   }
   for (const [, name] of screens) {
+    if (name === 'leaderboard') continue; // changes on purpose (the ⋯ Round tools button)
     const a = fs.readFileSync(`${SHOTS}/phone-${name}-before.png`);
     const b = fs.readFileSync(`${SHOTS}/phone-${name}-after.png`);
     check(a.equals(b), `375 px ${name}: identical before and after`);

@@ -3,9 +3,9 @@ import { supabase, friendlyError } from '../lib/supabase.js';
 import { useSession } from '../lib/store.jsx';
 import { setCurrentGroup } from '../lib/group.js';
 import { inviteCode } from '../lib/invite.js';
-import { personalCode } from '../lib/personal.js';
+import { linkTarget, inviteNext, readLink, pageToKeep, targetQuery } from '../lib/links.js';
 import { SIGN_IN, signInWith, signInWithEmail, verifyEmailCode } from '../lib/auth.js';
-import { cleanEmailCode, looksLikeEmail, clearFreshSignIn, markFreshSignIn } from '../lib/home.js';
+import { cleanEmailCode, looksLikeEmail, clearFreshSignIn, markFreshSignIn, rememberReturn, takeReturn } from '../lib/home.js';
 import { GOOGLE_CLIENT_ID, googleButtonHere, loadGoogle, makeNonce } from '../lib/google.js';
 import { GroupCrest } from '../components/Logo.jsx';
 import { savedLook, paintLook, DEFAULT_LOOK } from '../lib/theme.js';
@@ -20,9 +20,12 @@ export async function ensureSignedIn() {
   }
 }
 
-/** Joining by invite link (#/join/CODE): used before you're in any group, and inside the app for another group. */
+/** Joining by link (#/join/CODE, maybe ?to=<page>): used before you're in any group, and inside the app for another. */
 export function InviteJoin({ code, inside = false, onLook }) {
-  const { refresh } = useSession();
+  const { refresh, status } = useSession();
+  // A shared link (#/join/CODE?to=<page>, 083; or an old vote link ?vote=<plan>): after joining, land on that page.
+  const target = linkTarget(window.location.hash);
+  const after = () => target || takeReturn() || '#/';
   const [info, setInfo] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -33,11 +36,16 @@ export function InviteJoin({ code, inside = false, onLook }) {
         await ensureSignedIn();
         const { data, error } = await supabase.rpc('invite_info', { p_token: code });
         if (error) throw error;
-        if (live) setInfo(data || { bad: true });
+        if (!live) return;
+        setInfo(data || { bad: true });
         // If they start their own group later, it's counted as coming from this one.
-        if (live && data?.group_id && !data.already_in) rememberSource({ from_group: data.group_id, placement: 'invite' });
+        if (data?.group_id && !data.already_in) rememberSource({ from_group: data.group_id, placement: 'invite' });
         // Show the group's own crest and colours (not when already inside another group's app).
-        if (live && data?.look && !inside) { paintLook(data.look, data.group_name); onLook?.(data.look); }
+        if (data?.look && !inside) { paintLook(data.look, data.group_name); onLook?.(data.look); }
+        // Already in: straight to the page (switching group first if another one is open on this phone).
+        const next = inviteNext({ info: data, inside, currentGroupId: status?.group_id, hasTarget: !!target });
+        if (next === 'go') window.location.hash = after();
+        else if (next === 'switch') { setCurrentGroup(data.group_id); window.location.hash = after(); window.location.reload(); }
       } catch (e) {
         if (live) { setErr(friendlyError(e)); setInfo({ bad: true }); }
       }
@@ -53,13 +61,14 @@ export function InviteJoin({ code, inside = false, onLook }) {
       if (error) throw error;
       if (!data) { setErr('That link has stopped working — ask for a new one.'); return; }
       setCurrentGroup(data);
+      clearFreshSignIn();
       if (inside) {
         // Everything on screen belongs to the old group: start fresh in the new one.
-        window.location.hash = '#/';
+        window.location.hash = after();
         window.location.reload();
         return;
       }
-      window.location.hash = '#/';
+      window.location.hash = after();
       await refresh();
     } catch (e) {
       setErr(friendlyError(e));
@@ -70,17 +79,18 @@ export function InviteJoin({ code, inside = false, onLook }) {
 
   return (
     <div className="stack" style={{ width: '100%', maxWidth: 340, gap: 12, textAlign: 'center' }}>
-      {!info && <div style={{ color: 'var(--on-navy-muted)' }}>Checking the invite…</div>}
-      {info?.bad && <div className="err" style={{ color: '#FFB4AB' }}>{err || 'That invite link isn’t working — ask for a new one.'}</div>}
+      {!info && <div style={{ color: 'var(--on-navy-muted)' }}>Checking the link…</div>}
+      {info?.bad && <div className="err" style={{ color: '#FFB4AB' }}>{err || 'That link isn’t working — ask for a new one in the group chat.'}</div>}
       {info && !info.bad && (
         <>
           <div style={{ fontSize: 20 }}>You’re invited to</div>
           <div style={{ fontFamily: 'var(--display)', fontSize: 32, fontWeight: 700 }}>{info.group_name}</div>
           <div style={{ color: 'var(--on-navy-muted)' }}>{info.role === 'organiser' ? 'as the organiser — you set up rounds, players and invites. This link works once.' : info.team ? <>as a player on <strong style={{ color: '#fff' }}>{info.team}</strong>.</> : info.role === 'guest' ? 'as a guest — play, score and join in (no votes on rules or in the Tribunal).' : 'as a player.'}</div>
+          {target && !info.already_in && <div className="small" style={{ color: 'var(--on-navy-muted)' }}>Join, pick your name, and you’ll go straight to what was shared.</div>}
           {err && <div className="err" style={{ color: '#FFB4AB' }}>{err}</div>}
           {info.team && info.my_team && <div className="small" style={{ color: 'var(--on-navy-muted)' }}>You’re already on {info.my_team} — a link never moves you to another team.</div>}
           {info.already_in && !(info.team && !info.my_team)
-            ? <button type="button" className="btn gold block" onClick={() => { setCurrentGroup(info.group_id); window.location.hash = '#/'; window.location.reload(); }}>You’re already in — open it</button>
+            ? <button type="button" className="btn gold block" onClick={() => { setCurrentGroup(info.group_id); window.location.hash = after(); window.location.reload(); }}>You’re already in — open it</button>
             : <button type="button" className="btn gold block" disabled={busy} onClick={join}>{busy ? 'Joining…' : info.already_in && info.team ? `Join ${info.team}` : 'Join'}</button>}
         </>
       )}
@@ -88,133 +98,104 @@ export function InviteJoin({ code, inside = false, onLook }) {
   );
 }
 
+/** The front door before you're in a group: links first (no PINs, 083). Sign-in too, when it's on in this build. */
 export default function Join() {
-  // Sign-in switched off in this build (the live L.G.C app and GitHub Pages): the screen exactly as before.
-  if (!SIGN_IN.length) return <ClassicJoin />;
-  return <SignInHome />;
+  return <FrontDoor />;
 }
 
 const ON_NAVY_GHOST = { color: '#fff', borderColor: 'rgba(255,255,255,.5)', background: 'transparent' };
+const NAVY_PAGE = { minHeight: '100vh', background: 'var(--navy)', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 };
 
-/** The PIN (or pasted invite link) box. Used on every front-door screen. */
-export function PinForm({ onInvite, onJoined, autoFocus = false, linkFirst = false }) {
-  const { refresh } = useSession();
-  const [pin, setPin] = useState('');
-  const [busy, setBusy] = useState(false);
+/**
+ * The "open your link" box. Takes any link the app makes — an invite (player, guest, team, organiser), a personal
+ * link, or a shared page with its join code. On an iPhone the Home Screen app is separate from Safari, so a link
+ * tapped in a chat opens Safari; pasting it here is how the Home Screen app gets in.
+ */
+export function LinkForm({ autoFocus = false, onOpen, light = false }) {
+  const [text, setText] = useState('');
   const [err, setErr] = useState('');
-
-  async function submit(e) {
+  const submit = (e) => {
     e.preventDefault();
-    const linkCode = inviteCode(pin);
-    if (linkCode) { onInvite?.(linkCode); return; }
-    // Someone's personal link pasted in (an iPhone Home Screen app can't open links itself).
-    const mine = personalCode(pin);
-    if (mine) { window.location.hash = `#/me/${mine}`; return; }
-    setBusy(true);
     setErr('');
-    try {
-      await ensureSignedIn();
-      // join_group_id says which group the PIN opened, so the app shows that group.
-      let { data, error } = await supabase.rpc('join_group_id', { p_pin: pin });
-      if (error && /join_group_id/.test(error.message || '')) ({ data, error } = await supabase.rpc('join_group', { p_pin: pin }));
-      if (error) throw error;
-      if (!data) {
-        setErr("That PIN's not right. Check the group chat.");
-        return;
-      }
-      if (typeof data === 'string') setCurrentGroup(data);
-      clearFreshSignIn();
-      if (onJoined) onJoined(data); else await refresh();
-    } catch (e2) {
-      setErr(friendlyError(e2));
-    } finally {
-      setBusy(false);
+    const l = readLink(text);
+    if (!l) { setErr('That doesn’t look like a link from the app. Copy the whole link from the group chat and try again.'); return; }
+    if (l.kind === 'page') {
+      rememberReturn(l.hash);
+      setErr('That link opens a page, but it can’t let you in on its own. Open your group’s invite link or your personal link — you’ll land on that page after.');
+      return;
     }
-  }
-
+    if (onOpen) onOpen(l); else window.location.hash = l.hash;
+  };
+  const muted = light ? 'var(--muted)' : 'var(--on-navy-muted)';
   return (
-    <form onSubmit={submit} style={{ width: '100%', maxWidth: 340, display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <form onSubmit={submit} style={{ width: '100%', maxWidth: 340, display: 'flex', flexDirection: 'column', gap: 10 }}>
       <label className="field">
-        <span style={{ color: 'var(--on-navy-muted)' }}>{linkFirst ? 'Invite link (or group PIN)' : 'Group PIN or invite link'}</span>
-        <input
-          className="input" autoComplete="one-time-code" autoCapitalize="none" value={pin} autoFocus={autoFocus}
-          onChange={(e) => setPin(e.target.value)} placeholder={linkFirst ? 'Paste it here' : 'From the group chat'}
-          style={linkFirst
-            ? { fontSize: !pin || pin.length > 12 ? 16 : 24, textAlign: 'center', letterSpacing: pin && pin.length <= 12 ? '.3em' : 0, color: 'var(--text)' }
-            : { fontSize: pin.length > 12 ? 15 : 24, textAlign: 'center', letterSpacing: pin.length > 12 ? 0 : '.3em', color: 'var(--text)' }}
-        />
+        <span style={{ color: muted }}>Your link</span>
+        <input className="input" autoCapitalize="none" autoCorrect="off" spellCheck={false} inputMode="url" value={text} autoFocus={autoFocus}
+          onChange={(e) => { setText(e.target.value); setErr(''); }} placeholder="Paste the link here" style={{ fontSize: 16, color: 'var(--text)' }} />
       </label>
-      {err && <div className="err" style={{ color: '#FFB4AB' }}>{err}</div>}
-      <button className="btn gold block" disabled={busy || pin.trim().length < 4}>{busy ? 'Checking…' : "Let's go"}</button>
-      <span className="small" style={{ color: 'var(--on-navy-muted)', textAlign: 'center' }}>{linkFirst
-        ? 'Tapping the link in the group chat works too. On an iPhone Home Screen app, copy the link and paste it here.'
-        : 'Got an invite link? Paste it in the box (or just open it).'}</span>
+      {err && <div className="err" role="alert" style={light ? undefined : { color: '#FFB4AB' }}>{err}</div>}
+      <button className={light ? 'btn block' : 'btn gold block'} disabled={!text.trim()}>Open</button>
     </form>
   );
 }
 
-/** Today's home screen (PIN first). Shown whenever sign-in isn't switched on in the build. */
-function ClassicJoin() {
-  const [pasted, setPasted] = useState(null);
-  const [inviteLook, setInviteLook] = useState(null);
-  // An invite link opened in the browser, or pasted into the box (on iPhone the Home Screen app is separate from
-  // Safari, so a link tapped in a chat opens Safari — pasting it here is how the Home Screen app joins).
-  const code = inviteCode(window.location.hash) || pasted;
-  return (
-    <div style={{ minHeight: '100vh', background: 'var(--navy)', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 18 }}>
-      <GroupCrest size={code ? 120 : 170} look={inviteLook || savedLook()} name={inviteLook?.name} />
-      {code ? <InviteJoin code={code} onLook={setInviteLook} /> : (
-        <>
-          <div style={{ fontFamily: 'var(--display)', fontSize: 34, fontWeight: 700 }}>{savedLook()?.short_name ? `${savedLook().short_name} Golf` : 'The Golf Trip'}</div>
-          <PinForm onInvite={setPasted} />
-          {NEW_GROUPS && <a href="#/start" className="small" style={{ color: '#fff', fontWeight: 700, textAlign: 'center', borderTop: '1px solid rgba(255,255,255,.2)', paddingTop: 14, width: '100%', maxWidth: 340 }}>Running a golf group? Start your own →</a>}
-          <span className="small" style={{ color: 'var(--on-navy-muted)' }}><a href="#/privacy" style={{ color: 'inherit' }}>Privacy</a> · <a href="#/terms" style={{ color: 'inherit' }}>Terms</a></span>
-        </>
-      )}
-    </div>
-  );
+export function LostLink({ light = false }) {
+  return <span className="small" style={{ color: light ? 'var(--muted)' : 'var(--on-navy-muted)', textAlign: 'center', maxWidth: 340 }}>Lost your link? Ask your organiser to send your personal link.</span>;
 }
 
-/** The new front door (sign-in switched on): sign in first; a PIN or invite link still works without an account. */
-function SignInHome() {
+function FrontDoor() {
   const { status } = useSession();
-  const [pasted, setPasted] = useState(null);
   const [inviteLook, setInviteLook] = useState(null);
-  const [showPin, setShowPin] = useState(false);
-  const code = inviteCode(window.location.hash) || pasted;
+  const signInOn = SIGN_IN.length > 0;
+  const hash = window.location.hash;
+  const code = inviteCode(hash);
+  // An app page opened with no join code (an older link): keep it, so they land there once they're in.
+  const kept = code ? null : pageToKeep(hash);
+  useEffect(() => { if (kept) rememberReturn(kept); }, [kept]);
   // A brand-new phone has no group look yet: show The Golf Trip's own colours, never L.G.C's.
-  useEffect(() => { if (!code && !savedLook()) paintLook(DEFAULT_LOOK, null); }, [code]);
+  useEffect(() => { if (signInOn && !code && !savedLook()) paintLook(DEFAULT_LOOK, null); }, [code, signInOn]);
 
   if (code) {
-    // An invite: join as a guest straight away (no account needed before the first tee). Signing in is optional,
-    // and brings them back to this same invite.
+    // A link: join straight away (no account needed before the first tee). Signing in is optional, and brings them
+    // back to this same link.
     return (
-      <div style={{ minHeight: '100vh', background: 'var(--navy)', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 18 }}>
+      <div style={{ ...NAVY_PAGE, gap: 18 }}>
         <GroupCrest size={120} look={inviteLook || savedLook()} name={inviteLook?.name} />
         <InviteJoin code={code} onLook={setInviteLook} />
-        {!status?.signed_in && <div className="stack" style={{ width: '100%', maxWidth: 340, gap: 8, borderTop: '1px solid rgba(255,255,255,.2)', paddingTop: 14 }}>
+        {signInOn && !status?.signed_in && <div className="stack" style={{ width: '100%', maxWidth: 340, gap: 8, borderTop: '1px solid rgba(255,255,255,.2)', paddingTop: 14 }}>
           <span className="small" style={{ color: 'var(--on-navy-muted)', textAlign: 'center' }}>Got an account already? Sign in first and your scores stay with you on any phone.</span>
-          <SignInButtons returnHash={`#/join/${code}`} quiet />
+          <SignInButtons returnHash={`#/join/${code}${targetQuery(hash)}`} quiet />
         </div>}
       </div>
     );
   }
 
+  const short = savedLook()?.short_name;
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--navy)', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 }}>
-      <GroupCrest size={130} look={savedLook()} />
+    <div style={NAVY_PAGE}>
+      <GroupCrest size={signInOn ? 130 : 150} look={savedLook()} />
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontFamily: 'var(--display)', fontSize: 36, fontWeight: 700, lineHeight: 1.05 }}>The Golf Trip</div>
-        <div style={{ color: 'var(--on-navy-muted)', marginTop: 6 }}>Your golf group’s home: scores, trips and the honour board.</div>
+        <div style={{ fontFamily: 'var(--display)', fontSize: 34, fontWeight: 700, lineHeight: 1.05 }}>{!signInOn && short ? `${short} Golf` : 'The Golf Trip'}</div>
+        {signInOn && <div style={{ color: 'var(--on-navy-muted)', marginTop: 6 }}>Your golf group’s home: scores, trips and the honour board.</div>}
       </div>
-      <SignInButtons />
-      <div role="separator" style={{ width: '100%', maxWidth: 340, display: 'flex', alignItems: 'center', gap: 10, color: 'var(--on-navy-muted)' }} className="small">
-        <span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.2)' }} />or<span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.2)' }} />
+      {signInOn && (
+        <>
+          <SignInButtons returnHash={kept || ''} />
+          <div role="separator" style={{ width: '100%', maxWidth: 340, display: 'flex', alignItems: 'center', gap: 10, color: 'var(--on-navy-muted)' }} className="small">
+            <span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.2)' }} />or<span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.2)' }} />
+          </div>
+        </>
+      )}
+      <div style={{ textAlign: 'center', maxWidth: 340 }} data-testid="link-first">
+        <div style={{ fontSize: 20, fontWeight: 700 }}>Open the link from your group chat</div>
+        <div className="small" style={{ color: 'var(--on-navy-muted)', marginTop: 4 }}>
+          {kept ? 'Open your group’s link and you’ll land on the page you opened.' : 'Tap it in the chat. On an iPhone Home Screen app, copy it and paste it here.'}
+        </div>
       </div>
-      {showPin
-        ? <PinForm onInvite={setPasted} autoFocus linkFirst />
-        : <button type="button" className="btn ghost block" style={{ ...ON_NAVY_GHOST, maxWidth: 340 }} onClick={() => setShowPin(true)}>Got an invite link?</button>}
-      {NEW_GROUPS && <a href="#/start" className="btn ghost block" style={{ ...ON_NAVY_GHOST, maxWidth: 340, borderColor: 'transparent', textDecoration: 'underline' }}>Start a new group</a>}
+      <LinkForm />
+      <LostLink />
+      {NEW_GROUPS && <a href="#/start" className="small" style={{ color: '#fff', fontWeight: 700, textAlign: 'center', borderTop: '1px solid rgba(255,255,255,.2)', paddingTop: 14, width: '100%', maxWidth: 340 }}>{signInOn ? 'Start a new group' : 'Running a golf group? Start your own →'}</a>}
       <span className="small" style={{ color: 'var(--on-navy-muted)' }}><a href="#/privacy" style={{ color: 'inherit' }}>Privacy</a> · <a href="#/terms" style={{ color: 'inherit' }}>Terms</a></span>
     </div>
   );

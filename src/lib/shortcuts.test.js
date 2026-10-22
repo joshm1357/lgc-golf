@@ -2,12 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { nextKey, isTyping, findItems, SHORTCUTS } from './shortcuts.js';
 
 describe('keyboard shortcuts', () => {
-  it('g then t goes to the Trip desk, g then l to the leaderboard', () => {
+  it('g then t goes to Trips (the Trip desk folded in), g then l to the leaderboard', () => {
     let r = nextKey({}, 'g', {}, 1000);
     expect(r.action).toBeNull();
-    expect(nextKey(r.state, 't', {}, 1500).action).toEqual({ type: 'go', to: '/desk' });
+    expect(nextKey(r.state, 't', {}, 1500).action).toEqual({ type: 'go', to: '/plan' });
     expect(nextKey(r.state, 'l', {}, 1500).action).toEqual({ type: 'go', to: '/' });
-    expect(nextKey(r.state, 'p', {}, 1500).action).toEqual({ type: 'go', to: '/desk/players' });
+    expect(nextKey(r.state, 'p', {}, 1500).action).toEqual({ type: 'go', to: '/group/players' });
+    expect(nextKey(r.state, 'c', {}, 1500).action).toEqual({ type: 'go', to: '/cards' });
     r = nextKey({}, 'g', {}, 1000);
     // Too slow: the second key is just a key.
     expect(nextKey(r.state, 't', {}, 5000).action).toBeNull();
@@ -34,6 +35,10 @@ describe('keyboard shortcuts', () => {
   });
   it('lists every shortcut with words', () => {
     expect(SHORTCUTS.every((s) => s.keys.length && s.does)).toBe(true);
+  });
+  it('no shortcut sends anyone to the old Trip desk', () => {
+    expect(SHORTCUTS.some((s) => /desk/i.test(s.does))).toBe(false);
+    for (const k of 'tlpc') expect(nextKey({ prefix: 'g', at: 0 }, k, {}, 100).action.to).not.toMatch(/^\/desk/);
   });
 });
 

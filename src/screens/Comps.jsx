@@ -9,6 +9,7 @@ import CourseMap, { avatarIcon, teeIcon } from '../components/CourseMap.jsx';
 import { useRoundChoice, RoundChips } from './Leaderboard.jsx';
 import { OwnComp, useRoundOwnComps } from './OwnComps.jsx';
 import { ConditionsLine } from '../components/CompConditions.jsx';
+import RuleTag, { roundRef, useActiveRules } from '../components/RuleTag.jsx';
 
 const LABEL = { ctp: 'Closest to pin', ld: 'Longest drive' };
 
@@ -40,6 +41,7 @@ export default function Comps() {
   const [holeSel, setHoleSel] = useState(params.get('hole') ? Number(params.get('hole')) : null);
   const [entries, setEntries] = useState([]);
   const [adding, setAdding] = useState(false);
+  const rules = useActiveRules();
 
   const load = useCallback(async () => {
     if (!round) return;
@@ -138,7 +140,8 @@ export default function Comps() {
               <EntryRow e={leader} rank={1} me={status.player_id} isAdmin={status.is_admin} onChanged={load} compact list={list} />
             )}
             {kind === 'ld' && status.is_admin && <SetTee course={course} hole={hole} />}
-            {round.comp_bonus > 0 && round.format === 'ambrose' && <div className="card pad small" style={{ background: 'var(--gold-soft)', borderColor: 'var(--gold)' }}><strong>Worth {round.comp_bonus} strokes.</strong> Whoever leads this comp at the end takes {round.comp_bonus} off their team's score — the leaderboard updates live.</div>}
+            {round.comp_bonus > 0 && round.format === 'ambrose' && <div className="card pad small" style={{ background: 'var(--gold-soft)', borderColor: 'var(--gold)' }}><strong><RuleTag testId="worth-strokes" rule={{ ...roundRef(round, 'comp_bonus', `Worth ${round.comp_bonus} stroke${round.comp_bonus === 1 ? '' : 's'}`, rules), where: { round_id: round.id, trip_id: round.trip_id, path: `/comps?r=${round.id}&kind=${kind}` } }}
+              explain={`Whoever wins a side comp (closest to the pin, longest drive) takes ${round.comp_bonus} strokes off their team's Ambrose score.`}>Worth {round.comp_bonus} stroke{round.comp_bonus === 1 ? '' : 's'}.</RuleTag></strong> Whoever leads this comp at the end takes {round.comp_bonus} off their team's score — the leaderboard updates live.</div>}
             <p className="note" style={{ margin: 0 }}>
               {kind === 'ctp'
                 ? 'Distance is measured or paced and typed in — phone GPS is only good to about 5–10 m. The pin and photo are the evidence.'

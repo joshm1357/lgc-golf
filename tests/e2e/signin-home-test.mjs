@@ -115,7 +115,7 @@ const tapSize = async (page, locator, label) => {
   check(b && b.height >= 44, `${label}: big enough to tap (${b ? Math.round(b.height) : 0}px)`);
 };
 
-// 1. A stranger opens the app: sign in first, PIN folded away underneath.
+// 1. A stranger opens the app: sign in first, or open your group's link (no PIN anywhere, 083).
 {
   STATUS.v = null;
   const { ctx, page } = await phone();
@@ -123,7 +123,8 @@ const tapSize = async (page, locator, label) => {
   await page.getByRole('button', { name: /Sign in with Google/ }).waitFor({ timeout: 15000 });
   check(await page.getByText('The Golf Trip', { exact: true }).isVisible(), 'home: The Golf Trip name');
   check(await page.getByRole('button', { name: 'Email me a code' }).isVisible(), 'home: Email me a code');
-  check(!(await page.getByLabel('Invite link (or group PIN)').isVisible().catch(() => false)), 'home: invite box folded away');
+  check(await page.getByLabel('Your link').isVisible(), 'home: the link box is there too');
+  check(!(await page.getByText(/PIN/).count()), 'home: no PIN anywhere');
   check(await page.getByText('Start a new group').isVisible(), 'home: Start a new group');
   check(await page.locator('#test-marker').isVisible(), 'home: red TEST tag on a staging build');
   await tapSize(page, page.getByRole('button', { name: /Sign in with Google/ }), 'Google button');
@@ -131,10 +132,9 @@ const tapSize = async (page, locator, label) => {
   await noSideScroll(page, 'Home');
   check(!calls.some((c) => c.path === '/auth/v1/signup'), 'home: no phone-only account made just by opening it');
 
-  // 1b. The PIN still works without an account.
-  await page.getByRole('button', { name: 'Got an invite link?' }).click();
-  check(await page.getByLabel('Invite link (or group PIN)').isVisible(), 'home: invite box opens (link first, PIN as a fallback)');
-  await page.screenshot({ path: `${SHOTS}/s2-home-pin.png`, fullPage: true });
+  // 1b. A link still works without an account.
+  check(await page.getByText('Open the link from your group chat').isVisible(), 'home: link first, no PIN');
+  await page.screenshot({ path: `${SHOTS}/s2-home-link.png`, fullPage: true });
 
   // 1c. Google: remembers "just signed in" and goes to Google via Supabase, coming back to this app.
   const [auth] = await Promise.all([
@@ -369,13 +369,14 @@ const tapSize = async (page, locator, label) => {
   await ctx.close();
 }
 
-// 6. The live-style build (no VITE_SIGN_IN): the home screen is exactly as before.
+// 6. The live-style build (no VITE_SIGN_IN): link first, no PIN box (083).
 {
   STATUS.v = null;
   const { ctx, page } = await phone();
   await page.goto(LIVE);
-  await page.getByLabel('Group PIN or invite link').waitFor({ timeout: 15000 });
-  check(await page.getByRole('button', { name: "Let's go" }).isVisible(), 'live build: PIN box first, as today');
+  await page.getByLabel('Your link').waitFor({ timeout: 15000 });
+  check(await page.getByText('Open the link from your group chat').isVisible(), 'live build: link first');
+  check(!(await page.getByText(/PIN/).count()), 'live build: no PIN anywhere');
   check(!(await page.getByRole('button', { name: /Sign in with Google/ }).isVisible().catch(() => false)), 'live build: no sign-in buttons');
   // Changed on 20 Oct (Stage 1 beta): new groups are off on live until Stage 2, so the start link is hidden.
   check(!(await page.getByText('Running a golf group? Start your own →').isVisible()), 'live build: no "Start your own" link while new groups are off');

@@ -11,6 +11,7 @@ import { inviteLink } from '../lib/invite.js';
 import { shareText } from '../lib/push.js';
 import { useComps } from '../components/CompsChip.jsx';
 import { cleanSettings } from '../lib/comps.js';
+import RuleTag from '../components/RuleTag.jsx';
 import { sideHandicap, shotsOnHole, shots, matchState, matchText, cupTotals, toWin, pts, nextHole, matchPoints } from '../lib/cup.js';
 
 const FORMAT_LABEL = { ambrose: 'Ambrose pairs', singles: 'Singles' };
@@ -93,7 +94,10 @@ export default function Cup() {
         <div className="section">
           <div className="card pad" style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 8, textAlign: 'center' }}>
             <div><div style={{ fontWeight: 800, color: A.colour }}>{A.name}</div><div style={{ fontSize: 40, fontWeight: 800, color: A.colour }}>{pts(totals.won.a)}</div></div>
-            <div className="small muted">{cupPoints ? <>{pts(toWin(cupPoints))}<br />to win</> : 'v'}</div>
+            <div className="small muted">{cupPoints ? (data.currentTrip?.id && data.currentTrip?.cup_points
+              ? <RuleTag testId="cup-to-win" rule={{ table: 'trips', id: data.currentTrip.id, field: 'cup_points', label: `${pts(toWin(cupPoints))} to win (of ${pts(cupPoints)})`, value: Number(cupPoints), where: { trip_id: data.currentTrip.id, path: '/cup' } }}
+                  explain={`The Cup is worth ${pts(cupPoints)} points; a side needs more than half — ${pts(toWin(cupPoints))} — to win it.`}>{pts(toWin(cupPoints))}<br />to win</RuleTag>
+              : <>{pts(toWin(cupPoints))}<br />to win</>) : 'v'}</div>
             <div><div style={{ fontWeight: 800, color: B.colour }}>{B.name}</div><div style={{ fontSize: 40, fontWeight: 800, color: B.colour }}>{pts(totals.won.b)}</div></div>
             {(totals.projected.a !== totals.won.a || totals.projected.b !== totals.won.b) && (
               <div className="small muted" style={{ gridColumn: '1 / -1' }}>If it finished now: {A.name} {pts(totals.projected.a)} – {pts(totals.projected.b)} {B.name}</div>
@@ -213,7 +217,10 @@ export function CupMatch() {
         <div className="card pad" style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 26, fontWeight: 800, color: s.leader === 'a' ? sides[0]?.colour : s.leader === 'b' ? sides[1]?.colour : 'inherit' }}>{matchText(match, n)}</div>
           <div className="small muted">
-            Handicaps {Number(m.a_hcp)} v {Number(m.b_hcp)}{shotSide ? ` · ${shotSide === 'a' ? n.a : n.b} get ${diff} shot${diff === 1 ? '' : 's'}` : ' · no shots'}
+            Handicaps <RuleTag testId="cup-hcp" rule={{ table: 'cup_matches', id: m.id, field: 'a_hcp', label: `Match handicaps ${Number(m.a_hcp)} v ${Number(m.b_hcp)}`, value: Number(m.a_hcp), where: { round_id: m.round_id, path: `/cup/${m.id}` } }}
+              explain="The side with the higher handicap gets the difference in shots, on the hardest holes first.">{Number(m.a_hcp)} v {Number(m.b_hcp)}</RuleTag>{shotSide ? ` · ${shotSide === 'a' ? n.a : n.b} get ${diff} shot${diff === 1 ? '' : 's'}` : ' · no shots'}
+            {' · '}<RuleTag testId="cup-points" rule={{ table: 'cup_matches', id: m.id, field: 'points', label: `Worth ${pts(Number(m.points))} pt${Number(m.points) === 1 ? '' : 's'}`, value: Number(m.points), where: { round_id: m.round_id, path: `/cup/${m.id}` } }}
+              explain="What this match is worth in the Cup. A halved match splits the points.">worth {pts(Number(m.points))} pt{Number(m.points) === 1 ? '' : 's'}</RuleTag>
           </div>
         </div>
       </div>

@@ -1,22 +1,37 @@
-// The bits every desk screen shares: the tabs across the top, and saving a file (CSV) from the browser.
+// The bits the laptop tools share (the players table, pasting a scorecard, paper cards, printing): the bar across the
+// top that leads back to where each tool lives now, and saving a file (CSV) from the browser.
+// (Until 22 Oct these were tabs of the Trip desk; the desk folded into Trips, Group & invites, Courses and the rounds.)
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { useFeature } from '../lib/store.jsx';
+import { useSession } from '../lib/store.jsx';
+import { TOOL, toolHome } from '../lib/desk.js';
+import './desk.css';
 
-/** The tabs across the top of every desk screen. */
+/** The bar across the top of a laptop tool: back to its home, and the shortcuts hint. */
 export function DeskNav() {
-  const planner = useFeature('planner');
   const { pathname } = useLocation();
-  const items = [
-    planner && { to: '/desk', label: 'Trip desk', on: pathname === '/desk' || pathname.startsWith('/desk/trip') },
-    { to: '/desk/players', label: 'Players & handicaps' },
-    { to: '/desk/courses', label: 'Course scorecards' },
-    { to: '/desk/cards', label: 'Paper cards', on: pathname.startsWith('/desk/card') || pathname.startsWith('/desk/print') },
-  ].filter(Boolean);
+  const { status } = useSession();
+  const home = toolHome(pathname);
+  if (pathname === TOOL.players && status?.is_admin) return <GroupTabs />;
   return (
-    <nav className="desk-nav no-print" aria-label="Desk">
+    <nav className="desk-nav no-print" aria-label="Back">
+      <Link to={home.to} className="desk-nav-link">‹ {home.label}</Link>
+      <span className="grow" />
+      <span className="small desk-hint">Press <kbd>?</kbd> for shortcuts</span>
+    </nav>
+  );
+}
+
+/** Group & invites | Players table — the two halves of the group, for organisers (tabs on a laptop, a bar on a phone). */
+export function GroupTabs({ deskOnly = false }) {
+  const { pathname } = useLocation();
+  const { status } = useSession();
+  if (!status?.is_admin) return null;
+  const items = [{ to: '/group', label: 'Group & invites' }, { to: TOOL.players, label: 'Players table' }];
+  return (
+    <nav className={'desk-nav group-tabs no-print' + (deskOnly ? ' desk-only' : '')} aria-label="Group">
       {items.map((t) => {
-        const on = t.on ?? pathname === t.to;
+        const on = pathname === t.to;
         return <Link key={t.to} to={t.to} className={'desk-nav-link' + (on ? ' active' : '')} aria-current={on ? 'page' : undefined}>{t.label}</Link>;
       })}
       <span className="grow" />

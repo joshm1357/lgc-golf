@@ -95,7 +95,7 @@ export default function SetupGuide() {
             {open === s.key && <div style={{ padding: '0 14px 14px' }} className="stack">{body[s.key]}</div>}
           </div>
         ))}
-        <p className="note" style={{ margin: '4px' }}>Everything here can be changed later. For the finer details (teams for Ambrose, playing handicaps, trophies, PINs) use <Link to="/admin">Admin</Link>.</p>
+        <p className="note" style={{ margin: '4px' }}>Everything here can be changed later. For the finer details (teams for Ambrose, playing handicaps, trophies) use <Link to="/admin">Admin</Link>.</p>
       </div>
     </div>
   );

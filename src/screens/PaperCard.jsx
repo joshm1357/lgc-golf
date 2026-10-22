@@ -1,9 +1,9 @@
 // Stage 11c — paper cards at a laptop, and printing a round.
-//   CardPicker  /desk/cards            pick a round
-//   PaperCard   /desk/card/:roundId    a grid: one row per player (or team), one box per hole. Tab along, Enter for the
+//   CardPicker  /cards                 pick a round ("g c"; each round also has its own Paper cards button)
+//   PaperCard   /round/:id/cards       a grid: one row per player (or team), one box per hole. Tab along, Enter for the
 //                                      next row, arrows to move. Each box saves as you leave it, through the score
 //                                      queue (offline.js), so no signal just means it sends later.
-//   PrintRound  /desk/print/:roundId   results and every card, laid out for paper.
+//   PrintRound  /round/:id/print       results and every card, laid out for paper.
 // The reading of boxes, totals and what changed are in lib/papercard.js.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -16,6 +16,8 @@ import { cardSubjects, readCell, rowDraft, rowTotals, changedCells, parseCardLin
 import { friendlyError } from '../lib/supabase.js';
 import { Loading, toast } from '../components/ui.jsx';
 import { DeskNav } from './DeskNav.jsx';
+import { TOOL } from '../lib/desk.js';
+import './desk.css';
 
 export function CardPicker() {
   const data = useData();
@@ -26,8 +28,8 @@ export function CardPicker() {
   const line = (r) => (
     <li key={r.id}>
       <span className="grow"><strong>{r.name}</strong><div className="small muted">{[r.play_date && fmtRange(r.play_date), data.coursesById[r.course_id]?.name, formatName(r.format), r.status === 'live' ? '🔴 live' : r.status === 'locked' ? 'final' : 'not started'].filter(Boolean).join(' · ')}</div></span>
-      <Link className="btn sm" to={`/desk/card/${r.id}`}>Enter cards</Link>
-      <Link className="btn sm ghost" to={`/desk/print/${r.id}`}>Print</Link>
+      <Link className="btn sm" to={TOOL.card(r.id)}>Enter cards</Link>
+      <Link className="btn sm ghost" to={TOOL.print(r.id)}>Print</Link>
     </li>
   );
   return (
@@ -167,7 +169,7 @@ export function PaperCard() {
           <div className="hdr-sub">{[course.name, formatName(round.format), round.play_date && fmtRange(round.play_date)].filter(Boolean).join(' · ')}</div>
         </div>
         <div className="desk-head-side no-print">
-          <Link className="btn ghost sm desk-ghost" to={`/desk/print/${round.id}`}>Print</Link>
+          <Link className="btn ghost sm desk-ghost" to={TOOL.print(round.id)}>Print</Link>
           <Link className="btn ghost sm desk-ghost" to={`/?r=${round.id}`}>Leaderboard</Link>
         </div>
       </div>
@@ -249,7 +251,7 @@ export function PrintRound() {
       <DeskNav />
       <div className="no-print section row" style={{ gap: 8 }}>
         <button type="button" className="btn gold" onClick={() => window.print()}>🖨 Print</button>
-        <Link className="btn ghost" to={`/desk/card/${round.id}`}>Paper cards</Link>
+        <Link className="btn ghost" to={TOOL.card(round.id)}>Paper cards</Link>
       </div>
       <div className="section print-sheet">
         <div className="print-title">{status.group_name || 'The Golf Trip'} — {round.name}</div>

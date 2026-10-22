@@ -5,11 +5,14 @@
 // existing paths take: admin_create_player, trips, import_honours, import_handicaps and import_rules.
 // Also: reading an uploaded file in the browser (.txt .csv .md, and .docx / .xlsx without a library) and the size a
 // photo is shrunk to before it's sent.
+// 22 Oct ("import anything"): rounds and scorecards, cups, awards and moments, stories and other — their matching and
+// rows are in lib/historyimport.js.
 import { matchPlayers, sameHonour, winnerNames } from './history.js';
 import { readReply } from './aihelper.js';
+import { buildHistoryItems, historyLine, historyItem, historyProblem, historyCounts, HISTORY_KEYS } from './historyimport.js';
 
 export const MAX_TEXT = 200_000; // characters (~200 KB)
-export const MAX_PHOTOS = 4;
+export const MAX_PHOTOS = 12; // read 4 at a time by the function (planBatches in import.ts)
 export const PHOTO_MAX_PX = 1600;
 export const IMPORT_EXAMPLE = 'BD Trophy\n2019 Hunter Valley — Kurt & Bluey (44 pts)\n2018 Bowral — Sammy\n\nFines: $5 for a lost ball off the tee';
 
@@ -153,7 +156,7 @@ const hcpText = (h) => (h < 0 ? `+${-h}` : String(h));
  *   { id, section, label, detail, match, already, ticked, data }
  * `group` = { players, trips, trophies, honour_board, rules, handicaps (imported ones: { player_id, date, handicap }) }.
  */
-export function buildReview(proposal, group = {}) {
+export function buildReview(proposal, group = {}, preset = null) {
   const p = proposal || {};
   const players = group.players || [];
   const trips = group.trips || [];
@@ -206,6 +209,8 @@ export function buildReview(proposal, group = {}) {
       match: already ? 'already in the Rulebook' : 'new rule', already, ticked: !already && !x.guess, guess: !!x.guess,
     });
   });
+  // Rounds, cups, awards and moments, stories, other (historyimport.js): each on a trip.
+  items.push(...buildHistoryItems(p, group, items.filter((x) => x.section === 'trips'), preset));
   return items;
 }
 
@@ -255,15 +260,24 @@ export function winnerItem(it, board = []) {
 }
 
 export const SECTIONS = [
+  // The order on the confirm screen (22 Oct): who and where first, then what happened, then the rules and handicaps.
+  // The new kinds' titles match historyimport.js HISTORY_SECTIONS (kept here as plain values so the two files can
+  // load in either order).
   { key: 'players', title: 'Players', icon: '👥' },
   { key: 'trips', title: 'Past trips', icon: '🧳' },
+  { key: 'rounds', title: 'Rounds & scorecards', icon: '⛳' },
+  { key: 'cups', title: 'Cups', icon: '🏆' },
   { key: 'winners', title: 'Trophies & winners', icon: '🏆' },
-  { key: 'handicaps', title: 'Past handicaps', icon: '📈' },
+  { key: 'awards', title: 'Awards & moments', icon: '🎖️' },
+  { key: 'stories', title: 'Stories', icon: '📖' },
   { key: 'rules', title: 'Rules', icon: '📜' },
+  { key: 'handicaps', title: 'Past handicaps', icon: '📈' },
+  { key: 'other', title: 'Other', icon: '🗂️' },
 ];
 
 /** One line for an item on the confirm screen. */
 export function itemLine(it) {
+  if (HISTORY_KEYS.includes(it.section)) return historyLine(it);
   const d = it.data;
   if (it.section === 'players') return d.nickname ? `${d.name} (“${d.nickname}”)` : d.name;
   if (it.section === 'trips') return [d.name, d.start_date ? '' : `${d.year} (date unknown)`, d.place && !low(d.name).includes(low(d.place)) ? d.place : '', d.courses?.length ? d.courses.join(', ') : ''].filter(Boolean).join(' · ');
@@ -276,7 +290,7 @@ export function itemLine(it) {
 
 /** Ticked items that aren't already there, by section. */
 export function picked(items) {
-  const out = { players: [], trips: [], winners: [], handicaps: [], rules: [] };
+  const out = { players: [], trips: [], winners: [], handicaps: [], rules: [], rounds: [], cups: [], awards: [], stories: [], other: [] };
   for (const it of items) if (it.ticked && out[it.section]) out[it.section].push(it);
   return out;
 }
@@ -349,6 +363,7 @@ export function summaryLine(n) {
     n.handicaps ? plural(n.handicaps, 'past handicap') : '',
     n.rules ? plural(n.rules, 'rule') : '',
     n.proposed ? `${plural(n.proposed, 'rule')} up for a vote` : '',
+    ...historyCounts(n),
   ].filter(Boolean);
   if (!parts.length) return 'Nothing new to add — it’s all there already.';
   return `Added ${parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`}`;
@@ -360,7 +375,11 @@ export function readImportReply(data, error) {
   if (!error && data && typeof data === 'object' && data.import && typeof data.import === 'object') {
     const p = data.import;
     const list = (k) => (Array.isArray(p[k]) ? p[k] : []);
-    const proposal = { players: list('players'), trips: list('trips'), winners: list('winners'), handicaps: list('handicaps'), rules: list('rules'), unsure: list('unsure'), dropped: Number(p.dropped) || 0 };
+    const proposal = {
+      players: list('players'), trips: list('trips'), winners: list('winners'), handicaps: list('handicaps'), rules: list('rules'),
+      rounds: list('rounds'), cups: list('cups'), awards: list('awards'), stories: list('stories'), other: list('other'),
+      unsure: list('unsure'), dropped: Number(p.dropped) || 0,
+    };
     return { kind: 'import', proposal, found: Number(data.found) || 0, remaining: data.remaining || null, ...(data.log_id != null ? { logId: data.log_id } : {}) };
   }
   return readReply(data, error);
@@ -481,7 +500,8 @@ export function fitSize(w, h, max = PHOTO_MAX_PX) {
 }
 
 /** An item after it's been edited on the confirm screen: matched again (and unticked if it's now already there). */
-export function rematch(item, group) {
+export function rematch(item, group, ctx = {}) {
+  if (HISTORY_KEYS.includes(item.section)) return historyItem({ ...item, touched: true }, group, { trips: group.trips || [], ...ctx });
   const d = item.data;
   const one = {
     players: { players: [{ name: d.name, nickname: d.nickname || null }] },
@@ -533,6 +553,7 @@ export function playerAliases(items, made = []) {
 
 /** Is an edited item still good enough to save? (Words for the screen, or '' when fine.) */
 export function itemProblem(item, nextYear = new Date().getFullYear() + 1) {
+  if (HISTORY_KEYS.includes(item.section)) return historyProblem(item, nextYear);
   const d = item.data;
   const yearOk = (y) => Number.isInteger(Number(y)) && Number(y) >= 1950 && Number(y) <= nextYear;
   if (item.section === 'players') return String(d.name || '').trim().length < 2 ? 'Needs a name' : '';

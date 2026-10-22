@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pickDeskPlan, deskHeader, deskPanels, sortRows, nextSort, filterRows, csvCell, toCsv, costsCsv, csvName } from './desk.js';
+import { pickDeskPlan, deskHeader, deskPanels, sortRows, nextSort, filterRows, csvCell, toCsv, costsCsv, csvName, deskForward, TOOL, toolHome } from './desk.js';
 
 const today = '2026-10-21';
 
@@ -112,5 +112,44 @@ describe('CSV', () => {
   it('file names', () => {
     expect(csvName('Hunter Weekend 2026!')).toBe('hunter-weekend-2026-costs.csv');
     expect(csvName('')).toBe('trip-costs.csv');
+  });
+});
+
+describe('the Trip desk folded into Trips (22 Oct): old /desk links forward', () => {
+  const P = 'bbbbbbbb-0000-4000-8000-000000000001';
+  const R = 'dddddddd-0000-4000-8000-000000000001';
+  it('a trip on the desk → that trip’s Organise view', () => {
+    expect(deskForward(`/desk/trip/${P}`)).toBe(`/plan/${P}?view=organise`);
+  });
+  it('the desk itself → the trip that matters now (worked out on the screen)', () => {
+    expect(deskForward('/desk')).toBeNull();
+    expect(deskForward('/desk/')).toBeNull();
+    expect(deskForward('/desk/trip')).toBeNull();
+    expect(deskForward('/desk/anything-else')).toBeNull();
+  });
+  it('each tool → its new home', () => {
+    expect(deskForward('/desk/players')).toBe('/group/players');
+    expect(deskForward('/desk/courses')).toBe('/courses/paste');
+    expect(deskForward('/desk/cards')).toBe('/cards');
+    expect(deskForward(`/desk/card/${R}`)).toBe(`/round/${R}/cards`);
+    expect(deskForward(`/desk/present/${R}`)).toBe(`/round/${R}/present`);
+    expect(deskForward('/desk/present')).toBe('/present');
+    expect(deskForward(`/desk/print/${R}`)).toBe(`/round/${R}/print`);
+    expect(deskForward('/desk/print')).toBeNull();
+  });
+  it('only /desk addresses', () => {
+    expect(deskForward('/plan')).toBeNull();
+    expect(deskForward('/players')).toBeNull();
+  });
+  it('the new homes', () => {
+    expect(TOOL.organise(P)).toBe(`/plan/${P}?view=organise`);
+    expect([TOOL.players, TOOL.coursePaste, TOOL.cards, TOOL.present()]).toEqual(['/group/players', '/courses/paste', '/cards', '/present']);
+    expect([TOOL.card(R), TOOL.present(R), TOOL.print(R)]).toEqual([`/round/${R}/cards`, `/round/${R}/present`, `/round/${R}/print`]);
+  });
+  it('each tool’s back bar goes to where it lives', () => {
+    expect(toolHome('/group/players')).toEqual({ to: '/group', label: 'Group & invites' });
+    expect(toolHome('/courses/paste')).toEqual({ to: '/courses', label: 'Courses' });
+    expect(toolHome(`/round/${R}/cards`)).toEqual({ to: `/?r=${R}`, label: 'Leaderboard' });
+    expect(toolHome('/cards')).toEqual({ to: '/', label: 'Leaderboard' });
   });
 });

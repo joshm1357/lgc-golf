@@ -1,0 +1,19 @@
+Expected (staging, after 082 + 084). Run 22 Oct 2026 — matches.
+
+player applies a verdict = refused
+guest applies a verdict = refused
+other group's organiser applies = refused
+undecided case = refused
+dismissed case = refused
+a value of the wrong type = refused
+a value out of range = refused
+organiser applies = applied 2 → 1
+the setting now = 1
+recorded on the case = true / true / 2→1
+second apply = refused
+holes = applied [3, 9]
+changed since, no force = changed (now 4)
+min drives after no-force = 4
+changed since, apply anyway = applied 4 → 2
+round after = 1 / 2 / 3,9
+feed posts = 3

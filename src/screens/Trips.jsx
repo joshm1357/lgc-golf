@@ -7,7 +7,7 @@ import { useData, useRealtime, useSession, playerName, cacheGet, cacheSet, useFe
 import { Header, AvatarStack, Sheet, Loading, toast } from '../components/ui.jsx';
 import { fmtRange, countdown, RSVP_LABEL, todayISO, money } from '../lib/plan.js';
 import { STAGE_LABEL, sortTrips, stillToDecide, suggestionOptions, defaultCloses, tripWhen } from '../lib/trips.js';
-import { notify, shareText } from '../lib/push.js';
+import { notify, shareText, appLink } from '../lib/push.js';
 import { useRun, must } from '../lib/run.js';
 import { NotifyCard } from '../components/NotifyCard.jsx';
 import { TripsAi } from './AiPlanner.jsx';
@@ -247,7 +247,7 @@ export function SuggestSheet({ onClose, onSaved, initial = null }) {
       body: `💡 New ${kind === 'round' ? 'round' : 'trip'} idea: ${created.name}. ${opts.dates.length || opts.places.length ? 'Vote on when and where, and say if you’re in.' : 'Say if you’re in.'}` });
     const r = await notify(status.is_admin ? 'plan_new' : 'plan_proposed', { plan_id: created.id });
     // From a finished quick round: send the vote to everyone who played (they may not have notifications).
-    if (initial?.share) await shareText(`📅 ${created.name}? Vote on the date and say if you’re in: ${window.location.origin}${import.meta.env.BASE_URL}#/plan/${created.id}`);
+    if (initial?.share) await shareText(`📅 ${created.name}? Vote on the date and say if you’re in: ${appLink(`/plan/${created.id}`)}`);
     onClose(); onSaved?.(created);
     toast(`Up for a vote${r?.sent ? ` — ${r.sent} phone${r.sent === 1 ? '' : 's'} told` : ''}`);
   });
@@ -289,7 +289,7 @@ export function SuggestSheet({ onClose, onSaved, initial = null }) {
         </div>
         <label className="field"><span>Pitch it (optional)</span><textarea className="textarea" rows={3} style={{ padding: 12 }} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Why it’d be great, who’s keen…" /></label>
         <span className="small muted">{votesOn ? `Anyone can add more options once it’s up. ${status.is_admin ? 'You lock it in when it’s decided.' : 'The admin picks the winners and locks it in.'}` : (status.is_admin ? 'You lock it in when it’s sorted.' : 'The admin locks it in.')}</span>
-        <button type="button" className="btn gold block" disabled={busy || !name.trim()} onClick={save}>Put it to the group</button>
+        <button type="button" className="btn gold block" disabled={busy || !name.trim()} onClick={save}>{votesOn ? '🗳️ Call the vote' : 'Put it to the group'}</button>
       </div>
     </Sheet>
   );

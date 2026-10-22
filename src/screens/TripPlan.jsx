@@ -16,6 +16,8 @@ import {
   budgetSummary, suggestedDeposit, defaultBudget, depositStatus, stayLinks, cleanStay, KIND, linesPerPerson,
 } from '../lib/tripbudget.js';
 import { tripStage } from '../lib/trips.js';
+import StaySearch from '../components/StaySearch.jsx';
+import { CallVoteSheet } from '../components/CallVote.jsx';
 
 const RSVP_WORD = { in: 'In', maybe: 'Keen', out: 'Out' };
 
@@ -44,7 +46,7 @@ export function useTripExtras(pd) {
       rowsOr(supabase.from('plan_stays').select('*').eq('plan_id', planId).order('created_at')),
       rowsOr(supabase.from('plan_budget_items').select('*').eq('plan_id', planId).order('sort').order('created_at')),
       rowsOr(supabase.from('trip_builds').select('state').eq('plan_id', planId)),
-      rowsOr(supabase.from('trip_tee_options').select('id,job_id,times').eq('plan_id', planId)),
+      rowsOr(supabase.from('trip_tee_options').select('*').eq('plan_id', planId)),
       rowsOr(supabase.from('vote_batches').select('id,title,closes_on').eq('plan_id', planId)),
     ]);
     const state = builds[0]?.state || null;
@@ -52,8 +54,12 @@ export function useTripExtras(pd) {
       stays, budget,
       builder: {
         weekends: countWeekends(state), areas: stateNames(state), cards,
-        teeOptions: tees.filter((t) => (t.times || []).length).length,
-        callJobIds: [...new Set(tees.map((t) => t.job_id).filter(Boolean))],
+        weekendList: Array.isArray(state?.weekends) ? state.weekends : [],
+        // Areas on the table with places to stay picked but no accommodation idea or list yet (080).
+        noStayList: Object.entries(state?.areaStays || {}).filter(([area, pins]) => (pins || []).length && (!state.region || state.region === area)
+          && !stays.some((x) => x.area === area || (!x.area && state.region === area))).map(([area]) => area),
+        teeOptions: tees.filter((t) => (t.times || []).length || (t.ranges || []).length).length,
+        callJobIds: [...new Set([...tees.map((t) => t.job_id), ...Object.values(state?.callJobs || {})].filter(Boolean))],
       },
     });
   }, [planId]);
@@ -389,7 +395,6 @@ function StaySheet({ pd, ex, onClose, onTab }) {
   const me = status.player_id;
   const plan = pd.plan;
   const [v, setV] = useState({});
-  const [closes, setCloses] = useState(addDays(todayISO(), 5));
   const [busy, run] = useRun();
   const keen = keenIds(pd).length || data.players.filter((p) => p.approved !== false).length;
   const towns = ex.builder.areas.length ? ex.builder.areas : [plan.location_name].filter(Boolean);
@@ -407,13 +412,21 @@ function StaySheet({ pd, ex, onClose, onTab }) {
     await must(supabase.from('plan_stays').insert({ plan_id: plan.id, ...row }));
     setV({}); await ex.reload();
   }, 'Added to the shortlist');
-  const putToVote = () => run(async () => {
-    const r = await must(supabase.rpc('put_stays_to_vote', { p_plan: plan.id, p_closes_on: closes || null }));
+  const [calling, setCalling] = useState(false);
+  // Call the vote (080): the shortlist with tick boxes; only the ticked places go on (put_stays_to_vote's p_only).
+  const stayRange = [{ key: 'accom', kind: 'other', question: 'Where should we stay?', options: fresh.map((s) => ({
+    key: `accom:${s.id}`, stayId: s.id, label: s.name,
+    notes: [s.area, s.is_list ? 'a shared list' : null, s.total_cost != null ? `${money(s.total_cost)} total` : null, s.sleeps ? `sleeps ${s.sleeps}` : null].filter(Boolean).join(' · ') || null,
+  })) }];
+  const callStays = async (ballot, { closes: c }) => {
+    const ids = (ballot.sections[0]?.options || []).map((o) => o.stayId);
+    const r = await must(supabase.rpc('put_stays_to_vote', { p_plan: plan.id, p_closes_on: c || null, p_only: ids }));
     // Joined the trip builder's combined vote (or added to one already out): no second notification.
     if (r && !r.joined) await notify('poll_open', { poll_id: r.poll_id });
     pd.reload(); await ex.reload();
-    return r?.joined ? 'Added to the group’s vote' : 'It’s with the group — everyone’s been asked to vote';
-  }).then((m) => m && toast(m));
+    return r;
+  };
+  const putToVote = () => setCalling(true);
   const goWith = (s) => run(async () => {
     await must(supabase.from('plan_stays').update({ chosen: false }).eq('plan_id', plan.id).neq('id', s.id));
     await must(supabase.from('plan_stays').update({ chosen: true }).eq('id', s.id));
@@ -430,26 +443,13 @@ function StaySheet({ pd, ex, onClose, onTab }) {
     <Sheet title="Where to stay" onClose={onClose}>
       <div className="stack">
         {chosen && <div className="card pad" style={{ background: 'var(--gold-soft)', borderColor: 'var(--gold)' }}>✅ <strong>{chosen.name}</strong>{chosen.total_cost != null ? ` · ${money(chosen.total_cost)}` : ''}{chosen.link && <> · <a href={chosen.link} target="_blank" rel="noreferrer">Have a look ↗</a></>}</div>}
-        {plan.start_date && towns.length > 0 && (
-          <div className="stack" style={{ gap: 6 }}>
-            <span className="label">Search ({fmtRange(plan.start_date, plan.end_date)} · {keen} people)</span>
-            {towns.slice(0, 3).map((town) => (
-              <div key={town} className="stack" style={{ gap: 4 }}>
-                {towns.length > 1 && <span className="small" style={{ fontWeight: 700 }}>{town}</span>}
-                <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-                  {stayLinks({ town, start: plan.start_date, end: plan.end_date, people: keen }).map((l) => (
-                    <a key={l.name} className="btn ghost sm" href={l.url} target="_blank" rel="noreferrer noopener">{l.name} ↗</a>
-                  ))}
-                </div>
-              </div>
-            ))}
-            <span className="small muted">Just links with your dates and numbers filled in — nothing is booked by the app.</span>
-          </div>
+        {towns.length > 0 && (
+          <StaySearch places={towns.slice(0, 3)} weekends={plan.start_date ? [{ start: plan.start_date, end: plan.end_date }] : ex.builder.weekendList || []} people={keen}
+            maxPerNight={null} busy={busy} onSave={(mayRun || me) ? (row) => run(async () => { await must(supabase.from('plan_stays').insert({ plan_id: plan.id, ...row })); await ex.reload(); }, row.is_list ? 'List added — it goes on the vote with a View places link' : 'Added to the shortlist') : null} />
         )}
-        {!plan.start_date && <div className="small muted">Search links show up once the dates are picked.</div>}
 
         <span className="label">The shortlist</span>
-        {ex.stays.length === 0 && <div className="small muted">Nothing yet. Paste in 2–3 places.</div>}
+        {ex.stays.length === 0 && <div className="small muted">Nothing yet. Paste in 2–3 places, or a shared list.</div>}
         {ex.stays.map((s) => (
           <div key={s.id} className="card pad stack" style={{ gap: 4, borderColor: s.chosen ? 'var(--gold)' : undefined }}>
             <div className="row between" style={{ gap: 8, alignItems: 'flex-start' }}>
@@ -486,12 +486,12 @@ function StaySheet({ pd, ex, onClose, onTab }) {
         {winner && !winner.chosen && status.is_admin && <button type="button" className="btn gold block" disabled={busy} onClick={() => goWith(winner)}>Winner: {winner.name} — go with it</button>}
         {mayRun && fresh.length > 0 && (!poll || poll.status === 'open') && ex.stays.length >= 2 && (
           <div className="stack" style={{ gap: 8 }}>
-            {!poll && <label className="field"><span>Vote closes</span><input className="input" type="date" value={closes || ''} min={todayISO()} onChange={(e) => setCloses(e.target.value)} /></label>}
-            <button type="button" className="btn gold block" disabled={busy} onClick={putToVote}>{poll ? `Add ${fresh.length} to the vote` : 'Put it to the group'}</button>
+            <button type="button" className="btn gold block" disabled={busy} onClick={putToVote} data-testid="stays-call-vote">{poll ? `🗳️ Add to the vote (${fresh.length})` : '🗳️ Call the vote'}</button>
           </div>
         )}
         {mayRun && ex.stays.length === 1 && !poll && <span className="small muted">Add one more place to put it to a vote.</span>}
       </div>
+      {calling && <CallVoteSheet plan={plan} title="Where should we stay?" range={stayRange} keenOption={false} doCall={callStays} onClose={() => setCalling(false)} />}
     </Sheet>
   );
 }

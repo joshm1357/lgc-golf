@@ -3,7 +3,7 @@
 //   * Never greyed: AI off / not set up / a guest / no signal → it says why and still finds the right page.
 //   * Leaderboard suggestions are about its round; the screen goes to the function as context; an answer with
 //     go_to shows "Go there →", which takes you to the round's setup. No go_to → "Might help:".
-//   * Laptop width: a panel down the right (and on the desk).
+//   * Laptop width: a panel down the right (and on the laptop tools, e.g. the players table).
 // Usage: node caddie-test.mjs <base> <shotDir>   e.g. http://localhost:4385/lgc-golf/
 import { chromium } from '/opt/npm-tools/node_modules/playwright/index.mjs';
 import fs from 'node:fs';
@@ -273,9 +273,9 @@ guest = false; organiser = true;
   const ap = await dp.locator('.app.with-side').boundingBox();
   check(ap.x + ap.width <= pb.x + 1, 'laptop: the page makes room for it');
   await dp.screenshot({ path: `${SHOTS}/8-desktop.png` });
-  await dp.goto(`${BASE}#/desk/players`);
+  await dp.goto(`${BASE}#/group/players`); // the players table (was on the Trip desk)
   await dp.getByTestId('caddie-panel').waitFor({ timeout: 10000 });
-  check(true, 'laptop: on the desk too');
+  check(true, 'laptop: on the players table too');
   await d.close();
 }
 

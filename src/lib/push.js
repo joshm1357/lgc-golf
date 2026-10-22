@@ -7,6 +7,8 @@
 //   - The app tells the 'notify' server function what happened; the server writes
 //     the message and sends it, so nobody can send made-up notifications.
 import { currentGroup } from './group.js';
+import { shareLink } from './links.js';
+import { joinCodeNow } from './joincode.js';
 import { previewOf, READ_ONLY_MESSAGE } from './preview.js';
 import { supabase } from './supabase.js';
 
@@ -130,4 +132,11 @@ export async function downloadFile(name, text, type = 'text/calendar') {
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
-export const appLink = (path = '') => `${window.location.origin}${import.meta.env.BASE_URL}#${path}`;
+/**
+ * A link to a page in the app, for sharing (group chat, a nudge, a calendar entry). It carries the group's join code
+ * when it's known (083), so it works on a phone with no session: join, then land on the page. { join: false } for
+ * a plain link.
+ */
+export const appLink = (path = '', { join = true } = {}) => shareLink({
+  base: `${window.location.origin}${import.meta.env.BASE_URL}`, code: join ? joinCodeNow() : null, to: path,
+});

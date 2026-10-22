@@ -93,6 +93,21 @@ export function buildJobs(plan, items, { today = todayISO(), organiserId = null,
 }
 
 /** A job's stage, for old rows that only have `done`. */
+/**
+ * "One person for all" (080): the call jobs to hand to one person — every call job on the trip that isn't done and
+ * isn't theirs already. → [job ids]
+ */
+export function bulkAllocate(items, callJobIds, ownerId) {
+  if (!ownerId) return [];
+  return callJobs(items, callJobIds).filter((j) => jobStage(j) !== 'done' && j.owner_id !== ownerId).map((j) => j.id);
+}
+/** Who's calling the courses: 'one' (one person has every open call), 'per' (split, or none handed out yet). */
+export function callMode(items, callJobIds) {
+  const open = callJobs(items, callJobIds).filter((j) => jobStage(j) !== 'done');
+  const owners = new Set(open.map((j) => j.owner_id || null));
+  return open.length > 1 && owners.size === 1 && !owners.has(null) ? 'one' : 'per';
+}
+
 export function jobStage(j) {
   if (j.stage && JOB_STAGES.includes(j.stage)) return j.done && j.stage !== 'done' ? 'done' : j.stage;
   return j.done ? 'done' : 'todo';
@@ -212,11 +227,12 @@ export function nextStep(ctx) {
     if (!batch) return null;
     const closes = batch.closes_on ? closesLabel(batch.closes_on, today) : 'open';
     const n = batch.waiting.length;
-    if (me && batch.waiting.includes(me)) {
+    // The organiser gets the results (they're running it); their own ballot is a small part of that view (080).
+    if (me && batch.waiting.includes(me) && !isOrganiser) {
       return step({ key: `vote-me:${batch.key}`, icon: '🗳️', title: `Have your say: ${batch.label}`, detail: `Vote ${closes}.`, label: 'Vote now', action: { type: 'tab', tab: 'vote' } });
     }
     return step({ key: `vote:${batch.key}`, icon: '🗳️', title: `${batch.label} vote ${closes}`, detail: n ? `${n} haven’t answered.` : 'Everyone’s had their say.',
-      who: null, label: isOrganiser && !n ? 'Pick the winner' : 'See the vote', action: { type: 'tab', tab: 'vote' } });
+      who: null, label: isOrganiser ? (n ? 'See the results' : 'Pick the winner') : 'See the vote', action: { type: 'tab', tab: 'vote' } });
   };
 
   if (phase === 'idea') {
@@ -239,11 +255,19 @@ export function nextStep(ctx) {
     }
     const unowned = calls.find((j) => !j.owner_id);
     if (unowned && isOrganiser) return step({ key: `allocate:${unowned.id}`, icon: '📞', title: `Allocate: ${unowned.title}`, detail: unowned.due ? `Due ${fmtRange(unowned.due)}.` : 'Hand it to someone to ring for times.', label: 'Allocate', action: { type: 'allocate', id: unowned.id } });
-    const mine = calls.find((j) => j.owner_id === me);
+    const mineCalls = calls.filter((j) => j.owner_id === me);
+    // Several calls with the same person (one person for all, 080): one step, not one per course.
+    if (mineCalls.length > 1) return step({ key: 'calls-mine', icon: '📞', title: `Your job: call ${mineCalls.length} courses for tee times`, detail: 'Ring each one and enter the times they can give you.', who: me, label: 'Open the calls', action: { type: 'builder' } });
+    const mine = mineCalls[0];
     if (mine) return step({ key: `job:${mine.id}`, icon: '📞', title: mine.title, detail: 'Your job — enter the times they can give you.', who: me, label: 'Open the job', action: { type: 'job', id: mine.id } });
     if (calls.length) {
       const first = calls[0];
       return step({ key: 'calls-wait', icon: '📞', title: `Waiting on ${plural(calls.length, 'call')} for tee times`, detail: `${nameOf(names, first.owner_id)} is on ${first.title.replace(/^📞\s*/, '')}.`, who: first.owner_id, label: 'See jobs', action: { type: 'tab', tab: 'jobs' } });
+    }
+    // Places to stay on the table but no accommodation list yet (080): remind whoever's running it.
+    if (isOrganiser && (builder.noStayList || []).length) {
+      const area = builder.noStayList[0];
+      return step({ key: `stay-list:${area}`, icon: '🏠', title: `Find places to stay in ${area}`, detail: 'Search with the links, save a few to a list on Airbnb or Stayz, then paste the list link — it goes on the vote.', label: 'Build the trip', action: { type: 'builder' } });
     }
     if (builder.teeOptions > 0 && isOrganiser) return step({ key: 'configs', icon: '🧩', title: 'Pick a trip or put it to a vote', detail: 'The tee times are in — choose the combination that works.', label: 'See the options', action: { type: 'builder' } });
     if (plan.start_date && isOrganiser) return step({ key: 'lock', icon: '🔒', title: 'Lock it in', detail: `${fmtRange(plan.start_date, plan.end_date)}${plan.location_name ? ` · ${plan.location_name}` : ''}. Then the to-do list is made.`, label: 'Lock it in', action: { type: 'lock' } });

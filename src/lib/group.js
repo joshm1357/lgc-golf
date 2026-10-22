@@ -23,6 +23,8 @@ export const GROUP_TABLES = new Set([
   'plan_comments', 'notify_prefs',
   // Votes by email (migration 079)
   'vote_emails',
+  // Planning made clearer (migration 080)
+  'course_social_times',
   // Stage 3 (migration 029)
   'group_features',
   // Team match play (migration 050)
@@ -54,6 +56,8 @@ export const GROUP_TABLES = new Set([
   'commentary', 'commentary_settings',
   // Custom games and closest-to-pin / longest-drive conditions (migration 073)
   'custom_games', 'side_comp_conditions',
+  // History brought in with "Bring your history": stories, awards, cups … (migration 081)
+  'history_notes',
 ]);
 
 let current = (() => {

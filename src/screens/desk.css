@@ -143,3 +143,7 @@ tr.st-problem td { color: var(--down); }
 .print-sheet { background: var(--card); border-radius: 12px; }
 @media (min-width: 1024px) { .print-sheet { padding: 20px 24px; } }
 .pc-grid thead tr.pc-par th.pc-name, .pc-grid thead tr.pc-si th.pc-name { background: var(--ground); color: var(--muted); }
+
+/* Group & invites | Players table: tabs on a laptop (the Players table page shows them at any width). */
+.group-tabs.desk-only { display: none; }
+@media (min-width: 1024px) { .group-tabs.desk-only { display: flex; border-radius: 0; } }

@@ -9,6 +9,8 @@ import { roundBoard, isNetFormat, formatName } from '../lib/board.js';
 import { formatToPar } from '../lib/scoring.js';
 import { Avatar } from '../components/ui.jsx';
 import { GroupCrest } from '../components/Logo.jsx';
+import { TOOL } from '../lib/desk.js';
+import './desk.css';
 
 export function Present() {
   const { roundId } = useParams();
@@ -47,7 +49,7 @@ export function Present() {
         </div>
         <div className="present-actions">
           {rounds.length > 1 && (
-            <select className="select present-select" aria-label="Round" value={round.id} onChange={(e) => nav(`/desk/present/${e.target.value}`, { replace: true })}>
+            <select className="select present-select" aria-label="Round" value={round.id} onChange={(e) => nav(TOOL.present(e.target.value), { replace: true })}>
               {rounds.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
           )}

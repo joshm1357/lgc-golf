@@ -13,12 +13,14 @@ import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
 import { GamesChip } from '../components/GamesChip.jsx';
 import { CompChips } from '../components/CompsChip.jsx';
 import { RulesTodayChip } from '../components/RulesLinks.jsx';
+import RuleTag from '../components/RuleTag.jsx';
 import { TeeGroupsBoard } from './TeeGroups.jsx';
 import { AwardCards } from '../components/Awards.jsx';
 import RoundRecap from '../components/RoundRecap.jsx';
 import { CourseGuideChip } from '../components/CourseGuideLink.jsx';
 import { WeatherChip } from '../components/Weather.jsx';
 import { AskChip } from '../components/AskChip.jsx';
+import { RoundTools } from '../components/RoundTools.jsx';
 
 const DrawSetup = lazyScreen(() => import('../components/DrawSetup.jsx'), 'default', { inline: true });
 
@@ -174,6 +176,7 @@ export default function Leaderboard() {
 
       {status?.quick && <QuickRoundDone round={round} board={board} course={course} />}
       {status?.is_admin && ((tvOn && round.status !== 'locked') || round.tv) && <TvToggle round={round} />}
+      <RoundTools round={round} />
 
       {sideCompsOn && round.status === 'live' && ((round.ctp_holes || []).length > 0 || (round.ld_holes || []).length > 0) && (
         <div className="section">
@@ -190,7 +193,8 @@ export default function Leaderboard() {
       <GamesChip round={round} />
       <WeatherChip round={round} course={course} />
       {round.rules && round.status !== 'locked' && (
-        <div className="section"><div className="card pad small" style={{ lineHeight: 1.45 }}><strong>Today's rules:</strong> {round.rules}{status?.legacy && <> <a href="?guide" style={{ fontWeight: 700 }}>How it works</a></>}</div></div>
+        <div className="section"><div className="card pad small" style={{ lineHeight: 1.45 }}><strong><RuleTag testId="todays-rules" rule={{ table: 'rounds', id: round.id, field: 'rules', label: 'Today’s rules', value: round.rules, where: { round_id: round.id, trip_id: round.trip_id, path: '/' } }}
+          explain={round.rules}>Today's rules:</RuleTag></strong> {round.rules}{status?.legacy && <> <a href="?guide" style={{ fontWeight: 700 }}>How it works</a></>}</div></div>
       )}
 
       {heads.length > 0 && round.status !== 'locked' && (
@@ -304,7 +308,8 @@ export function Scorecard({ row, board }) {
     <div className="stack">
       <div className="row">
         <AvatarStack players={row.players} size={34} />
-        <span className="muted small">{isA ? `Team handicap ${row.handicap}` : `Playing off ${row.handicap}`}</span>
+        <span className="muted small">{isA ? <RuleTag testId="team-handicap" rule={{ table: 'teams', id: row.id, field: 'handicap', label: `Team handicap ${row.handicap}`, value: row.handicap, where: { path: '/' } }}
+          explain="A team’s handicap is its players’ handicaps added up, divided by twice the team size (4 players ÷ 8, 3 players ÷ 6), unless an organiser set it by hand.">Team handicap {row.handicap}</RuleTag> : `Playing off ${row.handicap}`}</span>
       </div>
       {row.bonus ? <div className="card pad small" style={{ background: 'var(--gold-soft)', borderColor: 'var(--gold)' }}><strong>Side comp bonus −{row.bonus}</strong> · {row.bonusWins.join(', ')} (already taken off the score)</div> : null}
       {row.quick ? (

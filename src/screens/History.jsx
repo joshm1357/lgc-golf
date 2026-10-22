@@ -5,6 +5,7 @@ import { useData, useSession, useFeature } from '../lib/store.jsx';
 import { useRun, must } from '../lib/run.js';
 import { Header, Seg, toast } from '../components/ui.jsx';
 import { ImportLink } from './AiImport.jsx';
+import { useHistoryNotes, NoteLine } from '../components/TripHistory.jsx';
 import { parseHonours, parseHandicaps, honourOrder, matchPlayers, matchTrip, parseDate, yearOf, readHandicap, localToday, sameHonour } from '../lib/history.js';
 
 const EACH_LINE = '__each_line__';
@@ -24,14 +25,48 @@ export default function History() {
   }
   return (
     <div className="page">
-      <Header back title="History" sub="Winners and handicaps from before the app" />
+      <Header back title="History" sub="Trips, rounds, winners and stories from before the app" />
       <div className="section stack" style={{ paddingBottom: 24 }}>
-        <ImportLink />
+        <ImportLink label="📥 Add past trips, scorecards, cups…" />
         {trophiesOn && (
           <Seg light value={tab} onChange={setTab} options={[{ value: 'winners', label: 'Past winners' }, { value: 'handicaps', label: 'Past handicaps' }]} />
         )}
         {tab === 'winners' && trophiesOn ? <Winners /> : <Handicaps />}
+        <Notes />
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- Stories, cups, awards … brought in (081)
+
+/** Everything brought in that isn't a winner or a handicap, by trip (newest first), each with ✕ to remove it. */
+function Notes() {
+  const data = useData();
+  const [busy, run] = useRun();
+  const [notes, reload] = useHistoryNotes(null, { all: true });
+  if (!notes.length) return null;
+  const byTrip = new Map();
+  for (const n of notes) {
+    const k = n.trip_id || '';
+    if (!byTrip.has(k)) byTrip.set(k, []);
+    byTrip.get(k).push(n);
+  }
+  const trip = (id) => data.trips.find((t) => t.id === id);
+  const keys = [...byTrip.keys()].sort((a, b) => String(trip(b)?.start_date || '').localeCompare(String(trip(a)?.start_date || '')));
+  const remove = (n) => {
+    if (!window.confirm(`Remove “${n.title}” from the history?`)) return;
+    run(async () => { await must(supabase.from('history_notes').delete().eq('id', n.id)); reload(); }, 'Removed');
+  };
+  return (
+    <div className="card pad stack" style={{ gap: 8 }} aria-label="Stories, cups and awards">
+      <strong>📖 Stories, cups and awards</strong>
+      {keys.map((k) => (
+        <div key={k || 'none'} className="stack" style={{ gap: 0 }}>
+          <span className="label">{k ? (trip(k) ? <Link to={`/trip/${k}`}>{trip(k).name}</Link> : 'A trip') : 'The group'}</span>
+          {byTrip.get(k).map((n) => <NoteLine key={n.id} n={n} busy={busy} onRemove={remove} />)}
+        </div>
+      ))}
     </div>
   );
 }

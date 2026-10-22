@@ -16,6 +16,7 @@ import {
 import { withCustom, roundGameFromCustom, copyFrom } from '../lib/customgames.js';
 import { useCustomGames, CustomGamesCard, OptionControls, CustomGameSheet } from '../components/CustomGames.jsx';
 import { RulesLink } from '../components/RulesLinks.jsx';
+import RuleTag from '../components/RuleTag.jsx';
 
 const byId = (list) => Object.fromEntries(list.map((c) => [c.id, c]));
 
@@ -146,7 +147,8 @@ function GameCard({ played, round }) {
         <strong style={{ fontSize: 17 }}>{info.emoji} {gameLabel(game)}</strong>
         <span className="small" style={{ fontWeight: 700, color: skipped ? 'var(--muted)' : final ? 'var(--up)' : 'var(--gold)' }}>{skipped ? 'Not on' : final ? 'Final ✓' : round.status === 'live' ? 'Live' : 'Not started'}</span>
       </div>
-      <div className="small muted">{info.blurb} {stakeWords(game)}</div>
+      <div className="small muted">{info.blurb} <RuleTag testId="game-stake" rule={{ table: 'round_games', id: game.id, field: 'stake', label: stakeWords(game).replace(/\.$/, ''), value: Number(game.stake), where: { round_id: round.id, trip_id: round.trip_id, path: `/games?r=${round.id}` } }}
+        explain={`${info.name || 'This game'}: ${stakeWords(game)} Set by the organiser for this round.`}>{stakeWords(game)}</RuleTag></div>
       {game.house_rules && <div className="small" style={{ whiteSpace: 'pre-wrap' }} data-testid="house-rules"><strong>House rules ({game.base_name}, our way):</strong> {game.house_rules}</div>}
       {played.note && <div className="small muted">{played.note}</div>}
       <div><RulesLink value={game.custom_game_id ? `custom_game:${game.custom_game_id}` : `game:${kind}`} /></div>

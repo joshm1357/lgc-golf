@@ -8,6 +8,7 @@ import { courseHoles } from '../lib/board.js';
 import { strokesReceived, stablefordPoints } from '../lib/scoring.js';
 import { Icon, Loading, toast, PhotoButtons } from '../components/ui.jsx';
 import Distances from '../components/Distances.jsx';
+import RuleTag, { roundRef, useActiveRules } from '../components/RuleTag.jsx';
 
 const MOMENTS = ['Chip-in', 'Bomb drive', 'Lost ball', 'Air shot', 'Three-putt', 'Tree hit', 'Sandy save'];
 
@@ -29,6 +30,7 @@ export default function ScoreEntry() {
   const holes = useMemo(() => courseHoles(course), [course]);
   const isA = round?.format === 'ambrose';
   const me = status?.player_id;
+  const rules = useActiveRules();
 
   const subjects = useMemo(() => {
     if (!round) return [];
@@ -223,7 +225,8 @@ export default function ScoreEntry() {
       {isA && minDrives > 0 && (
         <div className="section">
           <div className="card pad stack" style={{ gap: 8, borderColor: driveSqueeze ? 'var(--down)' : 'var(--line)' }}>
-            <div className="row between"><span className="label">Whose drive?</span><span className="small muted">min {minDrives} each</span></div>
+            <div className="row between"><span className="label">Whose drive?</span><span className="small muted"><RuleTag testId="min-drives" rule={roundRef(round, 'min_drives', `Minimum ${round.min_drives} drives each`, rules)}
+              explain={`In Ambrose, each player’s drive must be used at least ${round.min_drives} times in the round.`}>min {minDrives} each</RuleTag></span></div>
             <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, (subject.players || []).length)}, minmax(0, 1fr))`, gap: 8 }}>
               {(subject.players || []).filter(Boolean).map((p) => {
                 const c = driveCounts[p.id] || 0;

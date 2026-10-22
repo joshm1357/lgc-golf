@@ -17,6 +17,8 @@ import { tripDays, tripCourses, roundFormat, roundWinner, countdownWords, whosIn
 import { useTripComps } from '../components/CompsChip.jsx';
 import { WeatherChip } from '../components/Weather.jsx';
 import { CourseGuideChip } from '../components/CourseGuideLink.jsx';
+import TripHistory from '../components/TripHistory.jsx';
+import { ImportLink } from './AiImport.jsx';
 
 function useTripPhotos(tripId, on) {
   const [photos, setPhotos] = useState([]);
@@ -171,6 +173,10 @@ export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage 
           {statsOn && <Link to="/stats" className="btn sm ghost">📊 Stats</Link>}
         </div>
       )}
+
+      {/* Brought in from history (081): cups, awards and moments, stories, scorecard notes. */}
+      {tripId && <TripHistory tripId={tripId} />}
+      {done && tripId && <ImportLink label="📥 Add history to this trip" trip={tripId} />}
 
       {onOrganise && (
         <button type="button" className="btn ghost block" onClick={() => onOrganise(null)}>

@@ -936,3 +936,58 @@ screen, "Viewing as Mike · read only", and Stop.
 - **Tested:** Deno `import.test.ts` 8 (55 in the folder); Vitest `aiimport.test.js` 22; `ai-import-test.mjs` 35 checks;
   staging SQL checks (organiser adds / re-run skips / player and other group refused / voting group → proposed;
   empty-Rulebook voting group → in force; guard back on afterwards). ai-helper v4 deployed to staging and boot-checked.
+
+## ov8 — Dispute anything that's a rule, branch `ov8-dispute`, 22 Oct 2026
+- **What:** `<RuleTag>` (`src/components/RuleTag.jsx`, logic in `src/lib/disputes.js`): a rule value shows as normal
+  text with a faint dotted underline. Tap → what it says, where it's from (Rulebook rule / round / comp / game setting,
+  value now), "See it in the Rulebook", and "⚖️ Dispute this" → the Tribunal's raise sheet, filled in (a `ruling` case).
+  ⚖️ on the chip while a case about it is open; "You've already raised this — see the case"; guests and Tribunal-off
+  get the explanation only. The case page shows what was disputed and its value when raised.
+- **Where:** side comp "Worth 2 strokes", today's rules (leaderboard), Ambrose team handicap (scorecard), minimum
+  drives (score entry), game stakes, Cup match points and handicaps, Cup "to win", comp "how it's decided", the
+  Stableford tie-break (countback), own side comps' "how it's won". Rulebook rules (fines, trophy rules) already had
+  "Challenge this rule".
+- **Migration 082** (staging only): `cases.subject_kind` / `subject_ref` (nullable, checked), one-open-dispute-per-
+  person index, `raise_dispute()` (members, not guests; tribunal + rule challenges on; fixed list of tables/fields;
+  the value is read by the server). No new way to change a setting: a verdict goes through `apply_verdict_draft`
+  (organiser-checked) or an organiser changes the setting where it's set.
+- **Tested:** Vitest `disputes.test.js` 17 (1032 in all); `supabase/tests/082_rule_disputes.sql` 18 checks (rolled
+  back); `dispute-test.mjs` 23; rulebook-v2/v3, governance, games, cup, comps, own-comps, stroke, fourball, stats pass.
+  `rulebook-test`, `phone-test`, `trip-overview-test` time out on wave2-all as well (not from this branch).
+
+## ov8b — Apply a dispute's verdict, branch `ov8b-apply-verdict`, 22 Oct 2026
+- **What:** on an upheld dispute about a setting, organisers see "Change it to" (filled from the case's "What it should
+  be", checked as they type) and "Apply the verdict: change Worth 2 strokes from 2 to 1". After: "✓ Applied by Josh,
+  2:41 pm: 2 → 1" on the case, a feed post, the setting changed. If the setting changed since the case was raised:
+  "It's changed since — now 4. Apply anyway?". Settings objects, Rulebook and standard rules are still changed where
+  they're set (Rulebook rules via the existing organiser-checked "Into the Rulebook").
+- **Migration 084** (staging only): `cases.setting_applied_by / setting_applied_at / setting_change`,
+  `private.dispute_value()` (types and ranges per field), `apply_dispute_verdict(case, value, force)` — organiser of
+  the case's group only; upheld (`passed`) setting disputes only; once; same fixed field list as 082; refuses (returns
+  `changed`) when the value moved since raised unless `p_force`; table triggers still run.
+- **Tested:** Vitest `disputes.test.js` 21 (1071 in all); `supabase/tests/084_apply_dispute_verdict.sql` 17 checks
+  (rolled back); `dispute-test.mjs` 34; governance 44, comps 24.
+
+## Links, not PINs (083), branch `ov10-links-not-pins`, 22 Oct 2026
+- **Why:** Josh: "I don't want PINs any more. It should all be links." A recap link opened with no session showed the
+  PIN screen instead of the recap.
+- **No PIN anywhere in the UI:** the front door is "Open the link from your group chat" with a paste box that takes
+  any app link (invite, guest, team, organiser, personal, or a shared page) + "Lost your link? Ask your organiser to
+  send your personal link." (+ Sign in when the build has it). Gone: the PIN box, Admin's "Unlock admin" PIN form and
+  "Change PINs", More's "I'm the admin", the admin-PIN card in Group & invites, the PIN on the Sunday guide.
+  The server PIN functions (join_group, join_group_id, claim_admin, set_pins, turn_off_admin_pin) stay for old phones.
+- **One link scheme:** `#/join/<CODE>?to=<page, URL-encoded>` (`src/lib/links.js`). In that group → straight to the
+  page; in another group on this phone → switch, then the page; not in it → Join → pick your name → notifications
+  prompt → the page. Old `?vote=<plan>` links still work. Targets must be in-app ("/…", never /join or /me).
+  An old link with no code (#/?r=…) is remembered on the phone; after joining by any link they land on it.
+- **Every shared link carries the code:** `appLink()` adds the group's join code (fetched once per group,
+  `src/lib/joincode.js`), so recap, replay, nudges, trip shares, calendar entries and Call the vote all work with no
+  session.
+- **Personal links on the live build (sign-in off):** opening one makes that phone the player — no name to pick
+  ("Yes, I'm Mike — open the app"). Organisers send them from Group & invites (now shown with sign-in off too);
+  players get "📱 Copy my link" on their own profile. Sign-in builds keep 046's flow, plus "Just open it on this phone".
+- **Migration 083** (staging only): `share_join_code()` (any member gets the player invite code, a guest gets the guest
+  code; made if none is live), `use_player_link(token)` (phone-only use of a 046 link; proper sign-ins go through
+  claim_player_link), `create_my_player_link()`.
+- **Tested:** Vitest 1073 (`links.test.js` 23 new); SQL `supabase/tests/links_not_pins.sql` 24 checks on staging,
+  rolled back; e2e `links-test.mjs` 24 checks; stage2, signin-home, plan-ux, trips, replay, notify-prompt, phone pass.

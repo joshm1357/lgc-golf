@@ -164,7 +164,7 @@ describe('nextStep', () => {
   it('deciding: weekends first, then the vote, then calls, then lock in', () => {
     const p = { ...plan, status: 'planning', start_date: null };
     const org = { ...base, plan: p, stage: 'deciding', me: ORG, isOrganiser: true };
-    expect(nextStep(org).title).toBe('Pick 1–3 weekends');
+    expect(nextStep(org).title).toBe('Plan the areas and a shortlist of weekends');
     expect(nextStep(org).action.type).toBe('builder');
 
     const polls = [{ id: 'q1', status: 'open', vote_batch: 'b1', closes_on: '2026-11-06' }];
@@ -185,7 +185,13 @@ describe('nextStep', () => {
     expect(w.title).toBe('Waiting on 1 call for tee times');
     expect(w.who).toBe(P2);
     expect(nextStep({ ...org, items: [{ ...calls[0], owner_id: P2 }], builder: { weekends: 2 }, me: P2, isOrganiser: false, rsvps: [{ player_id: P2, status: 'in' }] }).action).toEqual({ type: 'job', id: 'c1' });
-    expect(nextStep({ ...org, builder: { weekends: 2, teeOptions: 4 } }).title).toBe('Pick a trip or put it to a vote');
+    expect(nextStep({ ...org, builder: { weekends: 2, teeOptions: 4 } }).title).toBe('Pick the trip, then lock it in');
+    // ov23: after the vote, the area and the primary / backup weekends come BEFORE any calls.
+    const pickArea = nextStep({ ...org, builder: { weekends: 3, started: true, region: null, weekendsSettled: false } });
+    expect([pickArea.key, pickArea.title]).toEqual(['area-pick', 'Choose the area and the primary and backup weekends']);
+    expect(nextStep({ ...org, builder: { weekends: 3, started: true, region: 'Hunter Valley', weekendsSettled: false } }).title).toBe('Set the primary and backup weekends');
+    expect(nextStep({ ...org, builder: { weekends: 2, started: true, region: 'Hunter Valley', weekendsSettled: true } }).key).toBe('courses-pick');
+    expect(nextStep({ ...org, builder: { weekends: 2, started: true, region: 'Hunter Valley', weekendsSettled: true, coursesDone: true } }).key).toBe('calls-make');
     expect(nextStep({ ...org, plan: { ...p, start_date: '2027-03-12' } }).action).toEqual({ type: 'lock' });
   });
 

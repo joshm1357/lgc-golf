@@ -8,12 +8,10 @@
 // first tap shows the summary, the second opens the details. The tick boxes still put things on the table.
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
-import { Icon, toast } from './ui.jsx';
-import { useRun, must } from '../lib/run.js';
+import { toast } from './ui.jsx';
 import * as TB from '../lib/tripbuilder.js';
 import { pickFacts } from '../lib/tripfinder.js';
 import BuilderMap from './BuilderMap.jsx';
-import StaySearch from './StaySearch.jsx';
 import { useFeature } from '../lib/store.jsx';
 import { useCourseResearch } from './CourseResearch.jsx';
 import { CourseSheet, StaySheet } from './PlaceSheets.jsx';
@@ -40,10 +38,13 @@ function useAreaLib(pins) {
   return lib;
 }
 
-export default function AreaStart({ plan, st, save, org, areas, history, accom = [], reloadAccom, people = 0, origin = null, tees = [], onCallVote = null, onMode = null }) {
-  const [busy, run] = useRun();
+// tab / onTab (ov23): the areas bar at the top of step 1 (components/AreaBar.jsx) picks the area; then this shows no
+// tabs of its own. Accommodation ideas and search links moved to step 2 (components/StayIdeas.jsx).
+export default function AreaStart({ plan, st, save, org, areas, history, accom = [], people = 0, origin = null, tees = [], onCallVote = null, onMode = null, tab: ctlTab = null, onTab = null, onChoose = null }) {
   const options = st.region ? [st.region] : st.regionOptions;
-  const [tab, setTab] = useState(options[0] || null);
+  const [tabState, setTabState] = useState(options[0] || null);
+  const tab = ctlTab ?? tabState;
+  const setTab = onTab || setTabState;
   const comparing = tab === '__compare' && options.length > 1;
   useEffect(() => { onMode?.(comparing ? 'compare' : 'region'); }, [comparing]); // eslint-disable-line react-hooks/exhaustive-deps
   const area = options.includes(tab) ? tab : options[0] || null;
@@ -69,7 +70,7 @@ export default function AreaStart({ plan, st, save, org, areas, history, accom =
     return m;
   }, [st.courses, lib]);
   if (!area) return null;
-  const tabs = options.length > 1 && (
+  const tabs = options.length > 1 && !onTab && (
     <div className="tb-chips" role="tablist" aria-label="Area" data-testid="area-tabs">
       {options.map((r) => <button key={r} type="button" role="tab" className="chip" aria-selected={!comparing && r === area} aria-pressed={!comparing && r === area} onClick={() => setTab(r)}>{r}</button>)}
       <button type="button" role="tab" className="chip" aria-selected={comparing} aria-pressed={comparing} onClick={() => setTab('__compare')} data-testid="area-compare-tab">📊 Compare</button>
@@ -109,6 +110,7 @@ export default function AreaStart({ plan, st, save, org, areas, history, accom =
     save({ ...st, areaStays: { ...(st.areaStays || {}), [area]: list }, ...(area === st.region ? { stays: list.slice(0, TB.MAX_STAYS) } : {}), suggested: keep(`stay:${area}:${k}`) });
   };
   function chooseArea(r) {
+    if (onChoose) { onChoose(r, courseMap); return; } // ov23: the builder picks it with the vote's favourites ticked
     const stays = ((st.areaStays || {})[r] || []).slice(0, TB.MAX_STAYS);
     const days = TB.prefillStayDays(st.days, (st.areaCourses || {})[r] || [], { ...courseMap, ...(st.courses || {}) }, { stays, stayMax: st.stayMax });
     save({ ...st, region: r, regionOptions: [r], stays, days });
@@ -120,16 +122,12 @@ export default function AreaStart({ plan, st, save, org, areas, history, accom =
     save({ ...st, pins: [...(st.pins || []), p], areaStays: { ...(st.areaStays || {}), [area]: list }, ...(area === st.region ? { stays: list.slice(0, TB.MAX_STAYS) } : {}) });
     setAddPin(null); setPinName('');
   };
-  const ideas = accom.filter((a) => a.area === area || (!a.area && area === st.region));
-  const removeIdea = (a) => run(async () => { await must(supabase.from('plan_stays').delete().eq('id', a.id)); reloadAccom?.(); });
-  const addIdea = (row) => run(async () => {
-    await must(supabase.from('plan_stays').insert({ plan_id: plan.id, ...row, area }));
-    reloadAccom?.();
-  }, row.is_list ? 'List added — it goes on the vote with a View places link' : 'Added');
 
   const mapCourses = cands.slice(0, 40).map((c) => ({ id: c.course.id, name: c.course.name, lat: c.course.lat, lng: c.course.lng, on: onTableCourses.includes(c.course.id), sub: c.drive.text, sug: c.suggested && !onTableCourses.includes(c.course.id) }));
   for (const id of onTableCourses) if (!mapCourses.some((m) => m.id === id) && courseMap[id]) mapCourses.push({ ...courseMap[id], on: true });
   const mapStays = stayPins.map((s) => ({ ...s, on: onTableStays.some((x) => (x.key || x.name) === s.key), sug: isSug(`stay:${area}:${s.key}`), count: TB.staySupport(s, onTableCourses, courseMap, st.stayMax) }));
+  // The trip's accommodation ideas for this area (the stay sheet shows them; adding them is in step 2, ov23).
+  const ideas = accom.filter((a) => a.area === area || (!a.area && area === st.region));
   // Hover for a quick summary, click for everything (ov22).
   const candOf = (id) => cands.find((c) => c.course.id === id);
   const tipFor = (kind, item) => (kind === 'course'
@@ -190,15 +188,7 @@ export default function AreaStart({ plan, st, save, org, areas, history, accom =
                 <button type="button" className="btn sm" disabled={pinName.trim().length < 2} onClick={dropPin}>Add</button>
               </div>
             ))}
-        <span className="label" style={{ marginTop: 6 }}>Accommodation ideas</span>
-        {ideas.length === 0 && <span className="small muted">None yet — search below, save a list on the site and paste its link, or paste a place.</span>}
-        {ideas.map((a) => (
-          <div key={a.id} className="row between small" style={{ gap: 6 }} data-testid="accom-idea">
-            <span className="grow"><strong>{a.is_list ? '📋 ' : '🏡 '}{a.name}</strong>{a.link && <> · <a href={a.link} target="_blank" rel="noreferrer noopener">{a.is_list ? 'View places ↗' : 'Have a look ↗'}</a></>}{a.option_id ? ' · on the vote' : ''}</span>
-            {org && !a.option_id && <button type="button" className="btn ghost sm" aria-label={`Remove ${a.name}`} disabled={busy} onClick={() => removeIdea(a)}>{Icon.x(14)}</button>}
-          </div>
-        ))}
-        <StaySearch places={(onTableStays.length ? onTableStays.map((s) => s.name) : [area]).slice(0, 3)} weekends={st.weekends || []} people={people} busy={busy} onSave={org ? addIdea : null} />
+        <span className="small muted">Accommodation searches come in the next step, once the area’s chosen.</span>
       </div>
 
       </div>

@@ -145,7 +145,7 @@ function VotesPanel({ p, onStep }) {
     <Panel id="votes" title="🗳️ Open votes" count={p.open.length ? `${p.open.length} open` : `${p.decided} decided`}>
       {!p.open.length && <div className="small muted">No votes open.</div>}
       {p.open.map((v) => (
-        <button key={v.poll.id} type="button" className="desk-vote org-vote-btn" data-testid="desk-vote" onClick={() => onStep?.(v.poll.purpose === 'stay' ? 'book' : 'vote')}>
+        <button key={v.poll.id} type="button" className="desk-vote org-vote-btn" data-testid="desk-vote" onClick={() => onStep?.(v.poll.purpose === 'stay' ? 'courses' : 'area')}>
           <div style={{ fontWeight: 800 }}>{v.poll.question}</div>
           <table className="desk-table compact">
             <tbody>

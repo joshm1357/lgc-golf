@@ -1357,3 +1357,51 @@ Front end only; no database change (one small change to the ai-helper function's
   switch); functions runup_offer_car / join_car / leave_car / claim_bring, tips_close_at. NOT yet applied to staging
   (the apply needed an approval nobody could give in this run) — checked in PGlite with `supabase/tests/094_run_up_test.sql`.
 - **Tests:** `src/lib/runup.test.js` (32); e2e `runup-test.mjs` new; trips / trip-overview / nav / phone / history updated.
+
+## ov23 — Weekends shortlist, areas, vote depth, comps in the run-up (23 Oct 2026, branch `ov23-weekends-comps`, not merged)
+Josh (08:30–08:39, using Build the trip on live). The order is now: **1 Plan** (areas + weekends shortlist + how long
++ who's coming) → **2 Vote** (area + weekends + how long; each area's courses and places are optional detail) →
+**3 Call the courses** (only the winning area's courses, about the **primary and backup weekends**) → **4 Pick & lock
+in** → **5 Jobs & money** → **6 Comps & on the day**. Step keys unchanged (`book`, `lockin`, `day`), so old links work.
+- **Step 1 "Areas & weekends":** "The areas we're considering" bar (chips, ✕, "+ Add another area" with search and
+  the region guide list, 📊 Compare) — `components/AreaBar.jsx`. EVERY weekend in the window (default the next 6
+  months, organiser picks the start month and 3–12 months), grouped by month, tagged 🏖️ long weekend (NSW public
+  holidays) / 🎒 school holidays (NSW Eastern division, 2026–Jan 2028 from education.nsw.gov.au), tick any number,
+  plus your own dates — `components/WeekendPicker.jsx`, `lib/weekends.js`. Nights changes keep the shortlist (dates
+  resized). "How long?" can be set or put to the vote (1/2/3 nights / day trip; 3 nights → Thursday or Monday).
+  "Who's coming?" number. No accommodation in step 1 (moved to step 2, `components/StayIdeas.jsx`).
+- **Head count:** `tripHeadcount` — the number set (organiser, or the plan chat's `headcount`), else who said
+  they're in, else the group; never a default. Links say "for 9 people · 5+ bedrooms" and the number can be changed
+  there (saved to the trip). The Organise stay sheet uses it too.
+- **The vote:** "How deep?" — Areas only, or Areas + what's in them. Detail questions ("Hunter Valley: which
+  courses?" / "…: where to stay?") are optional: not needed to count as answered, never nudged (app, reminders,
+  emails). Ballot groups them under "📍 If it's <area>" with "Go into the detail →". Every option has a one-line
+  summary (course: style · ★ for groups · fees · drive; place: courses within 30 min; area: courses within 30 min ·
+  drive · $ a round · region-guide line) and "ⓘ Details" (sheet with the course research; hover tooltip on a
+  laptop) — `components/OptionDetails.jsx`. Results in the builder (`components/AreaVoteResults.jsx`): area winner,
+  rankings inside each area, "N went into the detail", how long, weekends Primary/Backup; "Choose this one" picks
+  the area, its favourite courses first, its voted places ticked, and sets Primary + Backup at the winning length.
+- **Call the courses:** locked until the area's chosen and weekends set. Script line "Primary: …; Backup: …" on
+  every call job. "It's not working? Open it up": add the next weekend from the vote as another backup, or re-open
+  the area choice (runner-up) — nothing lost.
+- **Comps & on the day (Organise step 6):** `components/RunUp.jsx` + `lib/runup.js` — What's up for grabs (tick
+  which comps are on; Cup only when the group uses it; standings link), Rules for this trip (Rulebook, up for a
+  vote, under dispute, Propose a rule change), Handicaps check (last change, open disputes, tap to dispute,
+  "Review handicaps" until marked done), then Teams and the draw. Ryder Cup removed from planning extras (old saved
+  lists cleaned); the AI planner is told not to ask about comps ("we'll sort comps and teams closer to the trip").
+- **Overview:** the same for everyone — no "Organise this trip"/"Build the trip" in the body; "You've voted ✓ — see
+  results or change my votes".
+- **Migration 092 (`092_vote_detail.sql`, additive):** `plan_polls.optional`, `plan_polls.area`. Applied to
+  **staging** only. The app sends them only for detail questions.
+- **Edge functions changed (deploy to staging when convenient):** ai-helper (`plan.ts`: draft `headcount`, comps
+  rule, comp extras filtered), notify (optional polls skipped), `_shared/emailvotes.js` (optional polls skipped).
+- **One step list (merge with release-v10, Josh's follow-up):** `src/lib/tripsteps.js` is the ONLY list of a trip's
+  steps — Organise's step cards and the trip builder's tabs both read it, with the same summary lines ("Hunter Valley ·
+  Primary Fri 13 – Mon 16 Nov · Backup …"): 1 Areas & weekends (incl. the vote and primary/backup) · 2 Courses & stays ·
+  3 Call the courses · 4 Pick & lock in · 5 Jobs & money · 6 Comps & on the day. No separate Plan or Vote step; old
+  `?step=plan` / `?step=vote` links open step 1. The builder shows all six (5 and 6 link to Organise). New Next steps
+  "Pick the course options each day and where to stay" and "Call the courses: make the call jobs".
+- **Merged release-v10 (ov22):** the vote card's ⓘ Details opens ov22's course / place-to-stay sheets (one sheet everywhere).
+- **Tests:** Vitest 1389 pass (new weekends ×20, areavote ×10, runup ×4, step order). Deno ai-helper/notify/_shared
+  154 pass. Playwright: new `weekends-comps-test` 61 checks; `trip-builder`, `plan-ux`, `organise-tidy`,
+  `trip-overview`, `desktop`, `trip-plan`, `trip-extras`, `caddie`, `trips`, `email-votes` all pass.

@@ -10,7 +10,7 @@ import { useRun, must } from '../lib/run.js';
 import { notify, shareText } from '../lib/push.js';
 import { todayISO } from '../lib/plan.js';
 import { answersFor } from '../lib/emailvotes.js';
-import { allTicked, toggleTick, ballotFrom, callProblem, defaultCloses, closesWord, pollRows, reach, voteShareLink, shareMessage } from '../lib/callvote.js';
+import { allTicked, toggleTick, ballotFrom, callProblem, defaultCloses, closesWord, pollRows, reach, voteShareLink, shareMessage, groupBallot, pollArea, detailQuestion } from '../lib/callvote.js';
 import { joinCodeNow, loadJoinCode } from '../lib/joincode.js';
 import './planux.css';
 
@@ -182,15 +182,18 @@ export function CallVoteSheet({ plan, title, range, keenDefault = true, keenOpti
           <span className="label">What the group sees</span>
           <div className="card" style={{ overflow: 'hidden', borderColor: 'var(--navy)', borderWidth: 2, marginTop: 6 }}>
             <div style={{ padding: '10px 14px', background: 'var(--navy)', color: '#fff' }}>
-              <div className="small" style={{ opacity: 0.85, fontWeight: 700 }}>🗳️ {ballot.sections.length + (keenOption && keen ? 1 : 0)} quick questions · closes {closesWord(closes, todayISO())}</div>
+              <div className="small" style={{ opacity: 0.85, fontWeight: 700 }}>🗳️ {groupBallot(ballot.sections).main.length + (keenOption && keen ? 1 : 0)} quick questions{groupBallot(ballot.sections).areas.length ? ' + optional detail' : ''} · closes {closesWord(closes, todayISO())}</div>
               <div style={{ fontSize: 18, fontWeight: 800 }}>{title}</div>
             </div>
             <div className="stack" style={{ padding: 10, gap: 8 }}>
-              {ballot.sections.map((s) => {
+              {(() => { const g = groupBallot(ballot.sections); return [...g.main, ...g.areas.flatMap((a) => a.polls)]; })().map((s, i, arr) => {
                 const words = answersFor({ kind: s.kind, question: s.question, purpose: s.options.some((o) => o.stayId) ? 'stay' : null });
+                const area = pollArea(s);
+                const firstOfArea = area && pollArea(arr[i - 1]) !== area;
                 return (
-                  <div key={s.key} className="card pad stack" style={{ gap: 4 }}>
-                    <strong>{s.question}</strong>
+                  <div key={s.key} className="card pad stack" style={{ gap: 4 }} data-testid={area ? 'preview-detail' : 'preview-main'}>
+                    {firstOfArea && <span className="small" style={{ fontWeight: 800 }}>📍 If it’s {area} — optional detail</span>}
+                    <strong>{area ? detailQuestion(s) : s.question}</strong>
                     {s.options.map((o) => (
                       <div key={o.key} className="row between small" style={{ gap: 6 }}>
                         <span style={{ fontWeight: 600 }}>{o.label}</span>

@@ -254,8 +254,18 @@ export function nextStep(ctx) {
     const calls = callJobs(items, builder.callJobIds).filter((j) => jobStage(j) !== 'done');
     if (!plan.start_date && !(builder.weekends > 0) && !calls.length) {
       return isOrganiser
-        ? step({ key: 'weekends', icon: '📅', title: 'Pick 1–3 weekends', detail: 'Courses can’t give you times until you know the dates.', label: 'Build the trip', action: { type: 'builder' } })
+        ? step({ key: 'weekends', icon: '📅', title: 'Plan the areas and a shortlist of weekends', detail: 'Then the group votes. Courses get called once the area and the weekends are picked.', label: 'Build the trip', action: { type: 'builder' } })
         : step({ key: 'weekends-wait', icon: '📅', title: 'The organiser is picking weekends', detail: 'You’ll get a vote soon.', label: 'Chat about it', action: { type: 'tab', tab: 'chat' } });
+    }
+    // ov23 (Josh): decide the area and the weekends (primary and backup) first, THEN call the courses.
+    if (isOrganiser && !calls.length && builder.started && !plan.start_date && !(builder.teeOptions > 0) && (!builder.region || !builder.weekendsSettled)) {
+      return step({ key: 'area-pick', icon: '📍', title: builder.region ? 'Set the primary and backup weekends' : 'Choose the area and the primary and backup weekends',
+        detail: 'From the vote (or your call). Then the courses get called about those weekends.', label: 'Build the trip', action: { type: 'builder' } });
+    }
+    // Then step 2 (courses each day and where to stay), then step 3 (make the call jobs).
+    if (isOrganiser && !calls.length && builder.started && !plan.start_date && !(builder.teeOptions > 0) && builder.region && builder.weekendsSettled) {
+      if (!builder.coursesDone) return step({ key: 'courses-pick', icon: '⛳', title: 'Pick the course options each day and where to stay', detail: 'Then the courses get called about the primary and backup weekends.', label: 'Build the trip', action: { type: 'builder' } });
+      return step({ key: 'calls-make', icon: '📞', title: 'Call the courses: make the call jobs', detail: 'One job per course, asking about the primary and backup weekends.', label: 'Build the trip', action: { type: 'builder' } });
     }
     const unowned = calls.find((j) => !j.owner_id);
     if (unowned && isOrganiser) return step({ key: `allocate:${unowned.id}`, icon: '📞', title: `Allocate: ${unowned.title}`, detail: unowned.due ? `Due ${fmtRange(unowned.due)}.` : 'Hand it to someone to ring for times.', label: 'Allocate', action: { type: 'allocate', id: unowned.id } });
@@ -273,9 +283,9 @@ export function nextStep(ctx) {
       const area = builder.noStayList[0];
       return step({ key: `stay-list:${area}`, icon: '🏠', title: `Find places to stay in ${area}`, detail: 'Search with the links, save a few to a list on Airbnb or Stayz, then paste the list link — it goes on the vote.', label: 'Build the trip', action: { type: 'builder' } });
     }
-    if (builder.teeOptions > 0 && isOrganiser) return step({ key: 'configs', icon: '🧩', title: 'Pick a trip or put it to a vote', detail: 'The tee times are in — choose the combination that works.', label: 'See the options', action: { type: 'builder' } });
+    if (builder.teeOptions > 0 && isOrganiser) return step({ key: 'configs', icon: '🧩', title: 'Pick the trip, then lock it in', detail: 'The tee times are in — choose the best combination for each day.', label: 'See the options', action: { type: 'builder' } });
     if (plan.start_date && isOrganiser) return step({ key: 'lock', icon: '🔒', title: 'Lock it in', detail: `${fmtRange(plan.start_date, plan.end_date)}${plan.location_name ? ` · ${plan.location_name}` : ''}. Then the to-do list is made.`, label: 'Lock it in', action: { type: 'lock' } });
-    if (isOrganiser) return step({ key: 'weekends', icon: '📅', title: 'Pick 1–3 weekends', detail: 'Then put them to the group.', label: 'Build the trip', action: { type: 'builder' } });
+    if (isOrganiser) return step({ key: 'weekends', icon: '📅', title: 'Plan the areas and a shortlist of weekends', detail: 'Then put them to the group.', label: 'Build the trip', action: { type: 'builder' } });
     return step({ key: 'deciding-wait', icon: '🗳️', title: 'Still being decided', detail: 'The organiser will put up a vote.', label: 'Chat about it', action: { type: 'tab', tab: 'chat' } });
   }
 

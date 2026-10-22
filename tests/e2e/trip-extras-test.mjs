@@ -240,7 +240,7 @@ await page.screenshot({ path: `${SHOTS}/4-repeat-made.png`, fullPage: true });
 // 3b. "Set it up in the app" on the copied trip fills the rounds from last time, then puts the side comps and games back.
 await page.goto(`${BASE}#/plan/${made?.id}?view=organise&step=day`);
 await page.getByRole('button', { name: /Set it up in the app/ }).click();
-const selects = page.getByLabel('Course');
+const selects = page.getByLabel('Course', { exact: true });
 await selects.first().waitFor({ timeout: 10000 });
 const picked = await selects.evaluateAll((els) => els.map((e) => e.value));
 check(picked[0] === C1 && picked[1] === '' && picked[2] === C2, `set-up sheet: Friday Cypress Lakes, Saturday blank, Sunday The Vintage (${picked.join(', ')})`);

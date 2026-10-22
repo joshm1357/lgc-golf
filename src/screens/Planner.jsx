@@ -200,7 +200,8 @@ export function PlanDetail() {
             <TripOverview trip={trip} plan={plan} rsvps={pd.rsvps} items={pd.items} stage={stage} onOrganise={(t) => setView('organise', t)}
               votes={showRunUp(stage) ? null : <OverviewVotes pd={pd} />}
               runUp={showRunUp(stage) ? <RunUp pd={pd} trip={trip} onOrganise={(t) => setView('organise', t)} /> : null} />
-            {!isAdmin && plan.status === 'planning' && <div style={{ marginTop: 14 }}><TripBuilderCard pd={pd} /></div>}
+            {/* ov23: the same for organisers and players — "how it's coming together", never "Build the trip" here. */}
+            {plan.status === 'planning' && <div style={{ marginTop: 14 }}><TripBuilderCard pd={pd} viewer /></div>}
             {/* After the trip: rate the course and the dinner awards belong with the summary. */}
             {stage === 'done' && <div className="stack" style={{ marginTop: 14 }}><TripFinderCard pd={pd} /><TripExtras pd={pd} viewer /></div>}
           </div>

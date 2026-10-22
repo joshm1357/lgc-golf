@@ -1,23 +1,18 @@
-// The run-up's named slots (ov25, 23 Oct 2026) — pieces other builders own, wired in here at merge.
+// The run-up's named slots (ov25, 23 Oct 2026) — pieces other builders own, wired in here at the v10 merge.
 // The run-up (components/RunUp.jsx) mounts whatever is set; while a slot is null it shows a simple stand-in.
 //
-//   compsForTrip   ov23's "Comps & on the day" piece for one trip: what's up for grabs, rules, handicaps, teams.
-//                  Rendered as <CompsForTrip pd={pd} trip={trip} compact />.
+//   compsForTrip   ov23's "Comps & on the day": what's up for grabs, rules, handicaps (read-only here).
 //   awardsForTrip  ov24's "Awards & fines for this trip": propose, opinions, rewards (incl. strokes), proof, fines.
-//                  Rendered as <AwardsForTrip pd={pd} trip={trip} compact />.
-//   awardVotes     ov24's open award / fine proposals to vote on inline, for "Up for a vote".
-//                  Rendered as <AwardVotes pd={pd} trip={trip} />.
-//
-// To wire one: import it here and set it, e.g.
-//   import { CompsAndOnTheDay } from './CompsAndOnTheDay.jsx';
-//   export const RUNUP_SLOTS = { compsForTrip: CompsAndOnTheDay, ... };
+//   awardVotes     left empty: AwardsRunUp already lists the proposals waiting for a decision.
+import React from 'react';
 import { AwardsRunUp } from './AwardsFines.jsx';
+import CompsOnTheDay from './CompsOnTheDay.jsx';
 
-// Wired at the v10 merge. awardVotes stays empty: AwardsRunUp already lists the proposals waiting for a decision.
+const CompsForTrip = ({ pd, trip }) => <CompsOnTheDay pd={pd} trip={trip} isOrg={false} />;
 const AwardsForTrip = ({ trip }) => <AwardsRunUp trip={trip} title="🏷 Awards & fines" />;
 
 export const RUNUP_SLOTS = {
-  compsForTrip: null, // set when ov23 merges
+  compsForTrip: CompsForTrip,
   awardsForTrip: AwardsForTrip,
   awardVotes: null,
 };

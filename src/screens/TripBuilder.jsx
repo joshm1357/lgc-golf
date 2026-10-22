@@ -26,6 +26,15 @@ import { windowDates, slotsFor } from '../lib/teegrid.js';
 import { extrasSection } from '../lib/extras.js';
 import { useCourseResearch } from '../components/CourseResearch.jsx';
 import { shortFacts } from '../lib/courseresearch.js';
+// ov23: areas bar, every weekend in the window, how long, stays in step 2, the vote's results, primary / backup.
+import AreaBar, { useRegionGuides } from '../components/AreaBar.jsx';
+import WeekendPicker, { LengthPicker } from '../components/WeekendPicker.jsx';
+import StayIdeas from '../components/StayIdeas.jsx';
+import AreaVoteResults from '../components/AreaVoteResults.jsx';
+import { chooseAreaFromVotes, reopenArea, courseSummary, staySummary, areaSummary, regionNote } from '../lib/areavote.js';
+import { tripHeadcount, settlePrimaryBackup, openUpWeekend, makePrimary, weekendRole, rolesLine, lengthSection, leadingNights, resizeWeekend } from '../lib/weekends.js';
+import { detailCounts } from '../lib/callvote.js';
+import { TRIP_STEPS, areaLine, coursesLine } from '../lib/tripsteps.js';
 import { CourseSheet, StaySheet } from '../components/PlaceSheets.jsx';
 import { usePlaceInfo, RowTip } from '../components/PlanMapTools.jsx';
 import { courseTip, stayTip } from '../lib/placeinfo.js';
@@ -53,15 +62,14 @@ export default function TripBuilder() {
   const [step, setStep] = useState(null);
   const [focus, setFocus] = useState(0);
   const [open, setOpen] = useState(null);
-  const [query, setQuery] = useState('');
+  const [areaTab, setAreaTab] = useState(null); // the area open under the areas bar ('__compare' = side by side)
+  const guides = useRegionGuides();
   const [filters, setFilters] = useState({});
-  const [longOn, setLongOn] = useState(false);
   const [addPin, setAddPin] = useState(null); // null | 'tap' | { lat, lng }
   const [pinName, setPinName] = useState('');
   const [busy, run] = useRun();
   const [batches] = useVoteBatches(planId);
   const [calling, setCalling] = useState(null);
-  const [comparing, setComparing] = useState(false); // the Compare tab shows only the comparison (080 review) // { title, range, keen, slot, attach, state } — the Call the vote sheet
   const [accom, setAccom] = useState([]);
   // ov22: hover for a quick summary, click for everything (map pins and list rows).
   const [staySheet, setStaySheet] = useState(null);
@@ -164,6 +172,10 @@ export default function TripBuilder() {
   const history = useCallback((id) => TB.playedHistory(id, { courses: data.courses, rounds: data.rounds, trips: data.trips, honour: data.honour_board }), [data]);
   const points = useMemo(() => TB.votePoints(st?.optionKeys || {}, pd?.votes || []), [st?.optionKeys, pd?.votes]);
   const need = TB.teeTimesNeeded({ rsvps: pd?.rsvps || [], override: st?.headcount });
+  // ov23: how many are coming — the number set (organiser / plan chat), else who's in, else the group. Never made up.
+  const head = tripHeadcount({ set: st?.headcount, setBy: st?.headcountBy, rsvps: pd?.rsvps || [], players: data.players || [] });
+  // The courses on the table in every area (for the one-line summaries on the vote card).
+  const areaResearch = useCourseResearch(Object.values(st?.areaCourses || {}).flat());
   const jobs = (pd?.items || []).filter((i) => i.kind === 'job');
   const callJobIds = st?.callJobs || {};
 
@@ -214,22 +226,49 @@ export default function TripBuilder() {
     if (!has && stays.length >= TB.MAX_STAYS) { toast(`Up to ${TB.MAX_STAYS} places to stay`); return; }
     patch({ stays: has ? stays.filter((x) => x.key !== s.key) : [...stays, { key: s.key, name: s.name, lat: s.lat, lng: s.lng }] });
   };
-  const toggleWeekend = (w) => {
-    const has = st.weekends.some((x) => x.start === w.start);
-    if (!has && st.weekends.length >= TB.MAX_WEEKENDS) { toast(`Up to ${TB.MAX_WEEKENDS} weekends`); return; }
-    patch({ weekends: has ? st.weekends.filter((x) => x.start !== w.start) : [...st.weekends, { start: w.start, end: w.end, long: w.long, holiday: w.holiday || null }].sort((a, b) => a.start.localeCompare(b.start)), weekendsSettled: false });
+  // ------------------------------------------------------------------ ov23: the area, the length, primary / backup
+  const v1polls = (pd?.polls || []).filter((p) => p.vote_batch && p.vote_batch === st.votes?.v1);
+  const detail = detailCounts(v1polls, pd?.votes || []);
+  const votedNights = st.lengthVote?.on ? leadingNights(points, st.nights) : st.nights;
+  // "Choose this one": the area with the vote's favourite courses and places ticked, and (once there's a vote) the
+  // primary and backup weekends at the winning length.
+  const chooseArea = (area, nights = null) => {
+    const n = nights ?? votedNights;
+    const base = n !== st.nights ? { ...st, nights: n, days: TB.resizeDays(st.days, n) } : st;
+    let next = chooseAreaFromVotes(base, area, points, courseMap);
+    next = { ...next, areaPool: st.areaPool?.length ? st.areaPool : st.regionOptions };
+    if (!st.weekendsSettled && st.votes?.v1 && (st.weekends || []).length) next = { ...next, ...settlePrimaryBackup(base, points, { nights: n }) };
+    save(next);
+    setAreaTab(area);
   };
-  const toggleRegion = (r) => {
-    const has = st.regionOptions.includes(r);
-    if (!has && st.regionOptions.length >= 3) { toast('Up to 3 areas'); return; }
-    patch({ regionOptions: has ? st.regionOptions.filter((x) => x !== r) : [...st.regionOptions, r] });
+  const settleWeekends = (nights = null) => {
+    const n = nights ?? votedNights;
+    const s = settlePrimaryBackup(st, points, { nights: n });
+    save({ ...st, ...s, ...(n !== st.nights ? { days: TB.resizeDays(st.days, n) } : {}) });
+  };
+  const setHead = (v) => patch({ headcount: v === '' ? null : Math.max(1, Math.min(200, Number(v))), headcountBy: v === '' ? null : 'organiser' });
+
+  // The one-line summary on each option of the vote card (Josh 08:37): courses, places to stay, areas.
+  const voteNotes = () => {
+    const out = {};
+    const regs = TB.regionsFrom(areas);
+    for (const r of st.region ? [st.region] : st.regionOptions) {
+      const ids = st.areaCourses?.[r] || [];
+      const pins = st.areaStays?.[r] || [];
+      const reg = regs.find((x) => x.region === r);
+      const list = ids.map((id) => courseMap[id]).filter(Boolean);
+      const sum = areaSummary({ region: reg, courses: list, research: areaResearch, origin, note: regionNote(guides, r) });
+      out[`area:${r}`] = [sum, TB.areaBallotNote(ids, courseMap, pins)].filter(Boolean).join(' · ');
+      for (const id of ids) out[`areacourse:${r}:${id}`] = courseSummary({ course: courseMap[id] || {}, research: areaResearch[id] || null, from: pins[0] || reg || null });
+      for (const s of pins) out[`stay:${s.key || s.name}`] = staySummary({ stay: s, courseIds: ids, courseMap });
+    }
+    return out;
   };
 
-
-  // Call the vote (080): everything on the table at the start — areas (each with its courses and places to stay),
-  // weekends, towns, courses, accommodation ideas, extras — and each day's course options once the area's settled.
-  const vote1 = () => {
-    const range = TB.startRange(st, { courseMap, accom, extras: extrasSection(st.extras) });
+  // Call the vote (080; ov23): the organiser picks how deep — areas only, or areas and what's in them (each area's
+  // courses and places to stay, optional for voters) — plus the weekends shortlist and "How long?" when it's asked.
+  const vote1 = (depth = 'full') => {
+    const range = TB.startRange(st, { courseMap, accom, extras: extrasSection(st.extras), depth, length: lengthSection(st.lengthVote), notes: voteNotes() });
     if (st.region) {
       for (const d of days) {
         if (d.options.length < 2) continue;
@@ -240,17 +279,19 @@ export default function TripBuilder() {
       }
     }
     if (!range.length) { toast('Nothing on the table yet — add a second option somewhere, or just pick'); return; }
-    setCalling({ title: st.region ? 'Weekend, where to stay and courses' : 'Where and when?', range, keen: true, slot: 'v1' });
+    // The vote keeps the shortlist and the areas (weekendPool / areaPool) so "open it up" can go back to them later.
+    setCalling({ title: st.region ? 'Weekend, where to stay and courses' : 'Where and when?', range, keen: true, slot: 'v1', depth,
+      multi: !st.region && st.regionOptions.length > 1, state: { weekendPool: st.weekends, areaPool: st.region ? [st.region] : st.regionOptions } });
   };
   const called = async ({ batch: b, keys }) => {
     const c = calling;
     for (const id of c.attach || []) await supabase.from('plan_polls').update({ vote_batch: b.id }).eq('id', id);
-    await save({ ...st, ...(c.state || {}), optionKeys: { ...(st.optionKeys || {}), ...keys }, votes: { ...(st.votes || {}), [c.slot]: b.id } });
+    await save({ ...st, ...(c.state || {}), optionKeys: { ...(st.optionKeys || {}), ...keys }, votes: { ...(st.votes || {}), [c.slot]: b.id }, ...(c.depth ? { voteDepth: c.depth } : {}) });
     pd.reload(); loadAccom();
   };
 
   const makeCalls = () => run(async () => {
-    const made = TB.callJobs({ days, weekends: st.weekends, courses: courseMap, needed: need.needed || 1, origin, stays, booking });
+    const made = TB.callJobs({ days, weekends: st.weekends, courses: courseMap, needed: need.needed || 1, origin, stays, booking, note: st.weekendsSettled ? rolesLine(st.weekends) : null });
     const fresh = made.filter((j) => !callJobIds[j.course_id] || !jobs.some((x) => x.id === callJobIds[j.course_id]));
     if (!fresh.length) { toast('Every course already has its call job'); return; }
     const due = TB.addDays(todayISO(), 7);
@@ -305,7 +346,7 @@ export default function TripBuilder() {
       const c = courseMap[item.id] || item;
       return courseTip({ course: c, research: research[item.id] || hotResearch[item.id], booking: booking[item.id], drive: item.sub || st.info?.[`${focusDay.index}:${item.id}`] || '', facts: c.facts });
     }
-    return stayTip({ stay: item, courses: mapCourses, ideas: accom.filter((a) => !a.area || a.area === st.region), people: need.people || 0 });
+    return stayTip({ stay: item, courses: mapCourses, ideas: accom.filter((a) => !a.area || a.area === st.region), people: head.people || 0 });
   };
   const tipForKey = (key) => {
     if (!key) return null;
@@ -331,66 +372,65 @@ export default function TripBuilder() {
     </div>
   );
 
-  // ------------------------------------------------------------------ 1. area & weekends
-  const regionHits = TB.matchRegions(query, areas);
-  const wkOptions = TB.weekendOptions({ count: 6, nights: st.nights, includeLong: longOn });
+  // ------------------------------------------------------------------ 1. areas & weekends (ov23)
+  // Just: where roughly (the areas we're considering) + when (the weekends shortlist) + how long + who's coming.
+  // Accommodation ideas and search links are in step 2.
+  const areaOptions = st.region ? [st.region] : st.regionOptions;
+  const tabNow = areaTab === '__compare' && areaOptions.length > 1 ? '__compare' : areaOptions.includes(areaTab) ? areaTab : areaOptions[0] || null;
+  const comparing = tabNow === '__compare';
   const ptsBadge = (k) => (points[k] ? <span className="tb-chip-pts">{points[k]}</span> : null);
+  const primaryBackup = st.weekendsSettled && st.weekends.length > 0 && (
+    <div className="card pad stack" style={{ gap: 4 }} data-testid="tb-weekends-settled">
+      <strong className="small">📅 The weekends the courses get called about</strong>
+      {st.weekends.map((w, i) => (
+        <div key={w.start} className="row between small" style={{ gap: 6 }} data-testid="settled-weekend">
+          <span><strong>{weekendRole(i)}:</strong> {TB.weekendLabel({ start: w.start, end: w.end })}</span>
+          {org && i > 0 && <span className="row" style={{ gap: 4 }}>
+            <button type="button" className="btn ghost sm" onClick={() => patch({ weekends: makePrimary(st.weekends, w.start) })}>Make primary</button>
+            <button type="button" className="btn ghost sm" aria-label={`Drop ${w.start}`} onClick={() => patch({ weekends: st.weekends.filter((x) => x.start !== w.start) })}>✕</button>
+          </span>}
+        </div>
+      ))}
+      {org && <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        {openUpWeekend(st, points).added && <button type="button" className="btn ghost sm" onClick={() => patch({ weekends: openUpWeekend(st, points).weekends })} data-testid="add-backup">+ Add another backup</button>}
+        <button type="button" className="btn ghost sm" onClick={() => patch({ weekendsSettled: false, weekends: st.weekendPool?.length ? st.weekendPool : st.weekends })}>Change</button>
+      </div>}
+    </div>
+  );
   const stepArea = (
     <>
-      <span className="label">Where, roughly?</span>
-      {st.region ? (
-        <div className="row between"><strong data-testid="tb-region">📍 {st.region}</strong>{org && <button type="button" className="btn ghost sm" onClick={() => patch({ region: null })}>Change</button>}</div>
-      ) : (
-        <>
-          {org && <input className="input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. South Coast, Hunter, Mudgee" aria-label="Area" />}
-          {regionHits.length > 0 && (
-            <div className="tb-chips" data-testid="tb-region-hits">
-              {regionHits.slice(0, 6).map((r) => (
-                <button key={r.region} type="button" className="chip" aria-pressed={st.regionOptions.includes(r.region)} disabled={!org} onClick={() => toggleRegion(r.region)}>{r.region}</button>
-              ))}
-            </div>
-          )}
-          {st.regionOptions.length === 1 && org && <span className="small muted">Pick another area to put them to a vote, or go with this one below.</span>}
-        </>
+      <AreaBar st={st} save={save} org={org} areas={areas} tab={tabNow} onTab={setAreaTab} guides={guides} />
+      {areaOptions.length > 0 && (
+        <AreaStart plan={plan} st={st} save={save} org={org} areas={areas} history={history} accom={accom}
+          people={head.people} origin={origin} tees={tees} tab={tabNow} onTab={setAreaTab} onChoose={(r) => chooseArea(r)}
+          onCallVote={org && votesOn && !v1 ? () => vote1('full') : null} />
       )}
-      {(st.region || st.regionOptions.length > 0) && (
-        <AreaStart plan={plan} st={st} save={save} org={org} areas={areas} history={history} accom={accom} reloadAccom={loadAccom}
-          people={need.people || data.players.filter((p) => p.approved !== false).length} origin={origin} tees={tees}
-          onCallVote={org && votesOn && !v1 ? vote1 : null} onMode={(m) => setComparing(m === 'compare')} />
-      )}
-      {!(comparing && st.regionOptions.length > 1 && !st.region) && <>
+      {v1 && !st.region && <AreaVoteResults st={st} points={points} detail={detail} courseMap={courseMap} org={org} onChoose={chooseArea} onSettle={settleWeekends} />}
+      {!comparing && <>
       {org && (
         <div className="small muted">Coming from: <strong>{origin?.label || 'not set'}</strong>{!origin && ' — add starting points in “Find a course”, or people’s home suburbs.'}</div>
       )}
-      <span className="label">How long?</span>
-      <Seg light options={[{ value: 1, label: '1 night' }, { value: 2, label: '2 nights' }, { value: 3, label: '3 nights' }]} value={st.nights}
-        onChange={(n) => org && patch({ nights: n, days: TB.resizeDays(st.days, n), weekends: [], weekendsSettled: false })} />
-      <span className="label">Which weekends? (1–3)</span>
-      {org && (
-        <div className="tb-chips" data-testid="tb-weekend-options">
-          {wkOptions.map((w) => (
-            <button key={w.start} type="button" className="chip" aria-pressed={st.weekends.some((x) => x.start === w.start)} onClick={() => toggleWeekend(w)}>{w.label}{ptsBadge(`weekend:${w.start}`)}</button>
-          ))}
-          <button type="button" className="chip" aria-pressed={longOn} onClick={() => setLongOn(!longOn)}>{longOn ? 'Hide long weekends' : '+ Long weekends'}</button>
-        </div>
+      <LengthPicker st={st} save={save} org={org} leading={st.lengthVote?.on && v1 ? votedNights : null} />
+      {st.weekendsSettled ? primaryBackup : <WeekendPicker st={st} save={save} org={org} points={points} nights={st.lengthVote?.on && v1 ? votedNights : st.nights} />}
+      {v1 && st.region && !st.weekendsSettled && <AreaVoteResults st={st} points={points} detail={detail} courseMap={courseMap} org={org} onChoose={chooseArea} onSettle={settleWeekends} />}
+      {org && !v1 && st.region && st.weekends.length > 0 && !st.weekendsSettled && (
+        <button type="button" className="btn block" onClick={() => settleWeekends(st.nights)} data-testid="settle-weekends">
+          {st.weekends.length > 1 ? 'Skip the vote: the first is the primary weekend, the next the backup' : 'This is the weekend'}
+        </button>
       )}
-      {st.weekends.length > 0 && (
-        <div className="stack" style={{ gap: 4 }} data-testid="tb-weekends">
-          {st.weekends.map((w) => (
-            <div key={w.start} className="row between small"><span>📅 <strong>{TB.weekendLabel(w)}</strong>{ptsBadge(`weekend:${w.start}`)}</span>
-              {org && st.weekends.length > 1 && <button type="button" className="btn ghost sm" onClick={() => patch({ weekends: [w], weekendsSettled: true })}>Go with this</button>}
-            </div>
-          ))}
-        </div>
-      )}
-      {org && st.weekends.length > 0 && (
-        st.weekendsSettled
-          ? <span className="small" style={{ fontWeight: 700 }} data-testid="tb-weekends-settled">✓ Weekends settled — the courses get called about {st.weekends.length === 1 ? 'this one' : 'these'}.{' '}<button type="button" className="btn ghost sm" onClick={() => patch({ weekendsSettled: false })}>Change</button></span>
-          : <button type="button" className="btn block" onClick={() => patch({ weekendsSettled: true })}>These are the weekends{st.weekends.length > 1 ? ' (a shortlist)' : ''}</button>
-      )}
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }} data-testid="tb-headcount">
+        <span className="label" style={{ margin: 0 }}>Who’s coming?</span>
+        {org
+          ? <input className="input" style={{ width: 90 }} type="number" min="1" max="200" inputMode="numeric" value={st.headcount ?? ''} placeholder={String(head.people || '')} onChange={(e) => setHead(e.target.value)} aria-label="How many coming" />
+          : <strong>{head.people || '?'}</strong>}
+        <span className="small muted">{head.people ? `${head.people} — ${head.words}` : 'not known yet'}</span>
+      </div>
       <ExtrasPanel plan={plan} st={st} save={save} org={org} />
       {org && votesOn && !v1 && (st.regionOptions.length > 0 || st.region) && (
-        <button type="button" className="btn gold block" disabled={busy} onClick={vote1} data-testid="tb-call-vote1">🗳️ Call the vote: “{st.region ? 'Weekend, where to stay and courses' : 'Where and when?'}”</button>
+        <div className="stack" style={{ gap: 6 }}>
+          <button type="button" className="btn gold block" disabled={busy} onClick={() => vote1('full')} data-testid="tb-call-vote1">🗳️ Call the vote: “{st.region ? 'Weekend, where to stay and courses' : 'Where and when?'}”</button>
+          {!st.region && st.regionOptions.length > 1 && <span className="small muted">You choose how deep on the next screen: just the areas, or the areas and what’s in them.</span>}
+        </div>
       )}
       </>}
       {v1 && <VoteLink planId={planId} title={v1.title} />}
@@ -437,23 +477,37 @@ export default function TripBuilder() {
           cands={focusDay.index === d.index ? cands : []} courseMap={courseMap} info={st.info || {}} org={org} booking={booking} history={history} research={research}
           votes={TB.dayVotes(points, d.index)} onToggle={(c) => toggleOption(d, c)} onOpen={(id) => setOpen({ id, day: d })} pi={pi} />
       ))}
+      {/* ov23: where to stay — ideas and search links with the real head count — live here now, not in step 1. */}
+      <StayIdeas plan={plan} st={st} save={save} org={org} accom={accom} reloadAccom={loadAccom} head={head} />
       {org && votesOn && st.region && !st.votes?.v1 && (
-        <button type="button" className="btn gold block" disabled={busy} onClick={vote1} data-testid="tb-vote1">🗳️ Call the vote (one vote card)</button>
+        <button type="button" className="btn gold block" disabled={busy} onClick={() => vote1('full')} data-testid="tb-vote1">🗳️ Call the vote (one vote card)</button>
       )}
       {v1 && <VoteLink planId={planId} title={v1.title} />}
     </>
   );
 
   // ------------------------------------------------------------------ 3. call the courses
-  const callList = TB.callJobs({ days, weekends: st.weekends, courses: courseMap, needed: need.needed || 1, origin, stays, booking });
+  const callList = TB.callJobs({ days, weekends: st.weekends, courses: courseMap, needed: need.needed || 1, origin, stays, booking, note: st.weekendsSettled ? rolesLine(st.weekends) : null });
   // Every day of every weekend still in play (080): the call covers them all, so the best day can be picked later.
   const callDates = windowDates(st.weekends);
+  // "It's not working — open it up" (ov23): add the next weekend from the vote as another backup, or go back to the
+  // area choice with the runner-up — nothing is lost either way.
+  const nextWeekend = openUpWeekend(st, points);
+  const openUp = (how) => {
+    if (how === 'weekend' && nextWeekend.added) { patch({ weekends: nextWeekend.weekends }); toast(`Added a backup: ${TB.weekendLabel(nextWeekend.added)} — ask the courses about it too`); return; }
+    if (how === 'area') {
+      const r = reopenArea(st, points);
+      save(r.state); setAreaTab(r.runnerUp); setStep('area');
+      toast(r.runnerUp ? `The area’s open again — ${r.runnerUp} came next in the vote` : 'The area’s open again');
+    }
+  };
   const stepCalls = (
     <>
+      {st.weekendsSettled && <div className="card pad small" data-testid="tb-call-weekends"><strong>Ask about:</strong> {rolesLine(st.weekends)}{st.nights != null ? ` · ${st.nights === 0 ? 'a day trip' : `${st.nights} night${st.nights === 1 ? '' : 's'}`}` : ''}</div>}
       <div className="row between" style={{ gap: 8 }} data-testid="tb-needed">
         <span><strong>{need.needed} tee time{need.needed === 1 ? '' : 's'} in a row</strong> <span className="small muted">for {need.people || '?'} {need.source === 'in' ? 'in' : need.source === 'keen' ? 'keen' : need.source === 'set' ? '(set)' : ''}</span></span>
         {org && <input className="input" style={{ width: 90 }} type="number" min="1" max="200" inputMode="numeric" value={st.headcount ?? ''} placeholder={String(need.people || '')}
-          onChange={(e) => patch({ headcount: e.target.value === '' ? null : Math.max(1, Math.min(200, Number(e.target.value))) })} aria-label="How many playing" />}
+          onChange={(e) => setHead(e.target.value)} aria-label="How many playing" />}
       </div>
       {org && <button type="button" className="btn gold block" disabled={busy || !callList.length} onClick={makeCalls} data-testid="tb-make-calls">📞 Make the “Call the course” jobs ({callList.length})</button>}
       {callList.length > 0 && <CallsWho items={pd.items} callJobIds={Object.values(callJobIds)} org={org} reload={pd.reload} />}
@@ -470,6 +524,17 @@ export default function TripBuilder() {
       })}
       {org && tees.length > 0 && <BestPerDay rows={tees} dates={callDates} needed={need.needed || 1} courses={courseMap} />}
       {!org && !callList.length && <span className="small muted">No courses to call yet.</span>}
+      {org && st.callsMade && (
+        <div className="card pad stack" style={{ gap: 6 }} data-testid="open-it-up">
+          <strong className="small">It’s not working? Open it up</strong>
+          <span className="small muted">No workable times on these weekends? Add the next weekend from the vote, or go back to the area choice. Nothing you’ve done is lost.</span>
+          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+            <button type="button" className="btn ghost sm" disabled={!nextWeekend.added} onClick={() => openUp('weekend')} data-testid="open-up-weekend">
+              {nextWeekend.added ? `+ Backup: ${TB.weekendLabel(nextWeekend.added)}` : 'No more weekends on the shortlist'}</button>
+            {(st.areaPool || []).length > 1 && <button type="button" className="btn ghost sm" onClick={() => openUp('area')} data-testid="open-up-area">↩︎ Re-open the area choice</button>}
+          </div>
+        </div>
+      )}
     </>
   );
 
@@ -486,7 +551,7 @@ export default function TripBuilder() {
         {shownConfigs.slice(0, 5).map((c, i) => (
           <div key={c.key} className="tb-config" data-testid="tb-config">
             <div className="row between" style={{ gap: 8 }}>
-              <strong>{i + 1}. {TB.weekendLabel(c.weekend)}</strong>
+              <strong>{i + 1}. {st.weekendsSettled && st.weekends.findIndex((w) => w.start === c.weekend.start) >= 0 ? `${weekendRole(st.weekends.findIndex((w) => w.start === c.weekend.start))} · ` : ''}{TB.weekendLabel(c.weekend)}</strong>
               <span className="small muted">{points[`config:${c.key}`] ? `${points[`config:${c.key}`]} vote pts · ` : ''}{c.gaps ? `${c.gaps} day${c.gaps === 1 ? '' : 's'} without golf · ` : ''}about {c.totalDrive} min driving</span>
             </div>
             <div className="small" data-testid="tb-config-text">{c.text}</div>
@@ -503,8 +568,9 @@ export default function TripBuilder() {
 
   const bodies = { area: stepArea, courses: stepCourses, calls: stepCalls, configs: stepConfigs };
   const summaries = {
-    area: [st.region || (st.regionOptions.length ? `${st.regionOptions.join(' or ')}?` : null), st.weekends.map((w) => TB.weekendLabel(w)).join(' / ')].filter(Boolean).join(' · '),
-    courses: stays.length ? `Stay ${stays.map((s) => s.name).join(' / ')} · ${days.filter((d) => d.options.length).length} of ${days.length} days with options` : null,
+    // The same lines as the Organise step cards (lib/tripsteps.js).
+    area: areaLine(st),
+    courses: coursesLine(st),
     calls: st.callsMade ? `${tees.filter((t) => slotsFor(t).length).length} sets of tee times in` : null,
     configs: st.pickedText || (configs.length ? `${configs.length} trip${configs.length === 1 ? '' : 's'} that work` : null),
   };
@@ -519,6 +585,10 @@ export default function TripBuilder() {
               {s.locked ? '🔒' : s.done ? '✓' : s.n} {s.label}
             </button>
           ))}
+          {/* ov23: the same six steps as Organise — the last two live there. */}
+          {TRIP_STEPS.filter((t) => !t.builder).map((t) => (
+            <Link key={t.key} role="listitem" className="tb-step tb-step-out" to={`/plan/${planId}?view=organise&step=${t.key}`} data-testid={`tb-step-link-${t.key}`}>{t.n} {t.title} ↗</Link>
+          ))}
         </div>
         {!org && <div className="small muted">The organiser builds the trip here; you vote on the trip’s page{jobs.some((j) => j.owner_id === me && Object.values(callJobIds).includes(j.id)) ? ' — and put in the tee times for your call below' : ''}.</div>}
         <div className={`tb-layout${current === 'area' ? ' single' : ''}`}>
@@ -532,7 +602,16 @@ export default function TripBuilder() {
         </div>
       </div>
       {calling && (
-        <CallVoteSheet plan={plan} title={calling.title} range={calling.range} keenDefault={calling.keen} keenOption={calling.keen}
+        <CallVoteSheet key={calling.depth || 'x'} plan={plan} title={calling.title} range={calling.range} keenDefault={calling.keen} keenOption={calling.keen}
+          intro={calling.multi ? (
+            <div className="stack" style={{ gap: 6 }} data-testid="vote-depth">
+              <span className="label">How deep?</span>
+              <Seg light options={[{ value: 'areas', label: 'Areas only' }, { value: 'full', label: 'Areas + what’s in them' }]} value={calling.depth} onChange={(d) => vote1(d)} />
+              <span className="small muted">{calling.depth === 'areas'
+                ? 'Just “Which area?” (and the weekends). Courses and places get sorted once the area’s picked.'
+                : 'Each area’s courses and places to stay go under it, optional — voters can answer just the areas and weekends, or go into the detail.'}</span>
+            </div>
+          ) : null}
           doCall={(ballot, { closes, keen }) => callBatch({ plan, me, title: calling.title, sections: ballot.sections, keen, closes })}
           onCalled={called} onClose={() => setCalling(null)} />
       )}

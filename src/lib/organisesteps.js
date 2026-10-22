@@ -1,13 +1,15 @@
 // Organise as one clear path (Josh, 22 Oct: "It's not clear where to start"). Pure functions, no React, so they can
 // be tested.
 //
-// Plain words: a trip is organised in six steps, in the order the organiser actually works:
-//   1 Plan          where and when (Build the trip, or set them by hand)
-//   2 Vote          put it to the group, then pick the winner
-//   3 Book          call the courses for tee times, find and pick the accommodation
-//   4 Lock in       lock it in, who's in, the deposits
-//   5 Jobs & money  the to-do list, the kitty, rooms and cars
-//   6 On the day    rounds, teams, the draw and side comps
+// Plain words: a trip is organised in six steps — the SAME six as the trip builder's tabs (lib/tripsteps.js):
+//   1 Areas & weekends   the areas, the weekends shortlist, how long, the vote, then the area and primary / backup
+//   2 Courses & stays    course options each day, where to stay (the shortlist and its vote)
+//   3 Call the courses   only the chosen area's courses, about the primary and backup weekends
+//   4 Pick & lock in     the best combination from the tee times, then lock it in, who's in, the deposits
+//   5 Jobs & money       the to-do list, the kitty, rooms and cars
+//   6 Comps & on the day what's up for grabs, the rules, handicaps, teams and the draw, the rounds
+// ov23 (Josh, 23 Oct): no separate "Plan" or "Vote" step — the vote is part of step 1. Old ?step=plan / ?step=vote
+// links open step 1 (STEP_ALIAS); book, lockin, money and day keep their keys.
 // The step that's open ("current") is the one the Next step (nextStep() in tripjobs.js) belongs to, so there's only
 // ever one big button and it's the same advice as before. Each step also says, from the trip's own data, whether
 // it's done, and a one-line summary ("✓ Hunter Valley · Fri 13 – Sun 15 Mar").
@@ -15,30 +17,28 @@
 import { fmtRange, money } from './plan.js';
 import { callJobs, jobStage } from './tripjobs.js';
 import { depositStatus } from './tripbudget.js';
+import { TRIP_STEPS, STEP_ALIAS, areaLine, coursesLine } from './tripsteps.js';
+export { STEP_ALIAS };
 
-export const ORGANISE_STEPS = [
-  { key: 'plan', n: 1, title: 'Plan', blurb: 'Where and when' },
-  { key: 'vote', n: 2, title: 'Vote', blurb: 'Put it to the group' },
-  { key: 'book', n: 3, title: 'Book', blurb: 'Tee times and accommodation' },
-  { key: 'lockin', n: 4, title: 'Lock in', blurb: 'Who’s in and deposits' },
-  { key: 'money', n: 5, title: 'Jobs & money', blurb: 'Jobs, kitty, rooms and cars' },
-  { key: 'day', n: 6, title: 'On the day', blurb: 'Teams, draw and comps' },
-];
+// ov23: the ONE shared step list (lib/tripsteps.js) — the trip builder's tabs read the same one.
+export const ORGANISE_STEPS = TRIP_STEPS.map(({ key, n, title, blurb }) => ({ key, n, title, blurb }));
 export const STEP_KEYS = ORGANISE_STEPS.map((s) => s.key);
 
 /** The old ?tab= addresses (notifications and shared links use them) → the step they now live under. */
-export const TAB_STEP = { vote: 'vote', people: 'lockin', jobs: 'money', kitty: 'money', groups: 'money' };
+export const TAB_STEP = { vote: 'area', people: 'lockin', jobs: 'money', kitty: 'money', groups: 'money' };
 /** Tabs that live in the "More" section rather than a step. */
 export const MORE_TABS = ['chat', 'details'];
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const jobsOf = (items) => (items || []).filter((i) => i.kind === 'job');
-const BOOK_JOBS = ['shortlist_stay', 'reserve_stay', 'book_tees'];
+const STAY_JOBS = ['shortlist_stay', 'reserve_stay'];
+const BOOK_JOBS = ['book_tees'];
 const LOCK_JOBS = ['deposit_ask', 'chase_deposits'];
 
 /** Which step a job belongs to. */
 export function stepOfJob(job, items, callJobIds = []) {
   if (!job) return 'money';
+  if (STAY_JOBS.includes(job.formula_key)) return 'courses';
   if (BOOK_JOBS.includes(job.formula_key)) return 'book';
   if (LOCK_JOBS.includes(job.formula_key)) return 'lockin';
   if (job.formula_key === 'teams_draw') return 'day';
@@ -50,12 +50,15 @@ export function stepOfJob(job, items, callJobIds = []) {
 export function stepOfNext(next, { items = [], polls = [], builder = {} } = {}) {
   if (!next) return null;
   const [kind, id] = String(next.key).split(/:(.*)/s);
-  if (['idea', 'weekends', 'weekends-wait', 'stay-list'].includes(kind)) return 'plan';
-  if (['configs', 'deciding-wait'].includes(kind)) return 'vote';
+  // ov23: the vote is part of step 1 (Areas & weekends); places to stay are step 2.
+  if (['idea', 'weekends', 'weekends-wait', 'deciding-wait', 'area-pick'].includes(kind)) return 'area';
+  if (kind === 'stay-list' || kind === 'courses-pick') return 'courses';
+  if (kind === 'calls-make') return 'book';
+  if (kind === 'configs') return 'lockin'; // pick the trip from the tee times, then lock it in
   if (kind === 'vote' || kind === 'vote-me') {
-    // A vote on where to stay is part of booking; anything else is the Vote step.
+    // A vote on where to stay belongs with the stays; anything else is step 1's vote.
     const ps = polls.filter((p) => p.id === id || p.vote_batch === id);
-    return ps.length && ps.every((p) => p.purpose === 'stay') ? 'book' : 'vote';
+    return ps.length && ps.every((p) => p.purpose === 'stay') ? 'courses' : 'area';
   }
   if (['calls-mine', 'calls-wait'].includes(kind)) return 'book';
   if (['allocate', 'job', 'wait', 'late'].includes(kind)) return stepOfJob(items.find((j) => j.id === id), items, builder.callJobIds);
@@ -97,24 +100,28 @@ export function organiseSteps(ctx) {
   const areas = builder.areas || [];
   const kittyTotal = costs.reduce((s, c) => s + (Number(c.amount) || 0) * (c.per_head ? Math.max(1, ins) : 1), 0);
 
+  const bs = builder.state || null; // the trip builder's saved state, when there is one
+  const voteOpen = openVotes.length > 0;
   const done = {
-    plan: confirmed || groupPolls.length > 0 || !!plan.start_date || (builder.weekends || 0) > 0,
-    vote: confirmed || (openVotes.length === 0 && !!plan.start_date && (!!plan.location_name || decided.length > 0)),
-    book: openCalls.length === 0 && (round || !!chosen || (reserve && jobStage(reserve) === 'done')),
+    area: confirmed || (!voteOpen && ((!!plan.start_date && (!!plan.location_name || decided.length > 0)) || (!!builder.region && !!builder.weekendsSettled))),
+    courses: confirmed || round || !!chosen || (!!reserve && jobStage(reserve) === 'done') || !!builder.coursesDone,
+    book: openCalls.length === 0 && (confirmed || round || calls.length > 0 || (!!plan.start_date && !builder.started)),
     lockin: confirmed && (round || !costsOn || (formulaMade && (dep ? dep.people.every((p) => p.state === 'paid') : !askJob || jobStage(askJob) === 'done'))),
     money: confirmed && formulaMade && moneyJobs.every((j) => jobStage(j) === 'done'),
     day: stage === 'done',
   };
   if (round) done.money = confirmed && openJobs.filter((j) => j.formula_key !== 'teams_draw').length === 0;
 
+  // The same lines as the trip builder's rows (lib/tripsteps.js), with the plan's own dates once they're set.
+  const builderArea = bs ? areaLine(bs) : null;
+  const handArea = [plan.location_name || (areas.length ? `${plural(areas.length, 'area')}: ${areas.join(', ')}` : null),
+    dates || (builder.weekends ? `${plural(builder.weekends, 'weekend')} on the shortlist` : null)].filter(Boolean).join(' · ');
   const summary = {
-    plan: [plan.location_name || (areas.length ? `${plural(areas.length, 'area')}: ${areas.join(', ')}` : null),
-      dates || (builder.weekends ? plural(builder.weekends, 'weekend') + ' to choose from' : null)].filter(Boolean).join(' · ') || 'Where and when — nothing yet',
-    vote: openVotes.length
-      ? `${plural(openVotes.length, 'vote')} open`
-      : [plan.location_name, dates].filter(Boolean).join(' · ') || (decided.length ? `${plural(decided.length, 'vote')} decided` : 'No vote yet'),
-    book: [round ? null : chosen ? `🏠 ${chosen.name}` : stays.length ? `${plural(stays.length, 'place')} on the shortlist` : 'Accommodation not picked',
-      calls.length ? `📞 ${calls.length - openCalls.length} of ${plural(calls.length, 'call')} done` : null].filter(Boolean).join(' · '),
+    area: [voteOpen ? `🗳️ ${plural(openVotes.length, 'vote')} open` : null,
+      (plan.start_date && plan.location_name && !builder.weekendsSettled ? handArea : builderArea || handArea) || null].filter(Boolean).join(' · ') || 'Where and when — nothing yet',
+    courses: [bs ? coursesLine(bs) : null,
+      round ? null : chosen ? `🏠 ${chosen.name}` : stays.length ? `${plural(stays.length, 'place')} on the shortlist` : null].filter(Boolean).join(' · ') || 'Nothing yet',
+    book: calls.length ? `📞 ${calls.length - openCalls.length} of ${plural(calls.length, 'call')} done` : 'No calls yet',
     lockin: [confirmed ? '🔒 Locked in' : 'Not locked in yet', `${ins} in`,
       dep ? `deposits ${dep.people.filter((p) => p.state === 'paid').length} of ${dep.people.length} paid` : null].filter(Boolean).join(' · '),
     money: [jobs.length ? `${jobs.length - openJobs.length} of ${plural(jobs.length, 'job')} done` : 'No jobs yet',
@@ -124,7 +131,7 @@ export function organiseSteps(ctx) {
 
   // Something has happened on the step already (a greyed later step shows its summary instead of what it's for).
   const started = {
-    plan: true, vote: polls.length > 0, book: calls.length > 0 || stays.length > 0, lockin: confirmed || !!dep,
+    area: true, courses: stays.length > 0 || !!(bs && coursesLine(bs)), book: calls.length > 0, lockin: confirmed || !!dep,
     money: jobs.length > 0 || costs.length > 0, day: roundsSetUp > 0 || stage === 'on',
   };
 
@@ -160,8 +167,8 @@ export function primaryFor(next, { current, polls = [], builderOn = true, builde
       ? { ...base, title: builderStarted ? 'Carry on planning where and when' : 'Start by planning where and when', label: builderStarted ? 'Carry on: plan where and when' : 'Start: plan where and when', action: { type: 'plan_builder' } }
       : { ...base, title: 'Set the dates and place', label: 'Set the dates and place', action: { type: 'edit' } };
   }
-  if (kind === 'stay-list' || kind === 'configs' || kind === 'calls-mine') return { ...base, action: builderOn ? { type: 'plan_builder' } : base.action };
-  if (kind === 'vote' && current === 'vote') {
+  if (['stay-list', 'configs', 'calls-mine', 'courses-pick', 'calls-make', 'area-pick'].includes(kind)) return { ...base, action: builderOn ? { type: 'plan_builder' } : base.action };
+  if (kind === 'vote' && current === 'area') {
     const open = polls.filter((p) => (p.id === id || p.vote_batch === id) && p.status === 'open').map((p) => p.id);
     return { ...base, label: 'Pick the winner', action: { type: 'pick_winner', pollIds: open } };
   }

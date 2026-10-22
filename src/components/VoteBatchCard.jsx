@@ -6,8 +6,9 @@ import { useRun, must } from '../lib/run.js';
 import { notify } from '../lib/push.js';
 import { todayISO } from '../lib/plan.js';
 import { batchNonVoters } from '../lib/tripbuilder.js';
-import { organiserView, hasAnsweredAll, sectionResults, timeLeft, closesWord } from '../lib/callvote.js';
+import { organiserView, hasAnsweredAll, sectionResults, timeLeft, closesWord, groupBallot, detailCounts, detailQuestion } from '../lib/callvote.js';
 import { PollCard } from './PollCard.jsx';
+import { useOptionKeys, detailsFor, OptionDetailsSheet } from './OptionDetails.jsx';
 import { ShareVoteButton } from './CallVote.jsx';
 
 // Combined vote cards (077): several polls on a trip shown as ONE card with a section each ("Where and when?":
@@ -47,8 +48,15 @@ export function VoteBatchCard({ batch, pd, voterOnly = false }) {
   const [busy, run] = useRun();
   const [asVoter, setAsVoter] = useState(false);
   const [extend, setExtend] = useState(null);
-  const polls = pd.polls.filter((p) => p.vote_batch === batch.id);
-  const open = polls.some((p) => p.status === 'open');
+  const all = pd.polls.filter((p) => p.vote_batch === batch.id);
+  // ov23: the main questions (areas, weekends, how long…) and the optional detail under each area.
+  const { main: polls, areas: detailAreas } = groupBallot(all);
+  const counts = detailCounts(all, pd.votes);
+  const [openArea, setOpenArea] = useState({});
+  const st = useOptionKeys(detailAreas.length || all.some((p) => p.kind !== 'dates') ? pd.plan.id : null);
+  const [showing, setShowing] = useState(null); // { option, detail }
+  const details = (o) => { const d = detailsFor(o, st); return d ? () => setShowing({ option: o, detail: d }) : null; };
+  const open = all.some((p) => p.status === 'open');
   const people = data.players.filter((p) => p.approved !== false).map((p) => p.id);
   const waiting = open ? batchNonVoters({ polls: polls.filter((p) => p.status === 'open'), votes: pd.votes, rsvps: pd.rsvps, keen: batch.keen, playerIds: people }) : [];
   const mine = pd.rsvps.find((r) => r.player_id === me)?.status;
@@ -68,7 +76,7 @@ export function VoteBatchCard({ batch, pd, voterOnly = false }) {
   }).filter(Boolean);
   const moveClose = () => run(async () => {
     await must(supabase.from('vote_batches').update({ closes_on: extend }).eq('id', batch.id));
-    for (const p of polls.filter((x) => x.status === 'open')) await must(supabase.from('plan_polls').update({ closes_on: extend }).eq('id', p.id));
+    for (const p of all.filter((x) => x.status === 'open')) await must(supabase.from('plan_polls').update({ closes_on: extend }).eq('id', p.id));
     setExtend(null);
     pd.reload();
   }, 'Closing date moved');
@@ -121,9 +129,35 @@ export function VoteBatchCard({ batch, pd, voterOnly = false }) {
         {polls.map((p, i) => (
           <div key={p.id} data-testid="vote-batch-section">
             <div className="small muted" style={{ fontWeight: 800, margin: '0 4px 4px' }}>{i + 1} of {sections}</div>
-            <PollCard poll={p} pd={pd} inCard asVoter={!org} />
+            <PollCard poll={p} pd={pd} inCard asVoter={!org} details={details} />
           </div>
         ))}
+        {detailAreas.length > 0 && (
+          <div className="stack" style={{ gap: 8 }} data-testid="vote-detail">
+            <div className="small muted" style={{ fontWeight: 800, margin: '4px 4px 0' }}>
+              {org ? 'The detail (optional for voters)' : 'Want a say on the courses and places? Optional — the questions above are enough.'}
+            </div>
+            {detailAreas.map(({ area, polls: ps }) => {
+              const isOpen = org || !!openArea[area];
+              return (
+                <div key={area} className="card" style={{ overflow: 'hidden' }} data-testid="vote-detail-area" data-area={area}>
+                  <button type="button" className="row between" onClick={() => setOpenArea({ ...openArea, [area]: !openArea[area] })} aria-expanded={isOpen}
+                    style={{ width: '100%', padding: '10px 14px', background: 'var(--ground)', border: 0, textAlign: 'left', color: 'inherit', font: 'inherit', minHeight: 48 }}>
+                    <span><strong>📍 If it’s {area}</strong>
+                      <span className="small muted" style={{ display: 'block' }} data-testid="detail-count">{org ? `${counts[area] || 0} went into the detail` : ps.map((p) => detailQuestion(p).replace(/\?$/, '')).join(' · ')}</span></span>
+                    {!org && <span className="small" style={{ fontWeight: 700 }}>{isOpen ? 'Hide ▴' : 'Go into the detail →'}</span>}
+                  </button>
+                  {isOpen && (
+                    <div className="stack" style={{ padding: 8, gap: 8 }}>
+                      {ps.map((p) => <div key={p.id} data-testid="vote-detail-section"><PollCard poll={p} pd={pd} inCard asVoter={!org} details={details} title={detailQuestion(p)} /></div>)}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {showing && <OptionDetailsSheet option={showing.option} detail={showing.detail} st={st} onClose={() => setShowing(null)} />}
         {batch.keen && (
           <div className="card pad stack" data-testid="vote-batch-keen" style={{ gap: 8 }}>
             <div className="small muted" style={{ fontWeight: 800 }}>{sections} of {sections}</div>

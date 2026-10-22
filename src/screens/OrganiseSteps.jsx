@@ -14,6 +14,7 @@ import { Avatar } from '../components/ui.jsx';
 import { tallyPoll, money } from '../lib/plan.js';
 import { callJobs, jobStage } from '../lib/tripjobs.js';
 import { organiseSteps, primaryFor, STEP_KEYS, TAB_STEP, MORE_TABS } from '../lib/organisesteps.js';
+import { stepKey } from '../lib/tripsteps.js';
 import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
 import { useTripExtras, useNextStep, useStepActions, TripPlanCards, TripJobsTab } from './TripPlan.jsx';
 import { DetailsTab, KittyTab, GroupsTab, ItemSheet } from './PlanTabs.jsx';
@@ -22,6 +23,7 @@ import TripExtras, { RepeatInfo } from './TripExtras.jsx';
 import { TripBuilderCard } from '../components/TripBuilderCard.jsx';
 import { TripFinderCard } from '../components/TripFinderCard.jsx';
 import { AwardsRunUp } from '../components/AwardsFines.jsx'; // ov24
+import CompsOnTheDay from '../components/CompsOnTheDay.jsx'; // ov23
 import { VoteTab, PeopleTab, ChatTab, PollSheet, CloseSheet, ProposalBanner, LockInCard, Checklist, CalledOffBanner } from './Planner.jsx';
 import './organise.css';
 
@@ -65,7 +67,7 @@ export function OrganiseView({ pd, stage, trip, wide, desk, onEdit }) {
 
   const pickWinner = (pollIds) => {
     const poll = pd.polls.find((p) => (pollIds || []).includes(p.id)) || pd.polls.find((p) => p.status === 'open' && p.purpose !== 'stay');
-    if (!poll) { openStep('vote'); return; }
+    if (!poll) { openStep('area'); return; }
     const rows = tallyPoll(pd.options.filter((o) => o.poll_id === poll.id), pd.votes.filter((v) => v.poll_id === poll.id));
     setClosing({ poll, rows });
   };
@@ -110,7 +112,8 @@ export function OrganiseView({ pd, stage, trip, wide, desk, onEdit }) {
 
   const asked = params.get('step');
   const moneyTab = ['jobs', 'kitty', 'groups'].includes(tab) ? tab : null;
-  const open = STEP_KEYS.includes(asked) ? asked : (tab && TAB_STEP[tab]) || current || (stage === 'done' ? 'day' : 'plan');
+  const askedKey = stepKey(asked); // old ?step=plan / ?step=vote links open Areas & weekends
+  const open = STEP_KEYS.includes(askedKey) ? askedKey : (tab && TAB_STEP[tab]) || current || (stage === 'done' ? 'day' : 'area');
   const moreTab = MORE_TABS.includes(tab) || tab === 'checklist' || tab === 'tribunal' ? tab : null;
   const primary = isOrg ? primaryFor(next, { current, polls: pd.polls, builderOn: on.trip_finder, builderStarted: !!(ex.builder.weekends || ex.builder.areas?.length) }) : null;
   const doPrimary = () => act(primary.action);
@@ -212,7 +215,8 @@ export function OrganiseView({ pd, stage, trip, wide, desk, onEdit }) {
 
 function StepBody({ k, pd, ex, stage, trip, isOrg, on, desk, wide, moneyTab, onMoneyTab, onPoll, onEdit, newCostAt, act }) {
   const { plan } = pd;
-  if (k === 'plan') {
+  // ov23: one step for where and when — the areas, the weekends, how long, AND the vote (no separate Vote step).
+  if (k === 'area') {
     return (
       <>
         {plan.proposed && <ProposalBanner plan={plan} reload={pd.reload} />}
@@ -229,16 +233,30 @@ function StepBody({ k, pd, ex, stage, trip, isOrg, on, desk, wide, moneyTab, onM
           </div>
         )}
         {!isOrg && <div className="small muted">The organiser works out where and when — you’ll get a vote.</div>}
+        {on.planner_tasks && <VoteTab pd={pd} />}
       </>
     );
   }
-  if (k === 'vote') {
-    return on.planner_tasks ? <VoteTab pd={pd} /> : <div className="small muted">Votes are switched off for this group (Group &amp; invites → Features).</div>;
+  // Courses & stays: each day's course options (the trip builder) and where to stay (the shortlist, its vote).
+  if (k === 'courses') {
+    return (
+      <>
+        {isOrg && plan.status === 'planning' && on.trip_finder && ex.builder.started && (
+          <Link to={`/plan/${plan.id}/build`} className="small" data-testid="courses-link" style={{ fontWeight: 700 }}>⛳ Course options each day, in the trip builder →</Link>
+        )}
+        {plan.kind !== 'round' && <TripPlanCards pd={pd} only={['stay']} />}
+        {plan.kind === 'round' && <div className="small muted">A one-day round: no places to stay to sort.</div>}
+      </>
+    );
   }
   if (k === 'book') return <BookStep pd={pd} ex={ex} isOrg={isOrg} act={act} on={on} />;
   if (k === 'lockin') {
     return (
       <>
+        {/* ov23: pick the best combination from the tee times first (the trip builder), then lock it in. */}
+        {isOrg && plan.status === 'planning' && on.trip_finder && ex.builder.started && (
+          <Link to={`/plan/${plan.id}/build`} className="small" data-testid="pick-link" style={{ fontWeight: 700 }}>🧩 Pick the trip from the tee times (best per day) →</Link>
+        )}
         {isOrg && plan.status === 'planning' && !plan.proposed && <LockInCard pd={pd} />}
         {plan.repeat_shape && stage !== 'done' && <RepeatInfo pd={pd} />}
         <TripPlanCards pd={pd} only={['budget', 'deposits']} />
@@ -262,9 +280,11 @@ function StepBody({ k, pd, ex, stage, trip, isOrg, on, desk, wide, moneyTab, onM
       </>
     );
   }
-  // On the day
+  // Comps & on the day (ov23): the run-up — what's up for grabs, the rules, the handicaps — then teams and the draw.
   return (
     <>
+      <CompsOnTheDay pd={pd} trip={trip} isOrg={isOrg} />
+      <span className="label" style={{ marginTop: 4 }} data-testid="teams-draw">👥 Teams and the draw</span>
       <TripSetupCard plan={plan} reload={pd.reload} />
       {wide && isOrg && <LazyArea fallback={null} quiet><DayPanels pd={pd} trip={trip} goTab={onMoneyTab} /></LazyArea>}
       {!wide && isOrg && trip && <Link to="/setup" className="btn ghost block">⛳ Teams, draw and side comps →</Link>}
@@ -275,7 +295,7 @@ function StepBody({ k, pd, ex, stage, trip, isOrg, on, desk, wide, moneyTab, onM
   );
 }
 
-/** Book: the calls to the courses for tee times, and where to stay. */
+/** Call the courses: the calls for tee times (where to stay is step 2, Courses & stays). */
 function BookStep({ pd, ex, isOrg, act, on }) {
   const data = useData();
   const calls = callJobs(pd.items, ex.builder.callJobIds);
@@ -301,9 +321,8 @@ function BookStep({ pd, ex, isOrg, act, on }) {
           {on.trip_finder && <Link to={`/plan/${pd.plan.id}/build`} className="small" style={{ display: 'block', padding: '8px 14px', fontWeight: 700 }}>The tee times so far, in the trip builder →</Link>}
         </div>
       )}
-      {!round && <TripPlanCards pd={pd} only={['stay']} />}
       {round && !calls.length && <div className="small muted">A one-day round: nothing to book here unless you’re calling the course.</div>}
-      {!round && pd.plan.kind === 'trip' && !pd.plan.start_date && !calls.length && <div className="small muted">Once the dates are picked: call the courses for tee times and find somewhere to stay.</div>}
+      {!round && !calls.length && <div className="small muted">Once the area and the primary and backup weekends are picked, the courses get called for tee times.</div>}
     </>
   );
 }

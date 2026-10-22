@@ -329,6 +329,7 @@ export const CHAT_TOOL = {
       name: { type: 'string', description: 'A working name, e.g. "March Away 2027"' },
       kind: { type: 'string', enum: ['trip', 'round'] },
       travel: { type: 'string', enum: ['drive', 'fly'], description: 'How they get there: drive (one region within a drive — the default) or fly (not planned yet; kept as a note)' },
+      headcount: { type: 'integer', description: 'About how many are coming, once they have said (e.g. 9). Leave it out if unknown — never guess.' },
       dates: { type: 'array', description: '2 to 4 weekend options (YYYY-MM-DD)', items: obj({ start_date: { type: 'string' }, end_date: { type: 'string' }, note: { type: 'string' } }, ['start_date']) },
       places: { type: 'array', description: '2 to 4 places, each with the library course ids courses_near found (up to 6; fewer is fine)', items: obj({
         place: { type: 'string' }, courses: { type: 'array', items: { type: 'string' } }, cost_each: { type: 'number' }, note: { type: 'string' },
@@ -387,6 +388,8 @@ Building the draft:
 - 2 to 4 places (golf towns or areas). Look them ALL up in ONE courses_near call (places: ["Town A", "Town B", …]) and list the library course ids it returns (up to 6 a place). Fewer is fine. If the library has nothing for a place, keep the town and say "no courses in our list yet" in its note — don't search again.
 - 2 to 4 weekend options (Friday to Sunday unless they say otherwise).
 - rough costs each and a rough budget each (AUD, estimates), and a few optional extras worth offering (shirts or caps, a bus, a group dinner, a chef at the house, a brewery tour…) with rough costs.
+- headcount: how many are coming, once they've said (the accommodation searches use it). Leave it out while unknown.
+- Comps, trophies, the Cup / Ryder Cup, teams, formats and handicaps are NOT part of planning — don't ask about them and don't put them in extras. If they come up, say "We'll sort comps and teams closer to the trip" and carry on.
 - keep everything the organiser already agreed to (the current draft); only change what they asked about.
 - Searches cost turns and you only have a few: never repeat a search, and reply as soon as the lookups are back.
 
@@ -412,7 +415,7 @@ ${RESEARCH_RULES}
 ${GUARD}`;
 }
 
-export type ChatDraft = TripPlan & { extras: { label: string; pp: number | null }[] };
+export type ChatDraft = TripPlan & { extras: { label: string; pp: number | null }[]; headcount?: number };
 export type ChatReply = {
   message: string;
   draft: ChatDraft | null; // null: still asking the key facts (ov16)
@@ -424,6 +427,8 @@ const cleanExtras = (list: Any) => {
   const extras: { label: string; pp: number | null }[] = [];
   for (const e of Array.isArray(list) ? list.slice(0, PLAN_LIMITS.extras) : []) {
     const label = clean(typeof e === 'string' ? e : e?.label, 60);
+    // ov23: comps, the Cup and formats are sorted in the run-up, not while planning.
+    if (/\bryder\b|\bcup\b|\bformat\b|\bmatch ?play\b|\bstableford\b|\bambrose\b/i.test(label)) continue;
     if (label.length >= 2 && !extras.some((x) => x.label.toLowerCase() === label.toLowerCase())) extras.push({ label, pp: money(e?.pp, 5000) });
   }
   return extras;
@@ -492,7 +497,8 @@ export function validatePlanChat(raw: Any, ctx: TripPlanContext, opts: { lenient
   if (hasDraft(raw.draft)) {
     const v = validateTripPlan(raw.draft, ctx, { partial: true, lenient: opts.lenient });
     if (!v.ok || !v.plan) return { ok: false, errors: v.errors, value: null };
-    draft = { ...v.plan, extras: cleanExtras(raw.draft?.extras) };
+    const hc = Math.round(Number(raw.draft?.headcount));
+    draft = { ...v.plan, extras: cleanExtras(raw.draft?.extras), ...(hc > 0 && hc < 200 ? { headcount: hc } : {}) };
   }
   const questions: ChatReply['questions'] = [];
   const rawQs = Array.isArray(raw.questions) ? raw.questions : [];

@@ -77,7 +77,10 @@ export function callProblem({ sections = [], keen = false, closes = null, today 
 /** The rows the database needs: a poll per section, its options. (The screen inserts them in order.) */
 export function pollRows(sections, { planId, batchId = null, closes = null }) {
   return sections.map((s) => ({
-    poll: { plan_id: planId, kind: s.kind, question: String(s.question).slice(0, 200), closes_on: closes || null, ...(batchId ? { vote_batch: batchId } : {}) },
+    // ov23 (092): the detail under an area is optional for voters. Only sent when it's set, so a ballot without any
+    // detail still works on a database from before 092.
+    poll: { plan_id: planId, kind: s.kind, question: String(s.question).slice(0, 200), closes_on: closes || null, ...(batchId ? { vote_batch: batchId } : {}),
+      ...(s.optional ? { optional: true, area: String(s.area || '').slice(0, 80) || null } : {}) },
     options: s.options.map((o) => ({
       label: String(o.label || '').slice(0, 120), notes: o.notes ? String(o.notes).slice(0, 480) : null,
       start_date: o.start_date || null, end_date: o.end_date || null,
@@ -179,7 +182,8 @@ export function organiserView({ isAdmin = false, me = null, plan = null, asVoter
 /** Has this person answered every section (and "are you keen?" if asked)? */
 export function hasAnsweredAll({ polls = [], votes = [], me, keen = false, rsvps = [] }) {
   if (!me) return false;
-  if (polls.some((p) => !votes.some((v) => v.poll_id === p.id && v.player_id === me))) return false;
+  // The detail under an area (ov23) is optional: answering the areas and the weekends counts as answered.
+  if (polls.filter((p) => !p.optional).some((p) => !votes.some((v) => v.poll_id === p.id && v.player_id === me))) return false;
   return !keen || rsvps.some((r) => r.player_id === me);
 }
 
@@ -192,4 +196,52 @@ export function timeLeft(closes, today) {
   if (n === 0) return 'Closes today';
   if (n === 1) return 'Closes tomorrow';
   return `Closes in ${n} days`;
+}
+
+// ------------------------------------------------------------------ the main questions and the detail (ov23)
+// Josh: "the people voting can also just choose to vote area and weekends, or also go into the detail."
+
+/** The area a detail question belongs to: its `area`, else the "Hunter Valley: which courses?" prefix. */
+export function pollArea(p) {
+  if (!p?.optional) return null;
+  if (p.area) return p.area;
+  const m = /^(.+?):\s/.exec(String(p.question || ''));
+  return m ? m[1] : null;
+}
+
+/**
+ * A ballot's questions split into the main ones (areas, weekends, extras…) and the optional detail, grouped by area
+ * in the order the areas first appear. Works on polls or ballot sections ({ optional, area, question }).
+ * → { main: [poll], areas: [{ area, polls: [poll] }] }
+ */
+export function groupBallot(polls = []) {
+  const main = [];
+  const areas = [];
+  for (const p of polls || []) {
+    const a = pollArea(p);
+    if (!a) { main.push(p); continue; }
+    let g = areas.find((x) => x.area === a);
+    if (!g) { g = { area: a, polls: [] }; areas.push(g); }
+    g.polls.push(p);
+  }
+  return { main, areas };
+}
+
+/** How many people went into the detail for each area (answered at least one of its optional questions). → { area: n } */
+export function detailCounts(polls = [], votes = []) {
+  const out = {};
+  for (const { area, polls: ps } of groupBallot(polls).areas) {
+    const ids = new Set(ps.map((p) => p.id));
+    out[area] = new Set((votes || []).filter((v) => ids.has(v.poll_id)).map((v) => v.player_id)).size;
+  }
+  return out;
+}
+
+/** The question without its area prefix, for showing under the area's heading: "which courses?" → "Which courses?". */
+export function detailQuestion(p) {
+  const a = pollArea(p);
+  const q = String(p?.question || '');
+  if (!a || !q.startsWith(`${a}:`)) return q;
+  const rest = q.slice(a.length + 1).trim();
+  return rest.charAt(0).toUpperCase() + rest.slice(1);
 }

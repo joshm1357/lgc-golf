@@ -5,12 +5,13 @@ import React, { useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { toast } from './ui.jsx';
 import { useRun, must } from '../lib/run.js';
-import { startExtras, setExtraState, setExtraCost, addCustomExtra, extrasIn, extrasToVote, extrasToPlan } from '../lib/extras.js';
+import { startExtras, setExtraState, setExtraCost, addCustomExtra, extrasIn, extrasToVote, extrasToPlan, planningExtras } from '../lib/extras.js';
 
 const STATES = [['off', 'No'], ['in', 'In'], ['vote', 'Ask']];
 
 export default function ExtrasPanel({ plan, st, save, org }) {
-  const list = st.extras || startExtras();
+  // Comps, the Cup and formats aren't planning extras (ov23) — they're in Organise → Comps & on the day.
+  const list = planningExtras(st.extras) || startExtras();
   const [own, setOwn] = useState('');
   const [ownPp, setOwnPp] = useState('');
   const [open, setOpen] = useState(false);
@@ -37,6 +38,7 @@ export default function ExtrasPanel({ plan, st, save, org }) {
       {open && (
         <>
           <span className="small muted">In = it’s happening. Ask = it goes on the vote as “Would you do these?”.</span>
+          <span className="small muted" data-testid="comps-later">🏆 Comps, the Cup and teams get sorted closer to the trip — Organise → Comps &amp; on the day.</span>
           {list.map((e) => (
             <div key={e.key} className="stack" style={{ gap: 4, borderTop: '1px solid var(--line-soft)', paddingTop: 6 }} data-testid="extra">
               <div className="row between" style={{ gap: 6 }}>

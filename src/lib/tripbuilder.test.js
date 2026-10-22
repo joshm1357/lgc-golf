@@ -306,11 +306,13 @@ describe('steps, in Josh’s order', () => {
   it('courses need the area; calls need weekends AND courses; configurations need tee times', () => {
     const s0 = builderSteps(newState({}));
     expect(s0.map((s) => [s.key, s.locked])).toEqual([['area', false], ['courses', true], ['calls', true], ['configs', true]]);
-    expect(s0[1].after).toBe('Area & weekends');
+    expect(s0[1].after).toBe('the area is chosen (Areas & weekends)');
+    expect(s0.map((s) => s.label)).toEqual(['Areas & weekends', 'Courses & stays', 'Call the courses', 'Pick & lock in']);
     const st = { ...newState({}), region: 'South Coast NSW', stays: [NOWRA], days: [{ index: 0, leg: 'way', options: ['sh'] }] };
     const s1 = builderSteps(st);
     expect(s1[1].locked).toBe(false);
-    expect(s1[2]).toMatchObject({ locked: true, after: 'Area & weekends' }); // weekends not settled yet
+    expect(s1[2]).toMatchObject({ locked: true, after: 'the primary and backup weekends are set (Areas & weekends)' }); // weekends not settled yet
+    expect(builderSteps({ ...st, region: null, weekends: [{ start: '2026-03-13' }], weekendsSettled: true })[2]).toMatchObject({ locked: true, after: 'the area is chosen (Areas & weekends)' });
     const s2 = builderSteps({ ...st, weekends: [{ start: '2026-03-13' }], weekendsSettled: true });
     expect(s2[2].locked).toBe(false);
     expect(s2[3].locked).toBe(true);

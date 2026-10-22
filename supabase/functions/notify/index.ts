@@ -232,10 +232,11 @@ async function plan(g: string, id: string) {
   return mine(g, 'plans', id);
 }
 async function openPollNonVoters(g: string, planId: string, pollId?: string) {
-  let pq = db.from('plan_polls').select('id').eq('plan_id', planId).eq('status', 'open');
+  let pq = db.from('plan_polls').select('*').eq('plan_id', planId).eq('status', 'open');
   if (pollId) pq = pq.eq('id', pollId);
   const { data: polls } = await pq;
-  const pollIds = (polls || []).map((p) => p.id);
+  // ov23 (092): nobody is nudged for skipping the optional detail (an area's courses / places to stay).
+  const pollIds = (polls || []).filter((p) => p.optional !== true).map((p) => p.id);
   if (!pollIds.length) return [];
   const [{ data: opts }, { data: votes }, people] = await Promise.all([
     db.from('plan_options').select('id,poll_id').in('poll_id', pollIds),
@@ -363,8 +364,9 @@ async function dailyFor(g: string) {
     if (!(await once(`batch-closing:${grp.batch}:${today}`))) continue;
     const { data: b } = await db.from('vote_batches').select('id,plan_id,title,keen').eq('id', grp.batch).eq('group_id', g).maybeSingle();
     if (!b) continue;
-    const { data: all } = await db.from('plan_polls').select('id').eq('vote_batch', b.id).eq('status', 'open');
-    const pollIds = (all || []).map((x) => x.id);
+    // ov23 (092): the optional detail under an area doesn't count — select('*') so a database before 092 still works.
+    const { data: all } = await db.from('plan_polls').select('*').eq('vote_batch', b.id).eq('status', 'open');
+    const pollIds = (all || []).filter((x) => x.optional !== true).map((x) => x.id);
     const [{ data: votes }, { data: rs }, people] = await Promise.all([
       db.from('plan_votes').select('poll_id,player_id').in('poll_id', pollIds),
       db.from('plan_rsvps').select('player_id').eq('plan_id', b.plan_id),

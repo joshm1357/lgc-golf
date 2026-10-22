@@ -180,11 +180,8 @@ export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage 
       {tripId && <TripHistory tripId={tripId} />}
       {done && tripId && <ImportLink label="📥 Add history to this trip" trip={tripId} />}
 
-      {onOrganise && (
-        <button type="button" className="btn ghost block" onClick={() => onOrganise(null)}>
-          {status?.is_admin ? '🧰 Organise this trip' : '🧰 Chat, jobs, kitty and rooms'}
-        </button>
-      )}
+      {/* ov23 (Josh): the Overview looks the same for everyone — no "Organise this trip" here. Organisers use the
+          Overview | Organise switch at the top. */}
     </div>
   );
 }

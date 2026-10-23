@@ -415,6 +415,7 @@ create or replace trigger aa_fill_group_id before insert or update on public.awa
 --                         nomination_id = the claim (null for "from the scores"). One row per player per run.
 --       'activity'        (101) a trip activity; source_id = its row.
 --       'manual'          (101) an organiser's hand entry; source_id null.
+--       'kudos'           (101) cap tips 🧢 players give each other; source_id = the cap tip's row.
 --       'penalty'         reserved.
 --     Scores-based sources (rounds, side comps, games, matches, tips, penalty strokes) are worked out at standings time
 --     and are NOT written here.
@@ -427,7 +428,7 @@ create table if not exists public.cup_points (
   comp_id uuid references public.comps(id) on delete set null,
   player_id uuid not null references public.players(id) on delete cascade,
   points numeric not null check (points between -1000 and 1000),
-  source_type text not null check (source_type in ('award', 'fine', 'activity', 'manual', 'penalty')),
+  source_type text not null check (source_type in ('award', 'fine', 'activity', 'manual', 'penalty', 'kudos')),
   source_id uuid,
   rule_id uuid references public.rules(id) on delete set null,
   nomination_id uuid references public.dinner_award_nominations(id) on delete set null,
@@ -997,7 +998,29 @@ begin
 end $$;
 revoke all on function private.auto_awards_tick(timestamptz) from public, anon, authenticated;
 
-select cron.schedule('lgc-auto-awards', '*/5 * * * *', 'select private.auto_awards_tick()');
+-- The job: the tick, then (when there's a buzz waiting) the notify function sends the award buzzes straight away to
+-- people on "straight away" (the hourly send does the rest). The project's address and the secret are found the way
+-- 071's commentary job finds them.
+create or replace function private.auto_awards_job() returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare v jsonb; v_base text; v_secret text;
+begin
+  v := private.auto_awards_tick(now());
+  if exists (select 1 from public.notify_queue where kind in ('award_proposed', 'award_confirmed', 'award_overturned')
+             and sent_at is null and created_at > now() - interval '30 minutes') then
+    select substring(command from 'https://[a-z0-9]+\.supabase\.co') into v_base from cron.job where jobname = 'lgc-daily-reminders';
+    select value into v_secret from public.server_secrets where name = 'cron_secret';
+    if v_base is not null and v_secret is not null then
+      perform net.http_post(url := v_base || '/functions/v1/notify',
+        headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-secret', v_secret),
+        body := '{"type":"auto_awards"}'::jsonb);
+    end if;
+  end if;
+  return v;
+end $$;
+revoke all on function private.auto_awards_job() from public, anon, authenticated;
+
+select cron.schedule('lgc-auto-awards', '*/5 * * * *', 'select private.auto_awards_job()');
 
 -- ============================================================================================ disputes
 -- private.dispute_fields gains: award_runs.player_id (the proposed winner), cup_points.points (one person's line),

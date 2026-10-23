@@ -263,7 +263,7 @@ export default function TripResults({ trip, moneyLine = null }) {
 
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
         <button type="button" className="btn ghost sm" onClick={share} data-testid="share-results">Share the results</button>
-        {awardsOn && <Link to={`/present/awards/${trip.id}`} className="btn ghost sm" data-testid="present-awards">🎤 Present the awards</Link>}
+        <Link to={`/present/awards/${trip.id}`} className="btn ghost sm" data-testid="present-awards">🎤 The presentation</Link>
       </div>
       {/* Only after all of that: the next trip. */}
       {plannerOn && <Link to="/plan" className="btn gold block" data-testid="plan-next">Plan the next trip</Link>}

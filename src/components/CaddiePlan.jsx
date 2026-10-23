@@ -23,6 +23,9 @@ import { DraftCard } from '../screens/AiPlanner.jsx';
 import AiChat from './AiChat.jsx';
 
 /** Tell an open trip builder its saved state changed (realtime also does, this is just quicker). */
+// Trips the chat lets go of: called off, done.
+export const LET_GO = ['cancelled', 'done'];
+
 const changed = (planId) => window.dispatchEvent(new CustomEvent('tripbuild:changed', { detail: { planId } }));
 
 export default function CaddiePlan({ onGo }) {
@@ -44,6 +47,7 @@ export default function CaddiePlan({ onGo }) {
   const [confirm, setConfirm] = useState(false);
   const [remaining, setRemaining] = useState(null);
   const [logId, setLogId] = useState(null);
+  const [gone, setGone] = useState(''); // e.g. “March 2027” was called off — the trip the chat had been filling in
   const areas = useRef(null);
   useEffect(() => { saveChat(gid, { turns: turns.map(({ card, ...t }) => t), draft, planId }); }, [gid, turns, draft, planId]);
 
@@ -52,10 +56,23 @@ export default function CaddiePlan({ onGo }) {
     return areas.current;
   };
   // The trip screen, filling in: the first draft makes a draft trip and opens the builder; later ones update it.
-  const syncBuild = async (d, pid) => {
-    if (!builderOn || !d) return pid;
+  // v10.5 (Josh 23 Oct: "it doesn't show the planning screen, let alone update it… that should not be the requirement"):
+  //  - every update opens the trip screen if you're not on it (no need to find "Show the trip");
+  //  - a trip that's been called off (or is done, or gone) is let go: the next draft starts a new trip, with a note.
+  const isLive = async (pid) => {
+    if (!pid) return false;
+    const { data: p } = await supabase.from('plans').select('id,name,status').eq('id', pid).maybeSingle();
+    if (p && !LET_GO.includes(p.status)) return true;
+    setGone(`“${p?.name || 'Your last trip'}” ${p?.status === 'done' ? 'has been played' : p ? 'was called off' : 'is gone'}`);
+    return false;
+  };
+  const onIt = (pid) => String(window.location.hash || '').includes(`/plan/${pid}`);
+  const syncBuild = async (d, pid0) => {
+    if (!builderOn || !d) return pid0;
+    let pid = pid0;
     try {
       const a = await stayAreas();
+      if (pid && !(await isLive(pid))) pid = null;
       if (!pid) {
         const plan = await must(supabase.from('plans').insert({ kind: d.kind === 'round' ? 'round' : 'trip', name: d.name || 'Golf trip', status: 'planning', proposed: false, ...(d.budget_pp != null ? { budget_pp: d.budget_pp } : {}) }).select('id').single());
         await must(supabase.from('trip_builds').upsert({ plan_id: plan.id, state: mergeDraftIntoBuild(null, d, a) }, { onConflict: 'plan_id' }));
@@ -66,12 +83,21 @@ export default function CaddiePlan({ onGo }) {
       const { data: b } = await supabase.from('trip_builds').select('state').eq('plan_id', pid).maybeSingle();
       await must(supabase.from('trip_builds').upsert({ plan_id: pid, state: mergeDraftIntoBuild(b?.state || null, d, a) }, { onConflict: 'plan_id' }));
       changed(pid);
+      if (!onIt(pid)) nav(`/plan/${pid}/build`);
       return pid;
     } catch {
       toast('Couldn’t update the trip screen — the options are still here in the chat');
       return pid;
     }
   };
+  // Opening the chat on a trip that's since been called off: say so, and let it go.
+  useEffect(() => {
+    if (!planId || !builderOn) return;
+    let live = true;
+    isLive(planId).then((ok) => { if (live && !ok) setPlanId(null); });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planId, builderOn]);
   // What the trip screen shows now (the organiser may have changed it there) — sent with the next question.
   const readPage = async () => {
     if (!planId) return null;
@@ -141,7 +167,7 @@ export default function CaddiePlan({ onGo }) {
     setBusy(false);
     setErr(r.text || 'Couldn’t create it.');
   };
-  const restart = () => { clearChat(gid); setTurns([]); setDraft(null); setPrev(null); setPlanId(null); setConfirm(false); setErr(''); };
+  const restart = () => { setGone(''); clearChat(gid); setTurns([]); setDraft(null); setPrev(null); setPlanId(null); setConfirm(false); setErr(''); };
 
   if (!aiOn || !plannerOn) return <div className="small caddie-why" role="note">Planning with the Caddie is switched off for this group.</div>;
   if (!status?.is_admin || status?.viewing) return <div className="small caddie-why" role="note">Only an organiser can plan a trip with the Caddie. Ask me about your trips instead.</div>;
@@ -186,6 +212,9 @@ export default function CaddiePlan({ onGo }) {
           <button type="button" className="btn ghost sm" disabled={busy} onClick={() => setConfirm(false)}>Back to the chat</button>
           <span className="small muted">Costs are the Caddie’s rough guesses — check before booking.</span>
         </div>
+      )}
+      {gone && !planId && (
+        <div className="small caddie-why" role="note" data-testid="plan-gone">{gone}, so I’ll start a new trip from your next answer.</div>
       )}
       {planId && onTrip && <span className="small muted">✨ The trip screen fills in as we talk. Change anything there — I’ll see it next time you say something.</span>}
       {err && <div className="small err" style={{ margin: 0 }} role="alert">{err}</div>}

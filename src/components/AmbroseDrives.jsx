@@ -75,7 +75,7 @@ export default function AmbroseDrives({ round, team, holes, hole, scores = {}, p
             );
           })}
         </div>
-        {hint.length > 0 && <span className="small" data-testid="drive-hint" style={{ fontWeight: 700 }}>🏌️ {hint.join(' or ')} need{hint.length === 1 ? 's' : ''} one — use {hint.length === 1 ? 'their' : 'one of theirs'} off this tee if you can.</span>}
+        {hint.length > 0 && <span className="small" data-testid="drive-hint" style={{ fontWeight: 700 }}>🏌️ {hint.join(' or ')} need{hint.length === 1 ? 's' : ''} one — use {hint.length === 1 ? 'their drive' : 'one of their drives'} off this tee if you can.</span>}
         {bad
           ? st.warnings.map((w) => <span key={w} className="err" data-testid="drive-warning" style={{ fontSize: 13 }}>⚠️ {w}</span>)
           : <span className="small muted" data-testid="drive-tracker">{st.rows.every((r) => r.used >= need) ? 'Drive rule done ✓' : st.line}</span>}

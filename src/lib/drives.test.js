@@ -2,9 +2,32 @@ import { describe, it, expect } from 'vitest';
 import {
   DRIVES_KEY, drivesRule, baseDrives, minDrivesFor, drivePenaltyFor, drivesTable, driveStatus, projectedDrivePenalties,
   drivesValue, drivesDetail, drivesRoundLine, drivesRulePatch, penaltyPower, breachLabel, ruleStrokes, penaltyArgs, signed,
+  penaltyBadgeWord, penaltyRowWords, projectedStrokes,
 } from './drives.js';
 import { penaltyFor } from './scoring.js';
 import { roundBoard } from './board.js';
+import { isDisputable, applySpec, canApplyVerdict, parseApplyValue } from './disputes.js';
+
+describe('board words and disputes for rule penalties', () => {
+  it('says what a row’s strokes are for', () => {
+    expect(penaltyBadgeWord([{ kind: 'late_job' }])).toBe('late job');
+    expect(penaltyBadgeWord([{ kind: 'rule_breach' }, { kind: 'late_job', waived: true }])).toBe('penalty');
+    expect(penaltyBadgeWord([{ kind: 'rule_breach' }, { kind: 'award' }])).toBe('strokes');
+    expect(penaltyRowWords([{ kind: 'rule_breach' }, { kind: 'late_job' }, { kind: 'rule_breach', projected: true }])).toBe('rule penalties, late job');
+    expect(projectedStrokes([{ strokes: 2, projected: true }, { strokes: 4 }, { strokes: 2, projected: true }])).toBe(4);
+  });
+  it('the new numbers can be disputed and set by a verdict', () => {
+    const id = '11111111-1111-4111-8111-111111111111';
+    expect(isDisputable({ table: 'rules', id, field: 'breach_strokes' })).toBe(true);
+    expect(isDisputable({ table: 'rules', id, field: 'drives_4' })).toBe(true);
+    expect(isDisputable({ table: 'rounds', id, field: 'drive_penalty' })).toBe(true);
+    expect(applySpec({ table: 'rounds', id, field: 'drive_penalty' })).toBeTruthy();
+    expect(parseApplyValue({ table: 'score_adjustments', id, field: 'strokes' }, '−1')).toEqual({ ok: true, value: -1 });
+    const c = { kind: 'ruling', subject_kind: 'rule', status: 'passed', subject_ref: { table: 'rules', id, field: 'drives_3' } };
+    expect(canApplyVerdict(c, 'organiser')).toBe(true);
+    expect(canApplyVerdict(c, 'player')).toBe(false);
+  });
+});
 
 const RULE = { id: 'rd', system_key: DRIVES_KEY, status: 'active', drives_2: 6, drives_3: 6, drives_4: 4, breach_strokes: 2 };
 const DR = drivesRule([{ id: 'x', system_key: 'late_job' }, RULE]);

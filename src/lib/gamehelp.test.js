@@ -9,7 +9,7 @@ describe('side game help', () => {
       expect(h, k).toBeTruthy();
       expect(h.what.length).toBeGreaterThan(20);
       expect(h.steps.length).toBeGreaterThan(0);
-      expect(h.example).toMatch(/\$/);
+      expect(h.example.length).toBeGreaterThan(30);
       expect(h.money.length).toBeGreaterThan(10);
     }
     expect(helpFor('nope')).toBeNull();

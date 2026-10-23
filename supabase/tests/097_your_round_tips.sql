@@ -26,14 +26,17 @@ insert into public.group_features (group_id, feature_key, enabled) values ('f9e1
   on conflict (group_id, feature_key) do update set enabled = true;
 insert into public.trips (id, group_id, name, start_date, end_date) values
   ('09700000-0000-4000-8000-000000000001', 'f9e18914-24a2-43ad-8989-ca91e3d1af19', 'Tips test', current_date + 5, current_date + 6);
-insert into public.rounds (id, group_id, trip_id, name, format, status, play_date) values
-  ('09700000-0000-4000-8000-0000000000a1', 'f9e18914-24a2-43ad-8989-ca91e3d1af19', '09700000-0000-4000-8000-000000000001', 'Ambrose day', 'ambrose', 'setup', current_date + 5),
-  ('09700000-0000-4000-8000-0000000000a2', 'f9e18914-24a2-43ad-8989-ca91e3d1af19', '09700000-0000-4000-8000-000000000001', 'Stableford day', 'stableford', 'setup', current_date + 6);
+-- rounds.course_id is required (001), so the test brings its own course.
+insert into public.courses (id, group_id, name, holes) values
+  ('09700000-0000-4000-8000-0000000000c9', 'f9e18914-24a2-43ad-8989-ca91e3d1af19', 'Tips test course', '[{"n":1,"par":4,"si":1}]');
+insert into public.rounds (id, group_id, trip_id, course_id, name, format, status, play_date) values
+  ('09700000-0000-4000-8000-0000000000a1', 'f9e18914-24a2-43ad-8989-ca91e3d1af19', '09700000-0000-4000-8000-000000000001', '09700000-0000-4000-8000-0000000000c9', 'Ambrose day', 'ambrose', 'setup', current_date + 5),
+  ('09700000-0000-4000-8000-0000000000a2', 'f9e18914-24a2-43ad-8989-ca91e3d1af19', '09700000-0000-4000-8000-000000000001', '09700000-0000-4000-8000-0000000000c9', 'Stableford day', 'stableford', 'setup', current_date + 6);
 insert into public.teams (id, group_id, round_id, name) values
   ('09700000-0000-4000-8000-0000000000b1', 'f9e18914-24a2-43ad-8989-ca91e3d1af19', '09700000-0000-4000-8000-0000000000a1', 'Team 1'),
   ('09700000-0000-4000-8000-0000000000b2', 'f9e18914-24a2-43ad-8989-ca91e3d1af19', '09700000-0000-4000-8000-0000000000a1', 'Team 2');
-insert into public.round_players (group_id, round_id, player_id) values
-  ('f9e18914-24a2-43ad-8989-ca91e3d1af19', '09700000-0000-4000-8000-0000000000a2', '20000000-0000-4000-8000-000000000001');
+insert into public.round_players (group_id, round_id, player_id, playing_handicap) values
+  ('f9e18914-24a2-43ad-8989-ca91e3d1af19', '09700000-0000-4000-8000-0000000000a2', '20000000-0000-4000-8000-000000000001', 14);
 insert into public.cup_sides (group_id, name, colour, sort) values
   ('f9e18914-24a2-43ad-8989-ca91e3d1af19', 'Team Blue', '#1F4B9E', 1), ('f9e18914-24a2-43ad-8989-ca91e3d1af19', 'Team Red', '#B3261E', 2)
   on conflict (group_id, sort) do nothing;

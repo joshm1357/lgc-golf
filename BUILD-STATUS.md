@@ -1457,3 +1457,52 @@ general (not Cup-only), any meal (not "dinner"), don't flood.
   trip-overview (updated for the results page), trips, jokes, stroke, links, nav, phone, history, own-comps,
   commentary, desktop pass. `quick` and `signin-first` fail the same way on v10-int (not touched here).
 - **Deploy when convenient:** the notify function (new kinds). Apply 097 on staging, then live.
+
+## ov27 — The trip page, money, guests and first open (23 Oct 2026, branch `ov27-trip-page-money`, migration 096)
+
+From Josh's walkthrough review (R1 A, M1 A, R2 A, F1 A, F2 B, ideas I1, I7, I10, I15 and the small fixes in these files).
+Merged with v10-int (ov28): "Your round" is mounted in Your weekend, and the money line is the results page's Settle up.
+
+- **R1 Your weekend** (`components/YourWeekend.jsx`, words in `lib/yourweekend.js`): the top of a locked-in trip's page —
+  dates and countdown, where we're staying (tap for maps), each day's course with ov28's `YourRound` (team, partner,
+  opponents, group, tee time; "Tee time and group to come" until it's set), your car, your money line and "Seats
+  confirmed: 6 of 10 (paid)" (I7). Then **Your to-dos** (every one with a button), then everything else folded under
+  **More about this trip**, each section once (getting there, votes, what's up for grabs, rules, side activities, what
+  to bring, form guide, tipping, chat, then the plan by day). TripOverview adds nothing above the run-up any more.
+- **M1 One money line** (`components/MoneyLine.jsx`, `lib/money.js`): "Your share $535 · paid $200 · still to pay $335
+  to Josh (PayID …) [I've paid]"; after "I've paid": "waiting for Josh to confirm", no Pay button. "pay Josh" (the trip's
+  organiser), never "the kitty". Organisers: payments waiting for a tick, a short "still to pay" list with ONE Remind
+  (a buzz, else a group-chat message); the full table is behind Details on the Kitty tab. "You owe" (never "YOU owes").
+- **I15 Settle up:** `<MoneyLine tripId settle />` passed as TripResults' `moneyLine` (TripOverview and TripNow).
+- **R2 Guest view:** "You're Josh's guest for the …" on Your weekend; no votes, no Organise tab, no group rules or tipping,
+  and only to-dos with a button (the money).
+- **F1 First open** (`components/FirstOpen.jsx`, `lib/firstopen.js`): the organiser of a new group gets a three-step start
+  on Home (1 invite your mates — ready-made group-chat message, then who's joined (I1); 2 suggest the next trip;
+  3 notifications); a new player or guest gets a welcome card (group, faces in, next trip or "nothing planned yet").
+  One pop-up a visit; the notifications ask and Caddie's hello wait for the second visit; the Home notifications card
+  goes away for 30 days after "Not now" (card or pop-up).
+- **F2 One-step join** (`screens/Join.jsx`, `lib/savespot.js signInModes().joinCode`): when `VITE_SIGN_IN` lists `email`,
+  the join screen is Google or an emailed code only (no password). "Just this phone for now" is a proper button with a
+  line on what it means. **Live today is `google,password`, so nothing changes there until Josh switches it** (below).
+- **I10 Countdown pushes** (`_shared/runup.js countdownPush`, notify `daily`): 30 days out → pay; 7 days → handicap,
+  else pay, else lift; the day before → your car etc., or "No lift sorted yet" when that's the one thing. Nothing when
+  there's nothing to do. Only people who said In get them.
+- **Small fixes:** "You owe"; no Pay button while waiting; dates written "by Fri 30 Oct"; notifications card gone after
+  "Not now"; the chosen notification option's second line readable; Caddie doesn't suggest "Who's leading today?" with
+  no round on; "Tell Josh" → "Send feedback"; a just-added bring item doesn't say "Nobody yet" next to "I'll bring it";
+  "admin" → "organiser" on the name-pick screens.
+- **Migration 096** (`096_trip_page_money.sql`, additive, not applied): two policies on `plan_transfers` so the TRIP's
+  organiser (plans.organiser_id, their player in that row's group) can tick off or remove money paid in (to_id null) for
+  their own trip. Nothing dropped. Test `supabase/tests/096_trip_page_money_test.sql` (+ expected): passes on a PGlite
+  stand-in, and without 096 the organiser's tick does nothing (checked).
+- **Headcount:** `lib/money.js peopleIn` is a local helper marked for switching to ov26's `lib/headcount.js` (not in
+  v10-int yet).
+- **Tests:** Vitest 1547 pass (money, firstopen, yourweekend, caddie, savespot). Deno notify/_shared 14 pass; notify
+  type-checks. Browser: new `trip-page` (R1, M1, R2, F1); `signin-first` (new part I on a `google,password,email`
+  build), `save-spot`, `signin-home`, `beta`, `links`, `notify-prompt` (updated for one pop-up a visit), runup,
+  trip-overview, trip-plan, results, your-round, day-screen, awards-fines, hello-maps, caddie, trips, desktop, plan-ux,
+  trip-extras, nav, phone, organise-tidy, trip-builder, cup pass.
+- **Josh to do:** to turn on the one-step join on live, set `infra/cloudflare.json` → `sign_in.live` to
+  `"google,password,email"` (join links: Google or a code; the front door still takes passwords people have set) or
+  `"google,email"` (a code everywhere). Check the Supabase "Magic link" and "Confirm sign up" emails include
+  `{{ .Token }}` (docs/SIGN-IN-SETUP.md). Deploy the notify function. Apply 096 on staging, then live.

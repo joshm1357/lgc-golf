@@ -49,6 +49,7 @@ import { CourseSheet, StaySheet } from '../components/PlaceSheets.jsx';
 import { usePlaceInfo, RowTip } from '../components/PlanMapTools.jsx';
 // ov35: two votes, either order — 📅 When? and 📍 Where? (old trips with one combined vote keep the old screen).
 import WhenWhere from '../components/WhenWhere.jsx';
+import { CoOrganisersCard } from '../components/CoOrganisers.jsx';
 import { PART_LOOK, BOTH_TITLE, isCombined, cardPolls, callChoices, splitRange, settleWhen, winnerKeys, partResultPost, whenLabel } from '../lib/votecards.js';
 import { courseTip, stayTip } from '../lib/placeinfo.js';
 
@@ -892,6 +893,7 @@ export default function TripBuilder() {
         </div>
         {/* O1: the same "where we're up to" line as Organise and the Overview's card. */}
         <div className="small" style={{ fontWeight: 800 }} data-testid="up-to-line">📍 {upToLine(plan.status !== 'planning' ? 'money' : (steps.find((x) => !x.done) || { key: 'lockin' }).key)}</div>
+        <CoOrganisersCard plan={plan} compact />
         {!org && <div className="small muted">The organiser builds the trip here; you vote on the trip’s page{jobs.some((j) => j.owner_id === me && Object.values(callJobIds).includes(j.id)) ? ' — and put in the tee times for your call below' : ''}.</div>}
         <div className={`tb-layout${current === 'area' ? ' single' : ''}`}>
           <div className="tb-side">

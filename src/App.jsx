@@ -85,6 +85,7 @@ const Present = lazyScreen(() => import('./screens/Present.jsx'), 'Present');
 const AwardsShow = lazyScreen(() => import('./screens/AwardsShow.jsx')); // ov28 (I14): the awards presentation
 const TripFinder = lazyScreen(() => import('./screens/TripFinder.jsx'));
 const TripBuilder = lazyScreen(() => import('./screens/TripBuilder.jsx'));
+import { PlanRole } from './components/CoOrganisers.jsx';
 const Notifications = lazyScreen(() => import('./screens/Notifications.jsx'));
 const CompsBoard = lazyScreen(() => import('./screens/CompsBoard.jsx'));
 const TripOverviewScreen = lazyScreen(() => import('./screens/TripOverview.jsx')); // a trip's overview (trips with no plan)
@@ -92,7 +93,12 @@ const TripOverviewScreen = lazyScreen(() => import('./screens/TripOverview.jsx')
 // A fresh plan screen per plan, so nothing carries over when a notification jumps to another one.
 function PlanDetailRoute() {
   const { planId } = useParams();
-  return <PlanDetail key={planId} />;
+  // ov35: a trip's co-organisers get the organiser's view of it (components/CoOrganisers.jsx PlanRole).
+  return <PlanRole planId={planId} key={planId}><PlanDetail /></PlanRole>;
+}
+function TripBuilderRoute() {
+  const { planId } = useParams();
+  return <PlanRole planId={planId} key={planId}><TripBuilder /></PlanRole>;
 }
 
 // An invite link opened by someone already in a group: join that group too (or open it if already in).
@@ -323,7 +329,7 @@ function Inside() {
         <Route path="/plan" element={<FeatureRoute feature="planner" label="The Trips planner"><Planner /></FeatureRoute>} />
         <Route path="/plan/:planId" element={<FeatureRoute feature="planner" label="The Trips planner"><PlanDetailRoute /></FeatureRoute>} />
         <Route path="/plan/:planId/find" element={<FeatureRoute feature="trip_finder" label="The trip finder"><TripFinder /></FeatureRoute>} />
-        <Route path="/plan/:planId/build" element={<FeatureRoute feature="trip_finder" label="Plan the trip"><TripBuilder /></FeatureRoute>} />
+        <Route path="/plan/:planId/build" element={<FeatureRoute feature="trip_finder" label="Plan the trip"><TripBuilderRoute /></FeatureRoute>} />
         <Route path="/rules" element={<GovRedirect to="/governance/rulebook" />} />
         <Route path="/rules/:ruleId" element={<RulePage />} />
         <Route path="/courses/:courseId/greens" element={<GreenMapper />} />

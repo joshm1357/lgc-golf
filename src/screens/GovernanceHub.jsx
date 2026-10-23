@@ -14,7 +14,7 @@ import Tribunal from './Tribunal.jsx';
 
 export const GOV_TABS = [
   { key: 'rulebook', label: 'Rulebook' },
-  { key: 'tribunal', label: 'Tribunal' },
+  { key: 'tribunal', label: 'Tribunal', sub: 'Disputes' },
   { key: 'committees', label: 'Committees' },
 ];
 
@@ -45,10 +45,10 @@ export default function GovernanceHub() {
   const summary = g?.ok ? howWeDecideLine(g.settings, g.committees, isOn) : '';
   return (
     <div className="page">
-      <Header logo title="⚖️ Governance" sub="How the group runs itself: the rules, the cases, and who decides">
-        <nav className="seg gov-tabs" aria-label="Governance" style={{ marginTop: 10 }}>
+      <Header logo title="⚖️ Group rules" sub="How the group runs itself: the rules, the cases, and who decides">
+        <nav className="seg gov-tabs" aria-label="Group rules" style={{ marginTop: 10 }}>
           {tabs.map((t) => (
-            <NavLink key={t.key} to={`/governance/${t.key}`} className={({ isActive }) => (isActive ? 'active' : undefined)} data-testid={`gov-tab-${t.key}`}>{t.label}</NavLink>
+            <NavLink key={t.key} to={`/governance/${t.key}`} className={({ isActive }) => (isActive ? 'active' : undefined)} data-testid={`gov-tab-${t.key}`}>{t.sub ? <span className="gov-tab-two">{t.label}<small>{t.sub}</small></span> : t.label}</NavLink>
           ))}
         </nav>
       </Header>

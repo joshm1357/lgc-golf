@@ -529,7 +529,7 @@ Deno.serve(async (req) => {
     const g = m.group_id as string;
     const me = { player_id: m.player_id as string | null, is_admin: m.role === 'organiser' };
     const adminOnly = ['plan_new', 'trip_locked', 'rsvp_locked', 'nudge_votes', 'nudge_rsvp', 'nudge_kitty', 'groups_set', 'draw_open', 'deposit_ask', 'nudge_deposit', 'nudge_signin', 'draw_out'];
-    if (adminOnly.includes(body.type) && !me.is_admin) return json({ error: 'Admin only' }, 403);
+    if (adminOnly.includes(body.type) && !me.is_admin) return json({ error: 'Organisers only' }, 403);
     const from = me.player_id as string | null;
     // Someone who hasn't picked their name yet can't send anything to others (only the test buzz to themselves).
     if (!from && !me.is_admin && body.type !== 'test') return json({ error: 'Pick your name first' }, 403);
@@ -578,7 +578,7 @@ Deno.serve(async (req) => {
         if (!me.is_admin) {
           // The trip's organiser may pick winners when the group allows it.
           const [{ data: gr }, pl0] = await Promise.all([db.from('groups').select('vote_decider').eq('id', g).single(), plan(g, p.plan_id)]);
-          if (gr?.vote_decider !== 'admin_or_organiser' || !from || pl0.organiser_id !== from) return json({ error: 'Admin only' }, 403);
+          if (gr?.vote_decider !== 'admin_or_organiser' || !from || pl0.organiser_id !== from) return json({ error: 'Organisers only' }, 403);
         }
         if (!(await once(`poll-decided:${p.id}`))) break;
         const { data: o } = p.winner_option_id ? await db.from('plan_options').select('label').eq('id', p.winner_option_id).eq('group_id', g).maybeSingle() : { data: null };
@@ -690,7 +690,7 @@ Deno.serve(async (req) => {
         break;
       }
       case 'rule_decided': {
-        if (!me.is_admin) return json({ error: 'Admin only' }, 403);
+        if (!me.is_admin) return json({ error: 'Organisers only' }, 403);
         const r = await mine(g, 'rules', body.rule_id);
         if (!r || !['active', 'rejected', 'retired'].includes(r.status)) break;
         const verb = { active: '✅ New rule', rejected: '❌ Rule rejected', retired: '🗄️ Rule retired' }[r.status as 'active'];

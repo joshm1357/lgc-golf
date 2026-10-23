@@ -1,4 +1,4 @@
-// "✨ Plan it with AI" (AI helper v2, 21 Oct 2026; a conversation since 22 Oct, 080) — on the Trips tab, for organisers.
+// "✨ Plan it with the Caddie" (AI helper v2, 21 Oct 2026; a conversation since 22 Oct, 080) — on the Trips tab, for organisers.
 // It's a chat now: the helper replies with its draft (a shortlist of places with their courses, weekends, extras,
 // rough costs) and 1–3 questions with quick answers; the draft card shows what changed. A helper, never a decider.
 // The organiser says what they want ("Weekend away in March, 12 of us, within 3 hours of Sydney, about $500 each")
@@ -31,13 +31,13 @@ export function TripsAi() {
   const { status } = useSession();
   if (!on || !planner) return null;
   const carryOn = chatSize(loadChat(status?.group_id)) || (pending.has(status?.group_id) ? 1 : 0);
-  // ov16: "Plan it with AI" IS the Caddie now — this is a shortcut that opens it in ✨ Plan a trip mode (the chat
+  // ov16: "Plan it with the Caddie" IS the Caddie now — this is a shortcut that opens it in ✨ Plan a trip mode (the chat
   // beside the trip screen, which fills in as you talk). PlanWithAiSheet below is kept for older links only.
   return (
     <div className="stack" style={{ gap: 8 }}>
       {status?.is_admin && (
         <button type="button" className="btn ghost block" style={{ minHeight: 52, borderColor: 'var(--navy)', fontWeight: 800 }} onClick={openPlanner} data-testid="plan-with-ai">
-          ✨ {carryOn ? `Carry on your plan (${carryOn} messages)` : 'Plan it with AI'}
+          ✨ {carryOn ? `Carry on your plan (${carryOn} messages)` : 'Plan it with the Caddie'}
         </button>
       )}
       <div style={{ textAlign: 'center' }}><AskChip about="trips" inline /></div>
@@ -141,7 +141,7 @@ export function PlanWithAiSheet({ onClose }) {
       nav(`/plan/${plan.id}/build`);
     } catch (e) {
       setBusy(false);
-      setErr(e?.message || 'Couldn’t open the trip builder.');
+      setErr(e?.message || 'Couldn’t open Plan the trip.');
     }
   };
   const restart = () => { clearChat(gid); setTurns([]); setDraft(null); setPrev(null); setConfirm(false); setErr(''); };
@@ -151,9 +151,9 @@ export function PlanWithAiSheet({ onClose }) {
   const shown = turns.map((t) => (t === lastAi && draft ? { ...t, card: <div className="pc-inline-card"><DraftCard draft={draft} diff={diff} prev={prev} /></div> } : t));
   const ready = draft && (draft.places || []).length > 0 && (draft.dates || []).length > 0;
   return (
-    <Sheet title="✨ Plan it with AI" onClose={onClose} wide>
+    <Sheet title="✨ Plan it with the Caddie" onClose={onClose} wide>
       <div className="pc-grid">
-      <div className="stack" style={{ gap: 10 }} aria-label="Plan it with AI">
+      <div className="stack" style={{ gap: 10 }} aria-label="Plan it with the Caddie">
         {!confirm ? (
           <AiChat turns={shown} onSend={send} busy={busy} left={turnsLeft(turns)} placeholder={turns.length ? 'Answer, or say what to change…' : PLAN_EXAMPLE}
             intro={!turns.length && <span className="small muted">Say roughly when, how many, how far and the budget. The helper comes back with some options and a few questions — you choose what goes to the group. Nothing’s saved until you say so.</span>}
@@ -172,9 +172,9 @@ export function PlanWithAiSheet({ onClose }) {
             {(draft.warnings || []).map((w, i) => <span key={i} className="small err" style={{ margin: 0 }}>⚠️ {w}</span>)}
             <span className="small muted">These are options for the group to vote on — nothing is picked for them.</span>
             <button type="button" className="btn gold block" disabled={busy} onClick={create}>{busy ? 'Creating…' : 'Create it'}</button>
-            {builderOn && <button type="button" className="btn block" disabled={busy} onClick={toBuilder} data-testid="to-builder">🗺️ Open in the trip builder instead</button>}
+            {builderOn && <button type="button" className="btn block" disabled={busy} onClick={toBuilder} data-testid="to-builder">🗺️ Plan it on the map instead</button>}
             <button type="button" className="btn ghost sm" disabled={busy} onClick={() => setConfirm(false)}>Back to the chat</button>
-            <span className="small muted">Costs are rough AI estimates — check before booking.</span>
+            <span className="small muted">Costs are the Caddie’s rough guesses — check before booking.</span>
           </div>
         )}
         {err && <div className="small err" style={{ margin: 0 }} role="alert">{err}</div>}

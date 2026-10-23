@@ -241,7 +241,7 @@ export function briefText(plan: TripPlan, tasksOn: boolean): string | null {
   const parts: string[] = [];
   if (plan.notes) parts.push(plan.notes);
   if (plan.travel === 'fly') parts.push('Travel: the group would like a flying trip (flying and multi-stop trips are coming soon to the planner).');
-  if (plan.costs.length) parts.push(`Rough costs each (AI estimate — check before booking):\n${costLines(plan).join('\n')}`);
+  if (plan.costs.length) parts.push(`Rough costs each (the Caddie’s rough guess — check before booking):\n${costLines(plan).join('\n')}`);
   if (!tasksOn && plan.places.length > 1) parts.push(`Other places to think about: ${plan.places.slice(1).map((p) => p.label).join(', ')}`);
   if (!tasksOn && plan.jobs.length) parts.push(`Jobs:\n${plan.jobs.map((j) => `• ${j}`).join('\n')}`);
   if (!tasksOn && plan.bring.length) parts.push(`Bring:\n${plan.bring.map((j) => `• ${j}`).join('\n')}`);

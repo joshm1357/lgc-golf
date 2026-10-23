@@ -143,8 +143,8 @@ export default function CaddiePlan({ onGo }) {
   };
   const restart = () => { clearChat(gid); setTurns([]); setDraft(null); setPrev(null); setPlanId(null); setConfirm(false); setErr(''); };
 
-  if (!aiOn || !plannerOn) return <div className="small caddie-why" role="note">Planning with the AI is switched off for this group.</div>;
-  if (!status?.is_admin || status?.viewing) return <div className="small caddie-why" role="note">Only an organiser can plan a trip with the AI. Ask me about your trips instead.</div>;
+  if (!aiOn || !plannerOn) return <div className="small caddie-why" role="note">Planning with the Caddie is switched off for this group.</div>;
+  if (!status?.is_admin || status?.viewing) return <div className="small caddie-why" role="note">Only an organiser can plan a trip with the Caddie. Ask me about your trips instead.</div>;
 
   const diff = diffDraft(prev, draft);
   const lastAi = [...turns].reverse().find((t) => t.role === 'assistant');
@@ -184,7 +184,7 @@ export default function CaddiePlan({ onGo }) {
           <span className="small muted">These are options for the group to vote on — nothing is picked for them.</span>
           <button type="button" className="btn gold block" disabled={busy} onClick={create}>{busy ? 'Creating…' : 'Create it'}</button>
           <button type="button" className="btn ghost sm" disabled={busy} onClick={() => setConfirm(false)}>Back to the chat</button>
-          <span className="small muted">Costs are rough AI estimates — check before booking.</span>
+          <span className="small muted">Costs are the Caddie’s rough guesses — check before booking.</span>
         </div>
       )}
       {planId && onTrip && <span className="small muted">✨ The trip screen fills in as we talk. Change anything there — I’ll see it next time you say something.</span>}

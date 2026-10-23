@@ -1,5 +1,6 @@
 // Stage 6: history from before the app — past winners and past handicaps, typed in or pasted as a list
 // (from a spreadsheet, a note or the group chat). Pure functions, so they can be tested.
+import { shortDate } from './ladder.js';
 
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 
@@ -156,7 +157,7 @@ export function parseHandicaps(text, { players = [], today = localToday(), exist
     const date = d && parseDate(d);
     if (!date) { problems.push(`Line ${n}: couldn’t read the date or handicap — “${line}” (try 1/6/2023, 14.2)`); return; }
     const handicap = readHandicap(h); // golfers write a plus handicap as +2
-    if (date > today) { problems.push(`Line ${n}: ${date} is in the future`); return; }
+    if (date > today) { problems.push(`Line ${n}: ${shortDate(date)} is in the future`); return; }
     if (handicap == null) { problems.push(`Line ${n}: a handicap of ${h} doesn’t look right`); return; }
     const row = { player_id: hits[0].id, name: hits[0].name, date, handicap };
     const same = (x) => x.player_id === row.player_id && x.date === row.date && Number(x.handicap) === row.handicap;

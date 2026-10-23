@@ -39,7 +39,7 @@ export default function DrawDemo() {
       <DrawCeremony draw={draw} actions={actions} demo onClose={() => setDraw(fresh())} />
       <div style={{ position: 'fixed', left: 0, right: 0, top: 0, zIndex: 90, background: '#D9A521', color: '#15202E', fontFamily: 'Barlow, sans-serif', fontSize: 13, fontWeight: 700, padding: '6px 10px', display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
         <span>EXAMPLE — nothing is saved</span>
-        <button type="button" onClick={() => setAsAdmin(!asAdmin)} style={{ border: '1px solid #15202E', borderRadius: 999, background: 'transparent', padding: '2px 10px', fontWeight: 700 }}>{asAdmin ? 'View as a player' : 'View as admin'}</button>
+        <button type="button" onClick={() => setAsAdmin(!asAdmin)} style={{ border: '1px solid #15202E', borderRadius: 999, background: 'transparent', padding: '2px 10px', fontWeight: 700 }}>{asAdmin ? 'View as a player' : 'View as organiser'}</button>
         {draw.status === 'lobby' && (
           <>
             <select value={k} onChange={(e) => { const v = Number(e.target.value); setK(v); setDraw(fresh(v, balance, pace)); }} style={{ borderRadius: 6, fontWeight: 700 }} aria-label="Team size">

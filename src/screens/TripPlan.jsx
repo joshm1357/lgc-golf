@@ -167,7 +167,7 @@ export function useStepActions(pd, ex, { onTab, onOther } = {}) {
       askConfirm(lockInWords(plan, pd.polls)).then((yes) => yes && run(async () => {
         await lockInTrip(pd, status);
         pd.reload();
-      }, 'Locked in — the votes are closed and the to-do list is ready'));
+      }, 'Locked in — the votes are closed and the jobs are ready'));
       return;
     }
     if (a.type === 'go') { nav(a.to); return; }

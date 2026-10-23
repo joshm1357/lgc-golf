@@ -232,7 +232,7 @@ function CompsSection({ trip, rounds }) {
   if (!list.length && !gamesOn && !cupOn) return null;
   return (
     <div className="card" data-testid="trip-comps">
-      <div className="label" style={{ padding: '12px 14px 4px' }}>What we’re playing for</div>
+      <div className="label" style={{ padding: '12px 14px 4px' }}>Trophies &amp; cups</div>
       {lines.map(({ c, lead }) => (
         <Link key={c.id} to={c.kind === 'cup' && cupOn ? '/cup' : `/comps-board?trip=${trip.id}&c=${encodeURIComponent(c.id)}`} className="row"
           style={{ gap: 10, padding: '10px 14px', borderTop: '1px solid var(--line-soft)', textDecoration: 'none', color: 'inherit', minHeight: 48 }}>

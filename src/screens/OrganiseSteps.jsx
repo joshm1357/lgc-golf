@@ -233,7 +233,7 @@ function StepBody({ k, pd, ex, stage, trip, isOrg, on, desk, wide, moneyTab, onM
         {isOrg && (
           <OtherWays open={plan.status !== 'planning' || plan.proposed ? false : !hasPrimary}>
             {plan.status === 'planning' && on.trip_finder && (
-              <Link to={`/plan/${plan.id}/build`} className="small" data-testid="tb-link" style={{ fontWeight: 700 }}>🗺️ Open the trip builder →</Link>
+              <Link to={`/plan/${plan.id}/build`} className="small" data-testid="tb-link" style={{ fontWeight: 700 }}>🗺️ Plan the trip on the map →</Link>
             )}
             <TripFinderCard pd={pd} />
             {plan.status === 'planning' && (
@@ -254,7 +254,7 @@ function StepBody({ k, pd, ex, stage, trip, isOrg, on, desk, wide, moneyTab, onM
     return (
       <>
         {isOrg && plan.status === 'planning' && on.trip_finder && ex.builder.started && (
-          <Link to={`/plan/${plan.id}/build`} className="small" data-testid="courses-link" style={{ fontWeight: 700 }}>⛳ Course options each day, in the trip builder →</Link>
+          <Link to={`/plan/${plan.id}/build`} className="small" data-testid="courses-link" style={{ fontWeight: 700 }}>⛳ Course options each day, on the map →</Link>
         )}
         {plan.kind !== 'round' && <TripPlanCards pd={pd} only={['stay']} />}
         {plan.kind === 'round' && <div className="small muted">A one-day round: no places to stay to sort.</div>}
@@ -330,7 +330,7 @@ function BookStep({ pd, ex, isOrg, act, on }) {
               </button>
             );
           })}
-          {on.trip_finder && <Link to={`/plan/${pd.plan.id}/build`} className="small" style={{ display: 'block', padding: '8px 14px', fontWeight: 700 }}>The tee times so far, in the trip builder →</Link>}
+          {on.trip_finder && <Link to={`/plan/${pd.plan.id}/build`} className="small" style={{ display: 'block', padding: '8px 14px', fontWeight: 700 }}>The tee times so far, on the map →</Link>}
         </div>
       )}
       {round && !calls.length && <div className="small muted">A one-day round: nothing to book here unless you’re calling the course.</div>}

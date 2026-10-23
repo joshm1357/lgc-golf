@@ -134,7 +134,7 @@ function Feedback() {
           <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} disabled={busy} onClick={() => tick(r)}>{r.done ? 'Not done' : 'Mark done'}</button>
         </div>
       ))}
-      <span className="small muted">From More → Tell Josh. Each one has the sender’s name, the screen they were on and the app version.</span>
+      <span className="small muted">From Send feedback (More, or the sidebar). Each one has the sender’s name, the screen they were on and the app version.</span>
     </div>
   );
 }

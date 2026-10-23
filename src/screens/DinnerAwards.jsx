@@ -72,8 +72,8 @@ export default function DinnerAwards() {
   const nameOf = useCallback((id) => playerName(data.playersById[id]) || 'Someone', [data.playersById]);
   const card = useMemo(() => (d ? resultsCard({ tripName: trip?.name, awards: d.awards, nominations: d.nominations, votes: d.votes, nameOf }) : null), [d, trip, nameOf]);
 
-  if (!trip) return <div className="page"><Header back title="Awards and fines" /><div className="empty">No trip yet — awards and fines belong to a trip.</div></div>;
-  if (!d) return <div className="page"><Header back title="Awards and fines" sub={trip.name} /><Loading /></div>;
+  if (!trip) return <div className="page"><Header back title="Fines & awards" /><div className="empty">No trip yet — fines &amp; awards belong to a trip.</div></div>;
+  if (!d) return <div className="page"><Header back title="Fines & awards" sub={trip.name} /><Loading /></div>;
   // 100: a nightly (daily, from-the-scores) award shows as its runs below, not as a card to vote on — unless someone
   // nominated straight onto it (the old way, still allowed). The nights' copies (parent_id) are inside those runs.
   const list = sortAwards(d.awards.filter((a) => !a.parent_id
@@ -81,7 +81,7 @@ export default function DinnerAwards() {
 
   return (
     <div className="page">
-      <Header back title="Awards and fines" sub={trip.name} />
+      <Header back title="Fines & awards" sub={trip.name} />
       <div className="section stack">
         {d.failed && <div className="err">Couldn’t load the awards — check your signal.</div>}
         {list.length === 0 && d.awards.length === 0 && <div className="empty">No awards or fines yet. Add the first — the group nominates, then votes when you get together (dinner, lunch or at the course).</div>}
@@ -96,7 +96,7 @@ export default function DinnerAwards() {
         {!readOnly && status.role !== 'guest' && <button type="button" className="btn ghost block" onClick={() => setProposing(true)} data-testid="dinner-propose">📜 Propose one for the Rulebook (every trip, with a reward and proof)</button>}
         {card?.rows.length > 0 && (
           <SharePicture kind="awards" data={card} label="🖼️ Share the results as a picture"
-            text={`🏅 ${trip.name} — awards and fines`} />
+            text={`🏅 ${trip.name} — fines & awards`} />
         )}
         <p className="note" style={{ margin: 0 }}>
           Roast the golf and the mates — never race, religion, sexuality, disability or anything tragic (the app won’t take it).

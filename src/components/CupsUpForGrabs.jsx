@@ -56,7 +56,7 @@ export default function CupsUpForGrabs({ trip, isOrg }) {
     if (x.on) await must(supabase.from('comps').update({ retired: true }).eq('id', x.comp.id));
     else await turnOn(x.cup, trip, allComps);
     await reloadComps();
-  }, x.on ? `${x.cup.name} is off for this trip` : `${x.cup.name} is up for grabs`);
+  }, x.on ? `${x.cup.name} is off for this trip` : `${x.cup.name} is on for this trip`);
   return (
     <div className="stack" style={{ gap: 6 }} data-testid="cups-grabs">
       {!shown.length && <span className="small muted">{isOrg ? 'No group cups yet. Make one for this weekend:' : 'No group cups on for this trip yet.'}</span>}
@@ -175,7 +175,7 @@ function NewCupSheet({ trip, cupOn, allComps, onClose, onSaved }) {
     if (trip) await turnOn(cup, trip, allComps);
     await onSaved?.();
     onClose();
-  }, `${name.trim()} saved to the group’s cups${trip ? ' and put up for grabs' : ''}`);
+  }, `${name.trim()} saved to the group’s cups${trip ? ' and put on for this trip' : ''}`);
   return (
     <Sheet title="A new cup" onClose={onClose}>
       <div className="stack" data-testid="cups-new-sheet">
@@ -203,7 +203,7 @@ function NewCupSheet({ trip, cupOn, allComps, onClose, onSaved }) {
         </div>
         {trophy === true && <span className="small muted">Once it’s saved, add a photo of it and who has it now (next to the cup).</span>}
         {trophy === false && <span className="small muted">We’ll remind you in the run-up to sort one before the presentation.</span>}
-        <button type="button" className="btn gold block" disabled={busy || name.trim().length < 2} onClick={save} data-testid="cups-new-save">Save{trip ? ' and put it up for grabs' : ''}</button>
+        <button type="button" className="btn gold block" disabled={busy || name.trim().length < 2} onClick={save} data-testid="cups-new-save">Save{trip ? ' and put it on for this trip' : ''}</button>
       </div>
     </Sheet>
   );

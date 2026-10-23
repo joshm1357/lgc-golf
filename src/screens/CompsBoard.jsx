@@ -220,7 +220,7 @@ export default function CompsBoard() {
   if (!data.ready) return <Loading />;
   return (
     <div className="page">
-      <Header back title="What we’re playing for" sub={trip ? trip.name : 'No trip yet'} />
+      <Header back title="Trophies & cups" sub={trip ? trip.name : 'No trip yet'} />
       <div className="section stack" style={{ gap: 10, paddingBottom: 24 }}>
         {!trip && <div className="empty">No trip yet.{admin ? <> <Link to="/setup">Set up your trip</Link>.</> : ''}</div>}
         {/* ov28 (C1): your team, partner, opponents and tee time for the round that's on or next (nothing if none). */}
@@ -280,7 +280,7 @@ export function CompsStep({ trip, onStep }) {
       {editing
         ? <CompEditor key={editing === 'new' ? 'new' : editing.id} trip={trip} comp={editing === 'new' ? null : editing} comps={list} onStep={onStep}
             onDone={() => { setEditing(null); reload(); }} />
-        : <button type="button" className="btn gold" onClick={() => setEditing('new')}>{list.length ? '+ Add another' : '+ Pick what you’re playing for'}</button>}
+        : <button type="button" className="btn gold" onClick={() => setEditing('new')}>{list.length ? '+ Add another' : '+ Pick the trophies & cups'}</button>}
       {list.length > 0 && <Link to="/comps-board" className="small" style={{ fontWeight: 700 }}>See the standings →</Link>}
     </>
   );

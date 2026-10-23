@@ -39,8 +39,8 @@ export const FEATURES = [
   { key: 'replay', name: 'Round replay', description: 'Watch a finished round as a 60-second animated replay.', newGroup: true },
   // v8 (23 Oct, Josh): "Remove running jokes as that is a background thing." No switch any more: it's a background
   // part of commentary — on when commentary is on (`follows`). The database key stays, kept in step with commentary.
-  { key: 'in_jokes', name: 'Running jokes', description: 'The AI quietly picks up running jokes from the feed and trip chat to use in commentary and the replay. They’re never shown as a list.', newGroup: false, hidden: true, follows: 'commentary' },
-  { key: 'ai_helper', name: 'AI helper', description: 'Ask the app in plain words: set up a trip for you, or answer questions about your group’s history.', newGroup: true },
+  { key: 'in_jokes', name: 'Running jokes', description: 'The Caddie quietly picks up running jokes from the feed and trip chat to use in commentary and the replay. They’re never shown as a list.', newGroup: false, hidden: true, follows: 'commentary' },
+  { key: 'ai_helper', name: 'The Caddie', description: 'Ask the app in plain words: set up a trip for you, or answer questions about your group’s history.', newGroup: true },
   { key: 'rule_challenges', name: 'Rule challenges', description: 'Anyone can challenge a rule: change it, scrap it or ask for a ruling.', parent: 'tribunal', newGroup: true },
   { key: 'other_cases', name: '“Anything else” cases', description: 'Raise anything with the Tribunal — that shirt on day 2.', parent: 'tribunal', newGroup: true },
   { key: 'committees', name: 'Committees and terms', description: 'Named committees (e.g. Handicap Committee) with seats and terms.', parent: 'tribunal', newGroup: false },
@@ -48,7 +48,7 @@ export const FEATURES = [
   { key: 'trip_finder', name: 'Trip finder', description: 'Which courses suit the group: tee-time windows, drive times and course facts, ranked on a map.', parent: 'planner', newGroup: false },
   { key: 'weather', name: 'Weather on the trip', description: 'The forecast for the trip’s place in the week before.', parent: 'planner', newGroup: true },
   // ov28 (I14, Josh: "not just dinner — often just lunch after the last game and head home"): same key, plainer words.
-  { key: 'dinner_awards', name: 'Awards and fines', description: 'Nominate and vote for the trip’s awards and fines, then present them — at dinner, lunch or the course.', newGroup: false },
+  { key: 'dinner_awards', name: 'Fines & awards', description: 'Nominate and vote for the trip’s fines & awards, then present them — at dinner, lunch or the course.', newGroup: false },
   { key: 'commentary', name: 'Live commentary', description: 'A short line in the Feed (and the odd buzz) as the round goes on: lead changes, birdie runs, aces, the Cup — plus a round report.', parent: 'awards', newGroup: true },
   // ov28 (migration 097, walkthrough I9): bragging rights only — no money.
   { key: 'tipping', name: 'Tipping', description: 'Tip the Cup, a match, or who wins a round. Bragging rights only — no money in the app.', newGroup: true },

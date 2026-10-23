@@ -213,7 +213,7 @@ export function AwardRunPage() {
   const { runId } = useParams();
   return (
     <div className="page">
-      <Header back title="Awards and fines" />
+      <Header back title="Fines & awards" />
       <div className="section stack"><AwardRunCard runId={runId} /></div>
     </div>
   );
@@ -268,7 +268,7 @@ export function AutoAwardResults({ trip }) {
   const nameOf = (id) => playerName(data.playersById[id]) || 'Someone';
   return (
     <div className="card pad stack" style={{ gap: 6 }} data-testid="auto-award-results">
-      <strong>🌙 Nightly awards and fines</strong>
+      <strong>🌙 Nightly fines &amp; awards</strong>
       {res.lines.map((l) => (
         <div key={l.id} className="row between small" style={{ gap: 8 }} data-testid="auto-result-line">
           <span className="grow" style={{ minWidth: 0 }}>{l.kind === 'fine' ? '🏷' : '🏅'} {l.title}: <strong>{nameOf(l.player_id)}</strong></span>
@@ -277,7 +277,7 @@ export function AutoAwardResults({ trip }) {
       ))}
       {res.tally.length > 0 && (
         <div className="small" data-testid="auto-points">
-          <span className="label">Points from awards and fines</span>
+          <span className="label">Points from fines &amp; awards</span>
           <div>{res.tally.map((t) => `${nameOf(t.player_id)} ${signedPoints(t.points)}`).join(' · ')}</div>
         </div>
       )}

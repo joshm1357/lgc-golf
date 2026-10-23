@@ -407,7 +407,7 @@ function InviteStep({ gid }) {
       <div className="card pad">🎉 Your group is ready. Send this link to the group chat — anyone who opens it joins as a player.</div>
       <InviteCard role="player" />
       <button type="button" className="btn gold block" style={{ minHeight: 56 }} onClick={open}>Open your group</button>
-      <span className="small muted" style={{ textAlign: 'center' }}>Next: add a course and a trip in More → Admin. The guest link and everything else are in More → Group &amp; invites.</span>
+      <span className="small muted" style={{ textAlign: 'center' }}>Next: add a course and a trip in More → Organiser tools. The guest link and everything else are in More → Group &amp; invites.</span>
       <span className="small muted" style={{ textAlign: 'center' }}>Tip: so the group isn’t stuck if you lose your phone, add a sign-in when you can — or make a mate a second organiser (Group &amp; invites → people).</span>
     </>
   );

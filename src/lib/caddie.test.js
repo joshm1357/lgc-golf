@@ -91,7 +91,7 @@ describe('can the AI answer here?', () => {
     expect(caddieMode({ viewing: true, offline: true }).reason).toBe('viewing');
   });
   it('says it plainly, and still offers to take you there', () => {
-    expect(fallbackIntro(caddieMode({ notSetUp: true }))).toBe('I can’t answer questions yet — the AI isn’t switched on for your group — but I can take you to the right page:');
+    expect(fallbackIntro(caddieMode({ notSetUp: true }))).toBe('I can’t answer questions yet — the Caddie isn’t switched on for your group — but I can take you to the right page:');
     expect(fallbackIntro(caddieMode({ offline: true }))).toMatch(/^I can’t answer questions right now — there’s no signal — but I can take you/);
     expect(fallbackIntro(caddieMode({}))).toBe('');
   });
@@ -134,7 +134,7 @@ describe('the search (no AI needed)', () => {
     expect(top('turn on notifications')).toEqual({ key: 'notifications', label: 'Notifications', path: '/notifications' });
   });
   it('money, kitty → the trip’s kitty', () => {
-    expect(top('money')).toEqual({ key: 'trip_organise', label: 'Organise the trip › Kitty', path: `/plan/${P}?view=organise&tab=kitty` });
+    expect(top('money')).toEqual({ key: 'trip_organise', label: 'Plan the trip › Kitty', path: `/plan/${P}?view=organise&tab=kitty` });
     expect(top('Where do I pay the kitty?', false).path).toBe(`/plan/${P}?view=organise&tab=kitty`);
   });
   it('more', () => {

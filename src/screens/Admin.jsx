@@ -54,11 +54,11 @@ export default function Admin() {
   if (!status?.is_admin) {
     return (
       <div className="page">
-        <Header back title="Admin" sub="For whoever's running the trip" />
+        <Header back title="Organiser tools" sub="For whoever's running the trip" />
         {/* No admin PIN any more (083): an organiser makes you one in Players & group, or sends you an organiser link. */}
         <div className="section">
           <div className="card pad stack" style={{ gap: 6 }}>
-            <strong>Only organisers can open Admin</strong>
+            <strong>Only organisers can open Organiser tools</strong>
             <span className="small muted">Ask an organiser to make you one (Players & group → People and roles), or to send you their organiser link.</span>
           </div>
         </div>
@@ -68,7 +68,7 @@ export default function Admin() {
 
   return (
     <div className="page">
-      <Header back title="Admin" sub="Set up trips, courses, players and rounds" />
+      <Header back title="Organiser tools" sub="Set up trips, courses, players and rounds" />
       <div className="section stack" style={{ paddingBottom: 20 }}>
         <Link to="/setup" className="card pad row" style={{ gap: 10, textDecoration: 'none', color: 'inherit', borderColor: 'var(--navy)' }}>
           <span aria-hidden="true">🧭</span><span className="grow"><strong>Set up your trip</strong> <span className="small muted">— the step-by-step guide</span></span><span className="muted">›</span>
@@ -632,7 +632,7 @@ function VotesAdmin() {
   return (
     <Section title="7. Trip votes — who picks the winner">
       <span className="small muted">Everyone votes on when and where. This decides who closes a vote and picks the winner. It applies to every trip in the group.</span>
-      {[['admin', 'The admin', 'Only admins pick winners (as now).'], ['admin_or_organiser', 'The admin or the trip’s organiser', 'Whoever suggested a trip (or who you make its organiser) can pick its winners too.']].map(([v, label, help]) => (
+      {[['admin', 'The group’s organisers', 'Only the group’s organisers pick winners (as now).'], ['admin_or_organiser', 'The group’s organisers or the trip’s organiser', 'Whoever suggested a trip (or who you make its organiser) can pick its winners too.']].map(([v, label, help]) => (
         <button key={v} type="button" className="chip" aria-pressed={value === v} disabled={value == null}
           style={{ textAlign: 'left', whiteSpace: 'normal', minHeight: 48, display: 'block' }} onClick={() => pick(v)}>
           <strong>{value === v ? '● ' : '○ '}{label}</strong><div className="small muted">{help}</div>

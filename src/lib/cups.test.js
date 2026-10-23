@@ -101,7 +101,7 @@ describe('up for grabs on a trip', () => {
     expect(tripCupComps([{ id: 'cb', trip_id: T, cup_id: 'b', retired: false }, social(), { id: 'z', trip_id: T, kind: 'day', retired: false }], T).map((c) => c.id)).toEqual(['cb', 'cup-social']);
   });
   it('one plain line on how to win', () => {
-    expect(howToWin(social({ awards: { on: true }, vibe: { on: true } }))).toBe('Most points wins: awards and fines and vibe points.');
+    expect(howToWin(social({ awards: { on: true }, vibe: { on: true } }))).toBe('Most points wins: fines & awards and vibe points.');
     expect(howToWin({ kind: 'individual_points', settings: {} }, { format: 'stableford' })).toMatch(/Most Stableford points/);
     expect(howToWin(social({}))).toMatch(/hasn’t said/);
   });

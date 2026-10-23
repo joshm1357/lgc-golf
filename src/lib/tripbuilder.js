@@ -384,7 +384,7 @@ export function callJobs({ days = [], weekends = [], courses = {}, needed = 1, o
       title: `📞 Call ${j.name} — ask for ${n} tee time${n === 1 ? '' : 's'} in a row on ${ask}`.slice(0, 300),
       // note (ov23): "Primary: Fri 6 – Sun 8 Mar; Backup: Fri 13 – Sun 15 Mar" — ask about both.
       body: [...(note ? [note] : []), `Ask what they have — ${n} tee time${n === 1 ? '' : 's'} in a row (we’re ${n * 4 - 3}–${n * 4}).`, ...how,
-        'Then put the times in on the trip builder (Trip → Build the trip → Tee times). Nothing is booked yet.'].join('\n'),
+        'Then put the times in on the trip (Trip → Plan the trip → Call the courses). Nothing is booked yet.'].join('\n'),
     };
   });
 }

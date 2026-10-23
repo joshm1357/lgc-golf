@@ -151,7 +151,7 @@ export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage 
 
       {/* ov24: the trip's awards and fines, before the trip ("What's up for grabs"). Once the run-up shows, they're in its
           own "What's up for grabs" part instead (v10 merge: one place per screen). */}
-      {!done && !runUp && <AwardsRunUp trip={trip || data.trips.find((t) => t.id === tripId) || null} title="🎁 What’s up for grabs" overview />}
+      {!done && !runUp && <AwardsRunUp trip={trip || data.trips.find((t) => t.id === tripId) || null} title="🎁 Trophies & cups" overview />}
 
       {/* Results (done) */}
       {/* ov28 (W1): a played trip's results page (in TripStatus above) hands the trophies over; this card is for trips
@@ -173,7 +173,7 @@ export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage 
       {/* Your bits (coming up) */}
       {!done && plan && !runUp && (myJobs.length > 0 || bring.length > 0) && (
         <div className="card pad stack" style={{ gap: 6 }}>
-          <strong>🙋 Your bits</strong>
+          <strong>🙋 Your jobs</strong>
           {myJobs.map((j) => <div key={j.id} className="small">📋 {j.title}{j.due ? <span className="muted"> · by {fmtRange(j.due).replace(/ \d{4}$/, '')}</span> : null}</div>)}
           {bring.length > 0 && <div className="small">🎒 Bring list: {bring.length} thing{bring.length === 1 ? '' : 's'}</div>}
           {onOrganise && <button type="button" className="btn sm ghost" style={{ alignSelf: 'flex-start' }} onClick={() => onOrganise(myJobs.length ? 'jobs' : 'details')}>See it all →</button>}
@@ -191,7 +191,7 @@ export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage 
       )}
       {done && ((dinnerOn && !plan) || statsOn) && (
         <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-          {dinnerOn && tripId && !plan && <Link to={`/dinner/${tripId}`} className="btn sm ghost">🏅 Awards &amp; fines</Link>}
+          {dinnerOn && tripId && !plan && <Link to={`/dinner/${tripId}`} className="btn sm ghost">🏅 Fines &amp; awards</Link>}
           {statsOn && <Link to="/stats" className="btn sm ghost">📊 Stats</Link>}
         </div>
       )}

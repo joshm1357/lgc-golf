@@ -46,7 +46,7 @@ function SidebarNav() {
     { to: '/group', label: 'Players & group', icon: Icon.user },
     on.trophies && { to: '/trophies', label: 'Trophy Room', icon: Icon.trophy },
     // ov19: the Rulebook, Tribunal and Committees are one place — Governance, with tabs.
-    { to: '/governance', label: 'Governance', icon: Icon.gavel },
+    { to: '/governance', label: 'Group rules', icon: Icon.gavel },
     { to: '/courses', label: 'Courses', icon: Icon.map },
     { to: '/more', label: 'More', icon: Icon.more },
   ].filter(Boolean);

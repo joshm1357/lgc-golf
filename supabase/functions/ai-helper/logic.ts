@@ -45,7 +45,7 @@ export const LIMITS = {
   callTimeoutMs: 60000,
   totalMs: 130000, // the whole request (each call's timeout is cut to fit), under the edge function's ~150 s
 };
-export const NOT_ON_YET = 'The AI helper isn’t switched on yet';
+export const NOT_ON_YET = 'The Caddie isn’t switched on yet';
 
 /** The request kinds the function takes. 'history' is the Ask screen (kept for older app versions); 'ask' is the
  *  same thing. `logMode` is the older helper_log.mode column (the cap counts 'setup' and 'history' rows). */
@@ -265,7 +265,7 @@ export function validatePlan(raw: Any, ctx: PlanContext): { ok: boolean; errors:
     const id = typeof c === 'string' ? c : c?.ref;
     const pc = resolve(id);
     if (!pc) errors.push(`Course ${clean(id, 40) || '(blank)'} isn’t in your courses or the course library.`);
-    else if (pc.kind === 'library' && !pc.holes) errors.push(`${pc.name} has no scorecard in the library yet — add it by hand in Admin → Courses.`);
+    else if (pc.kind === 'library' && !pc.holes) errors.push(`${pc.name} has no scorecard in the library yet — add it by hand in Organiser tools → Courses.`);
   }
 
   // The rounds.
@@ -593,7 +593,7 @@ export type Fallback = { kind: 'stop'; value: Any } | { kind: 'text'; text: stri
 
 /** Does this reply read like a question back to the person (so it's fine that there's no plan)? */
 export const asksBack = (text: string) => /\?\s*$/.test(text.trim()) || /\?\s*\n/.test(text);
-const BAD_JSON = 'The AI helper got its wires crossed — try again, or say it a bit more simply.';
+const BAD_JSON = 'The Caddie got its wires crossed — try again, or say it a bit more simply.';
 /** The last call is kept for the final, forced answer when less than this is left before the deadline. */
 export const FINAL_RESERVE_MS = 30000;
 const REPEAT_NOTE = '(You already asked exactly this — it’s the same answer as before. Don’t search for it again: use what you have.)';
@@ -728,7 +728,7 @@ export async function runLoop(o: {
         continue;
       }
       if (text) return end({ kind: 'text', text, usage }, final ? 'final_text' : 'text');
-      return (await giveUp('no_answer')) || end({ kind: 'error', code: 'no_answer', message: 'The AI helper didn’t have an answer — try asking another way.', usage }, 'no_answer');
+      return (await giveUp('no_answer')) || end({ kind: 'error', code: 'no_answer', message: 'The Caddie didn’t have an answer — try asking another way.', usage }, 'no_answer');
     }
     const results: ToolResult[] = [];
     let stop: LoopResult | null = null;
@@ -830,9 +830,9 @@ export async function helperRequest(body: Any, d: Deps): Promise<Record<string, 
   if (!m) return { error: 'Unknown request.' };
   if (!d.status?.is_member || !d.status.group_id) return { error: 'You’re not in this group.' };
   // Guests (quick-round and personal links) don't get the helper: it would spend the group's questions.
-  if (d.status.role === 'guest') return { error: 'The AI helper is for the group’s players — ask your organiser to add you.' };
+  if (d.status.role === 'guest') return { error: 'The Caddie is for the group’s players — ask your organiser to add you.' };
   if (m.organiser && !d.status.is_admin) return { error: m.planner ? 'Only an organiser can plan a trip with the helper.' : 'Only an organiser can set up a trip with the helper.' };
-  if (!(await d.featureOn('ai_helper'))) return { error: 'The AI helper is switched off for this group. An organiser can switch it on in More → Group & invites → Features.', off: true };
+  if (!(await d.featureOn('ai_helper'))) return { error: 'The Caddie is switched off for this group. An organiser can switch it on in More → Group & invites → Features.', off: true };
   if (m.planner && !(await d.featureOn('planner'))) return { error: 'The Trips planner is switched off for this group.', off: true };
 
   if (mode === 'apply' || mode === 'plan_apply') {
@@ -855,13 +855,13 @@ export async function helperRequest(body: Any, d: Deps): Promise<Record<string, 
   const now = d.now();
   const started = Date.now();
   const logId = await d.logStart({ mode: m.logMode, area: m.area, provider: d.ai.provider, model: d.ai.model });
-  if (logId == null) return { error: 'The AI helper couldn’t start just now — try again in a minute.' };
+  if (logId == null) return { error: 'The Caddie couldn’t start just now — try again in a minute.' };
   let used: Used;
   try {
     used = await d.usage();
   } catch {
     await d.logEnd(logId, { ok: false, input_tokens: 0, output_tokens: 0, ms: 0, error: 'cap_check', capped: true });
-    return { error: 'The AI helper couldn’t start just now — try again in a minute.' };
+    return { error: 'The Caddie couldn’t start just now — try again in a minute.' };
   }
   const cap = capCheck({ month: Math.max(0, used.month - 1), today: Math.max(0, used.today - 1) }, now, d.ai.caps);
   if (!cap.ok) {
@@ -972,7 +972,7 @@ export async function helperRequest(body: Any, d: Deps): Promise<Record<string, 
     }
   } catch (e) {
     console.error('ai-helper loop failed:', errorKind(e)); // only the kind of error: never values, text or keys
-    result = { kind: 'error', code: 'crash', message: 'The AI helper hit a snag — try again in a minute.', usage: result.usage };
+    result = { kind: 'error', code: 'crash', message: 'The Caddie hit a snag — try again in a minute.', usage: result.usage };
   } finally {
     // Why it ended (ov16), in the 40 characters helper_log.error has, e.g. "too_many_rounds r8 past,course m2".
     // A rescued reply (the bad parts left out, or the "I got stuck…" question) is logged as "salvaged …" / "stuck …",

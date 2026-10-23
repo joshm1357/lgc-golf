@@ -112,7 +112,7 @@ function TripSetupSheet({ plan, onClose, onDone }) {
         await supabase.from('rounds').update({ status: 'locked' }).in('trip_id', others).eq('status', 'live');
       }
     }
-    if (problems.length) toast(`Trip made, but ${problems.join(' and ')} didn't save — add them in Admin.`);
+    if (problems.length) toast(`Trip made, but ${problems.join(' and ')} didn't save — add them in Organiser tools.`);
     await feedPost(status.player_id, plan, `🏌️ ${trip.name} is set up in the app${chosen.length ? ` — ${chosen.length} round${chosen.length === 1 ? '' : 's'} ready` : ''}. See you on the first tee.`);
     data.reload();
     onDone();
@@ -145,14 +145,14 @@ function TripSetupSheet({ plan, onClose, onDone }) {
         {finding ? (
           <div className="card pad stack" style={{ gap: 8 }}>
             <strong>📚 Find a course in the library</strong>
-            <FindCourse hint="add it in Admin → Courses" onAdded={(id) => {
+            <FindCourse hint="add it in Organiser tools → Courses" onAdded={(id) => {
               setFinding(false);
               // Put the new course on the first round that hasn't got one.
               setRounds((rs) => { const i = rs.findIndex((r) => !r.course_id); return i < 0 ? rs : rs.map((r, j) => (j === i ? { ...r, course_id: id } : r)); });
             }} />
           </div>
         ) : <button type="button" className="btn ghost block" onClick={() => setFinding(true)}>📚 Course not listed? Find it in the library</button>}
-        <span className="small muted">Not in the library either? Add it in Admin → Courses (par and stroke index), then pick it here. Ambrose rounds take the side comp and drive rules from the Rulebook. Teams and side comp holes are set nearer the day.</span>
+        <span className="small muted">Not in the library either? Add it in Organiser tools → Courses (par and stroke index), then pick it here. Ambrose rounds take the side comp and drive rules from the Rulebook. Teams and side comp holes are set nearer the day.</span>
         {trophiesOn && lastTrophies.length > 0 && (
           <label className="row" style={{ gap: 8, fontWeight: 600 }}>
             <input type="checkbox" checked={copyTrophies} onChange={(e) => setCopyTrophies(e.target.checked)} style={{ width: 20, height: 20 }} />
@@ -161,7 +161,7 @@ function TripSetupSheet({ plan, onClose, onDone }) {
         )}
         <label className="row" style={{ gap: 8, fontWeight: 600, alignItems: 'flex-start' }}>
           <input type="checkbox" checked={current} onChange={(e) => setCurrent(e.target.checked)} style={{ width: 20, height: 20, marginTop: 2 }} />
-          <span>Make it the current trip now<div className="small muted" style={{ fontWeight: 400 }}>{current ? 'The leaderboard and trophies switch to this trip; the current trip (and any round still live in it) is closed off.' : 'It waits, closed, until you reopen it in Admin → Trips.'}</div></span>
+          <span>Make it the current trip now<div className="small muted" style={{ fontWeight: 400 }}>{current ? 'The leaderboard and trophies switch to this trip; the current trip (and any round still live in it) is closed off.' : 'It waits, closed, until you reopen it in Organiser tools → Trips.'}</div></span>
         </label>
         <button type="button" className="btn gold block" style={{ minHeight: 56 }} disabled={busy || !name.trim()} onClick={go}>
           Set it up{chosen.length ? ` — ${chosen.length} round${chosen.length === 1 ? '' : 's'}` : ''}

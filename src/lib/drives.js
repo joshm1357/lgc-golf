@@ -161,7 +161,7 @@ export function penaltyBadgeWord(lines = []) {
 }
 /** "(late job)", "(rule penalties)", "(awards and fines, late job)" — the scorecard's penalty row. */
 export function penaltyRowWords(lines = []) {
-  const W = { late_job: 'late job', rule_breach: 'rule penalties', award: 'awards and fines' };
+  const W = { late_job: 'late job', rule_breach: 'rule penalties', award: 'fines & awards' };
   const kinds = [...new Set((lines || []).filter((l) => !l.waived && !l.projected).map((l) => l.kind || 'late_job'))];
   return kinds.map((k) => W[k] || 'strokes').join(', ');
 }

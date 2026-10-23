@@ -63,7 +63,7 @@ export const UNDO_MINUTES = 10;
  * stored: true = cup_points rows (written when it happens); false = worked out from what's already in the app.
  */
 export const SOURCES = [
-  { key: 'awards', emoji: '🏷', name: 'Awards and fines', blurb: 'Points set on each award or fine (“Counts towards” this cup).', stored: true, fields: {} },
+  { key: 'awards', emoji: '🏷', name: 'Fines & awards', blurb: 'Points set on each award or fine (“Counts towards” this cup).', stored: true, fields: {} },
   { key: 'placings', emoji: '⛳', name: 'Golf results', blurb: 'Points for each place in the rounds you pick (ties share).', stored: false, fields: { scale: [5, 3, 1] } },
   { key: 'matches', emoji: '⚔️', name: 'Team matches', blurb: 'Cup matches: everyone on the winning side (half for a halve).', stored: false, fields: { per_win: 1 } },
   { key: 'side', emoji: '🎯', name: 'Side comps', blurb: 'Closest to the pin, longest drive, your own comps and dots.', stored: false, fields: { ctp: 1, ld: 1, own: 1, dot: 1, penalty_dot: -1 } },

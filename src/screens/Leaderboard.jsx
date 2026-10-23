@@ -252,7 +252,7 @@ export default function Leaderboard() {
                 {drawOn && <button type="button" className="btn gold" onClick={() => setDrawing(true)}>🎲 Random draw — live for everyone</button>}
                 <Link to="/admin" className="btn ghost">Pick the teams myself</Link>
               </div>
-            ) : (drawOn ? 'Teams come out of the draw — keep the app open and it will pop up.' : 'Teams aren’t set yet.')) : isFour ? (status?.is_admin ? <Link to="/admin" className="btn ghost">Pick the pairs in Admin</Link> : 'The pairs aren’t set yet.') : 'No players in this round yet.'}
+            ) : (drawOn ? 'Teams come out of the draw — keep the app open and it will pop up.' : 'Teams aren’t set yet.')) : isFour ? (status?.is_admin ? <Link to="/admin" className="btn ghost">Pick the pairs in Organiser tools</Link> : 'The pairs aren’t set yet.') : 'No players in this round yet.'}
           </div>
         )}
         {(() => {

@@ -118,7 +118,7 @@ export function RunUp({ pd, trip = null, onOrganise = null, slots = {}, more = n
     setTimeout(() => document.querySelector(`[data-testid="runup-${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
   };
   const organise = guest ? null : onOrganise; // guests have no Organise view
-  const moreList = ['Getting there', !guest && 'votes', 'what’s up for grabs', !guest && 'rules', 'what to bring', 'chat'].filter(Boolean).join(', ');
+  const moreList = ['Getting there', !guest && 'votes', 'trophies & cups', !guest && 'rules', 'what to bring', 'chat'].filter(Boolean).join(', ');
 
   return (
     <div className="runup stack" data-testid="runup">
@@ -145,10 +145,10 @@ export function RunUp({ pd, trip = null, onOrganise = null, slots = {}, more = n
         </Part>
       )}
       {sections.includes('up_for_grabs') && (
-        <Part id="grabs" icon="🏆" title="What’s up for grabs">
+        <Part id="grabs" icon="🏆" title="Trophies & cups">
           {S.compsForTrip ? <S.compsForTrip pd={pd} trip={trip} compact /> : <GrabsStandIn tripId={tripId} rounds={rounds} />}
           {S.awardsForTrip ? <S.awardsForTrip pd={pd} trip={trip} compact /> : (feature.dinner && tripId && (
-            <Link to={`/dinner/${tripId}`} className="btn ghost sm" data-testid="runup-awards-link">🍽️ Awards & fines for this trip</Link>
+            <Link to={`/dinner/${tripId}`} className="btn ghost sm" data-testid="runup-awards-link">🍽️ Fines & awards for this trip</Link>
           ))}
         </Part>
       )}
@@ -180,8 +180,8 @@ function Todos({ todos, pd, me, mine, onOrganise, onMore, reload, guest }) {
     reload();
   }, 'Handicap checked ✓');
   return (
-    <Part id="todos" icon="✅" title="Your to-dos" count={todos.length || null}>
-      {!me && <div className="small muted">Sign in to see your to-dos.</div>}
+    <Part id="todos" icon="✅" title="Your jobs" count={todos.length || null}>
+      {!me && <div className="small muted">Sign in to see your jobs.</div>}
       {me && !todos.length && <div className="small" data-testid="todos-clear">All done — nothing waiting on you. 🎉</div>}
       {todos.map((t) => (
         <div key={t.key} className={'ru-todo' + (t.late ? ' late' : '')} data-testid={`todo-${t.key.replace(/-.*/, '')}`}>

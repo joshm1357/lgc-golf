@@ -69,7 +69,7 @@ export default function Distances({ round, course, hole }) {
     try {
       const { data: gone, error: e } = await supabase.from('round_pins').delete().eq('round_id', round.id).eq('hole', hole.n).select('hole');
       if (e) throw e;
-      if (!gone?.length) throw new Error('The pin wasn’t cleared — only the admin can clear a pin.');
+      if (!gone?.length) throw new Error('The pin wasn’t cleared — only an organiser can clear a pin.');
       toast(`Today's pin on ${hole.n} cleared`);
       reloadPins();
     } catch (e) { toast(friendlyError(e)); } finally { setBusy(false); }
@@ -107,7 +107,7 @@ export default function Distances({ round, course, hole }) {
         {!mapped ? (
           <div className="small">
             The greens for {course.name} aren’t mapped yet.
-            {status.is_admin ? <> <Link to={`/courses/${course.id}/greens`}>Map them now</Link> (about 5 minutes, or fill from OpenStreetMap).</> : ' Ask the admin to map them.'}
+            {status.is_admin ? <> <Link to={`/courses/${course.id}/greens`}>Map them now</Link> (about 5 minutes, or fill from OpenStreetMap).</> : ' Ask an organiser to map them.'}
           </div>
         ) : !pos ? (
           <div className="small muted">{error || 'Getting your GPS position…'}</div>

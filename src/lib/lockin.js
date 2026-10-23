@@ -42,7 +42,7 @@ export function lockInWords(plan, polls = []) {
   const when = plan?.start_date ? weekendLabel({ start: String(plan.start_date).slice(0, 10), end: String(plan.end_date || plan.start_date).slice(0, 10) }) : 'the dates';
   return {
     title: `Lock in ${plan?.name || 'the trip'}?`,
-    body: `${when}${plan?.location_name ? ` at ${plan.location_name}` : ''}. ${n ? `${n === 1 ? 'The open vote on where and when closes' : `The ${n} open votes on where and when close`} and show${n === 1 ? 's' : ''} as decided. ` : ''}Then the to-do list is made and everyone’s told.`,
+    body: `${when}${plan?.location_name ? ` at ${plan.location_name}` : ''}. ${n ? `${n === 1 ? 'The open vote on where and when closes' : `The ${n} open votes on where and when close`} and show${n === 1 ? 's' : ''} as decided. ` : ''}Then the jobs are made and everyone’s told.`,
     yes: 'Lock it in',
     tone: 'go', // not a red "remove" button
   };

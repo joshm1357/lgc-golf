@@ -193,7 +193,7 @@ function ProposedCard({ rule, votes, reload, onEdit, c }) {
       </div>
       <Chips rule={rule} />
       {rule.detail && <div style={{ fontSize: 15, lineHeight: 1.45 }}>{rule.detail}</div>}
-      <div className="small muted">Proposed by {by ? playerName(by) : 'the admin'}</div>
+      <div className="small muted">Proposed by {by ? playerName(by) : 'an organiser'}</div>
       <div className="row" style={{ gap: 14, fontWeight: 800 }}><span>👍 {count('for')}</span><span>👎 {count('against')}</span><span className="muted">Abstain {count('abstain')}</span></div>
       {votes.length > 0 && <div className="small muted">{votes.map((v) => `${playerName(data.playersById[v.player_id])}: ${VOTE[v.vote].replace(/^\S+ /, '')}${v.comment ? ` — “${v.comment}”` : ''}`).join(' · ')}</div>}
       {status.role === 'guest' && <div className="small muted">Guests don’t vote on rules.</div>}
@@ -360,7 +360,7 @@ export function RuleSheet({ rule, start, onClose, onSaved, settings, localRules 
         <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
           {APPLIES.map(([k, l]) => <button key={k} type="button" className="chip" aria-pressed={v.applies_to.includes(k)} onClick={() => toggle(k)}>{l}</button>)}
         </div>
-        {!rule && !isAdmin && <span className="small muted">It goes up for a vote; the admin decides.</span>}
+        {!rule && !isAdmin && <span className="small muted">It goes up for a vote; an organiser decides.</span>}
         {!rule && isAdmin && direct('new_rule') && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <button type="button" className="btn gold" disabled={busy || !ok} onClick={() => save('proposed')}>Put it to a vote</button>

@@ -38,7 +38,7 @@ export default function ExtrasPanel({ plan, st, save, org }) {
       {open && (
         <>
           <span className="small muted">In = it’s happening. Ask = it goes on the vote as “Would you do these?”.</span>
-          <span className="small muted" data-testid="comps-later">🏆 Comps, the Cup and teams get sorted closer to the trip — Organise → Comps &amp; on the day.</span>
+          <span className="small muted" data-testid="comps-later">🏆 Comps, the Cup and teams get sorted closer to the trip — Plan the trip → The run-up.</span>
           {list.map((e) => (
             <div key={e.key} className="stack" style={{ gap: 4, borderTop: '1px solid var(--line-soft)', paddingTop: 6 }} data-testid="extra">
               <div className="row between" style={{ gap: 6 }}>

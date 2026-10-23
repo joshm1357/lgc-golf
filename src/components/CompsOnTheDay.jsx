@@ -92,7 +92,7 @@ function GrabsList({ trip, isOrg }) {
     </>
   ) : (
     <>
-      <span className="small">{usual.length ? <>Usually up for grabs: <strong>{usual.join(', ')}</strong>.</> : 'Nothing from past trips yet.'}</span>
+      <span className="small">{usual.length ? <>Usually played for: <strong>{usual.join(', ')}</strong>.</> : 'Nothing from past trips yet.'}</span>
       <span className="small muted">You tick which are on once the trip’s locked in and set up in the app.</span>
       {trophiesOn && <Link to="/trophies" className="small" style={{ fontWeight: 700 }}>The Trophy Room →</Link>}
     </>
@@ -135,7 +135,7 @@ function CompsDayFull({ pd, trip, isOrg }) {
   return (
     <div className="stack" style={{ gap: 12 }} data-testid="comps-day">
       <section className="card pad stack" style={{ gap: 6 }} data-testid="comps-grabs">
-        <strong>🏆 What’s up for grabs</strong>
+        <strong>🏆 Trophies &amp; cups</strong>
         <GrabsList trip={trip} isOrg={isOrg} />
       </section>
 

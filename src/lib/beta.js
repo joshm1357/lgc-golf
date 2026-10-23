@@ -26,7 +26,7 @@ export function checkFeedback(kind, message) {
 // Bump this when there's something new worth a note; each phone sees each note once.
 export const WHATS_NEW_ID = 'beta-1';
 export const WHATS_NEW = [
-  { title: 'Trips', body: 'Trips comes first. At the top: the trip that’s on (or the next one) and the last one — tap either for its leaderboards, what you’re playing for and its posts. Nothing coming up? ✨ Plan a trip. Opening the app takes you straight to the trip that’s on.' },
+  { title: 'Trips', body: 'Trips comes first. At the top: the trip that’s on (or the next one) and the last one — tap either for its leaderboards, its trophies & cups and its posts. Nothing coming up? ✨ Plan a trip. Opening the app takes you straight to the trip that’s on.' },
   { title: 'Players & group', body: 'Everyone’s handicap in one list. Organisers change them; think one’s wrong? Tap it to dispute it. Your own settings are on your profile.' },
   { title: 'Every trip, start to finish', body: 'Every trip goes from idea to votes to locked in to the record, with past trips kept. Called a trip off? It’s kept, and an organiser can bring it back.' },
   { title: 'Sign in once, any phone', body: 'Sign in with Google or an emailed code. Your scores and history follow you to a new phone.' },

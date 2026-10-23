@@ -187,7 +187,7 @@ export function PlanDetail() {
         right={(isAdmin || (plan.proposed && plan.created_by === status.player_id)) && <button type="button" className="btn ghost sm" style={{ color: '#fff', background: 'transparent', borderColor: 'rgba(255,255,255,.45)' }} onClick={() => setEditing(true)}>Edit</button>}>
         {plan.status !== 'cancelled' && !guest && (
           <div className="chips" role="tablist" aria-label="View" style={{ margin: '4px -16px 0', padding: '0 16px' }}>
-            {[{ value: 'overview', label: '⛳ Overview' }, { value: 'organise', label: '🧰 Organise' }].map((v) => (
+            {[{ value: 'overview', label: '⛳ Overview' }, { value: 'organise', label: '🧰 Plan the trip' }].map((v) => (
               <button key={v.value} type="button" role="tab" className="chip" aria-selected={v.value === view} onClick={() => setView(v.value)}
                 style={v.value === view ? { background: '#fff', borderColor: '#fff', color: 'var(--navy)', fontWeight: 800 } : { background: 'transparent', borderColor: 'rgba(255,255,255,.35)', color: '#fff' }}>{v.label}</button>
             ))}
@@ -287,14 +287,14 @@ export function VoteTab({ pd, showCall = true }) {
   const closed = pd.polls.filter((p) => p.status === 'closed' && !p.vote_batch && !atLockIn.includes(p));
   return (
     <>
-      {pd.polls.length === 0 && <div className="empty">No votes yet.{status.is_admin ? ' Put one up — dates, place, or anything else.' : ' The admin will put one up.'}</div>}
+      {pd.polls.length === 0 && <div className="empty">No votes yet.{status.is_admin ? ' Put one up — dates, place, or anything else.' : ' An organiser will put one up.'}</div>}
       <VoteBatches pd={pd} />
       {open.map((p) => <PollCard key={p.id} poll={p} pd={pd} />)}
       {status.is_admin && showCall && <button type="button" className="btn ghost block" onClick={() => setCreating(true)} data-testid="call-a-vote">🗳️ Call a vote</button>}
       {(closed.length > 0 || atLockIn.length > 0) && <span className="label">Decided</span>}
       {atLockIn.length > 0 && <DecidedLine plan={pd.plan} titles={atLockIn.map((p) => p.question)} />}
       {closed.map((p) => <PollCard key={p.id} poll={p} pd={pd} />)}
-      <p className="note" style={{ margin: 0 }}>Dates: ✓ Yes · ? Maybe · ✗ No. Places: ⭐ Keen · 👍 Happy with it · 👎 Not keen. The first is 2 points, the middle 1. Anyone can add an option. {pd.voteDecider === 'admin_or_organiser' ? 'The admin or the trip’s organiser' : 'The admin'} closes the vote and picks the winner.</p>
+      <p className="note" style={{ margin: 0 }}>Dates: ✓ Yes · ? Maybe · ✗ No. Places: ⭐ Keen · 👍 Happy with it · 👎 Not keen. The first is 2 points, the middle 1. Anyone can add an option. {pd.voteDecider === 'admin_or_organiser' ? 'A group organiser or the trip’s organiser' : 'An organiser'} closes the vote and picks the winner.</p>
       {creating && <PollSheet pd={pd} onClose={() => setCreating(false)} />}
     </>
   );
@@ -521,7 +521,7 @@ export function PeopleTab({ pd }) {
       )}
       {status.is_admin && (
         <div className="card pad stack" style={{ gap: 8 }}>
-          <span className="label">Admin</span>
+          <span className="label">Organiser</span>
           {locked ? (
             <button type="button" className="btn ghost" disabled={busy} onClick={() => run(async () => { await must(supabase.from('plans').update({ rsvp_locked: false }).eq('id', plan.id)); pd.reload(); }, 'Unlocked — the lads can change their answer')}>🔓 Unlock the list</button>
           ) : (
@@ -568,7 +568,7 @@ export function ProposalBanner({ plan, reload }) {
   const by = data.playersById[plan.created_by];
   return (
     <div className="card pad stack" style={{ gap: 8, background: 'var(--gold-soft)', borderColor: 'var(--gold)' }}>
-      <div><strong>💡 An idea from {by ? playerName(by) : 'one of the lads'}.</strong> <span className="small">Vote on when and where, say if you’d be in, and talk it over on Chat — the admin decides whether it goes ahead.</span></div>
+      <div><strong>💡 An idea from {by ? playerName(by) : 'one of the lads'}.</strong> <span className="small">Vote on when and where, say if you’d be in, and talk it over on Chat — an organiser decides whether it goes ahead.</span></div>
       {status.is_admin && (
         <div className="row" style={{ gap: 8 }}>
           <button type="button" className="btn gold sm" disabled={busy} onClick={() => run(async () => {
@@ -664,7 +664,7 @@ function PlanSheet({ plan, pd, onClose, onSaved }) {
       await feedPost(status.player_id, created, `💡 New idea: ${created.name}${created.start_date ? ` (${fmtRange(created.start_date, created.end_date)})` : ''}${created.location_name ? ` at ${created.location_name}` : ''}. Open it and say if you’d be in.`);
       await notify('plan_proposed', { plan_id: created.id });
       onClose(); onSaved?.(created);
-      toast('Suggested — the admin has been told');
+      toast('Suggested — the organisers have been told');
       return;
     }
     const created = await must(supabase.from('plans').insert(row).select().single());
@@ -737,7 +737,7 @@ export function LockInCard({ pd }) {
         run(async () => {
           await lockInTrip(pd, status);
           pd.reload();
-        }, 'Locked in — the votes are closed and the to-do list is ready');
+        }, 'Locked in — the votes are closed and the jobs are ready');
       }}>
       <span style={{ fontSize: 26 }}>🔒</span>
       <span className="grow"><strong>Lock it in</strong><div className="small muted">{fmtRange(plan.start_date, plan.end_date)} · {plan.location_name || 'place TBC'} — makes it a trip in the app, ready for rounds.</div></span>

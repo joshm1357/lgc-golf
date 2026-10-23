@@ -208,9 +208,9 @@ export default function TripBuilder() {
       stayMax: st.stayMax, detourMax: st.detourMax, votes: points, limit: 12 });
   }, [org, st, stays, courseMap, origin, tees, need.needed, points]);
 
-  if (!pd || !st || row === undefined) return <div className="page"><Header back="Trip" title="Build the trip" /><Loading /></div>;
-  if (!plan) return <div className="page"><Header back="Trip" title="Build the trip" /><div className="empty">This trip has been removed.</div></div>;
-  if (!org && !row) return <div className="page"><Header back="Trip" title="Build the trip" sub={plan.name} /><div className="empty">The organiser hasn’t started building this trip yet.</div></div>;
+  if (!pd || !st || row === undefined) return <div className="page"><Header back="Trip" title="Plan the trip" /><Loading /></div>;
+  if (!plan) return <div className="page"><Header back="Trip" title="Plan the trip" /><div className="empty">This trip has been removed.</div></div>;
+  if (!org && !row) return <div className="page"><Header back="Trip" title="Plan the trip" sub={plan.name} /><div className="empty">The organiser hasn’t started building this trip yet.</div></div>;
 
   const steps = TB.builderSteps(st, { teeCount: tees.filter((t) => slotsFor(t).length).length });
   const current = step || (steps.find((s) => !s.done && !s.locked) || steps[steps.length - 1]).key;
@@ -710,7 +710,7 @@ export default function TripBuilder() {
       await data.reload();
       pd.reload();
       setStep('configs');
-    }, 'Locked in — the votes are closed and the to-do list is ready. Set the rounds up below.'));
+    }, 'Locked in — the votes are closed and the jobs are ready. Set the rounds up below.'));
   };
   const configRow = (c, i) => (
     <div key={c.key} className="tb-config" data-testid="tb-config">
@@ -773,7 +773,7 @@ export default function TripBuilder() {
 
   return (
     <div className="page tb-wide">
-      <Header back="Trip" title="Build the trip" sub={plan.name} />
+      <Header back="Trip" title="Plan the trip" sub={plan.name} />
       <div className="section stack">
         <div className="tb-steps" role="list" aria-label="Steps">
           {steps.map((s) => (

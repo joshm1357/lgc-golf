@@ -297,8 +297,8 @@ function Inside() {
         <Route path="/comps-board" element={<CompsBoard />} />
         <Route path="/trip/:tripId" element={<TripOverviewScreen />} />
         <Route path="/trip-now/:tripId" element={<TripNow />} />
-        <Route path="/ask" element={<FeatureRoute feature="ai_helper" label="The AI helper"><Ask /></FeatureRoute>} />
-        <Route path="/import" element={<FeatureRoute feature="ai_helper" label="The AI helper"><AiImport /></FeatureRoute>} />
+        <Route path="/ask" element={<FeatureRoute feature="ai_helper" label="The Caddie"><Ask /></FeatureRoute>} />
+        <Route path="/import" element={<FeatureRoute feature="ai_helper" label="The Caddie"><AiImport /></FeatureRoute>} />
         <Route path="/cup" element={<FeatureRoute feature="cup" label="The Cup"><Cup /></FeatureRoute>} />
         <Route path="/cup/:matchId" element={<FeatureRoute feature="cup" label="The Cup"><CupMatch /></FeatureRoute>} />
         <Route path="/games" element={<FeatureRoute feature="games" label="Games and side bets"><Games /></FeatureRoute>} />
@@ -309,8 +309,8 @@ function Inside() {
         <Route path="/committees" element={<GovRedirect to="/governance/committees" />} />
         <Route path="/tribunal/:caseId" element={<FeatureRoute feature="tribunal" label="The Handicap Tribunal"><TribunalCase /></FeatureRoute>} />
         <Route path="/stats" element={<FeatureRoute feature="stats" label="Player stats"><Stats /></FeatureRoute>} />
-        <Route path="/dinner/:tripId?" element={<FeatureRoute feature="dinner_awards" label="Awards and fines"><DinnerAwards /></FeatureRoute>} />
-        <Route path="/award-run/:runId" element={<FeatureRoute feature="dinner_awards" label="Awards and fines"><AwardRunPage /></FeatureRoute>} />
+        <Route path="/dinner/:tripId?" element={<FeatureRoute feature="dinner_awards" label="Fines & awards"><DinnerAwards /></FeatureRoute>} />
+        <Route path="/award-run/:runId" element={<FeatureRoute feature="dinner_awards" label="Fines & awards"><AwardRunPage /></FeatureRoute>} />
         <Route path="/tribunal/case/:caseId" element={<CaseRoute><CaseHearing /></CaseRoute>} />
         <Route path="/governance" element={<GovRedirect to="/governance/rulebook" />} />
         <Route path="/governance/settings" element={<FeatureRoute feature="tribunal" label="The Tribunal"><Governance /></FeatureRoute>} />
@@ -322,7 +322,7 @@ function Inside() {
         <Route path="/plan" element={<FeatureRoute feature="planner" label="The Trips planner"><Planner /></FeatureRoute>} />
         <Route path="/plan/:planId" element={<FeatureRoute feature="planner" label="The Trips planner"><PlanDetailRoute /></FeatureRoute>} />
         <Route path="/plan/:planId/find" element={<FeatureRoute feature="trip_finder" label="The trip finder"><TripFinder /></FeatureRoute>} />
-        <Route path="/plan/:planId/build" element={<FeatureRoute feature="trip_finder" label="The trip builder"><TripBuilder /></FeatureRoute>} />
+        <Route path="/plan/:planId/build" element={<FeatureRoute feature="trip_finder" label="Plan the trip"><TripBuilder /></FeatureRoute>} />
         <Route path="/rules" element={<GovRedirect to="/governance/rulebook" />} />
         <Route path="/rules/:ruleId" element={<RulePage />} />
         <Route path="/courses/:courseId/greens" element={<GreenMapper />} />

@@ -16,7 +16,7 @@ function CompsForTrip({ pd, trip }) {
   const { status } = useSession();
   return <CompsOnTheDay pd={pd} trip={trip} isOrg={!!status?.is_admin && !status?.viewing} compact />; // just the grabs: the run-up has its own Rules part
 }
-const AwardsForTrip = ({ trip }) => <AwardsRunUp trip={trip} title="🏷 Awards & fines" />;
+const AwardsForTrip = ({ trip }) => <AwardsRunUp trip={trip} title="🏷 Fines & awards" />;
 
 export const RUNUP_SLOTS = {
   compsForTrip: CompsForTrip,

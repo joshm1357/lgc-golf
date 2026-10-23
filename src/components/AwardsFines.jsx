@@ -43,7 +43,7 @@ export function useAwardsData(tripId) {
  * "Awards & fines for this trip": what's on (worth and proof), what's waiting for a decision, and "Propose one".
  * Mounted in the run-up Organise step and on the trip Overview before the trip (title "What's up for grabs").
  */
-export function AwardsRunUp({ trip, title = '🏷 Awards & fines for this trip', overview = false }) {
+export function AwardsRunUp({ trip, title = '🏷 Fines & awards for this trip', overview = false }) {
   const { status } = useSession();
   const ad = useAwardsData(trip?.id);
   const [proposing, setProposing] = useState(null);
@@ -64,7 +64,7 @@ export function AwardsRunUp({ trip, title = '🏷 Awards & fines for this trip',
     <div className="card pad stack" style={{ gap: 8 }} data-testid="awards-runup">
       <div className="row between" style={{ gap: 8 }}>
         <strong>{title}</strong>
-        {trip && <Link to={`/dinner/${trip.id}`} className="small" style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>Awards &amp; fines →</Link>}
+        {trip && <Link to={`/dinner/${trip.id}`} className="small" style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>Fines &amp; awards →</Link>}
       </div>
       {list.length === 0 && <span className="small muted">Nothing on yet — propose the first.</span>}
       {list.map((x) => <AwardLine key={x.key} item={x} />)}
@@ -373,7 +373,7 @@ export function FineSheet({ post, who: whoStart, onClose, onSaved }) {
   return (
     <Sheet title="🏷 Fine or award" onClose={onClose}>
       <div className="stack" data-testid="fine-sheet">
-        {!tripId && <div className="small muted">This post isn’t on a trip — fines and awards belong to a trip.</div>}
+        {!tripId && <div className="small muted">This post isn’t on a trip — fines &amp; awards belong to a trip.</div>}
         {tripId && ad.ready && open.length === 0 && <div className="small muted">No awards or fines on {trip?.name || 'this trip'} yet. Propose one in the trip’s run-up.</div>}
         {open.length > 0 && (
           <div className="stack" style={{ gap: 6 }}>

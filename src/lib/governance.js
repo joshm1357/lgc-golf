@@ -21,7 +21,7 @@ export const KINDS = [
   { key: 'other', label: 'Anything else', example: 'That shirt on day 2', effect: 'Verdict, plus a penalty in words if you like', feature: 'other_cases' },
   { key: 'trip_decision', label: 'Trip decisions', example: 'Pick the winning dates or place', effect: 'Who picks the winner of a trip vote', feature: 'tribunal', settingsOnly: true },
   { key: 'election', label: 'Committee election', example: 'Fill a seat on the Handicap Committee', effect: 'Seat filled for a term', feature: 'committees' },
-  { key: 'governance', label: 'Governance change', example: 'Rule changes now need two-thirds', effect: 'Changes the decision rules', feature: 'tribunal' },
+  { key: 'governance', label: 'Group rules change', example: 'Rule changes now need two-thirds', effect: 'Changes the decision rules', feature: 'tribunal' },
 ];
 export const KIND = Object.fromEntries(KINDS.map((k) => [k.key, k]));
 /** Kinds whose verdict changes the rules or the decision rules: these wait for the next trip unless approved. */

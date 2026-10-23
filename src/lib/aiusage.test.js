@@ -3,7 +3,7 @@ import { areaName, errorLabel, upShare, tokens, weekLabel, weekRows } from './ai
 
 describe('AI usage words', () => {
   it('names areas and error codes in plain words', () => {
-    expect(areaName('plan')).toBe('Plan it with AI');
+    expect(areaName('plan')).toBe('Plan it with the Caddie');
     expect(areaName('ask')).toBe('Questions (Ask)');
     expect(areaName('weird')).toBe('weird');
     expect(errorLabel('bad_json')).toBe('Muddled reply (bad JSON)');

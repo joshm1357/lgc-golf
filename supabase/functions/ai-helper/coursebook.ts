@@ -96,7 +96,7 @@ async function runLookup(o: { ai: AiConfig; fetchFn: typeof fetch; user: string 
       messages.push({ role: 'tool', results });
     } else messages.push({ role: 'user', text: `Please call ${LOOKUP_TOOL.name} now.` });
   }
-  return { kind: 'error', code: 'bad_json', message: 'The AI got its wires crossed — try again.', usage };
+  return { kind: 'error', code: 'bad_json', message: 'The Caddie got its wires crossed — try again.', usage };
 }
 
 export type CoursebookDeps = {
@@ -111,7 +111,7 @@ export type CoursebookDeps = {
   caps?: { groupPerMonth: number; personPerDay: number };
 };
 
-const FAIL = 'The AI helper hit a snag — try again in a minute.';
+const FAIL = 'The Caddie hit a snag — try again in a minute.';
 
 /** { mode: 'course_lookup', course_id, website? } → { draft, checkedWeb, warning? } or friendly words. Never saves. */
 export async function coursebookRequest(body: Any, d: CoursebookDeps): Promise<Record<string, unknown>> {
@@ -119,9 +119,9 @@ export async function coursebookRequest(body: Any, d: CoursebookDeps): Promise<R
   if (body?.mode !== 'course_lookup') return { error: 'Unknown request.' };
   if (!st?.is_member || !st.group_id) return { error: 'You’re not in this group.' };
   if (st.role === 'guest' || !st.is_admin) return { error: 'Only an organiser can look up a course.' };
-  if (!(await d.featureOn('ai_helper'))) return { error: 'The AI helper is switched off for this group.', off: true };
+  if (!(await d.featureOn('ai_helper'))) return { error: 'The Caddie is switched off for this group.', off: true };
   if (!(await d.featureOn('trip_finder'))) return { error: 'The trip finder is switched off for this group.', off: true };
-  if (!d.ai) return { error: 'The AI helper isn’t switched on yet', off: true };
+  if (!d.ai) return { error: 'The Caddie isn’t switched on yet', off: true };
   if (!isUuid(body?.course_id)) return { error: 'Which course?' };
   const course = await d.loadCourse(String(body.course_id));
   if (!course) return { error: 'That course isn’t in the library.' };
@@ -152,12 +152,12 @@ export async function coursebookRequest(body: Any, d: CoursebookDeps): Promise<R
   if (res.kind === 'error') return { error: res.message, remaining: left };
   const v = validateCourseDraft(res.input);
   if (!v.found || !v.filled) {
-    return { error: v.checkedWeb ? 'The AI couldn’t find booking details for this course — nothing saved. Fill in what you know.'
-      : 'The AI can’t look this course up on the web from here, and isn’t sure of the details — nothing saved. Fill in what you know.', remaining: left, nothing: true };
+    return { error: v.checkedWeb ? 'The Caddie couldn’t find booking details for this course — nothing saved. Fill in what you know.'
+      : 'The Caddie can’t look this course up on the web from here, and isn’t sure of the details — nothing saved. Fill in what you know.', remaining: left, nothing: true };
   }
   return {
     draft: v.draft, checkedWeb: v.checkedWeb, remaining: left,
-    warning: v.checkedWeb ? 'From the web just now — check it before you save.' : 'The AI couldn’t check the web — this is from memory. Check it (ring or look at their website) before you save.',
+    warning: v.checkedWeb ? 'From the web just now — check it before you save.' : 'The Caddie couldn’t check the web — this is from memory. Check it (ring or look at their website) before you save.',
   };
 }
 

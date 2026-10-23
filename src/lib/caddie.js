@@ -19,8 +19,8 @@ export const DESTINATIONS = [
     words: ['leaderboard', 'leading', 'leader', 'winning', 'standings', 'board', 'results', 'whos winning', 'who is winning'] }),
   D('score', 'Enter scores', { needs: ['round'], path: (i) => `/score/${i.round}`,
     words: ['enter score', 'enter my score', 'put in score', 'scorecard', 'score', 'scores', 'card', 'keypad'] }),
-  D('comps_board', 'What we’re playing for', { path: () => '/comps-board',
-    words: ['playing for', 'prizes', 'prize', 'comps', 'comp', 'side comps', 'closest to pin', 'closest to the pin', 'ctp', 'nearest pin', 'longest drive'] }),
+  D('comps_board', 'Trophies & cups', { path: () => '/comps-board',
+    words: ['trophies', 'trophies & cups', 'playing for', 'prizes', 'prize', 'comps', 'comp', 'side comps', 'closest to pin', 'closest to the pin', 'ctp', 'nearest pin', 'longest drive'] }),
   D('cup', 'The Cup', { feature: 'cup', path: () => '/cup', words: ['cup', 'ryder', 'match play', 'matches', 'match'] }),
   D('rulebook', 'The Rulebook', { path: () => '/rules',
     words: ['rule', 'rules', 'rulebook', 'gimme', 'gimmes', 'mulligan', 'mulligans', 'breakfast ball', 'local rule', 'bonus', 'pick up'] }),
@@ -39,7 +39,7 @@ export const DESTINATIONS = [
   D('trips', 'Trips', { feature: 'planner', path: () => '/plan', words: ['trips', 'trip', 'last trip', 'past trips', 'plan a trip', 'new trip', 'plans'] }),
   D('trip_overview', 'Trip overview', { needs: ['plan'], feature: 'planner', path: (i) => `/plan/${i.plan}?view=overview`,
     words: ['trip overview', 'overview', 'itinerary', 'schedule', 'whats on', 'what is on', 'when', 'where are we'] }),
-  D('trip_organise', 'Organise the trip', { needs: ['plan'], feature: 'planner',
+  D('trip_organise', 'Plan the trip', { needs: ['plan'], feature: 'planner',
     path: (i) => `/plan/${i.plan}?view=organise${i.tab ? `&tab=${i.tab}` : ''}`,
     words: ['organise', 'organize', 'kitty', 'money', 'pay', 'paid', 'payment', 'cost', 'costs', 'owe', 'jobs', 'job', 'vote', 'votes', 'rooms', 'room', 'cars', 'car', 'beds', 'accommodation', 'chat', 'whos in', 'who is in', 'rsvp'] }),
   D('history_import', 'Bring in our history', { organiser: true, feature: 'ai_helper', path: () => '/import',
@@ -166,11 +166,11 @@ function suggestionsFor(ctx = {}, { isAdmin = false, roundName = '' } = {}) {
  */
 export function caddieMode({ viewing = false, guest = false, quick = false, featureOn = true, notSetUp = false, capped = false, offline = false } = {}) {
   if (viewing) return { ai: false, reason: 'viewing', text: 'you’re viewing as someone else' };
-  if (quick) return { ai: false, reason: 'quick', text: 'quick rounds don’t have the AI' };
-  if (guest) return { ai: false, reason: 'guest', text: 'the AI is for the group’s players' };
-  if (!featureOn) return { ai: false, reason: 'off', text: 'the AI is switched off for your group' };
-  if (notSetUp) return { ai: false, reason: 'not_set_up', text: 'the AI isn’t switched on for your group' };
-  if (capped) return { ai: false, reason: 'capped', text: 'your group’s used up its AI questions for now' };
+  if (quick) return { ai: false, reason: 'quick', text: 'quick rounds don’t have the Caddie’s answers' };
+  if (guest) return { ai: false, reason: 'guest', text: 'the Caddie’s answers are for the group’s players' };
+  if (!featureOn) return { ai: false, reason: 'off', text: 'the Caddie is switched off for your group' };
+  if (notSetUp) return { ai: false, reason: 'not_set_up', text: 'the Caddie isn’t switched on for your group' };
+  if (capped) return { ai: false, reason: 'capped', text: 'your group’s used up its Caddie questions for now' };
   if (offline) return { ai: false, reason: 'offline', text: 'there’s no signal' };
   return { ai: true, reason: null, text: '' };
 }

@@ -92,7 +92,7 @@ export default function Trips() {
   const suggestButton = (
     <>
       <button type="button" className="btn gold block" style={{ minHeight: 56 }} onClick={() => setSuggesting(true)}>💡 Suggest a trip or round</button>
-      <span className="small muted" style={{ textAlign: 'center' }}>{votesOn ? 'Everyone votes on when and where; ' : 'Everyone says if they’re in; '}{status.is_admin ? 'you lock it in' : 'the admin locks it in'}.</span>
+      <span className="small muted" style={{ textAlign: 'center' }}>{votesOn ? 'Everyone votes on when and where; ' : 'Everyone says if they’re in; '}{status.is_admin ? 'you lock it in' : 'an organiser locks it in'}.</span>
     </>
   );
   const card = (x, i) => (
@@ -338,7 +338,7 @@ export function SuggestSheet({ onClose, onSaved, initial = null }) {
           {votesOn && <label className="field"><span>Votes close</span><input className="input" type="date" value={closes} min={todayISO()} onChange={(e) => setCloses(e.target.value)} /></label>}
         </div>
         <label className="field"><span>Pitch it (optional)</span><textarea className="textarea" rows={3} style={{ padding: 12 }} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Why it’d be great, who’s keen…" /></label>
-        <span className="small muted">{votesOn ? `Anyone can add more options once it’s up. ${status.is_admin ? 'You lock it in when it’s decided.' : 'The admin picks the winners and locks it in.'}` : (status.is_admin ? 'You lock it in when it’s sorted.' : 'The admin locks it in.')}</span>
+        <span className="small muted">{votesOn ? `Anyone can add more options once it’s up. ${status.is_admin ? 'You lock it in when it’s decided.' : 'An organiser picks the winners and locks it in.'}` : (status.is_admin ? 'You lock it in when it’s sorted.' : 'An organiser locks it in.')}</span>
         <button type="button" className="btn gold block" disabled={busy || !name.trim()} onClick={save}>{votesOn ? '🗳️ Call the vote' : 'Put it to the group'}</button>
       </div>
     </Sheet>

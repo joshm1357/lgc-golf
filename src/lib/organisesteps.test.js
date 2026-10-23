@@ -55,7 +55,7 @@ describe('organise steps — which step is current', () => {
   it('ov23: the steps in Josh’s order, and where the builder’s next steps belong', () => {
     const { ORGANISE_STEPS } = STEPS_MODULE;
     // One list for Organise AND the trip builder's tabs (lib/tripsteps.js) — no separate Plan or Vote step.
-    expect(ORGANISE_STEPS.map((s) => s.title)).toEqual(['Areas & weekends', 'Courses & stays', 'Call the courses', 'Pick & lock in', 'Jobs & money', 'Comps & on the day']);
+    expect(ORGANISE_STEPS.map((s) => s.title)).toEqual(['Areas & weekends', 'Courses & stays', 'Call the courses', 'Pick & lock in', 'Jobs & money', 'The run-up']);
     expect(STEP_KEYS).toEqual(['area', 'courses', 'book', 'lockin', 'money', 'day']);
     expect(STEPS_MODULE.STEP_ALIAS).toEqual({ plan: 'area', vote: 'area' }); // old ?step= links still open
     expect(stepOfNext({ key: 'area-pick' })).toBe('area');

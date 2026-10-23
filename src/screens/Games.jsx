@@ -86,7 +86,7 @@ export default function Games() {
       {!round || !played.length ? (
         <div className="empty">
           No games on {round ? 'this round' : 'any round'} yet.
-          <div className="small" style={{ marginTop: 6 }}>An organiser adds them in Admin → Rounds (or Set up your trip → Extras): one tap for skins, Nassau, a Stableford pot, a birdie pool or an eclectic. Anyone can put one up for the others to opt in to.</div>
+          <div className="small" style={{ marginTop: 6 }}>An organiser adds them in Organiser tools → Rounds (or Set up your trip → Extras): one tap for skins, Nassau, a Stableford pot, a birdie pool or an eclectic. Anyone can put one up for the others to opt in to.</div>
           <div className="section" style={{ textAlign: 'left' }}><CustomGamesCard /></div>
         </div>
       ) : (

@@ -30,7 +30,7 @@ export function TripBuilderCard({ pd, first = false, viewer = false }) {
       style={{ textDecoration: 'none', color: 'inherit', gap: 12, borderColor: 'var(--navy)', borderWidth: 2, marginBottom: first ? 12 : 0 }}>
       <span style={{ fontSize: 26 }}>🗺️</span>
       <span className="grow">
-        <strong>{status.is_admin ? 'Build the trip' : 'How the trip’s coming together'}</strong>
+        <strong>{status.is_admin ? 'Plan the trip' : 'How the trip’s coming together'}</strong>
         <div className="small muted">{build ? upToLine(steps.every((x) => x.done) ? 'money' : at.key) : 'Areas and weekends → the vote → courses and stays → call the courses → pick & lock in.'}</div>
       </span>
       <span className="btn sm">{status.is_admin ? (build ? 'Open' : 'Start') : 'Look'}</span>

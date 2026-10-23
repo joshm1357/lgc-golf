@@ -100,7 +100,7 @@ export default function Comps() {
       {!holes.length ? (
         <div className="empty">
           No {LABEL[kind].toLowerCase()} holes set for this round.
-          {status.is_admin && <> Set them in <Link to="/admin">Admin → Rounds</Link>.</>}
+          {status.is_admin && <> Set them in <Link to="/admin">Organiser tools → Rounds</Link>.</>}
         </div>
       ) : (
         <>

@@ -18,7 +18,7 @@ export const TRIP_STEPS = [
   { key: 'book', builder: 'calls', title: 'Call the courses', blurb: 'Tee times on the primary and backup weekends' },
   { key: 'lockin', builder: 'configs', title: 'Pick & lock in', blurb: 'Best combination, who’s in, deposits' },
   { key: 'money', builder: null, title: 'Jobs & money', blurb: 'Jobs, kitty, rooms and cars' },
-  { key: 'day', builder: null, title: 'Comps & on the day', blurb: 'What’s up for grabs, rules, handicaps, teams' },
+  { key: 'day', builder: null, title: 'The run-up', blurb: 'Trophies & cups, rules, handicaps, teams' },
 ].map((s, i) => ({ ...s, n: i + 1 }));
 
 /** Old step addresses (links, notifications) → today's step. */

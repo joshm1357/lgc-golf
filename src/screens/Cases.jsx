@@ -665,7 +665,7 @@ export function GovernanceLink() {
   return (
     <Link to="/governance/settings" className="card pad row" style={{ gap: 10, textDecoration: 'none', color: 'inherit' }}>
       <span style={{ fontSize: 22 }} aria-hidden>🏛️</span>
-      <span className="grow"><strong>Governance</strong><div className="small muted">Who decides what in the Tribunal</div></span>
+      <span className="grow"><strong>Group rules</strong><div className="small muted">Who decides what in the Tribunal</div></span>
       <span className="muted">{Icon.next()}</span>
     </Link>
   );
@@ -682,7 +682,7 @@ export function Governance() {
   const nav = useNavigate();
   const [editing, setEditing] = useState(null);
   if (!g) return <Loading />;
-  if (!g.ok) return <div className="page"><Header back title="Governance" /><div className="section empty">Governance isn’t set up on this database yet.</div></div>;
+  if (!g.ok) return <div className="page"><Header back title="Group rules" /><div className="section empty">Group rules aren’t set up on this database yet.</div></div>;
   const organiser = status.role === 'organiser';
   const direct = organiser && (g.settings.governance.decides === 'organiser' || !tribunalOn);
   const preset = g.group?.preset || null;
@@ -694,7 +694,7 @@ export function Governance() {
   }, 'Up for a vote');
   return (
     <div className="page">
-      <Header back title="How we decide things" sub="Governance settings: who decides what" />
+      <Header back title="How we decide things" sub="Group rules: who decides what" />
       <div className="section stack">
         <div className="card pad small">
           {direct

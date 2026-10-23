@@ -73,7 +73,7 @@ export function CourseSheet({ id, course, booking: givenBooking, research: given
   const facts = course.facts || {};
   const lookUp = () => run(async () => {
     const { data, error } = await supabase.functions.invoke('ai-helper', { body: { mode: 'course_lookup', course_id: id, group_id: currentGroup() || undefined } });
-    if (error) throw new Error('Couldn’t reach the AI helper — try again');
+    if (error) throw new Error('Couldn’t reach the Caddie — try again');
     if (data?.error) { setWarning(data.error); setDraft(null); return; }
     setDraft({ ...(booking || {}), ...data.draft, source: 'ai' });
     setWarning(data.warning || '');

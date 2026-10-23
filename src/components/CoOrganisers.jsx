@@ -97,7 +97,7 @@ export function CoOrganisersCard({ plan, compact = false }) {
   }));
 
   return (
-    <details className="card" data-testid="coorganisers" open={!compact || undefined} style={{ overflow: 'hidden' }}>
+    <details className="card" data-testid="coorganisers" open={!compact || role.coorg || undefined} style={{ overflow: 'hidden' }}>
       <summary className="small" style={{ padding: '10px 14px', fontWeight: 700, cursor: 'pointer', minHeight: 44, display: 'flex', alignItems: 'center', gap: 6 }}>
         👥 Co-organisers{names.length ? `: ${names.map(playerName).join(', ')}` : role.canName ? ' — share the planning' : ''}
       </summary>

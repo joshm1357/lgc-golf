@@ -53,7 +53,7 @@ export function baseDrives(dr, size) {
 export function minDrivesFor({ dr, round, teamSize, holes = 18 }) {
   const size = int(teamSize, 0);
   const h = int(holes, 0);
-  if (size < 2 || h < 1) return 0;
+  if (size < 1 || h < 1) return 0; // a one-player "team" only counts a round's own N (as before 099)
   const cap = Math.floor(h / size);
   if (round?.min_drives != null && round.min_drives !== '') return Math.max(0, Math.min(int(round.min_drives, 0), cap));
   if (!dr?.on) return 0;

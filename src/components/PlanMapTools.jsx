@@ -136,14 +136,16 @@ export function Declutter({ dep = '' }) {
   return null;
 }
 
-/** Inside a MapContainer: pans to a point when it's off-screen (the course pointed at in the list). */
-export function PanTo({ point }) {
+/** Inside a MapContainer: brings a point into view — pans if it's off-screen, and with `zoom` zooms in to at least that
+ *  (v10.5: a click on a list row zooms to it). */
+export function PanTo({ point, zoom = null }) {
   const map = useMap();
   const key = point ? `${point.lat},${point.lng}` : '';
   useEffect(() => {
     if (!point || point.lat == null) return;
     const ll = L.latLng(point.lat, point.lng);
-    if (!map.getBounds().pad(-0.08).contains(ll)) map.panTo(ll, { animate: false });
+    if (zoom && map.getZoom() < zoom) map.setView(ll, zoom, { animate: false });
+    else if (!map.getBounds().pad(-0.08).contains(ll)) map.panTo(ll, { animate: false });
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
   return null;
 }
@@ -252,8 +254,9 @@ export function usePlaceInfo({ onOpen = null } = {}) {
     onMouseLeave: () => { if (!touchNow()) hot.hoverOut(); },
   } : { 'data-place': key });
   /** how: this row's own way to open its details (e.g. a day's course), else onOpen. */
+  // v10.5: a click on a row (mouse or finger) first zooms the map to it with its summary; a second click opens it all.
   const tapRow = (key, el, how = null) => {
-    if (tapAction({ key, hotKey: hot.from === 'row' ? hot.hot : null, canHover: mouse() }) === 'open') open(key, how);
+    if (tapAction({ key, hotKey: hot.from === 'row' && hot.via === 'tap' ? hot.hot : null, canHover: false }) === 'open') open(key, how);
     else { hot.pick(key, 'row'); setAnchor({ key, el }); }
   };
   const tapPin = (key) => {

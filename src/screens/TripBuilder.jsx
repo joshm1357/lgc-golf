@@ -28,6 +28,7 @@ import { extrasSection } from '../lib/extras.js';
 import { useCourseResearch } from '../components/CourseResearch.jsx';
 import { shortFacts } from '../lib/courseresearch.js';
 // ov23: areas bar, every weekend in the window, how long, stays in step 2, the vote's results, primary / backup.
+import PinDropper, { tapToPin } from '../components/PinDropper.jsx';
 import AreaBar, { useRegionGuides } from '../components/AreaBar.jsx';
 import WeekendPicker, { LengthPicker } from '../components/WeekendPicker.jsx';
 import StayIdeas from '../components/StayIdeas.jsx';
@@ -431,7 +432,7 @@ export default function TripBuilder() {
   const map = (
     <BuilderMap courses={mapCourses} stays={mapStays} origin={org ? origin : null}
       onCourse={openCourse} onStay={org && st.region ? toggleStay : undefined} info={pi} tipFor={tipFor}
-      onTap={org && addPin === 'tap' ? (p) => { setAddPin(p); setPinName(''); } : undefined} />
+      onTap={org && addPin === 'tap' ? tapToPin(areas, setAddPin, setPinName) : undefined} />
   );
 
   const lockedNote = (s) => <div className="tb-locked">🔒 After: {s.after}</div>;
@@ -530,19 +531,14 @@ export default function TripBuilder() {
           })}
         </div>
       )}
-      {org && (addPin === null
-        ? <button type="button" className="btn ghost sm" onClick={() => setAddPin('tap')}>+ Add your own place (tap the map)</button>
-        : addPin === 'tap' ? <span className="small" style={{ fontWeight: 700 }}>Tap the map where you’d stay… <button type="button" className="btn ghost sm" onClick={() => setAddPin(null)}>Cancel</button></span>
-          : (
-            <div className="row" style={{ gap: 6 }}>
-              <input className="input grow" value={pinName} maxLength={40} onChange={(e) => setPinName(e.target.value)} placeholder="Name it, e.g. Callala Beach" aria-label="Place name" />
-              <button type="button" className="btn sm" disabled={pinName.trim().length < 2} onClick={() => {
-                const p = { key: `pin:${Date.now()}`, name: pinName.trim(), lat: Math.round(addPin.lat * 100) / 100, lng: Math.round(addPin.lng * 100) / 100, custom: true };
-                patch({ pins: [...pins, p], stays: stays.length < TB.MAX_STAYS ? [...stays, p] : stays });
-                setAddPin(null);
-              }}>Add</button>
-            </div>
-          ))}
+      {org && (
+        <PinDropper areas={areas} addPin={addPin} setAddPin={setAddPin} pinName={pinName} setPinName={setPinName}
+          startLabel="+ Add your own place (tap the map or type a town)" placeholder="Name it, e.g. Callala Beach"
+          onAdd={(at, name) => {
+            const p = { key: `pin:${Date.now()}`, name, lat: Math.round(at.lat * 100) / 100, lng: Math.round(at.lng * 100) / 100, custom: true };
+            patch({ pins: [...pins, p], stays: stays.length < TB.MAX_STAYS ? [...stays, p] : stays });
+          }} />
+      )}
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
         <label className="field grow"><span>Stay days: up to {st.stayMax} min from where we stay</span>
           <input type="range" min="0" max={STAY_LIMITS.length - 1} value={Math.max(0, STAY_LIMITS.indexOf(st.stayMax))} disabled={!org}

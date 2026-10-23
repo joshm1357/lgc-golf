@@ -34,6 +34,7 @@ describe('stroke play', () => {
     expect(board.higherBetter).toBe(false);
     expect(board.rows.map((r) => [r.name, r.netToPar, r.gross])).toEqual([['Al', 0, 90], ['Cy', 0, 45], ['Bo', 2, 74]]);
     expect(board.rows[0].rankLabel).toBe('T1');
-    expect(headlines(board, null)[0]).toMatchObject({ label: 'Leading' });
+    // ov28 (D2): level at the top → "Al and Cy", joint lead (was "Leading: Al").
+    expect(headlines(board, null)[0]).toMatchObject({ label: 'Joint lead', text: 'Al and Cy' });
   });
 });

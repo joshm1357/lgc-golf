@@ -108,7 +108,7 @@ describe('results in words', () => {
     expect(resultLine(F, tally(F, noms, [vote('f1', 'v1', 'n3')]), nameOf)).toBe('Harry (1 vote) — fine: buys the first round');
   });
   it('the feed post', () => {
-    expect(closedPost(A, tally(A, noms, [vote('a1', 'v1', 'n2')]), nameOf)).toBe('🏅 Dinner award — Hack of the day: Dick (1 vote)');
+    expect(closedPost(A, tally(A, noms, [vote('a1', 'v1', 'n2')]), nameOf)).toBe('🏅 Award — Hack of the day: Dick (1 vote)');
     expect(closedPost(F, tally(F, noms, [vote('f1', 'v1', 'n4')]), nameOf)).toBe('🍺 Fine — Late to the tee: Tom (1 vote) — fine: buys the first round');
   });
   it('order: voting, then nominations, then decided; awards before fines', () => {

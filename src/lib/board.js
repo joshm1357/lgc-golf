@@ -251,7 +251,9 @@ export function headlines(board, prevRanks, { projected = false } = {}) {
     });
   }
   if (!out.length && board.rows[0]?.thru > 0) {
-    out.push({ kind: 'up', label: 'Leading', text: `${board.rows[0].name}` });
+    // ov28 (D2): "Lou and Mo joint lead" when they're level — never "Leading: Lou" beside "Mo leads".
+    const w = leaderWords(board.rows);
+    out.push({ kind: 'up', label: w.joint ? 'Joint lead' : 'Leading', text: w.joint ? w.names : `${board.rows[0].name}` });
   }
   return out.slice(0, 2);
 }
@@ -302,3 +304,39 @@ export function stablefordTrophyBoard({ trip, rounds, coursesById, roundPlayers,
   }
   return { rounds: sRounds, rows, projection };
 }
+
+// ------------------------------------------------------------------ ov28 (walkthrough D2): the board's order
+/** Formats where "points" and "on pace" can differ (players on different holes): Stableford and 4BBB. */
+export const hasPace = (format) => format === 'stableford' || format === 'fourball';
+
+/**
+ * The board in the order people expect. order 'points' (the default): most points first, so 19 sits above 15.
+ * order 'pace': points against the expected 2 a hole (the old order), for players on different holes.
+ * Net formats (Ambrose, stroke play) are already fair across holes: unchanged. Ranks and "T" labels are redone.
+ */
+export function orderBoard(board, order = 'points') {
+  if (!board || !hasPace(board.format)) return board;
+  if (order === 'pace') return board;
+  const rows = rankRows(board.rows.map((r) => ({ ...r, ptsSort: r.thru || r.quick ? r.points : -999 })), {
+    key: 'ptsSort', higherBetter: true,
+    tiebreak: (a, b) => (a.cb && b.cb ? compareCountback(b.cb, a.cb) : 0),
+  });
+  return { ...board, rows, order: 'points' };
+}
+
+/**
+ * Who leads, in words: { names: "Lou and Mo", joint: true, text: "Lou and Mo joint lead" } or
+ * { names: "Lou", joint: false, text: "Lou leads" }. rows: ranked rows (rank 1 first). Nobody played → null text.
+ * finished: true → "Lou won" / "Lou and Mo tie for first".
+ */
+export function leaderWords(rows = [], { finished = false } = {}) {
+  const top = (rows || []).filter((r) => r.rank === 1 && (r.thru > 0 || r.quick || r.played > 0 || r.value > 0 || r.total > 0));
+  if (!top.length) return { names: '', joint: false, text: null, ids: [] };
+  const names = top.length === 1 ? top[0].name : `${top.slice(0, -1).map((r) => r.name).join(', ')} and ${top[top.length - 1].name}`;
+  const joint = top.length > 1;
+  const text = finished ? (joint ? `${names} tie for first` : `${names} won`) : joint ? `${names} joint lead` : `${names} leads`;
+  return { names, joint, text, ids: top.map((r) => r.id) };
+}
+
+/** Is this board row "me" — my own row, or my team / pair? (D2: your row highlighted and pinned.) */
+export const isMine = (row, me) => !!me && !!row && (row.id === me || (row.players || []).some((p) => p?.id === me));

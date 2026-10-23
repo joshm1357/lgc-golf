@@ -19,6 +19,7 @@ import { RulesLink } from '../components/RulesLinks.jsx';
 import RuleTag from '../components/RuleTag.jsx';
 import { isDisputable } from '../lib/disputes.js';
 import { pickActiveTrip } from '../lib/activetrip.js';
+import YourRound from '../components/YourRound.jsx';
 
 // useCompData moved to components/CompsChip.jsx (ov15) so This trip can use it without loading this screen.
 export { useCompData };
@@ -219,6 +220,8 @@ export default function CompsBoard() {
       <Header back title="What we’re playing for" sub={trip ? trip.name : 'No trip yet'} />
       <div className="section stack" style={{ gap: 10, paddingBottom: 24 }}>
         {!trip && <div className="empty">No trip yet.{admin ? <> <Link to="/setup">Set up your trip</Link>.</> : ''}</div>}
+        {/* ov28 (C1): your team, partner, opponents and tee time for the round that's on or next (nothing if none). */}
+        {trip && <YourRound trip={trip} />}
         {trip && !list.length && (
           <div className="empty">
             Nothing to play for yet — just the round leaderboards.

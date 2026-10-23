@@ -1405,3 +1405,55 @@ in** → **5 Jobs & money** → **6 Comps & on the day**. Step keys unchanged (`
 - **Tests:** Vitest 1389 pass (new weekends ×20, areavote ×10, runup ×4, step order). Deno ai-helper/notify/_shared
   154 pass. Playwright: new `weekends-comps-test` 61 checks; `trip-builder`, `plan-ux`, `organise-tidy`,
   `trip-overview`, `desktop`, `trip-plan`, `trip-extras`, `caddie`, `trips`, `email-votes` all pass.
+
+## ov28 — Teams and groups, tee times, the day, results (23 Oct 2026, branch `ov28-teams-day-results`)
+
+From Josh's walkthrough review (C1, C2, D1, D2, W1, I8, I9, I11, I12, I13, I14, I16 and small fixes), with his notes:
+general (not Cup-only), any meal (not "dinner"), don't flood.
+
+- **C1 Your round** (`components/YourRound.jsx`, rules + words in `supabase/functions/_shared/yourround.js`, app helpers in
+  `lib/yourround.js`): your team (colour and name), partner(s), opponents / opposing teams, playing group, tee time and
+  start hole — for a Cup match, an Ambrose team, a 4BBB pair or a plain playing group. Renders nothing when nothing's
+  assigned. Props `trip`, `round`, `me` (W2's "Your weekend" card can mount it). On the day screen, the Cup board (top,
+  your match first and marked) and the comps board. Reuses what exists: `cup_matches` / `cup_sides`, `teams` /
+  `team_players`, `tee_groups` — no new team tables. Maybes, no-replies and non-payers are marked in the Cup team and
+  match pickers and the tee group chips, with "Nudge them: are you coming?" (existing `nudge_rsvp`), and the player
+  sees "You're in Kurt's draw for Team Red. Are you coming?" on their round card. Team links say "Join Team Red".
+- **C2 Tee times:** a tee time and start hole on each Cup match (add, and edit in the list); matches keep their order.
+  Tee groups prefill the first time from the call-the-courses times. Organisers get "Set the playing groups" for rounds
+  in the next 5 days with no groups (on the day screen and the Overview's run-up, via TripStatus).
+- **D1 Day screen** (`components/TripStatus.jsx`): a Cup day leads with the Cup score ("if it finished now"), your
+  match first; then Your round, fines so far, and the board — hidden on a Cup day when nobody's entering Stableford.
+- **D2 Leaderboard:** headings always; points order by default with an "On pace" toggle (`board.js orderBoard`); "Lou and
+  Mo joint lead"; your row (or team's) highlighted and pinned; room under the last row for Enter score.
+- **W1 Results** (`components/TripResults.jsx`, maths `lib/results.js`): at the top of a finished trip — winner and
+  trophy, trophies handed over ("Mo wins the BD Trophy 2026, takes it from Bo", one-tap engrave for organisers), Cup
+  verdict from the real matches ("Team Blue win 7–5" / "All square" / "Not finished: 6 of 12 points played"), podium per
+  round, side comps, fines tally, who tipped right, best photos, then "Plan the next trip". `moneyLine` prop for W2's
+  `MoneyLine.jsx` (not there yet). Comps say "won" once their rounds are locked. Trophy Room shows the new holder
+  straight away. The Overview's old Honours card now only shows for trips with no rounds (tiny edit in W2's file).
+- **I8 The draw is out:** organiser button on the Cup set-up and on saved tee groups → Feed post + notify `draw_out`
+  (each player's own line, once an hour per round).
+- **I9 Tipping (migration 097, feature `tipping`):** tip the Cup, a match, or a round's winner; locks at the start
+  (in the database); "7 tipped Red, 4 tipped Blue"; bragging rights only.
+- **I11 Night before:** new evening job (`lgc-evening-tee-times`, 08:00 UTC) → notify `evening` → `tee_tomorrow`,
+  only to people with a time or group tomorrow, with their lift if cars are sorted.
+- **I12** Fines-so-far ticker on the day screen; "Fine someone" there and on the hole screen (ov24's FineSheet).
+- **I13 Swing alerts:** notify `swing` — a Cup match changing hands / back to level (to everyone not in it), and "You've
+  just passed Mo" (only to the mover). Under live commentary's switch and buzz level (feed only = none; often 10 min,
+  sometimes 30 min per person), "straight away" people only, never digested, once per match state / mover hole.
+- **I14 Awards presentation** `#/present/awards/<trip>` (`screens/AwardsShow.jsx`): winners one by one. "Dinner awards"
+  is now "Awards and fines" everywhere in the UI (feature key unchanged).
+- **I16** "This time last year" + six-month "suggest the next trip" nudge (`components/Memories.jsx`, on This trip and
+  Trips).
+- **Small fixes:** BD Trophy listed once; match results stop when decided ("won 10&8", never "10&2", extra holes noted);
+  Go-karts "I'm in" is solid green "✓ You're in" when in. Also fixed: opening a Cup match straight from a link crashed
+  (a hook after an early return).
+- **Migration 097** (`097_your_round_tips.sql`, additive, not applied): `cup_matches.tee_time/start_hole`, `tips` table
+  with RLS (members read, own pick, no guests, same group, feature switch, locks), feature `tipping`, the evening job.
+  Test: `supabase/tests/097_your_round_tips.sql` (+ expected) — passed on a PGlite stand-in.
+- **Tests:** Vitest 1502 pass (new yourround, results, ov28). Deno notify/_shared 14 pass; notify type-checks. Browser:
+  new `your-round`, `day-screen`, `results`; cup, comps, fourball, tee-groups, awards, awards-fines, runup, trip-extras,
+  trip-overview (updated for the results page), trips, jokes, stroke, links, nav, phone, history, own-comps,
+  commentary, desktop pass. `quick` and `signin-first` fail the same way on v10-int (not touched here).
+- **Deploy when convenient:** the notify function (new kinds). Apply 097 on staging, then live.

@@ -10,6 +10,8 @@ import { Icon, Loading, toast, PhotoButtons } from '../components/ui.jsx';
 import Distances from '../components/Distances.jsx';
 import RuleTag, { roundRef, useActiveRules } from '../components/RuleTag.jsx';
 import { useRoundAdjustments, PenaltyLines } from '../components/LateJobs.jsx';
+import { FineSomeone } from '../components/FinesTicker.jsx';
+import { notify } from '../lib/push.js';
 
 const MOMENTS = ['Chip-in', 'Bomb drive', 'Lost ball', 'Air shot', 'Three-putt', 'Tree hit', 'Sandy save'];
 
@@ -130,6 +132,8 @@ export default function ScoreEntry() {
       };
       const sent = await saveScore(row);
       if (!sent) toast('Saved on your phone — will sync when signal returns');
+      // ov28 (I13): a swing alert if that hole took this player past someone on points (the server checks; rate-limited).
+      else if (round.format === 'stableford' && !isA) notify('swing', { round_id: round.id, player_id: subject.id, hole: hole.n });
       // Moment and photo go to the feed.
       if (moment || photo) {
         // Goes now, or waits on the phone (photo too) until there's signal.
@@ -187,6 +191,12 @@ export default function ScoreEntry() {
         <div className="sync"><strong>{scores.pendingCount} waiting to sync.</strong> They'll send when signal's back.</div>
       )}
       {locked && <div className="sync">This round isn't live — scores can't be changed.</div>}
+      {/* ov28 (I12): one tap to fine someone from the hole you're on (ov24's fines; nothing when they're switched off). */}
+      {!locked && round.trip_id && (
+        <div className="section row" style={{ justifyContent: 'flex-end', paddingBottom: 0 }}>
+          <FineSomeone tripId={round.trip_id} />
+        </div>
+      )}
       {compHere && sideCompsOn && (
         <div className="section">
           <a href={`#/comps?r=${round.id}&kind=${compHere.kind}&hole=${hole.n}`} className="card pad row" style={{ background: 'var(--gold-soft)', borderColor: 'var(--gold)', textDecoration: 'none', color: 'inherit' }}>

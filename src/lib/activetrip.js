@@ -9,6 +9,8 @@
 //   3. the soonest trip still to come;
 //   4. the most recent trip that finished in the last 7 days (so Monday's banter still has its leaderboard).
 // Otherwise nothing: the card says "No trip on — plan one".
+// ov21 (23 Oct): "This trip" is no longer a tab of its own. Trips has sub-items — On now / Next trip, Last trip, or
+// ✨ Plan a trip (tripsMenu below) — and each opens that trip's status page (#/trip-now/<trip>).
 
 import { todayISO, daysUntil } from './plan.js';
 import { isYearOnly } from './trips.js';
@@ -39,7 +41,8 @@ export function pickActiveTrip({ trips = [], rounds = [], today = todayISO(), re
   const latest = (rs) => [...rs].sort((a, b) => String(b.play_date || '').localeCompare(String(a.play_date || '')) || String(b.created_at || '').localeCompare(String(a.created_at || '')))[0];
 
   // 1. A round in progress, else a round today.
-  const live = latest(ofTrip((rounds || []).filter((r) => r.status === 'live')));
+  // A round left 'live' from an earlier day (nobody locked it) doesn't make its trip "on now".
+  const live = latest(ofTrip((rounds || []).filter((r) => r.status === 'live' && (!r.play_date || day(r.play_date) >= today))));
   if (live) return { trip: byId.get(live.trip_id), why: 'live' };
   const todays = latest(ofTrip((rounds || []).filter((r) => day(r.play_date) === today)));
   if (todays) return { trip: byId.get(todays.trip_id), why: 'today' };
@@ -81,7 +84,11 @@ export function tripDayWords(trip, rounds = [], today = todayISO()) {
   }
   const ago = -daysUntil(end, today);
   if (ago === 1) return 'Finished yesterday';
-  return `Finished ${ago} days ago`;
+  if (ago < 21) return `Finished ${ago} days ago`;
+  if (ago < 60) return `Finished ${Math.round(ago / 7)} weeks ago`;
+  // Older: the month and year it finished, e.g. "Oct 2025".
+  const [y, m] = String(end).split('-').map(Number);
+  return `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][(m || 1) - 1]} ${y}`;
 }
 
 /**
@@ -108,3 +115,47 @@ export function tripPath(trip, plans = []) {
   const plan = (plans || []).find((p) => p.trip_id === trip.id && p.status !== 'cancelled');
   return plan ? `/plan/${plan.id}?view=overview` : `/trip/${trip.id}`;
 }
+
+/** Trips whose plan has been called off don't count as the next or last trip. */
+export function liveTrips(trips = [], plans = []) {
+  const off = new Set((plans || []).filter((p) => p.status === 'cancelled' && p.trip_id).map((p) => p.trip_id));
+  return (trips || []).filter((t) => t && t.id && t.status !== 'cancelled' && !off.has(t.id));
+}
+
+/**
+ * ov21 (23 Oct 2026) — the Trips menu. Josh: "Under Trips, looking like a submenu, it can have Last trip and Next
+ * trip; if no next trip then have Plan it." Used by the sidebar's sub-items, the top of the Trips screen and the home
+ * route.
+ *   now    — { trip, on }: the trip that's on right now (on: true — a round live or today, or between its first and
+ *            last day), else the soonest still to come (on: false); null if neither.
+ *   last   — the most recent trip that's finished (never the one in `now`); null if none.
+ *   planIt — true when there's no next trip: offer "✨ Plan a trip" instead.
+ */
+export function tripsMenu({ trips = [], rounds = [], plans = [], today = todayISO() } = {}) {
+  const list = liveTrips(trips, plans);
+  // recentDays -1: never fall back to a finished trip here — that's `last`.
+  const pick = pickActiveTrip({ trips: list, rounds, today, recentDays: -1 });
+  const now = pick ? { trip: pick.trip, on: pick.why !== 'upcoming' } : null;
+  // While a trip is on, the next one still gets its own line.
+  let next = null;
+  if (now?.on) {
+    const ahead = pickActiveTrip({ trips: list.filter((t) => t.id !== now.trip.id), rounds: [], today, recentDays: -1 });
+    if (ahead && ahead.why === 'upcoming') next = ahead.trip;
+  }
+  const done = list.filter((t) => t.id !== now?.trip.id && t.id !== next?.id)
+    .map((t) => ({ t, end: tripSpan(t, rounds).end }))
+    .filter((x) => x.end && x.end < today)
+    .sort((a, b) => b.end.localeCompare(a.end) || String(b.t.created_at || '').localeCompare(String(a.t.created_at || '')));
+  return { now, next, last: done[0]?.t || null, planIt: !now };
+}
+
+/** The words on a Trips sub-item: "On now: March", "Next: March", "Last: South Coast 2026". */
+export function menuLabel(kind, trip) {
+  const name = trip?.name || 'Trip';
+  if (kind === 'on') return `On now: ${name}`;
+  if (kind === 'next') return `Next: ${name}`;
+  return `Last: ${name}`;
+}
+
+/** Where a Trips sub-item goes: that trip's status page (its leaderboards, comps and feed). */
+export const tripNowPath = (trip) => (trip ? `/trip-now/${trip.id}` : '/plan');

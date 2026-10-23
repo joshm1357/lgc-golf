@@ -2,7 +2,7 @@
 // organiser — that could potentially go to vote as well". Pure functions, tested (extras.test.js).
 //
 //   * Each extra is 'off' (not on the table), 'in' (the organiser's put it in) or 'vote' (the group gets asked
-//     "Would you do these?" — ⭐ Want it · 👍 Happy either way · 👎 Skip it).
+//     "Would you do these?" — ⭐ Keen · 👍 Happy with it · 👎 Not keen).
 //   * Extras that are in, or that win the vote, go into the trip plan budget (078 plan_budget_items) and, where
 //     there's something to book, a job ("Book the bus").
 import { EXTRA_QUESTION } from './emailvotes.js';
@@ -24,8 +24,17 @@ export const DEFAULT_EXTRAS = [
   { key: 'pub', label: 'Casino or pub night', pp: null, kind: 'drinks', job: null },
   { key: 'round', label: 'An extra round', pp: 70, kind: 'green_fees', job: 'Book the extra round' },
   { key: 'spa', label: 'Massage or spa', pp: 100, kind: 'other', job: 'Book the massages' },
-  { key: 'ryder', label: 'Ryder Cup format (two teams)', pp: null, kind: 'other', job: null },
+  // ov23 (Josh): the Ryder Cup / comps / formats aren't planning extras — they're sorted in the run-up (Organise →
+  // Comps & on the day). Old saved lists that still have it are cleaned by planningExtras().
 ];
+
+/** Comps, cups and formats — not planning extras (ov23). Matches old saved entries and the helper's suggestions. */
+export const COMP_EXTRA = /\bryder\b|\bcup\b|\bformat\b|\bmatch ?play\b|\btwo teams\b|\bstableford\b|\bambrose\b/i;
+/** The extras list without comps / cups / formats (the trophy & engraving purchase stays — it's a cost). */
+export function planningExtras(list) {
+  if (!Array.isArray(list)) return list;
+  return list.filter((e) => e && e.key !== 'ryder' && !(e.own || e.suggested ? COMP_EXTRA.test(e.label || '') : false));
+}
 
 const money = (v) => {
   if (v === '' || v == null) return null;
@@ -64,8 +73,8 @@ export function addCustomExtra(list, label, pp = null, state = 'vote') {
   return [...cur, { key, label: l, pp: money(pp), kind: 'other', job: null, own: true, state: EXTRA_STATES.includes(state) ? state : 'vote' }];
 }
 
-export const extrasIn = (list) => (list || []).filter((e) => e.state === 'in');
-export const extrasToVote = (list) => (list || []).filter((e) => e.state === 'vote');
+export const extrasIn = (list) => (planningExtras(list) || []).filter((e) => e.state === 'in');
+export const extrasToVote = (list) => (planningExtras(list) || []).filter((e) => e.state === 'vote');
 
 /** The ballot section for the extras going to the group, or null when there are none. */
 export function extrasSection(list) {

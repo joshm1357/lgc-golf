@@ -25,7 +25,7 @@ describe('featureOn', () => {
 
 describe('the database list matches this one', () => {
   it('same keys, parents and defaults as the migrations (029, plus 036 for Clubhouse TV, … 071 for commentary)', () => {
-    const sql = ['029_features.sql', '036_quick_round.sql', '050_cup.sql', '053_overnight_features.sql', '060_wave2_features.sql', '071_commentary.sql']
+    const sql = ['029_features.sql', '036_quick_round.sql', '050_cup.sql', '053_overnight_features.sql', '060_wave2_features.sql', '071_commentary.sql', '097_your_round_tips.sql']
       .map((f) => fs.readFileSync(new URL(`../../supabase/migrations/${f}`, import.meta.url), 'utf8')).join('\n');
     const rows = [...sql.matchAll(/\('([a-z_]+)', (true|false), (null|'[a-z_]+'), 'free'\)/g)]
       .map((m) => ({ key: m[1], newGroup: m[2] === 'true', parent: m[3] === 'null' ? null : m[3].slice(1, -1) }));
@@ -48,5 +48,22 @@ describe('presets for a new group', () => {
     const s = PRESETS.find((p) => p.key === 'just_scoring').switches;
     expect(s.feed || s.tribunal || s.planner || s.trophies).toBe(false);
     expect(s.gps).toBe(true);
+  });
+});
+
+import { followers, withFollowers } from './features.js';
+describe('v8: running jokes are a background part of commentary, not a switch', () => {
+  it('isn’t listed as a switch', () => {
+    expect(FEATURES.filter((f) => !f.hidden).map((f) => f.key)).not.toContain('in_jokes');
+  });
+  it('is on exactly when commentary is on, whatever was stored', () => {
+    expect(featureOn('in_jokes', { awards: true, commentary: true, in_jokes: false })).toBe(true);
+    expect(featureOn('in_jokes', { awards: true, commentary: false, in_jokes: true })).toBe(false);
+    expect(featureOn('in_jokes', { awards: false, in_jokes: true })).toBe(false); // commentary needs awards
+  });
+  it('the database copy is kept in step: switching commentary also switches it, and every preset matches', () => {
+    expect(followers('commentary')).toEqual(['in_jokes']);
+    expect(withFollowers({ commentary: true, in_jokes: false }).in_jokes).toBe(true);
+    for (const p of PRESETS) expect(!!p.switches.in_jokes).toBe(!!p.switches.commentary);
   });
 });

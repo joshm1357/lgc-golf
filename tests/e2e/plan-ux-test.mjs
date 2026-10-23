@@ -84,7 +84,8 @@ const startState = {
 const J1 = crypto.randomUUID(); const J2 = crypto.randomUUID();
 const callState = {
   ...startState, region: 'South Coast NSW', regionOptions: ['South Coast NSW'], weekends: [W1], weekendsSettled: true, stays: [pin('Kiama')],
-  days: [{ index: 0, leg: 'way', options: [] }, { index: 1, leg: 'stay', options: [L(14), L(12)] }, { index: 2, leg: 'home', options: [] }],
+  // ov26 (O3): only golf days are asked about, so both courses are options every day here (2 × 3 days).
+  days: [{ index: 0, leg: 'way', options: [L(14), L(12)] }, { index: 1, leg: 'stay', options: [L(14), L(12)] }, { index: 2, leg: 'home', options: [L(14), L(12)] }],
   callsMade: true, callJobs: { [L(14)]: J1, [L(12)]: J2 },
 };
 const stay = (plan, name, area, link, total = null, isList = false) => ({ id: crypto.randomUUID(), group_id: GROUP, plan_id: plan, name, area, link, total_cost: total, sleeps: total ? 12 : null, is_list: isList, option_id: null, chosen: false, created_by: K, created_at: now });
@@ -243,7 +244,7 @@ await ctx.addInitScript(([uid]) => {
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
   if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated' } }));
-  localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-notify-prompt', String(Date.now()));
+  localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */ localStorage.setItem('tgt-notify-prompt', String(Date.now()));
 }, ['99999999-9999-4999-8999-999999999999']);
 const page = await ctx.newPage();
 page.on('pageerror', (e) => fails.push(`page error: ${e}`));
@@ -284,8 +285,8 @@ const build = () => db.trip_builds.find((b) => b.plan_id === newPlan)?.state;
 check(db.plans.some((p) => p.id === newPlan && p.name === 'Spring away'), 'the draft makes a draft trip');
 check(JSON.stringify(build()?.regionOptions) === JSON.stringify(['Hunter Valley', 'South Coast NSW']), 'the AI’s places land on the trip builder as area options');
 check(!build()?.region, 'nothing is picked for the organiser');
-await page.getByTestId('area-tabs').waitFor({ timeout: 15000 });
-check((await page.getByTestId('area-tabs').innerText()).includes('South Coast NSW'), 'the real trip screen shows them');
+await page.getByTestId('area-chips').waitFor({ timeout: 15000 });
+check((await page.getByTestId('area-chips').innerText()).includes('South Coast NSW'), 'the real trip screen shows them');
 check(await page.getByText('Show the chat ↑').isVisible(), 'the chat folds down so the trip shows');
 await page.screenshot({ path: `${CSHOTS}/m-02-trip-filling-in.png` });
 await page.getByText('Show the chat ↑').click();
@@ -301,7 +302,7 @@ const third = aiCalls.filter((c) => c.mode === 'plan_chat')[2];
 check(third?.text === 'Add another: Mudgee' && third.messages.length === 4 && third.draft?.places?.length === 2, 'the conversation so far and the current draft go with each turn');
 check(third?.page?.areas?.map((a) => a.area).join() === 'Hunter Valley,South Coast NSW', 'what the trip screen shows goes with the question');
 await page.getByText('Show the trip ↓').click(); await wait(800);
-check((await page.getByTestId('area-tabs').innerText()).includes('Central West NSW'), 'the trip screen shows the new area without a reload');
+check((await page.getByTestId('area-chips').innerText()).includes('Central West NSW'), 'the trip screen shows the new area without a reload');
 await page.screenshot({ path: `${CSHOTS}/m-04-trip-updated.png` });
 // Leaving and coming back keeps the chat.
 await page.getByRole('button', { name: 'Close' }).last().click(); await wait(300);
@@ -316,25 +317,19 @@ await page.getByRole('button', { name: 'Close' }).last().click(); await wait(300
 // ---------------------------------------------------------------- B. A page per region, then side by side
 await page.goto(`${BASE}#/plan/${PLAN}/build`);
 await page.getByTestId('area-start').waitFor({ timeout: 15000 });
-const tabs = page.getByTestId('area-tabs');
+const tabs = page.getByTestId('area-chips');
 check((await tabs.innerText()).includes('Hunter Valley') && (await tabs.innerText()).includes('Central West NSW') && (await tabs.innerText()).includes('Compare'), 'region chips across the top, plus Compare');
 await page.getByTestId('area-course').first().waitFor({ timeout: 10000 });
 check((await page.getByTestId('area-courses').innerText()).includes('Cypress Lakes'), 'Hunter Valley: its own courses');
 check((await page.getByTestId('area-courses').locator('input:checked').count()) === 4, 'Hunter Valley: 4 courses on the table (several, not one)');
-check((await page.getByTestId('area-stays').innerText()).includes('Airbnb list — Pokolbin'), 'Hunter Valley: places to stay with the shared list');
+check(!(await page.getByTestId('area-stays').innerText()).includes('Airbnb list — Pokolbin') && await page.getByTestId('stay-search').count() === 0, 'ov23: no accommodation ideas or search links in step 1 (they’re in step 2)');
 check(await page.locator('.tb-stay', { hasText: 'Pokolbin' }).count() > 0, 'stay pins on the map');
 await shot('04-region-hunter');
 await noSideScroll('Region page');
 await tabs.getByRole('tab', { name: 'South Coast NSW' }).click(); await wait(800);
 check((await page.getByTestId('area-courses').innerText()).includes('Gerringong') && (await page.getByTestId('area-courses').locator('input:checked').count()) === 5, 'South Coast: its own map and 5 courses');
-// A shared list link for this region.
-await page.getByLabel('List link').fill('https://www.airbnb.com.au/wishlists/v/222');
-await page.getByTestId('list-prompt').getByRole('button', { name: 'Add' }).click(); await wait(800);
-const added = db.plan_stays.find((s) => s.link === 'https://www.airbnb.com.au/wishlists/v/222');
-check(!!added && added.area === 'South Coast NSW' && added.is_list === true, `a pasted list is kept against the region (${added?.name})`);
-check((await page.getByTestId('stay-search').innerText()).includes('12 people · 6+ bedrooms'), 'search links say what they search for (12 people, 6+ bedrooms)');
-const air = await page.getByTestId('stay-search-set').first().getByRole('link', { name: /Airbnb/ }).getAttribute('href');
-check(air.includes('min_bedrooms=6') && air.includes(`checkin=${W1.start}`), 'the Airbnb link carries the weekend and bedrooms');
+// ov23: accommodation searches and lists are in step 2 now (weekends-comps-test checks them, with the head count).
+check(await page.getByTestId('list-prompt').count() === 0, 'no list prompt in step 1');
 await shot('05-region-south-coast');
 await page.getByTestId('extras').getByRole('button').first().click(); await wait(300);
 check((await page.getByTestId('extra').count()) >= 3, 'extras: in / ask the group');
@@ -350,7 +345,7 @@ await noSideScroll('Compare');
 await page.getByTestId('compare-call-vote').click();
 await page.getByTestId('call-vote').waitFor({ timeout: 5000 });
 const qs = await page.getByTestId('ballot-section').locator('strong').allInnerTexts();
-check(['Which area?', 'Which weekend?', 'Which town to stay in?', 'Hunter Valley: which courses?', 'Where should we stay?', 'Would you do these?'].every((q) => qs.includes(q)), `the full range on the table (${qs.join(' / ')})`);
+check(['Which area?', 'Which weekend?', 'Hunter Valley: where to stay?', 'Hunter Valley: which courses?', 'Where should we stay?', 'Would you do these?'].every((q) => qs.includes(q)), `the full range on the table (${qs.join(' / ')})`);
 await page.getByLabel('Which area?: Central West NSW').uncheck();
 const closes = plusDays(4);
 await page.getByLabel('Closes').fill(closes);
@@ -396,14 +391,14 @@ await page.reload();
 await page.getByTestId('vote-batch').waitFor({ timeout: 15000 });
 check((await card.getAttribute('data-view')) === 'voter', 'a player gets just the ballot');
 const sections = card.getByTestId('vote-batch-section');
-check((await sections.nth(0).getByRole('button', { name: '⭐ Prefer' }).count()) === 2 && (await sections.nth(1).getByRole('button', { name: '✓ Can' }).count()) === 2, 'places: ⭐ Prefer / 👍 Option / 👎 Don’t like; weekends: ✓ Can');
+check((await sections.nth(0).getByRole('button', { name: '⭐ Keen' }).count()) === 2 && (await sections.nth(1).getByRole('button', { name: '✓ Yes' }).count()) === 2, 'places: ⭐ Keen / 👍 Happy with it / 👎 Not keen; weekends: ✓ Yes');
 check((await card.innerText()).includes('closes'), 'the ballot says when it closes');
 await shot('10-voter-ballot');
 for (let i = 0; i < await sections.count(); i++) {
   const words = await sections.nth(i).locator('[data-answer="maybe"]').first().innerText().catch(() => '');
   if (words) { await sections.nth(i).locator('[data-answer="maybe"]').first().click(); await wait(350); }
 }
-await card.getByTestId('vote-batch-keen').getByRole('button', { name: '✓ In' }).click(); await wait(600);
+await card.getByTestId('vote-batch-keen').getByRole('button', { name: '✓ Yes' }).click(); await wait(600);
 check(await card.getByTestId('voter-thanks').isVisible(), 'answered everything: "Thanks — here’s how it’s looking"');
 check(db.plan_votes.some((v) => v.player_id === AL && v.response === 'maybe'), 'answers saved (stored as yes / maybe / no)');
 await shot('11-voter-thanks');
@@ -439,7 +434,7 @@ check(db.plan_items.find((j) => j.id === J2).owner_id === pid(2) && db.plan_item
 await page.getByTestId('calls-one').click();
 await page.getByLabel('One person for all').selectOption(AL); await wait(800);
 check(db.plan_items.find((j) => j.id === J2).owner_id === AL, 'back to one person for all');
-check((await page.getByTestId('tee-day').count()) === 6, 'each course covers every day of the weekend (2 × 3)');
+check((await page.getByTestId('tee-day').count()) === 6, 'each course covers every golf day of the weekend (2 × 3)');
 await shot('14-calls-who');
 
 asPlayer = true;
@@ -450,15 +445,26 @@ check((await page.getByTestId('next-step').innerText()).includes('Your job: call
 await page.goto(`${BASE}#/plan/${PLAN2}/build`);
 await page.locator('[data-testid="tb-step-calls"]').getByRole('button').first().click(); await wait(600);
 const day = (course, n) => page.locator('[data-testid="tb-call"]', { hasText: course }).locator(`[data-testid="tee-day"][data-date="${dayOf(W1, n)}"]`);
+// ov26 (O3): one form per course — "Fill in what they said", the days, one Save.
 const fill = async (course, n, avail, text = '') => {
+  const call = page.locator('[data-testid="tb-call"]', { hasText: course });
+  await call.getByTestId('call-fill').click();
   const d = day(course, n);
-  await d.getByTestId('tee-day-edit').click();
   await d.getByRole('button', { name: avail }).click();
   if (text) await d.getByLabel(`Times on offer ${dayOf(W1, n)}`).fill(text);
   if (avail === '✓ Yes') await d.getByLabel(`Price ${dayOf(W1, n)}`).fill('85');
-  await d.getByTestId('tee-day-save').click(); await wait(600);
+  await call.getByTestId('call-save').click(); await wait(600);
 };
-check((await page.locator('[data-testid="tb-call"]', { hasText: 'Kiama' }).getByTestId('call-checklist').textContent()).includes('Fri, Sat, Sun'), 'the caller’s checklist: every day of the weekend');
+check((await page.locator('[data-testid="tb-call"]', { hasText: 'Kiama' }).getByTestId('call-checklist').textContent()).includes('Every golf day: Fri, Sat, Sun'), 'the caller’s checklist: every golf day of the weekend');
+// "Nothing that weekend" sets every day of the weekend to no — then Cancel (nothing saved).
+{
+  const kc = page.locator('[data-testid="tb-call"]', { hasText: 'Kiama' });
+  await kc.getByTestId('call-fill').click();
+  await kc.getByTestId('nothing-that-weekend').first().click();
+  check((await kc.locator('[data-testid="tee-avail-no"][aria-pressed="true"]').count()) === 3, 'O3: “Nothing that weekend” answers every day of it');
+  await kc.getByRole('button', { name: 'Cancel' }).click();
+  check(db.trip_tee_options.filter((t) => t.plan_id === PLAN2).length === 0, 'nothing saved until Save');
+}
 await fill('Kiama', 0, '✓ Yes', '7:30-8:00');
 await fill('Kiama', 1, '✗ No');
 await fill('Kiama', 2, '? Not sure');
@@ -503,9 +509,9 @@ await page.getByRole('button', { name: 'Start a new plan' }).click().catch(() =>
 await page.getByLabel('Your message').fill('Weekend away late Nov, 12 of us, within 3.5 hours of Sydney, about $900 each — plan it');
 await page.getByRole('button', { name: 'Send', exact: true }).click();
 await page.waitForURL(/#\/plan\/[0-9a-f-]{36}\/build/, { timeout: 15000 });
-await page.getByTestId('area-tabs').waitFor({ timeout: 15000 });
+await page.getByTestId('area-chips').waitFor({ timeout: 15000 });
 await wait(800);
-check(await page.getByTestId('caddie-panel').isVisible() && (await page.getByTestId('area-tabs').isVisible()), 'desktop: the chat in the panel, the trip builder filling in beside it');
+check(await page.getByTestId('caddie-panel').isVisible() && (await page.getByTestId('area-chips').isVisible()), 'desktop: the chat in the panel, the trip builder filling in beside it');
 await vshot('d-01-chat');
 await page.screenshot({ path: `${CSHOTS}/d-01-panel-and-trip.png` });
 await page.getByTestId('caddie-panel').getByRole('tab', { name: 'Ask', exact: true }).click();
@@ -518,7 +524,7 @@ const mapBox = await page.locator('.as-map').boundingBox();
 const listBox = await page.locator('.as-lists').boundingBox();
 check(mapBox && listBox && listBox.x > mapBox.x + mapBox.width - 2 && mapBox.width > 500, `desktop: a big map with the lists beside it (${Math.round(mapBox?.width)} px map)`);
 await vshot('d-02-region');
-await page.getByTestId('area-tabs').getByRole('tab', { name: /Compare/ }).click(); await wait(500);
+await page.getByTestId('area-chips').getByRole('tab', { name: /Compare/ }).click(); await wait(500);
 check(await page.getByTestId('compare-table').isVisible(), 'desktop: Compare is a table, a column per region');
 check(!(await page.getByText('How long?').isVisible().catch(() => false)), 'Compare shows only the comparison');
 await vshot('d-03-compare');

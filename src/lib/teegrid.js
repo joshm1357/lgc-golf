@@ -4,6 +4,7 @@
 // One trip_tee_options row = one course on one date: available yes / no / unknown, time ranges ("07:30-09:00"), slots
 // (times), how many players they can hold, price each, a note. Pure functions, tested (teegrid.test.js).
 import { bestBlock } from './tripbuilder.js';
+import { teeTimesFor } from './headcount.js';
 
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -83,24 +84,81 @@ export function canFinishCall(progress) {
   return { ok: true, message: '', nudge };
 }
 
-/** The caller's checklist: what to ask about. */
-export function callChecklist(dates = [], { need = 1 } = {}) {
+/** The caller's checklist: what to ask about. people (O6): how many are playing — the one headcount number. */
+export function callChecklist(dates = [], { need = 1, people = null } = {}) {
   const days = [...new Set(dates.map((d) => DOW[dateOf(d).getDay()]))];
+  const n = people || need * 4;
   return [
-    `Every day: ${days.join(', ')}${dates.length > days.length ? ' — each weekend' : ''}`,
-    `${need} tee time${need === 1 ? '' : 's'} in a row (${need * 4} players) — what times?`,
+    `Every golf day: ${days.join(', ')}${dates.length > days.length ? ' — each weekend' : ''}`,
+    `${need} tee time${need === 1 ? '' : 's'} in a row (${n} players) — what times?`,
     'Their usual social golf times (weekdays and weekends)',
     'Biggest group they take',
     'Price each (and any deal for a group)',
   ];
 }
 
-/** A short script to read on the phone. */
-export function callScript({ course = 'the course', group = 'our golf group', need = 1, dates = [], memberDays = [] } = {}) {
+/** A short script to read on the phone. people (O6): the one headcount number (not tee times × 4). */
+export function callScript({ course = 'the course', group = 'our golf group', need = 1, people = null, dates = [], memberDays = [] } = {}) {
   const when = dates.length ? dates.map(dayShort).join(', ') : 'a weekend coming up';
+  const n = people || need * 4;
+  const t = people ? teeTimesFor(people) : need;
   // ov17: when the research says members have some of those days, ask for times around them.
   const around = memberDays.length ? ` I know members have the course on ${memberDays.join(' and ')} — what could we get around that?` : '';
-  return `Hi, I’m ringing for ${group}. We’re planning a golf weekend and looking at ${course}. We’d need ${need} tee time${need === 1 ? '' : 's'} in a row — ${need * 4} players. Could you tell me what you’d have on ${when}?${around} Nothing to book yet — we’re working out which days suit. And what are your usual social times during the week and on weekends, the biggest group you take, and the price each?`;
+  return `Hi, I’m ringing for ${group}. We’re planning a golf weekend and looking at ${course}. We’d need ${t} tee time${t === 1 ? '' : 's'} in a row — ${n} players. Could you tell me what you’d have on ${when}?${around} Nothing to book yet — we’re working out which days suit. And what are your usual social times during the week and on weekends, the biggest group you take, and the price each?`;
+}
+
+/**
+ * O3 (Josh's walkthrough): only ask a course about its GOLF days — the days it's an option on, on every weekend
+ * still in play (a travel day with no golf isn't asked about unless the organiser put a course on it).
+ * lines: callJobs()'s lines for the course ([{ dates }]). → sorted ISO dates
+ */
+export function golfDates(lines = []) {
+  return [...new Set((lines || []).flatMap((l) => l.dates || []))].sort();
+}
+
+/** The golf dates grouped by weekend (for "Nothing that weekend"): [{ start, end, label, dates }]. */
+export function datesByWeekend(dates = [], weekends = []) {
+  const out = [];
+  for (const w of weekends || []) {
+    const ds = (dates || []).filter((d) => d >= w.start && d <= (w.end || w.start));
+    if (ds.length) out.push({ start: w.start, end: w.end || w.start, label: `${dayShort(w.start)} – ${dayShort(w.end || w.start)}`, dates: ds });
+  }
+  const left = (dates || []).filter((d) => !out.some((g) => g.dates.includes(d)));
+  if (left.length) out.push({ start: left[0], end: left[left.length - 1], label: 'Other days', dates: left });
+  return out;
+}
+
+/**
+ * One form per course (O3): the rows to save from the form's answers. form: { [date]: { available, ranges, capacity,
+ * price, notes } }; rows: what's saved already. Only days that changed are sent. A "yes" needs times.
+ * → { upserts: [row], problem: '' | 'Fri 22 Jan: put in the times they offered' }
+ */
+export function formChanges(form = {}, rows = [], { planId, courseId, jobId = null, me = null } = {}) {
+  const at = new Map((rows || []).map((r) => [String(r.play_date).slice(0, 10), r]));
+  const upserts = [];
+  for (const [date, v] of Object.entries(form || {})) {
+    if (!v || !v.available) continue;
+    const old = at.get(date);
+    const ranges = v.available === 'no' ? [] : parseRanges(v.ranges);
+    if (v.available === 'yes' && !ranges.length && !(old?.times || []).length) return { upserts: [], problem: `${dayShort(date)}: put in the times they offered, e.g. 7:30–9:00` };
+    const capacity = v.capacity === '' || v.capacity == null ? null : Math.max(1, Math.min(400, Number(v.capacity) || 1));
+    const price = v.price === '' || v.price == null ? null : Number(String(v.price).replace(/[^0-9.]/g, '')) || null;
+    const notes = String(v.notes || '').trim().slice(0, 300) || null;
+    const same = old && old.available === v.available && JSON.stringify(old.ranges || []) === JSON.stringify(ranges)
+      && (old.capacity ?? null) === capacity && (old.price != null ? Number(old.price) : null) === price && (old.notes || null) === notes;
+    if (same) continue;
+    upserts.push({ plan_id: planId, play_date: date, course_id: courseId, job_id: jobId, entered_by: me, available: v.available, ranges, capacity, price, notes, ...(old ? {} : { times: [] }) });
+  }
+  return { upserts, problem: '' };
+}
+
+/** The form's starting answers from what's saved. */
+export function formFrom(rows = [], dates = []) {
+  const at = new Map((rows || []).map((r) => [String(r.play_date).slice(0, 10), r]));
+  return Object.fromEntries(dates.map((d) => {
+    const r = at.get(d);
+    return [d, { available: r?.available || null, ranges: (r?.ranges || []).map((x) => x.replace('-', '–')).join(', '), capacity: r?.capacity ?? '', price: r?.price ?? '', notes: r?.notes || '' }];
+  }));
 }
 
 /**

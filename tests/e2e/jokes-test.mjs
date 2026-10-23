@@ -18,8 +18,9 @@ const now = new Date().toISOString();
 const today = now.slice(0, 10);
 const LINES = ['Al still owes everyone for the cab', 'The ferry to nowhere'];
 
+// v8: running jokes have no switch of their own — they're on with commentary (which needs award moments).
 const feats = (jokes = true) => ['feed', 'dinner_awards', 'ai_helper'].map((k) => ({ group_id: GROUP, feature_key: k, enabled: true }))
-  .concat([{ group_id: GROUP, feature_key: 'in_jokes', enabled: jokes }]);
+  .concat(['in_jokes', 'awards', 'commentary'].map((k) => ({ group_id: GROUP, feature_key: k, enabled: jokes })));
 const db = {
   players: [
     { id: K, name: 'Kurt Dahl', nickname: 'Kurt', handicap: 10, approved: true, created_at: now },
@@ -88,7 +89,7 @@ await ctx.addInitScript(([uid]) => {
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
   if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated' } }));
-  localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-notify-prompt', String(Date.now()));
+  localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */ localStorage.setItem('tgt-notify-prompt', String(Date.now()));
 }, ['99999999-9999-4999-8999-999999999999']);
 const page = await ctx.newPage();
 page.on('pageerror', (e) => fails.push(`page error: ${e}`));
@@ -116,8 +117,8 @@ await page.goto(`${BASE}#/group`);
 const card = page.getByTestId('forget-jokes');
 await card.waitFor({ timeout: 15000 });
 check(/never shown as a list|Nobody sees them/i.test(await card.innerText()), 'organiser: Forget card says they’re never shown as a list');
-const featText = await page.locator('body').innerText();
-check(featText.includes('The AI quietly picks up running jokes from the feed and trip chat to use in commentary and the replay. They’re never shown as a list.'), 'Features list: the new plain-words description');
+check(await page.getByRole('switch', { name: 'Running jokes' }).count() === 0, 'Features list (v8): no Running jokes switch — it’s a background part of commentary');
+check(await page.getByRole('switch', { name: 'Live commentary' }).count() === 1, 'Features list: Live commentary is still a switch');
 await card.scrollIntoViewIfNeeded();
 await page.screenshot({ path: `${SHOTS}/2-group-forget.png` });
 await card.getByRole('button', { name: 'Forget the running jokes' }).click();

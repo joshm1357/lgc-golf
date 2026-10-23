@@ -84,7 +84,7 @@ export default function CompEditor({ trip, comp = null, comps = [], onDone, onSt
   if (!kind) {
     return (
       <div className="card pad stack" style={{ gap: 10, borderColor: 'var(--navy)' }}>
-        <strong>What are you playing for?</strong>
+        <strong>Trophies &amp; cups</strong>
         <CompCards onPick={pick} />
         <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={onDone}>Cancel</button>
       </div>
@@ -251,7 +251,7 @@ export default function CompEditor({ trip, comp = null, comps = [], onDone, onSt
           </label>
           {suggested > 0 && !total && <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={() => setTotal(String(suggested))}>Use {pts(suggested)} (the matches add up to that)</button>}
           {Number(total) > 0 && <span className="small muted">{pts(toWin(Number(total)))} to win.</span>}
-          <span className="small muted">Who’s on which side and the matches themselves are set in the Cup (its to-do list takes you there). The team links put people straight on a side.</span>
+          <span className="small muted">Who’s on which side and the matches themselves are set in the Cup (its jobs take you there). The team links put people straight on a side.</span>
         </div>
       )}
 

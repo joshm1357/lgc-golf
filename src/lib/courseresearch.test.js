@@ -1,5 +1,27 @@
 import { describe, it, expect } from 'vitest';
-import { aboutLines, checkedLabel, contactLinks, shortFacts, memberWarning, feesText, stars, tidy, safeUrl } from './courseresearch.js';
+import { aboutLines, checkedLabel, contactLinks, shortFacts, memberWarning, feesText, stars, tidy, safeUrl, dollars } from './courseresearch.js';
+
+describe('dollars (v8: fee text shows $ on bare amounts)', () => {
+  it('adds $ to the live example', () => {
+    expect(dollars('9 holes 105 Mon-Thu / 131 Fri-Sun')).toBe('9 holes $105 Mon-Thu / $131 Fri-Sun');
+  });
+  it('never doubles up', () => {
+    expect(dollars('$105 Mon-Thu / $131 Fri-Sun')).toBe('$105 Mon-Thu / $131 Fri-Sun');
+    expect(dollars('Twilight $45, groups 12+ 60 each')).toBe('Twilight $45, groups 12+ $60 each');
+  });
+  it('leaves counts, times, percentages and years alone', () => {
+    expect(dollars('55 for 18 walking; cart +50')).toBe('$55 for 18 walking; cart +$50');
+    expect(dollars('Groups of 12 or more: 10% off after 2pm')).toBe('Groups of 12 or more: 10% off after 2pm');
+    expect(dollars('Twilight from 1:30, 4 players 220')).toBe('Twilight from 1:30, 4 players $220');
+    expect(dollars('2026 rates: 1,250 per group')).toBe('2026 rates: $1,250 per group');
+    expect(dollars('49.50 weekdays')).toBe('$49.50 weekdays');
+    expect(dollars('')).toBe('');
+  });
+  it('is used for the fee lines from the research details', () => {
+    const lines = Object.fromEntries(aboutLines({ details: { green_fee_weekday_aud: '9 holes 105 Mon-Thu / 131 Fri-Sun', twilight_or_group_rates: 'Twilight 65' } }).map((l) => [l.label, l.value]));
+    expect(lines.Fees).toBe('9 holes $105 Mon-Thu / $131 Fri-Sun. Twilight $65');
+  });
+});
 import { callScript } from './teegrid.js';
 
 const row = {

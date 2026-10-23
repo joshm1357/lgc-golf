@@ -171,10 +171,10 @@ describe('what we know about a course', () => {
 describe('tee times', () => {
   it('needed: 12 in → 3; maybes count if nobody is in yet; override wins', () => {
     const rs = (n, status) => Array.from({ length: n }, (_, i) => ({ player_id: `${status}${i}`, status }));
-    expect(teeTimesNeeded({ rsvps: [...rs(12, 'in'), ...rs(3, 'maybe')] })).toEqual({ people: 12, needed: 3, source: 'in' });
-    expect(teeTimesNeeded({ rsvps: rs(5, 'maybe') })).toEqual({ people: 5, needed: 2, source: 'keen' });
-    expect(teeTimesNeeded({ rsvps: rs(5, 'in'), override: 16 })).toEqual({ people: 16, needed: 4, source: 'set' });
-    expect(teeTimesNeeded({})).toEqual({ people: 0, needed: 0, source: 'none' });
+    expect(teeTimesNeeded({ rsvps: [...rs(12, 'in'), ...rs(3, 'maybe')] })).toMatchObject({ people: 12, needed: 3, source: 'in' });
+    expect(teeTimesNeeded({ rsvps: rs(5, 'maybe') })).toMatchObject({ people: 5, needed: 2, source: 'keen' });
+    expect(teeTimesNeeded({ rsvps: rs(5, 'in'), override: 16 })).toMatchObject({ people: 16, needed: 4, source: 'set' });
+    expect(teeTimesNeeded({})).toMatchObject({ people: 0, needed: 0, source: 'none' });
   });
   it('reads typed times and makes a block', () => {
     expect(parseTeeTimes('10:30, 10:20 10:20 7am 1:10pm junk 3:00')).toEqual(['07:00', '10:20', '10:30', '13:10']);
@@ -306,11 +306,13 @@ describe('steps, in Josh’s order', () => {
   it('courses need the area; calls need weekends AND courses; configurations need tee times', () => {
     const s0 = builderSteps(newState({}));
     expect(s0.map((s) => [s.key, s.locked])).toEqual([['area', false], ['courses', true], ['calls', true], ['configs', true]]);
-    expect(s0[1].after).toBe('Area & weekends');
+    expect(s0[1].after).toBe('the area is chosen (Areas & weekends)');
+    expect(s0.map((s) => s.label)).toEqual(['Areas & weekends', 'Courses & stays', 'Call the courses', 'Pick & lock in']);
     const st = { ...newState({}), region: 'South Coast NSW', stays: [NOWRA], days: [{ index: 0, leg: 'way', options: ['sh'] }] };
     const s1 = builderSteps(st);
     expect(s1[1].locked).toBe(false);
-    expect(s1[2]).toMatchObject({ locked: true, after: 'Area & weekends' }); // weekends not settled yet
+    expect(s1[2]).toMatchObject({ locked: true, after: 'the primary and backup weekends are set (Areas & weekends)' }); // weekends not settled yet
+    expect(builderSteps({ ...st, region: null, weekends: [{ start: '2026-03-13' }], weekendsSettled: true })[2]).toMatchObject({ locked: true, after: 'the area is chosen (Areas & weekends)' });
     const s2 = builderSteps({ ...st, weekends: [{ start: '2026-03-13' }], weekendsSettled: true });
     expect(s2[2].locked).toBe(false);
     expect(s2[3].locked).toBe(true);

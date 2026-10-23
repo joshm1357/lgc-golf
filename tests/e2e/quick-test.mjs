@@ -22,7 +22,7 @@ const PAST = 'eeeeeeee-0000-4000-8000-000000000004';
 const POLL1 = 'abababab-0000-4000-8000-000000000001';
 const POLL2 = 'abababab-0000-4000-8000-000000000002';
 const now = new Date().toISOString();
-const today = now.slice(0, 10);
+const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney' }).format(new Date()); // the app's 'today' is Sydney time
 const holes = Array.from({ length: 18 }, (_, i) => ({ n: i + 1, par: 4, si: i + 1, green: { lat: -35.0 + i * 0.001, lng: 150.5 } }));
 
 const db = {
@@ -139,7 +139,7 @@ STATUS.v = { is_member: false, is_admin: false, player_id: null, group_name: nul
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
 await ctx.route('https://luogyzvrbedmicjejilr.supabase.co/**', fakeSupabase);
-await ctx.addInitScript(([uid]) => {
+await ctx.addInitScript(([uid]) => { try { localStorage.setItem('tgt-caddie-hello', '1'); } catch { /* ov22 */ }
   const exp = Math.floor(Date.now() / 1000) + 3600 * 24;
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;

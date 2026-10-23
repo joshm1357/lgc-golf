@@ -10,7 +10,7 @@ import { useRun, must } from '../lib/run.js';
 import { notify, shareText } from '../lib/push.js';
 import { todayISO } from '../lib/plan.js';
 import { answersFor } from '../lib/emailvotes.js';
-import { allTicked, toggleTick, ballotFrom, callProblem, defaultCloses, closesWord, pollRows, reach, voteShareLink, shareMessage } from '../lib/callvote.js';
+import { allTicked, toggleTick, ballotFrom, callProblem, defaultCloses, closesWord, pollRows, reach, voteShareLink, shareMessage, groupBallot, pollArea, detailQuestion } from '../lib/callvote.js';
 import { joinCodeNow, loadJoinCode } from '../lib/joincode.js';
 import './planux.css';
 
@@ -171,7 +171,7 @@ export function CallVoteSheet({ plan, title, range, keenDefault = true, keenOpti
           {keenOption && (
             <label className="row" style={{ gap: 10, minHeight: 44 }}>
               <input type="checkbox" checked={keen} onChange={(e) => setKeen(e.target.checked)} style={{ width: 22, height: 22 }} />
-              <span>Ask “Are you keen?” (In / Maybe / Out) too</span>
+              <span>Ask “Are you in?” (Yes / Maybe / No) first</span>
             </label>
           )}
           <label className="field"><span>Closes</span><input className="input" type="date" value={closes || ''} min={todayISO()} onChange={(e) => setCloses(e.target.value)} aria-label="Closes" /></label>
@@ -182,15 +182,20 @@ export function CallVoteSheet({ plan, title, range, keenDefault = true, keenOpti
           <span className="label">What the group sees</span>
           <div className="card" style={{ overflow: 'hidden', borderColor: 'var(--navy)', borderWidth: 2, marginTop: 6 }}>
             <div style={{ padding: '10px 14px', background: 'var(--navy)', color: '#fff' }}>
-              <div className="small" style={{ opacity: 0.85, fontWeight: 700 }}>🗳️ {ballot.sections.length + (keenOption && keen ? 1 : 0)} quick questions · closes {closesWord(closes, todayISO())}</div>
+              <div className="small" style={{ opacity: 0.85, fontWeight: 700 }}>🗳️ {groupBallot(ballot.sections).main.length + (keenOption && keen ? 1 : 0)} quick questions{groupBallot(ballot.sections).areas.length ? ' + optional detail' : ''} · closes {closesWord(closes, todayISO())}</div>
               <div style={{ fontSize: 18, fontWeight: 800 }}>{title}</div>
             </div>
             <div className="stack" style={{ padding: 10, gap: 8 }}>
-              {ballot.sections.map((s) => {
+              {/* V3 (walkthrough): "Are you in?" first — the one answer everyone must give. */}
+              {keenOption && keen && <div className="card pad"><strong>Are you in?</strong> <span className="small muted">✓ Yes · ? Maybe · ✗ No</span></div>}
+              {(() => { const g = groupBallot(ballot.sections); return [...g.main, ...g.areas.flatMap((a) => a.polls)]; })().map((s, i, arr) => {
                 const words = answersFor({ kind: s.kind, question: s.question, purpose: s.options.some((o) => o.stayId) ? 'stay' : null });
+                const area = pollArea(s);
+                const firstOfArea = area && pollArea(arr[i - 1]) !== area;
                 return (
-                  <div key={s.key} className="card pad stack" style={{ gap: 4 }}>
-                    <strong>{s.question}</strong>
+                  <div key={s.key} className="card pad stack" style={{ gap: 4 }} data-testid={area ? 'preview-detail' : 'preview-main'}>
+                    {firstOfArea && <span className="small" style={{ fontWeight: 800 }}>📍 If it’s {area} — optional detail</span>}
+                    <strong>{area ? detailQuestion(s) : s.question}</strong>
                     {s.options.map((o) => (
                       <div key={o.key} className="row between small" style={{ gap: 6 }}>
                         <span style={{ fontWeight: 600 }}>{o.label}</span>
@@ -200,7 +205,6 @@ export function CallVoteSheet({ plan, title, range, keenDefault = true, keenOpti
                   </div>
                 );
               })}
-              {keenOption && keen && <div className="card pad"><strong>Are you keen?</strong> <span className="small muted">✓ In · ? Maybe · ✗ Out</span></div>}
               {!ballot.sections.length && !(keenOption && keen) && <span className="small muted">Nothing ticked yet.</span>}
             </div>
           </div>

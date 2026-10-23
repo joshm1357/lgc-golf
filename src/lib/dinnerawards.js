@@ -136,7 +136,7 @@ export function sortAwards(awards = []) {
 /** The feed post when the organiser closes the voting on one award. */
 export function closedPost(award, result, nameOf) {
   const icon = award?.kind === 'fine' ? '🍺' : '🏅';
-  return `${icon} ${award.kind === 'fine' ? 'Fine' : 'Dinner award'} — ${award.title}: ${resultLine(award, result, nameOf)}`;
+  return `${icon} ${award.kind === 'fine' ? 'Fine' : 'Award'} — ${award.title}: ${resultLine(award, result, nameOf)}`;
 }
 
 /**
@@ -153,5 +153,5 @@ export function resultsCard({ tripName = '', awards = [], nominations = [], vote
       line: names.length ? `${plural(r.winners[0].votes, 'vote')}${a.kind === 'fine' && a.penalty ? ` · ${a.penalty}` : ''}`.slice(0, 50) : 'no votes',
     };
   });
-  return { title: tripName || 'Dinner awards', sub: rows.length ? `${rows.length} decided` : 'Nothing decided yet', rows: rows.slice(0, 7) };
+  return { title: tripName || 'Fines & awards', sub: rows.length ? `${rows.length} decided` : 'Nothing decided yet', rows: rows.slice(0, 7) };
 }

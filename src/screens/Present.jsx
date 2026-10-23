@@ -54,6 +54,8 @@ export function Present() {
             </select>
           )}
           {replayOn && round?.status === 'locked' && <Link className="present-btn" to={`/replay/${round.id}`}>▶ Replay</Link>}
+          {/* ov33: once the round's done, the click-through presentation (podiums, awards, trophies). */}
+          {round?.status === 'locked' && round.trip_id && <Link className="present-btn" to={`/present/awards/${round.trip_id}`} data-testid="present-show">🎤 The presentation</Link>}
           <button type="button" className="present-btn" onClick={full}>⛶ Full screen</button>
           <button type="button" className="present-btn" onClick={close} aria-label="Close">✕</button>
         </div>

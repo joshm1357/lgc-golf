@@ -30,7 +30,7 @@ function useCases() {
 }
 
 // The Tribunal (Stage 11b): handicap cases (today's tables) and every other kind of case, in one list.
-export default function Tribunal() {
+export default function Tribunal({ embedded = false }) {
   const data = useData();
   const { status } = useSession();
   const { cases, votes, reload } = useCases();
@@ -50,8 +50,9 @@ export default function Tribunal() {
   const handicapOn = !g?.ok || kinds.includes('handicap') || status?.role === 'organiser';
   const raise = () => (kinds.filter((k) => k !== 'handicap').length ? setRaising(true) : setLodging(true));
   return (
-    <div className="page">
-      <Header court back title="The Tribunal" sub="Raise a case — serious or silly. The group decides." />
+    // Embedded: the Tribunal tab of Governance (ov19) — the hub draws the header.
+    <div className={embedded ? undefined : 'page'}>
+      {!embedded && <Header court back title="The Tribunal" sub="Raise a case — serious or silly. The group decides." />}
       <div className="section stack">
         {status?.role !== 'guest' && (kinds.length > 0 || !g?.ok) && <button type="button" className="btn gold block" onClick={raise}>{Icon.gavel(20)}<span>Raise a case</span></button>}
         {open.length > 0 && <span className="label">Open cases</span>}
@@ -59,7 +60,7 @@ export default function Tribunal() {
         {closed.length > 0 && <span className="label">Past verdicts</span>}
         {closed.map((x) => x.el)}
         {!all.length && <div className="empty">Court is in session, but nobody's been accused yet.</div>}
-        {g?.ok && <Link to="/governance" className="small muted" style={{ textAlign: 'center' }}>Who decides what →</Link>}
+        {g?.ok && <Link to="/governance/settings" className="small muted" style={{ textAlign: 'center' }}>Who decides what →</Link>}
       </div>
       {lodging && handicapOn && <LodgeCase onClose={() => setLodging(false)} onDone={reload} players={data.players} />}
       {raising && <RaiseCase g={g} onClose={() => setRaising(false)} onHandicap={() => setLodging(true)} />}
@@ -175,7 +176,7 @@ export function TribunalCase() {
   return (
     <div className="page">
       <header className="hdr court">
-        <div className="hdr-row"><Link to="/tribunal" className="back" style={{ textDecoration: 'none' }}>{Icon.back()}<span>Tribunal</span></Link></div>
+        <div className="hdr-row"><Link to="/governance/tribunal" className="back" style={{ textDecoration: 'none' }}>{Icon.back()}<span>Tribunal</span></Link></div>
         <div className="row label" style={{ color: 'var(--gold)', gap: 6 }}>{Icon.gavel(16)}<span>Handicap Tribunal · {open ? 'in session' : 'closed'}</span></div>
         <div className="hdr-row">
           <Avatar player={accused} size={54} ring="var(--gold)" />

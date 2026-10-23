@@ -81,7 +81,7 @@ export function setupSteps(data, on = {}, trip = guideTrip(data.trips)) {
         : `${rounds.length} round${rounds.length === 1 ? '' : 's'}${missingDays.length ? ` · nothing on ${missingDays.map((d) => dayLabel(d).split(' ')[0]).join(', ')} (that’s fine for a rest day)` : ''}`,
     },
     {
-      key: 'comps', title: 'What are you playing for?', optional: true, done: comps.length > 0,
+      key: 'comps', title: 'Trophies & cups', optional: true, done: comps.length > 0,
       summary: comps.length ? comps.map((c) => c.name).join(', ') : 'A trophy over the weekend, Ambrose teams, a Cup… Optional.',
     },
     {

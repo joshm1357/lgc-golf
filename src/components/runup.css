@@ -1,0 +1,136 @@
+/* The run-up (ov25) and the Trips stage looks. Colours come from :root in styles.css. */
+
+/* ---------------------------------------------------------------- the run-up */
+.runup { gap: 12px; }
+.ru-hero { background: var(--navy); color: #fff; border-radius: 14px; padding: 14px 16px; }
+.ru-hero-tag { font-size: 12px; font-weight: 800; letter-spacing: .06em; color: var(--gold); }
+.ru-hero-line { font-family: var(--display); font-size: 21px; font-weight: 700; line-height: 1.15; margin-top: 2px; }
+.ru-hero-sub { font-size: 14px; color: var(--on-navy-muted); margin-top: 6px; line-height: 1.35; }
+
+.ru-part { padding: 0; overflow: hidden; }
+.ru-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line-soft); }
+.ru-head h3 { margin: 0; font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ru-icon { font-size: 20px; line-height: 1; }
+.ru-count { font-size: 12px; font-weight: 700; color: var(--muted); background: var(--ground); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+.ru-body { padding: 10px 14px 12px; display: flex; flex-direction: column; gap: 8px; }
+
+.ru-todo { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px 0; border-bottom: 1px solid var(--line-soft); }
+.ru-todo:last-of-type { border-bottom: 0; }
+.ru-todo.late { background: #FDECEC; margin: 0 -14px; padding: 6px 14px; border-left: 4px solid var(--under); }
+.ru-todo-icon { font-size: 20px; width: 26px; text-align: center; }
+.ru-todo-title { font-weight: 700; line-height: 1.25; }
+.ru-late { color: var(--under); font-weight: 700; }
+
+.ru-car { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.ru-seats { font-size: 12px; font-weight: 800; padding: 3px 8px; border-radius: 999px; background: var(--gold-soft); border: 1px solid var(--gold); color: var(--navy); white-space: nowrap; }
+.ru-seats.full { background: var(--ground); border-color: var(--line); color: var(--muted); }
+.ru-chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px 2px 2px; border-radius: 999px; background: var(--ground); font-size: 14px; font-weight: 600; }
+.ru-seat-empty { width: 24px; height: 24px; border-radius: 50%; border: 2px dashed #B9C2CC; display: inline-block; }
+.ru-rooms { display: flex; flex-direction: column; gap: 2px; padding-top: 4px; }
+
+.ru-case { border-left: 4px solid var(--court); background: var(--court-soft); border-radius: 8px; padding: 8px 10px; }
+.ru-rule { display: block; padding: 6px 0; border-bottom: 1px solid var(--line-soft); color: inherit; text-decoration: none; font-weight: 600; }
+.ru-rule.proposed { font-weight: 600; color: var(--navy-2); }
+
+.ru-act { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.ru-bring { display: flex; align-items: center; gap: 8px; min-height: 44px; border-bottom: 1px solid var(--line-soft); }
+
+.ru-form { display: flex; flex-direction: column; font-size: 14px; }
+.ru-form-row { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, .9fr); gap: 6px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line-soft); }
+.ru-form-row.head { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+
+.ru-tip-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
+.ru-tip { display: flex; align-items: center; gap: 6px; min-height: 48px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 12px; background: #fff; color: inherit; font-weight: 700; min-width: 0; }
+.ru-tip.on { border: 2px solid var(--gold); background: var(--gold-soft); }
+.ru-tip-result { font-weight: 800; padding: 8px 10px; background: var(--gold-soft); border-radius: 10px; }
+.ru-chat-body { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.runup .linkish, .trips-stage .linkish { background: none; border: 0; padding: 0; color: var(--navy-2); text-decoration: underline; font: inherit; cursor: pointer; min-height: 0; }
+
+/* ---------------------------------------------------------------- Trips list: each stage looks different */
+.stage-head { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.stage-head .label { color: var(--navy); }
+.stage-pill { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 800; letter-spacing: .03em; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.stage-tag { font-size: 13px; font-weight: 800; padding: 4px 10px; border-radius: 999px; white-space: nowrap; flex: 0 1 auto; min-width: 0; max-width: 58%; overflow: hidden; text-overflow: ellipsis; }
+.stage-pill { flex: none; }
+
+.trip-card { display: block; text-decoration: none; color: inherit; overflow: hidden; padding: 0; }
+.trip-card-top { padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; color: inherit; }
+
+/* On now — gold */
+.trip-card.stage-on { border: 2px solid var(--gold); background: var(--gold-soft); }
+.stage-on .stage-pill, .stage-on .stage-tag { background: var(--gold); color: var(--navy); }
+/* Upcoming — navy, with the countdown */
+.trip-card.stage-upcoming { border-color: var(--navy); }
+.trip-card.stage-upcoming .trip-card-top { background: var(--navy); color: #fff; }
+.stage-upcoming .stage-pill { background: rgba(255,255,255,.14); color: var(--gold); }
+.stage-upcoming .stage-tag { background: var(--gold); color: var(--navy); }
+/* Being organised — outline */
+.trip-card.stage-organising { border: 2px solid var(--navy-3); background: #fff; }
+.stage-organising .stage-pill { background: #fff; color: var(--navy-3); border: 1px solid var(--navy-3); }
+.stage-organising .stage-tag { background: #EAF0F7; color: var(--navy-2); }
+/* Proposed — dashed */
+.trip-card.stage-proposed { border: 2px dashed var(--gold); background: #FFFDF6; }
+.stage-proposed .stage-pill { background: var(--gold-soft); color: #7A5A00; }
+.stage-proposed .stage-tag { background: #fff; color: #7A5A00; border: 1px dashed var(--gold); }
+/* Previous — muted */
+.trip-card.stage-previous { background: var(--ground); border-color: var(--line); }
+.stage-previous .stage-pill { background: var(--line); color: var(--muted); }
+.stage-previous .stage-tag { background: #fff; color: var(--muted); border: 1px solid var(--line); }
+/* Called off — grey, folded away */
+.trip-card.stage-off { opacity: .6; filter: grayscale(1); }
+.stage-off .stage-pill { background: var(--line); color: var(--muted); }
+
+
+.trip-card-name { font-size: 20px; font-weight: 800; line-height: 1.15; }
+
+/* Sidebar sub-items by stage */
+.side-subitem.side-upcoming { font-weight: 700; }
+.side-subitem.side-organising { font-style: italic; }
+.side-subitem.side-previous { opacity: .75; }
+.side-subitem.side-all { font-size: 13px; opacity: .8; }
+
+/* ---------------------------------------------------------------- ov27: Your weekend (R1), More about this trip, the money line (M1) */
+.yw { padding: 0; overflow: hidden; border: 2px solid var(--navy); }
+.yw-head { background: var(--navy); color: #fff; padding: 12px 16px 14px; display: flex; flex-direction: column; gap: 6px; }
+.yw-tag { font-size: 12px; font-weight: 800; letter-spacing: .06em; color: var(--gold); }
+.yw-guest { font-family: var(--display); font-size: 20px; font-weight: 700; line-height: 1.2; }
+.yw-when { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 17px; font-weight: 700; }
+.yw-togo { font-size: 13px; font-weight: 800; padding: 3px 10px; border-radius: 999px; background: var(--gold); color: var(--navy); white-space: nowrap; }
+.yw-where { display: flex; align-items: center; gap: 6px; min-height: 44px; color: #fff; text-decoration: none; font-weight: 600; overflow-wrap: anywhere; }
+.yw-where .yw-maps { margin-left: auto; font-size: 13px; font-weight: 800; color: var(--gold); white-space: nowrap; padding-left: 8px; }
+.yw-body { padding: 10px 16px 14px; display: flex; flex-direction: column; gap: 10px; }
+.yw-day { display: flex; flex-direction: column; gap: 4px; padding-bottom: 8px; border-bottom: 1px solid var(--line-soft); }
+.yw-day-label { font-size: 12px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.yw-round { display: flex; flex-direction: column; gap: 2px; }
+.yw-course { line-height: 1.25; }
+.yw-row { display: flex; align-items: center; gap: 10px; min-height: 40px; }
+.yw .linkish { background: none; border: 0; padding: 0 4px; color: var(--navy-2); text-decoration: underline; font: inherit; font-weight: 700; cursor: pointer; min-height: 40px; }
+
+.money-line { display: flex; flex-direction: column; gap: 8px; }
+.money-line .money-words { font-weight: 700; line-height: 1.35; }
+.money-line.compact { padding: 10px 12px; border-radius: 12px; background: var(--ground); border-left: 4px solid var(--line); }
+.money-line.owe { border-left-color: var(--under); }
+.money-line.card.owe { border-color: var(--under); background: #FFF6F4; }
+.money-line.waiting { border-left-color: var(--gold); }
+.money-line.square { border-left-color: #1F7A4D; }
+
+.ru-more { border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+.ru-more-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; min-height: 56px; cursor: pointer; list-style: none; }
+.ru-more-head::-webkit-details-marker { display: none; }
+.ru-more-head strong { display: block; font-size: 17px; }
+.ru-more-list { display: block; }
+.ru-more-chev { font-size: 18px; color: var(--muted); transition: transform .15s; }
+.ru-more[open] .ru-more-chev { transform: rotate(180deg); }
+.ru-more-body { padding: 0 10px 12px; gap: 12px; }
+
+/* F1: first open — the organiser's three-step start and the welcome card */
+.fo-card { border: 2px solid var(--gold); background: var(--gold-soft); }
+.fo-step { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-top: 1px solid rgba(0,0,0,.06); }
+.fo-num { flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; background: var(--navy); color: #fff; }
+.fo-step.done .fo-num { background: #1F7A4D; }
+.fo-step.done .fo-title { text-decoration: line-through; opacity: .7; }
+.fo-title { font-weight: 800; }
+
+/* Side activities: "You're in" looks clearly different from "I'm in" (walkthrough small fix). */
+.ru-in-on { background: #1F7A4D; border-color: #1F7A4D; color: #fff; font-weight: 800; }

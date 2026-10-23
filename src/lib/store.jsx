@@ -288,15 +288,41 @@ export function DemoProviders({ session, data, children }) {
 
 /** Side-comp entries for a round, live. */
 export function useSideEntries(roundId) {
-  const [rows, setRows] = useState([]);
+  return useSideEntriesState(roundId).rows;
+}
+
+const NO_ROWS = [];
+/**
+ * A round's side comp entries, and whether they're known yet (v8 fix, 23 Oct 2026). `loaded` is true once they've
+ * come from the database, or from this phone's saved copy of them. A leaderboard with side-comp bonus strokes waits
+ * for `loaded` so it never shows a total without its bonus (Sunday Ambrose showed −7, then −9: scores came from the
+ * phone's copy straight away, side entries a moment later).
+ */
+export function useSideEntriesState(roundId) {
+  const key = roundId ? `side-${roundId}` : null;
+  const [got, setGot] = useState({}); // { [roundId]: rows } — only the latest round is kept
+  const saved = useMemo(() => (key ? cacheGet(key) : null), [key]);
+  const retry = useRef(null);
   const load = useCallback(async () => {
-    if (!roundId) { setRows([]); return; }
+    if (!roundId) return;
+    clearTimeout(retry.current);
     try {
       const { data, error } = await supabase.from('side_entries').select('*').eq('round_id', roundId);
-      if (!error && data) setRows(data);
-    } catch { /* keep what we have */ }
+      if (!error && data) {
+        cacheSet(`side-${roundId}`, data);
+        setGot({ [roundId]: data });
+        return;
+      }
+    } catch { /* no signal */ }
+    // Couldn't load: keep what we have and try again shortly.
+    retry.current = setTimeout(load, 5000);
   }, [roundId]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); return () => clearTimeout(retry.current); }, [load]);
   useRealtime(['side_entries'], load);
-  return rows;
+  return useMemo(() => {
+    if (!roundId) return { rows: NO_ROWS, loaded: true };
+    if (got[roundId]) return { rows: got[roundId], loaded: true };
+    if (Array.isArray(saved)) return { rows: saved, loaded: true, saved: true };
+    return { rows: NO_ROWS, loaded: false };
+  }, [roundId, got, saved]);
 }

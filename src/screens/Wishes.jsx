@@ -46,7 +46,7 @@ export default function Wishes() {
       {refused ? <div className="empty">Only Josh can see this.</div> : (
         <div className="section stack" style={{ gap: 12, paddingBottom: 24 }}>
           <div className="seg light" role="group" aria-label="Show">
-            {[['wishes', 'Wished for'], ['calls', 'Tool calls'], ['ai', '✨ AI helper']].map(([k, label]) => (
+            {[['wishes', 'Wished for'], ['calls', 'Tool calls'], ['ai', '✨ The Caddie']].map(([k, label]) => (
               <button key={k} type="button" aria-pressed={tab === k} onClick={() => setTab(k)}>{label}</button>
             ))}
           </div>

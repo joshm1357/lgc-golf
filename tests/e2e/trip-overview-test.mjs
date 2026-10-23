@@ -122,7 +122,7 @@ const check = (ok, msg) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${msg}`); if 
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
 await ctx.route('https://luogyzvrbedmicjejilr.supabase.co/**', fakeSupabase);
-await ctx.addInitScript(([uid]) => {
+await ctx.addInitScript(([uid]) => { try { localStorage.setItem('tgt-caddie-hello', '1'); } catch { /* ov22 */ }
   const exp = Math.floor(Date.now() / 1000) + 3600 * 24;
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
@@ -145,7 +145,9 @@ await page.getByRole('tab', { name: '⛳ Overview' }).waitFor({ timeout: 15000 }
 await page.waitForTimeout(800);
 check(await page.getByRole('tab', { name: '⛳ Overview' }).getAttribute('aria-selected') === 'true', 'past trip: opens on Overview');
 check(await page.getByText('Done and dusted').isVisible(), 'past trip: says it’s done');
-check(await page.getByText('🏆 Honours').isVisible() && await page.getByText('BD Trophy').isVisible(), 'past trip: honours shown');
+// ov28 (W1): the results page hands the trophies over (the old Honours card is for trips with no rounds).
+await page.getByTestId('results-trophies').waitFor({ timeout: 10000 }).catch(() => {});
+check(/Josh wins the BD Trophy/.test(await page.getByTestId('results-trophies').innerText().catch(() => '')), 'past trip: the results hand the trophy over');
 check(await page.getByText('Mollymook Hilltop').first().isVisible(), 'past trip: the course is listed');
 check(await page.getByText(/🏆 Josh · \d+ pts/).isVisible(), 'past trip: the round’s winner with points');
 check(await page.getByRole('link', { name: '▶ Watch the replay' }).isVisible(), 'past trip: replay button on the finished round');
@@ -154,32 +156,41 @@ await page.screenshot({ path: `${SHOTS}/1-past.png`, fullPage: true });
 await noSideScroll('past overview');
 
 // 2. Organise is one tap away.
-await page.getByRole('tab', { name: '🧰 Organise' }).click();
+await page.getByRole('tab', { name: '🧰 Plan the trip' }).click();
 await page.getByRole('tab', { name: '💬 Chat' }).waitFor({ timeout: 5000 });
 check(true, 'Organise shows the planner tabs');
 await page.getByRole('tab', { name: '⛳ Overview' }).click();
-await page.getByText('🏆 Honours').waitFor({ timeout: 5000 });
+await page.getByTestId('trip-results').waitFor({ timeout: 5000 });
 check(true, 'and back to the overview');
 
-// 3. A coming trip: countdown, who's in, the plan by day, your bits.
+// 3. A coming trip (ov27, R1): "Your weekend" at the top — dates and countdown, where, each day's course; who's in;
+//    then Your to-dos; everything else (the plan by day too) once, under "More about this trip".
 await page.goto(`${BASE}#/plan/${NEXT}`);
-await page.getByText('🗓️ The plan').waitFor({ timeout: 15000 });
+await page.getByTestId('your-weekend').waitFor({ timeout: 15000 });
 await page.waitForTimeout(600);
-check(await page.getByText(/^In \d+ days$/).isVisible(), 'coming trip: countdown');
-check(await page.getByText('3 in').isVisible(), 'coming trip: who’s in');
-check(await page.getByText('Fri 15 Jan').isVisible() && await page.getByText('Sat 16 Jan').isVisible(), 'coming trip: the plan by day');
-check(await page.getByText('Port Macquarie GC', { exact: true }).first().isVisible() && await page.getByText('Ambrose').first().isVisible(), 'coming trip: course and format per day');
-check(await page.getByText('📋 Book the minibus').isVisible() && await page.getByText('🎒 Bring list: 1 thing').isVisible(), 'coming trip: your bits');
+const when = await page.getByTestId('runup-countdown').innerText();
+check(/\d+ days to go/.test(when) && /Fri 15 – Sun 17 Jan 2027/.test(when), `coming trip: dates and countdown (${when.replace(/\n/g, ' ')})`);
+check(/Port Macquarie/.test(await page.getByTestId('yw-address').innerText()), 'coming trip: where (tap for maps)');
+check(/3 in/.test(await page.getByTestId('yw-seats').innerText()), 'coming trip: who’s in');
+const days = await page.getByTestId('yw-day').allInnerTexts();
+check(days.length === 2 && /Fri 15 Jan/i.test(days[0]) && /Sat 16 Jan/i.test(days[1]), `coming trip: the plan by day (${days.join(' | ').replace(/\n/g, ' ')})`);
+check(/Port Macquarie GC/.test(days[0]) && /Ambrose/.test(days[1]), 'coming trip: course and format per day');
+check(/Book the minibus/.test(await page.getByTestId('runup-todos').innerText()), 'coming trip: your job is in your to-dos');
+check(!(await page.getByText('🗓️ The plan').isVisible().catch(() => false)), 'the full plan by day is folded away (not a second copy on screen)');
+await page.getByTestId('runup-more').locator('summary').click();
+await page.getByTestId('overview-days').waitFor({ timeout: 5000 });
+check(await page.getByTestId('overview-days').count() === 1, 'More about this trip: the plan by day, once');
+check(/your own list \(1: balls\)/i.test(await page.getByTestId('runup-bring').innerText()), 'coming trip: your own bring list is mentioned');
 await page.screenshot({ path: `${SHOTS}/2-next.png`, fullPage: true });
 await noSideScroll('coming overview');
-await page.getByRole('button', { name: 'See it all →' }).click();
+await page.getByTestId('todo-job').getByRole('button', { name: 'Open' }).click();
 await page.getByRole('tab', { name: '📋 Jobs' }).waitFor({ timeout: 5000 });
-check(await page.getByRole('tab', { name: '📋 Jobs' }).getAttribute('aria-selected') === 'true', '“See it all” opens Organise on Jobs');
+check(await page.getByRole('tab', { name: '📋 Jobs' }).getAttribute('aria-selected') === 'true', 'a job in your to-dos opens Organise on Jobs');
 
 // 4. A trip still being decided opens on Organise.
 await page.goto(`${BASE}#/plan/${IDEA}`);
-await page.getByRole('tab', { name: '🧰 Organise' }).waitFor({ timeout: 15000 });
-check(await page.getByRole('tab', { name: '🧰 Organise' }).getAttribute('aria-selected') === 'true', 'deciding trip: opens on Organise');
+await page.getByRole('tab', { name: '🧰 Plan the trip' }).waitFor({ timeout: 15000 });
+check(await page.getByRole('tab', { name: '🧰 Plan the trip' }).getAttribute('aria-selected') === 'true', 'deciding trip: opens on Organise');
 
 // 5. A trip with no plan gets the overview at /trip/:id.
 db.plans = db.plans.filter((p) => p.id !== PAST);

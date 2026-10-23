@@ -100,7 +100,7 @@ export function InviteJoin({ code, inside = false, onLook }) {
           {info.team && info.my_team && <div className="small" style={{ color: 'var(--on-navy-muted)' }}>You’re already on {info.my_team} — a link never moves you to another team.</div>}
           {info.already_in && !(info.team && !info.my_team)
             ? <button type="button" className="btn gold block" onClick={() => { setCurrentGroup(info.group_id); window.location.hash = after(); window.location.reload(); }}>You’re already in — open it</button>
-            : <button type="button" className="btn gold block" disabled={busy} onClick={join}>{busy ? 'Joining…' : info.already_in && info.team ? `Join ${info.team}` : 'Join'}</button>}
+            : <button type="button" className="btn gold block" disabled={busy} onClick={join}>{busy ? 'Joining…' : info.team ? `Join ${info.team}` : 'Join'}</button>}
         </>
       )}
     </div>
@@ -251,7 +251,8 @@ function JoinSignIn({ code, returnHash, onPhone }) {
       {info === undefined && <div style={muted}>Checking the link…</div>}
       {info && (
         <div style={{ textAlign: 'center', maxWidth: 340 }}>
-          <div style={{ fontFamily: 'var(--display)', fontSize: 30, fontWeight: 700, lineHeight: 1.1 }}>Join {info.group_name}</div>
+          <div style={{ fontFamily: 'var(--display)', fontSize: 30, fontWeight: 700, lineHeight: 1.1 }} data-testid="join-title">Join {info.team || info.group_name}</div>
+          {info.team && <div style={{ ...muted, marginTop: 4 }}>in {info.group_name}</div>}
           <div style={{ ...muted, marginTop: 6 }}>Sign in so it’s you on any phone or laptop.</div>
           {(info.role === 'organiser' || info.team || info.role === 'guest') && (
             <div className="small" style={{ ...muted, marginTop: 6 }}>
@@ -270,28 +271,32 @@ function JoinSignIn({ code, returnHash, onPhone }) {
       {info !== undefined && (
         <div className="stack" style={{ width: '100%', maxWidth: 340, gap: 10 }}>
           {modes.google && <GoogleSignIn returnHash={returnHash} cont onError={(x) => setErr(friendlyError(x))} />}
-          {modes.google && (modes.password || modes.emailCode) && (
+          {modes.google && (modes.password || modes.emailCode || modes.joinCode) && (
             <div role="separator" style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--on-navy-muted)' }} className="small">
               <span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.2)' }} />or<span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.2)' }} />
             </div>
           )}
-          {modes.password && <EmailContinue />}
-          {modes.emailCode && <SignInButtons returnHash={returnHash} quiet emailOnly />}
+          {/* F2 (ov27, option B): one step — Google, or an emailed code (no password) when the build lists "email". */}
+          {modes.joinCode ? <SignInButtons returnHash={returnHash} quiet emailOnly codeOnly />
+            : modes.password && <EmailContinue />}
           {err && <div className="err" role="alert" style={{ color: '#FFB4AB' }}>{err}</div>}
         </div>
       )}
+      {/* F2 (ov27, walkthrough review option B): a proper button, with one line on what it means. */}
       {info && (
-        <button type="button" onClick={onPhone} data-testid="just-this-phone"
-          style={{ background: 'none', border: 0, color: '#fff', textDecoration: 'underline', minHeight: 44, padding: '8px 12px', font: 'inherit', fontSize: 14, cursor: 'pointer' }}>
-          Just this phone for now
-        </button>
+        <div className="stack" style={{ width: '100%', maxWidth: 340, gap: 6, borderTop: '1px solid rgba(255,255,255,.2)', paddingTop: 12 }}>
+          <button type="button" className="btn ghost block" onClick={onPhone} data-testid="just-this-phone" style={ON_NAVY_GHOST}>
+            📱 Just this phone for now
+          </button>
+          <span className="small" data-testid="just-this-phone-help" style={muted}>In straight away, but only on this phone — your name and scores won’t follow you to a laptop or new phone until you sign in.</span>
+        </div>
       )}
     </div>
   );
 }
 
 /** Sign in with Google, or have a 6-digit code emailed. Makes an account if there isn't one. */
-export function SignInButtons({ returnHash = '', quiet = false, emailOnly = false }) {
+export function SignInButtons({ returnHash = '', quiet = false, emailOnly = false, codeOnly = false }) {
   const { refresh } = useSession();
   const modes = signInModes(SIGN_IN);
   const [email, setEmail] = useState('');
@@ -312,8 +317,8 @@ export function SignInButtons({ returnHash = '', quiet = false, emailOnly = fals
       {SIGN_IN.includes('google') && !emailOnly && <GoogleSignIn returnHash={returnHash} quiet={quiet} busy={busy} onError={(x) => setErr(friendlyError(x))} />}
       {SIGN_IN.includes('facebook') && !emailOnly && <button type="button" className="btn ghost block" style={ON_NAVY_GHOST} disabled={busy} onClick={go(() => signInWith('facebook', returnHash))}>Sign in with Facebook</button>}
       {/* Email + password (22 Oct): Sign in, Forgot password? (an emailed code), Create an account. */}
-      {modes.password && !emailOnly && <EmailPasswordSignIn />}
-      {modes.emailCode && (sent
+      {modes.password && !emailOnly && !codeOnly && <EmailPasswordSignIn />}
+      {(modes.emailCode || codeOnly) && (sent
         ? (
           // A 6-digit code, typed here — an emailed link would open Safari, not the Home Screen app.
           <form className="stack" style={{ gap: 8 }} onSubmit={go(async () => {

@@ -93,6 +93,48 @@ export function buildJobs(plan, items, { today = todayISO(), organiserId = null,
   return out;
 }
 
+/**
+ * O7 (Josh's walkthrough): when the trip's dates change, the usual jobs move with them. The database does this on a
+ * date change from 095 on (a trigger); this is the app's copy, and it also fixes jobs already due AFTER the trip.
+ *   oldStart: the start before the change (the jobs shift by the same number of days, so a due date the organiser
+ *   changed by hand keeps its distance from the trip). Without it, only jobs due after the trip (or with no date)
+ *   get their date counted back from the trip again.
+ * Done jobs are left alone. "Chase deposits" counts from when the deposit was asked for, so it's only kept before the
+ * trip. → [{ id, due }] (only the ones that change)
+ */
+export function redateJobs(plan, items, { oldStart = null, today = todayISO() } = {}) {
+  if (!plan?.start_date || plan.kind === 'round') return [];
+  const start = String(plan.start_date).slice(0, 10);
+  const clamp = (d) => (d > start ? start : d < today ? (today < start ? today : start) : d);
+  const was = oldStart ? String(oldStart).slice(0, 10) : null;
+  const shift = was && was !== start ? Math.round((parseDate(start) - parseDate(was)) / 86400000) : 0;
+  const out = [];
+  for (const j of jobsOf(items)) {
+    if (!j.formula_key || jobStage(j) === 'done') continue;
+    const f = FORMULA_BY_KEY[j.formula_key];
+    if (!f) continue;
+    const had = j.due ? String(j.due).slice(0, 10) : null;
+    let due = had;
+    if (f.dueAfterAsk != null) {
+      if (due && due > start) due = start;
+    } else if (shift && due) {
+      due = clamp(addDays(due, shift));
+    } else if (!due || due > start) {
+      due = dueFor(f, plan, today);
+    }
+    if (due && due !== had) out.push({ id: j.id, due });
+  }
+  return out;
+}
+
+const DOW3 = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MON3 = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** "Fri 30 Oct" — a due date in words (O3: never "2026-10-30" on a screen). */
+export function dueWords(date) {
+  const d = parseDate(date);
+  return d ? `${DOW3[d.getDay()]} ${d.getDate()} ${MON3[d.getMonth()]}` : '';
+}
+
 /** A job's stage, for old rows that only have `done`. */
 /**
  * "One person for all" (080): the call jobs to hand to one person — every call job on the trip that isn't done and
@@ -250,12 +292,22 @@ export function nextStep(ctx) {
   if (phase === 'deciding') {
     const v = voteStep();
     if (v) return v;
-    if (!isOrganiser && !myRsvp) return step({ key: 'keen', icon: '🙋', title: 'Are you keen?', detail: 'Say In, Maybe or Out so the organiser knows numbers.', label: 'Answer', action: { type: 'tab', tab: 'people' } });
+    if (!isOrganiser && !myRsvp) return step({ key: 'keen', icon: '🙋', title: 'Are you in?', detail: 'Say yes, maybe or no so the organiser knows numbers.', label: 'Answer', action: { type: 'tab', tab: 'people' } });
     const calls = callJobs(items, builder.callJobIds).filter((j) => jobStage(j) !== 'done');
     if (!plan.start_date && !(builder.weekends > 0) && !calls.length) {
       return isOrganiser
-        ? step({ key: 'weekends', icon: '📅', title: 'Pick 1–3 weekends', detail: 'Courses can’t give you times until you know the dates.', label: 'Build the trip', action: { type: 'builder' } })
+        ? step({ key: 'weekends', icon: '📅', title: 'Plan the areas and a shortlist of weekends', detail: 'Then the group votes. Courses get called once the area and the weekends are picked.', label: 'Plan the trip', action: { type: 'builder' } })
         : step({ key: 'weekends-wait', icon: '📅', title: 'The organiser is picking weekends', detail: 'You’ll get a vote soon.', label: 'Chat about it', action: { type: 'tab', tab: 'chat' } });
+    }
+    // ov23 (Josh): decide the area and the weekends (primary and backup) first, THEN call the courses.
+    if (isOrganiser && !calls.length && builder.started && !plan.start_date && !(builder.teeOptions > 0) && (!builder.region || !builder.weekendsSettled)) {
+      return step({ key: 'area-pick', icon: '📍', title: builder.region ? 'Set the primary and backup weekends' : 'Choose the area and the primary and backup weekends',
+        detail: 'From the vote (or your call). Then the courses get called about those weekends.', label: 'Plan the trip', action: { type: 'builder' } });
+    }
+    // Then step 2 (courses each day and where to stay), then step 3 (make the call jobs).
+    if (isOrganiser && !calls.length && builder.started && !plan.start_date && !(builder.teeOptions > 0) && builder.region && builder.weekendsSettled) {
+      if (!builder.coursesDone) return step({ key: 'courses-pick', icon: '⛳', title: 'Pick the course options each day and where to stay', detail: 'Then the courses get called about the primary and backup weekends.', label: 'Plan the trip', action: { type: 'builder' } });
+      return step({ key: 'calls-make', icon: '📞', title: 'Call the courses: make the call jobs', detail: 'One job per course, asking about the primary and backup weekends.', label: 'Plan the trip', action: { type: 'builder' } });
     }
     const unowned = calls.find((j) => !j.owner_id);
     if (unowned && isOrganiser) return step({ key: `allocate:${unowned.id}`, icon: '📞', title: `Allocate: ${unowned.title}`, detail: unowned.due ? `Due ${fmtRange(unowned.due)}.` : 'Hand it to someone to ring for times.', label: 'Allocate', action: { type: 'allocate', id: unowned.id } });
@@ -271,11 +323,11 @@ export function nextStep(ctx) {
     // Places to stay on the table but no accommodation list yet (080): remind whoever's running it.
     if (isOrganiser && (builder.noStayList || []).length) {
       const area = builder.noStayList[0];
-      return step({ key: `stay-list:${area}`, icon: '🏠', title: `Find places to stay in ${area}`, detail: 'Search with the links, save a few to a list on Airbnb or Stayz, then paste the list link — it goes on the vote.', label: 'Build the trip', action: { type: 'builder' } });
+      return step({ key: `stay-list:${area}`, icon: '🏠', title: `Find places to stay in ${area}`, detail: 'Search with the links, save a few to a list on Airbnb or Stayz, then paste the list link — it goes on the vote.', label: 'Plan the trip', action: { type: 'builder' } });
     }
-    if (builder.teeOptions > 0 && isOrganiser) return step({ key: 'configs', icon: '🧩', title: 'Pick a trip or put it to a vote', detail: 'The tee times are in — choose the combination that works.', label: 'See the options', action: { type: 'builder' } });
-    if (plan.start_date && isOrganiser) return step({ key: 'lock', icon: '🔒', title: 'Lock it in', detail: `${fmtRange(plan.start_date, plan.end_date)}${plan.location_name ? ` · ${plan.location_name}` : ''}. Then the to-do list is made.`, label: 'Lock it in', action: { type: 'lock' } });
-    if (isOrganiser) return step({ key: 'weekends', icon: '📅', title: 'Pick 1–3 weekends', detail: 'Then put them to the group.', label: 'Build the trip', action: { type: 'builder' } });
+    if (builder.teeOptions > 0 && isOrganiser) return step({ key: 'configs', icon: '🧩', title: 'Pick the trip, then lock it in', detail: 'The tee times are in — choose the best combination for each day.', label: 'See the options', action: { type: 'builder' } });
+    if (plan.start_date && isOrganiser) return step({ key: 'lock', icon: '🔒', title: 'Lock it in', detail: `${fmtRange(plan.start_date, plan.end_date)}${plan.location_name ? ` · ${plan.location_name}` : ''}. Then the jobs are made.`, label: 'Lock it in', action: { type: 'lock' } });
+    if (isOrganiser) return step({ key: 'weekends', icon: '📅', title: 'Plan the areas and a shortlist of weekends', detail: 'Then put them to the group.', label: 'Plan the trip', action: { type: 'builder' } });
     return step({ key: 'deciding-wait', icon: '🗳️', title: 'Still being decided', detail: 'The organiser will put up a vote.', label: 'Chat about it', action: { type: 'tab', tab: 'chat' } });
   }
 
@@ -301,7 +353,7 @@ export function nextStep(ctx) {
     return step({ key: 'wait', icon: '🔒', title: days != null && days > 0 ? `${plural(days, 'day')} to go` : 'Locked in', detail: open[0] ? `Next up: ${open[0].title}${open[0].owner_id ? ` (${nameOf(names, open[0].owner_id)})` : ''}.` : 'All sorted.', label: 'See the details', action: { type: 'tab', tab: 'details' } });
   }
 
-  if (phase === 'locked' && plan.kind !== 'round') return step({ key: 'make_jobs', icon: '📋', title: 'Make the to-do list', detail: 'The usual jobs with due dates counted back from the trip — accommodation, deposits, transport, the draw.', label: 'Make it', action: { type: 'make_jobs' } });
+  if (phase === 'locked' && plan.kind !== 'round') return step({ key: 'make_jobs', icon: '📋', title: 'Make the jobs', detail: 'The usual jobs with due dates counted back from the trip — accommodation, deposits, transport, the draw.', label: 'Make it', action: { type: 'make_jobs' } });
   const v = voteStep();
   if (v) return v;
   if (dep && dep.pending.length) return step({ key: 'confirm-deposits', icon: '✅', title: `Tick off ${plural(dep.pending.length, 'deposit')}`, detail: 'They say they’ve paid — check it landed.', label: 'Check deposits', action: { type: 'deposits' } });

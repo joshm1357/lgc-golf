@@ -9,7 +9,7 @@
 //     automatically — the admin taps to add it as a job or to act on it.
 
 export const RESPONSES = ['yes', 'maybe', 'no'];
-export const RESPONSE_LABEL = { yes: '✓ Can', maybe: '? Maybe', no: '✗ Can’t' };
+export const RESPONSE_LABEL = { yes: '✓ Yes', maybe: '? Maybe', no: '✗ No' };
 export const RSVP_LABEL = { in: 'In', maybe: 'Maybe', out: 'Out' };
 
 const DAY = 24 * 3600 * 1000;

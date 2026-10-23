@@ -33,12 +33,12 @@ export default function AiUsage({ days }) {
   if (state.loading) return <Loading />;
   if (state.error) return <div className="err" role="alert">Couldn’t load the AI numbers: {state.error}</div>;
   const u = state.u;
-  if (!u || (!u.requests && !u.cap_hits)) return <><div className="empty">No AI helper questions yet. They show here once groups start asking.</div><AbResults days={days} /></>;
+  if (!u || (!u.requests && !u.cap_hits)) return <><div className="empty">No Caddie questions yet. They show here once groups start asking.</div><AbResults days={days} /></>;
   const share = upShare(u.up, u.down);
   const grid = { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 };
   const weeks = weekRows(u.weeks);
   return (
-    <div className="stack" style={{ gap: 12 }} aria-label="AI helper usage">
+    <div className="stack" style={{ gap: 12 }} aria-label="Caddie usage">
       <div style={grid}>
         <Stat label="Questions" value={u.requests} />
         <Stat label="Groups using it" value={u.groups_using} />
@@ -105,7 +105,7 @@ export default function AiUsage({ days }) {
 
       {(u.models || []).length > 0 && (
         <>
-          <strong>Which AI answered</strong>
+          <strong>Which model answered</strong>
           <div className="card pad stack" style={{ gap: 4 }}>
             {u.models.map((m) => (
               <span key={`${m.provider}-${m.model}`} className="small" style={{ overflowWrap: 'anywhere' }}>

@@ -137,6 +137,13 @@ export function fakeSupabase(db, who = () => ({ id: K, admin: true })) {
       }
       return null;
     }
+    if (name === 'call_off_plan') { // 091 (ov21)
+      const plan = db.plans.find((p) => p.id === body.p_plan);
+      if (plan && body.p_off && plan.status !== 'cancelled') Object.assign(plan, { cancelled_from: plan.status, status: 'cancelled', cancelled_by: me.id, cancelled_at: new Date().toISOString() });
+      else if (plan && !body.p_off && plan.status === 'cancelled') Object.assign(plan, { status: plan.cancelled_from || 'planning', cancelled_by: null, cancelled_at: null, cancelled_from: null });
+      return null;
+    }
+    if (name === 'delete_empty_plan') { db.plans = db.plans.filter((p) => p.id !== body.p_plan); return null; }
     if (name === 'vote_channels') return db.players.map((p) => ({ player_id: p.id, on_app: true, choice: 'app', has_email: false, source: 'own' }));
     if (name === 'group_invite') return 'ABCDEFGH2345';
     if (name === 'trip_finder_courses') return [];
@@ -206,7 +213,7 @@ export async function fakeContext(browser, fake, { width = 375, height = 812, mo
     const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
     const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
     if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated' } }));
-    localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-notify-prompt', String(Date.now()));
+    localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */ localStorage.setItem('tgt-notify-prompt', String(Date.now()));
   }, ['99999999-9999-4999-8999-999999999999']);
   return ctx;
 }

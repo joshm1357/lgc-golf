@@ -13,14 +13,14 @@ const D = (key, label, o = {}) => ({ key, label, needs: [], takes: [], organiser
 
 /** The places the caddie can take you. Keys, ids, organiser-only and features match the function's routes.ts. */
 export const DESTINATIONS = [
-  D('trip_now', 'This trip', { path: () => '/',
-    words: ['this trip', 'home', 'trip status', 'today', 'whats happening', 'what is happening', 'trip feed'] }),
+  D('trip_now', 'Trip status', { path: () => '/', // ov21: home — the On now / Next trip's status page
+    words: ['this trip', 'next trip', 'on now', 'home', 'trip status', 'today', 'whats happening', 'what is happening', 'trip feed'] }),
   D('leaderboard', 'Leaderboard', { takes: ['round'], path: (i) => (i.round ? `/?r=${i.round}` : '/leaderboard'),
     words: ['leaderboard', 'leading', 'leader', 'winning', 'standings', 'board', 'results', 'whos winning', 'who is winning'] }),
   D('score', 'Enter scores', { needs: ['round'], path: (i) => `/score/${i.round}`,
     words: ['enter score', 'enter my score', 'put in score', 'scorecard', 'score', 'scores', 'card', 'keypad'] }),
-  D('comps_board', 'What we’re playing for', { path: () => '/comps-board',
-    words: ['playing for', 'prizes', 'prize', 'comps', 'comp', 'side comps', 'closest to pin', 'closest to the pin', 'ctp', 'nearest pin', 'longest drive'] }),
+  D('comps_board', 'Trophies & cups', { path: () => '/comps-board',
+    words: ['trophies', 'trophies & cups', 'playing for', 'prizes', 'prize', 'comps', 'comp', 'side comps', 'closest to pin', 'closest to the pin', 'ctp', 'nearest pin', 'longest drive'] }),
   D('cup', 'The Cup', { feature: 'cup', path: () => '/cup', words: ['cup', 'ryder', 'match play', 'matches', 'match'] }),
   D('rulebook', 'The Rulebook', { path: () => '/rules',
     words: ['rule', 'rules', 'rulebook', 'gimme', 'gimmes', 'mulligan', 'mulligans', 'breakfast ball', 'local rule', 'bonus', 'pick up'] }),
@@ -36,10 +36,10 @@ export const DESTINATIONS = [
     words: ['player', 'players', 'add player', 'add a player', 'handicap', 'handicaps', 'approve', 'remove player'] }),
   D('setup_trip', 'Set up your trip', { takes: ['trip'], organiser: true, path: (i) => (i.trip ? `/setup?trip=${i.trip}` : '/setup'),
     words: ['set up', 'setup', 'set up trip', 'set up the trip', 'add round', 'add a round', 'add course', 'add a course', 'courses'] }),
-  D('trips', 'Trips', { feature: 'planner', path: () => '/plan', words: ['trips', 'trip', 'next trip', 'plan a trip', 'new trip', 'plans'] }),
+  D('trips', 'Trips', { feature: 'planner', path: () => '/plan', words: ['trips', 'trip', 'last trip', 'past trips', 'plan a trip', 'new trip', 'plans'] }),
   D('trip_overview', 'Trip overview', { needs: ['plan'], feature: 'planner', path: (i) => `/plan/${i.plan}?view=overview`,
     words: ['trip overview', 'overview', 'itinerary', 'schedule', 'whats on', 'what is on', 'when', 'where are we'] }),
-  D('trip_organise', 'Organise the trip', { needs: ['plan'], feature: 'planner',
+  D('trip_organise', 'Plan the trip', { needs: ['plan'], feature: 'planner',
     path: (i) => `/plan/${i.plan}?view=organise${i.tab ? `&tab=${i.tab}` : ''}`,
     words: ['organise', 'organize', 'kitty', 'money', 'pay', 'paid', 'payment', 'cost', 'costs', 'owe', 'jobs', 'job', 'vote', 'votes', 'rooms', 'room', 'cars', 'car', 'beds', 'accommodation', 'chat', 'whos in', 'who is in', 'rsvp'] }),
   D('history_import', 'Bring in our history', { organiser: true, feature: 'ai_helper', path: () => '/import',
@@ -91,7 +91,7 @@ export function caddieContext(pathname = '/', search = '', defaults = {}) {
   const q = new URLSearchParams(search || '');
   const seg = pathname.split('/').filter(Boolean);
   const [a, b] = seg;
-  // ov15: "/" is This trip; "/?r=<round>" (and /leaderboard) is a round's leaderboard.
+  // ov15/ov21: "/" is the trip status (On now / Next trip); "/?r=<round>" (and /leaderboard) is a round's leaderboard.
   if (!a) return q.get('r') ? tidy({ screen: 'leaderboard', round_id: id(q.get('r')) }) : tidy({ screen: 'trip_now', round_id: id(defaults.round) });
   if (a === 'leaderboard') return tidy({ screen: 'leaderboard', round_id: id(defaults.round) });
   switch (a) {
@@ -104,6 +104,7 @@ export function caddieContext(pathname = '/', search = '', defaults = {}) {
     case 'admin': return tidy({ screen: 'admin', round_id: id(q.get('round')) });
     case 'setup': return tidy({ screen: 'setup', trip_id: id(q.get('trip')) });
     case 'trip': return tidy({ screen: 'trip', trip_id: id(b) });
+    case 'trip-now': return tidy({ screen: 'trip_now', trip_id: id(b) }); // ov21: a trip's status page
     case 'plan': {
       if (!b) return { screen: 'trips' };
       const view = ['organise', 'overview'].includes(q.get('view')) ? q.get('view') : undefined;
@@ -127,8 +128,18 @@ export function caddieContext(pathname = '/', search = '', defaults = {}) {
   }
 }
 
-/** Three things to ask, by screen. `roundName` makes the leaderboard's about that round. */
-export function caddieSuggestions(ctx = {}, { isAdmin = false, roundName = '' } = {}) {
+/**
+ * Three things to ask, by screen. `roundName` makes the leaderboard's about that round. playing: false when no round is
+ * live or on today — then nothing about who's leading or entering scores (ov27, walkthrough small fix).
+ */
+export function caddieSuggestions(ctx = {}, { isAdmin = false, roundName = '', playing = true } = {}) {
+  const list = suggestionsFor(ctx, { isAdmin, roundName });
+  if (playing) return list;
+  const idle = ['What’s on our next trip?', isAdmin ? 'Plan a trip' : 'Who won our last trip?', 'Where are the rules?', 'Who’s won the most trips?'];
+  const kept = list.filter((q) => !/leading|enter my score|last few holes|on today/i.test(q));
+  return [...kept, ...idle.filter((q) => !kept.includes(q))].slice(0, 3);
+}
+function suggestionsFor(ctx = {}, { isAdmin = false, roundName = '' } = {}) {
   const r = roundName ? ` in ${roundName}` : '';
   switch (ctx.screen) {
     case 'trip_now': return ['Who’s leading today?', 'What’s on this trip?', isAdmin ? 'Set up the next round' : 'Where do I enter my score?'];
@@ -155,11 +166,11 @@ export function caddieSuggestions(ctx = {}, { isAdmin = false, roundName = '' } 
  */
 export function caddieMode({ viewing = false, guest = false, quick = false, featureOn = true, notSetUp = false, capped = false, offline = false } = {}) {
   if (viewing) return { ai: false, reason: 'viewing', text: 'you’re viewing as someone else' };
-  if (quick) return { ai: false, reason: 'quick', text: 'quick rounds don’t have the AI' };
-  if (guest) return { ai: false, reason: 'guest', text: 'the AI is for the group’s players' };
-  if (!featureOn) return { ai: false, reason: 'off', text: 'the AI is switched off for your group' };
-  if (notSetUp) return { ai: false, reason: 'not_set_up', text: 'the AI isn’t switched on for your group' };
-  if (capped) return { ai: false, reason: 'capped', text: 'your group’s used up its AI questions for now' };
+  if (quick) return { ai: false, reason: 'quick', text: 'quick rounds don’t have the Caddie’s answers' };
+  if (guest) return { ai: false, reason: 'guest', text: 'the Caddie’s answers are for the group’s players' };
+  if (!featureOn) return { ai: false, reason: 'off', text: 'the Caddie is switched off for your group' };
+  if (notSetUp) return { ai: false, reason: 'not_set_up', text: 'the Caddie isn’t switched on for your group' };
+  if (capped) return { ai: false, reason: 'capped', text: 'your group’s used up its Caddie questions for now' };
   if (offline) return { ai: false, reason: 'offline', text: 'there’s no signal' };
   return { ai: true, reason: null, text: '' };
 }
@@ -248,3 +259,25 @@ export function searchDestinations(text, { isAdmin = false, featureOn = () => tr
   });
   return scored.sort((a, b) => b.score - a.score || a.order - b.order).slice(0, limit).map(({ key, label, path }) => ({ key, label, path }));
 }
+
+// ------------------------------------------------------------------ Caddie says hello (ov22, Josh 23 Oct)
+// "When you open for the first time, a small overlay shows a message from Caddie: Hi, I'm Caddie. Ask me anything,
+// here to help." Once per device: after they've joined and picked a name, never on the join / sign-in screens, never
+// over another pop-up (the notifications sheet waits its turn first). Gone for good after either button.
+export const HELLO_KEY = 'tgt-caddie-hello';
+export const HELLO_TEXT = 'Hi, I’m Caddie. Ask me anything about the group, the rules or the next trip — or say “plan a trip”. I’m here to help.';
+const local = () => { try { return typeof localStorage === 'undefined' ? null : localStorage; } catch { return null; } };
+
+/** Has this device had the hello? No storage at all (blocked) → treat as seen, so it never nags every visit. */
+export function helloSeen(store = local()) {
+  try { return store ? !!store.getItem(HELLO_KEY) : true; } catch { return true; }
+}
+export function markHelloSeen(store = local(), now = Date.now()) {
+  try { store?.setItem(HELLO_KEY, String(now)); } catch { /* fine: it may say hello once more */ }
+}
+/** Say hello now? Only on a normal screen, with the Caddie button showing and nothing else popped up. */
+export function shouldSayHello({ seen = false, hidden = false, viewing = false, caddieOpen = false, otherPopUp = false } = {}) {
+  return !seen && !hidden && !viewing && !caddieOpen && !otherPopUp;
+}
+/** "plan a trip" typed into Ask → the ✨ Plan a trip mode. */
+export const isPlanATrip = (text) => /^\s*(let'?s\s+|can you\s+|help me\s+)?plan (a|our|the next) trip\s*[.!?]?\s*$/i.test(String(text || ''));

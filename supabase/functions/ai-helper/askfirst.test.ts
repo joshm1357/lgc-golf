@@ -5,7 +5,7 @@ const assert = (v: unknown, msg?: string) => nodeAssert.ok(v, msg);
 const assertEquals = (a: unknown, b: unknown) => nodeAssert.deepStrictEqual(a, b);
 const assertMatch = (s: string, re: RegExp) => nodeAssert.match(s, re);
 import { helperRequest, runLoop, salvagePlan, emptyLookups, errTags, logDetail, stableJson, LIMITS, FINAL_RESERVE_MS, type Deps } from './logic.ts';
-import { validatePlanChat, fallbackChat, wantsPlanNow, tripPageIn, CHAT_TOOL, CHAT_TOOLS } from './plan.ts';
+import { validatePlanChat, fallbackChat, wantsPlanNow, tripPageIn, CHAT_TOOL, CHAT_TOOLS, whenFirst, saidWhen, planChatSystem } from './plan.ts';
 import { requestBody, type AiConfig } from './providers.ts';
 
 // deno-lint-ignore no-explicit-any
@@ -241,4 +241,39 @@ Deno.test('setup: a course that keeps failing is left out (with a warning), the 
   assertEquals(v.plan!.rounds.length, 1);
   assertMatch(v.plan!.warnings.join(' '), /One round was left out/);
   assertEquals(salvagePlan({ ...raw, rounds: [raw.rounds[1]] }, ctx).ok, false);
+});
+
+// ------------------------------------------------------------------ v8 (23 Oct): "when" is one of the first questions
+Deno.test('v8: the first questions always include "roughly when" unless they already said when', async () => {
+  // Live: it asked how many, driving or flying, how far — and never when.
+  const live = [
+    { id: 'who', text: 'How many are coming?', quick: ['Under 8', '8–12', '12+'] },
+    { id: 'travel', text: 'Driving or flying?', quick: ['Driving', 'Flying', 'Not sure'] },
+    { id: 'where', text: 'How far will you travel?', quick: ['Under 2 hrs', 'Up to 3 hrs'] },
+  ];
+  const model = fakeModel([() => [use('t1', 'reply_with_draft', { message: 'Got it — a golf trip away.', questions: live })]]);
+  const { d } = deps(model.fetchFn);
+  const out: Any = await helperRequest({ mode: 'plan_chat', text: 'Golf trip next year' }, d);
+  assertEquals(out.chat.questions.map((q: Any) => q.id), ['when', 'who', 'travel']); // when first, still max 3, how far dropped
+  // The prompt says the order.
+  const sys = planChatSystem('2026-10-23', 'L.G.C');
+  assertMatch(sys, /WHICH QUESTIONS FIRST/);
+  assertMatch(sys, /roughly WHEN[\s\S]*how many[\s\S]*driving or flying/);
+  assertMatch(userText(model.calls[0]), /Roughly when\?/);
+});
+
+Deno.test('v8: whenFirst moves an existing when question to the front, and leaves it alone once they said when', () => {
+  const qs = [{ id: 'who', text: 'How many?', quick: ['8', '12'] }, { id: 'w', text: 'Which month or weekends?', quick: ['March', 'April'] }];
+  const r = { message: 'x', draft: null, questions: qs, done: false };
+  assertEquals(whenFirst(r, 'golf trip').questions.map((q) => q.id), ['w', 'who']);
+  assertEquals(whenFirst(r, 'golf trip in March').questions.map((q) => q.id), ['who', 'w']);
+  for (const t of ['March, 12 of us', 'a long weekend in spring', 'next month', 'Easter', 'around 14/3', 'in May']) assert(saidWhen(t), t);
+  for (const t of ['Golf trip next year', 'we may go somewhere', '12 of us, driving', 'golf trip']) assert(!saidWhen(t), t);
+});
+
+Deno.test('v8: later turns are not forced to ask when again', async () => {
+  const model = fakeModel([() => [use('t1', 'reply_with_draft', { message: 'Options', draft: DRAFT, questions: [{ id: 'budget', text: 'Budget about $800 each?', quick: ['Yes', 'Less'] }] })]]);
+  const { d } = deps(model.fetchFn);
+  const out: Any = await helperRequest({ mode: 'plan_chat', text: '12 of us, Hunter', messages: [{ role: 'user', text: 'Golf trip' }, { role: 'assistant', text: 'Roughly when?' }] }, d);
+  assertEquals(out.chat.questions.map((q: Any) => q.id), ['budget']);
 });

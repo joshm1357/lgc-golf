@@ -10,17 +10,19 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { useData, useSession, playerName } from '../lib/store.jsx';
-import { Icon, toast } from './ui.jsx';
+import { Icon, toast, askConfirm } from './ui.jsx';
 import { useRun, must } from '../lib/run.js';
-import { notify, appLink } from '../lib/push.js';
+import { notify, appLink, shareText } from '../lib/push.js';
 import { tallyPoll, nonVoters, nudgeText, todayISO } from '../lib/plan.js';
 import { canDecide } from '../lib/trips.js';
 import { answersFor, answerKind } from '../lib/emailvotes.js';
-import { sectionResults, organiserView, timeLeft, closesWord } from '../lib/callvote.js';
+import { sectionResults, organiserView, timeLeft, closesWord, lastDayNudge } from '../lib/callvote.js';
 import { EmailVoteLine } from './VoteEmail.jsx';
 import { ShareVoteButton } from './CallVote.jsx';
+import { DetailsButton } from './OptionDetails.jsx';
 import { addExtrasToPlan } from './ExtrasPanel.jsx';
 import { extraWins, extrasFromOptions } from '../lib/extras.js';
+import { closedAtLockIn, decidedLine } from '../lib/lockin.js';
 import { OptionSheet, CloseSheet, optionTitle, everyone, shareNudge } from '../screens/Planner.jsx';
 import './planux.css';
 
@@ -33,7 +35,31 @@ export function OptionLink({ o, kind }) {
   return <a href={o.link} target="_blank" rel="noreferrer noopener" className="small" style={{ fontWeight: 700 }} data-testid="option-link">{list || kind === 'place' ? 'View places ↗' : 'Have a look ↗'}</a>;
 }
 
-export function PollCard({ poll, pd, inCard = false, asVoter = false }) {
+/** I3: on a vote's last day, "Waiting on Lou, Mo and Pete" and a one-tap cheeky message for the group chat. */
+export function LastDayNudge({ poll, pd, names }) {
+  const n = lastDayNudge({ closes: poll.closes_on, today: todayISO(), waiting: names, planName: pd.plan.name, title: poll.question, link: appLink(`/plan/${pd.plan.id}?tab=vote`) });
+  if (!n) return null;
+  return (
+    <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }} data-testid="last-day-nudge">
+      <span className="small grow" style={{ fontWeight: 700 }}>⏰ Last day · {n.line}</span>
+      <button type="button" className="btn ghost sm" onClick={async () => { const r = await shareText(n.message, pd.plan.name); if (r === 'copied') toast('Copied — paste it in the group chat'); }} data-testid="nudge-chat">💬 Nudge them in the group chat</button>
+    </div>
+  );
+}
+
+/** V1: a vote closed when the trip was locked in — one line, "Decided: Fri 22 – Mon 25 Jan, Nowra". */
+export function DecidedLine({ plan, titles = [] }) {
+  return (
+    <div className="card pad row" style={{ gap: 10, alignItems: 'center', background: 'var(--ground)' }} data-testid="decided-line">
+      <span aria-hidden="true" style={{ fontSize: 20 }}>✅</span>
+      <span className="grow" style={{ minWidth: 0 }}><strong>{decidedLine(plan)}</strong>
+        {titles.length > 0 && <span className="small muted" style={{ display: 'block' }}>{titles.join(' · ')} — closed when the trip was locked in</span>}</span>
+    </div>
+  );
+}
+
+// details (ov23): (option) → a function that opens its details sheet, or null. Adds "ⓘ Details" to the option.
+export function PollCard({ poll, pd, inCard = false, asVoter = false, details = null, title = null }) {
   const data = useData();
   const { status } = useSession();
   const me = status.player_id;
@@ -63,6 +89,7 @@ export function PollCard({ poll, pd, inCard = false, asVoter = false }) {
       .then(({ data: m }) => live && setPartners(Object.fromEntries((m || []).map((x) => [x.name, x.slug]))), () => {});
     return () => { live = false; };
   }, [placeNames]);
+  if (closedAtLockIn(poll, pd.plan) && !inCard) return <DecidedLine plan={pd.plan} titles={[title || poll.question]} />;
 
   const respond = (o, r) => run(async () => {
     const mine = votes.find((v) => v.option_id === o.id && v.player_id === me);
@@ -82,9 +109,12 @@ export function PollCard({ poll, pd, inCard = false, asVoter = false }) {
     const mine = votes.find((v) => v.option_id === o.id && v.player_id === me)?.response;
     const canRemove = isOpen && (o.created_by === me || status.is_admin);
     return (
-      <div key={o.id} style={{ padding: '10px 14px', borderBottom: '1px solid var(--line-soft)', background: winner ? 'var(--gold-soft)' : '#fff' }} data-testid="ballot-option">
-        <div style={{ fontWeight: 700, fontSize: 16 }}>{winner && '✅ '}{optionTitle(poll, o)}</div>
-        {(o.address || o.cost_pp != null || o.notes) && <div className="small muted">{[o.address, o.cost_pp != null ? `~$${Number(o.cost_pp)} pp` : null, o.notes].filter(Boolean).join(' · ')}</div>}
+      <div key={o.id} style={{ padding: '10px 14px', borderBottom: '1px solid var(--line-soft)', background: winner ? 'var(--gold-soft)' : '#fff' }} data-testid="ballot-option" title={o.notes || undefined}>
+        <div className="row between" style={{ gap: 8, alignItems: 'flex-start' }}>
+          <div style={{ fontWeight: 700, fontSize: 16 }}>{winner && '✅ '}{optionTitle(poll, o)}</div>
+          {details?.(o) && <DetailsButton onClick={details(o)} label={o.label} />}
+        </div>
+        {(o.address || o.cost_pp != null || o.notes) && <div className="small muted" data-testid="option-summary-line">{[o.address, o.cost_pp != null ? `~$${Number(o.cost_pp)} pp` : null, o.notes].filter(Boolean).join(' · ')}</div>}
         <OptionLink o={o} kind={kind} />
         {partners[o.label] && <a href={`#/c/${partners[o.label]}?enquire=1`} className="small" style={{ display: 'block', fontWeight: 700 }}>Partner course · Ask about a group booking →</a>}
         {isOpen && me && (
@@ -94,7 +124,7 @@ export function PollCard({ poll, pd, inCard = false, asVoter = false }) {
                 style={{ minHeight: big ? 48 : 40, fontSize: 14, padding: '6px 4px', ...(mine === v ? { background: TONE[v], borderColor: TONE[v], color: '#fff' } : {}) }} onClick={() => respond(o, v)}>{words[v]}</button>
             ))}
             {canRemove && !big && (
-              <button type="button" className="btn ghost sm" aria-label="Remove option" onClick={() => { if (window.confirm('Remove this option and its votes?')) run(async () => { await must(supabase.from('plan_options').delete().eq('id', o.id)); pd.reload(); }); }}>{Icon.x(14)}</button>
+              <button type="button" className="btn ghost sm" aria-label="Remove option" onClick={async () => { if (await askConfirm({ title: 'Remove this option and its votes?', yes: 'Remove it' })) run(async () => { await must(supabase.from('plan_options').delete().eq('id', o.id)); pd.reload(); }); }}>{Icon.x(14)}</button>
             )}
           </div>
         )}
@@ -105,7 +135,7 @@ export function PollCard({ poll, pd, inCard = false, asVoter = false }) {
   const header = (
     <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--line-soft)' }}>
       <div className="small muted" style={{ fontWeight: 700 }}>{kindLabel} · {isOpen ? closesText : 'closed'}{org && isOpen ? ' · results' : ''}</div>
-      <div style={{ fontSize: 18, fontWeight: 800 }}>{poll.question}</div>
+      <div style={{ fontSize: 18, fontWeight: 800 }}>{title || poll.question}</div>
     </div>
   );
 
@@ -118,7 +148,7 @@ export function PollCard({ poll, pd, inCard = false, asVoter = false }) {
         <button type="button" className="card" onClick={() => setExpanded(true)} data-testid="poll-organiser" data-collapsed="true"
           style={{ width: '100%', textAlign: 'left', padding: '10px 14px', background: '#fff', color: 'inherit', font: 'inherit', cursor: 'pointer' }}>
           <div className="row between" style={{ gap: 8 }}>
-            <strong>{poll.question}</strong><span className="small muted">▾</span>
+            <strong>{title || poll.question}</strong><span className="small muted">▾</span>
           </div>
           <div className="small">{lead ? <>Leading: <strong>{optionTitle(poll, lead.option)}</strong> ({lead.score})</> : 'No votes yet'} · {options.length} option{options.length === 1 ? '' : 's'} · {results.answered.length} answered</div>
           {results.rows.filter((r) => r.against).slice(0, 2).map((r) => <div key={r.option.id} className="small" style={{ color: 'var(--under)', fontWeight: 700 }} data-testid="against">⚠️ {optionTitle(poll, r.option)}: {r.against}</div>)}
@@ -156,8 +186,9 @@ export function PollCard({ poll, pd, inCard = false, asVoter = false }) {
             <div key={o.id} style={{ padding: '10px 14px', borderBottom: '1px solid var(--line-soft)', background: winner ? 'var(--gold-soft)' : r.leading && isOpen ? '#FBFAF4' : '#fff' }} data-testid="result-row">
               <div className="row between" style={{ alignItems: 'flex-start', gap: 8 }}>
                 <div className="grow">
-                  <div style={{ fontWeight: 700 }}>{winner && '✅ '}{optionTitle(poll, o)}{!winner && r.leading && isOpen && <span className="small" style={{ marginLeft: 6, color: '#7A5A00', fontWeight: 800 }}>LEADING</span>}</div>
-                  {(o.cost_pp != null || o.notes) && <div className="small muted">{[o.cost_pp != null ? `~$${Number(o.cost_pp)} pp` : null, o.notes].filter(Boolean).join(' · ')}</div>}
+                  <div style={{ fontWeight: 700 }} title={o.notes || undefined}>{winner && '✅ '}{optionTitle(poll, o)}{!winner && r.leading && isOpen && <span className="small" style={{ marginLeft: 6, color: '#7A5A00', fontWeight: 800 }}>LEADING</span>}
+                    {details?.(o) && <span style={{ marginLeft: 6 }}><DetailsButton onClick={details(o)} label={o.label} /></span>}</div>
+                  {(o.cost_pp != null || o.notes) && <div className="small muted" data-testid="option-summary-line">{[o.cost_pp != null ? `~$${Number(o.cost_pp)} pp` : null, o.notes].filter(Boolean).join(' · ')}</div>}
                   <OptionLink o={o} kind={kind} />
                   {partners[o.label] && <a href={`#/c/${partners[o.label]}?enquire=1`} className="small" style={{ display: 'block', fontWeight: 700 }}>Partner course · Ask about a group booking →</a>}
                   {r.against && <div className="small" style={{ color: 'var(--under)', fontWeight: 700 }} data-testid="against">⚠️ {r.against}</div>}
@@ -236,6 +267,7 @@ export function PollCard({ poll, pd, inCard = false, asVoter = false }) {
         {!isOpen && results.leader && <div className="small muted">Most votes: {optionTitle(poll, results.leader.option)}</div>}
         {isOpen && <button type="button" className="btn ghost sm" onClick={() => setSuggesting(true)}>+ Suggest {poll.kind === 'dates' ? 'dates' : poll.kind === 'location' ? 'a place' : 'an option'}</button>}
         {isOpen && !inCard && waiting.length > 0 && <div className="small muted">{waiting.length} still to vote</div>}
+        {isOpen && !inCard && <LastDayNudge poll={poll} pd={pd} names={waiting.map((id) => playerName(data.playersById[id]))} />}
       </div>
       {suggesting && <OptionSheet poll={poll} onClose={() => setSuggesting(false)} onSaved={pd.reload} />}
     </div>

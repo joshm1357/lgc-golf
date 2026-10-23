@@ -212,7 +212,7 @@ export async function runRules(o: { ai: AiConfig; fetchFn: typeof fetch; system:
       messages.push({ role: 'tool', results });
     } else messages.push({ role: 'user', text: `Please call ${o.tool.name} now.` });
   }
-  return { kind: 'error', code: 'bad_json', message: 'The AI got its wires crossed — try again.', usage };
+  return { kind: 'error', code: 'bad_json', message: 'The Caddie got its wires crossed — try again.', usage };
 }
 
 // ------------------------------------------------------------------ one request
@@ -230,7 +230,7 @@ export type RulesDeps = {
   caps?: { groupPerMonth: number; personPerDay: number };
 };
 
-const FAIL = 'The AI helper hit a snag — try again in a minute.';
+const FAIL = 'The Caddie hit a snag — try again in a minute.';
 
 /** { mode: 'rules_conflicts' | 'rules_draft' | 'rules_tidy', … } → { conflicts } | { draft } | { tidy } or friendly words. */
 export async function rulesRequest(body: Any, d: RulesDeps): Promise<Record<string, unknown>> {
@@ -238,9 +238,9 @@ export async function rulesRequest(body: Any, d: RulesDeps): Promise<Record<stri
   const job = body?.mode === 'rules_conflicts' ? 'conflicts' : body?.mode === 'rules_draft' ? 'draft' : body?.mode === 'rules_tidy' ? 'tidy' : null;
   if (!job) return { error: 'Unknown request.' };
   if (!st?.is_member || !st.group_id) return { error: 'You’re not in this group.' };
-  if (st.role === 'guest' || !st.is_admin) return { error: 'Only an organiser can use the AI on the Rulebook.' };
-  if (!(await d.featureOn('ai_helper'))) return { error: 'The AI helper is switched off for this group.', off: true };
-  if (!d.ai) return { error: 'The AI helper isn’t switched on yet', off: true };
+  if (st.role === 'guest' || !st.is_admin) return { error: 'Only an organiser can use the Caddie on the Rulebook.' };
+  if (!(await d.featureOn('ai_helper'))) return { error: 'The Caddie is switched off for this group.', off: true };
+  if (!d.ai) return { error: 'The Caddie isn’t switched on yet', off: true };
 
   // What goes to the model, checked before anything is counted.
   const std = readStandard(body?.standard);
@@ -305,10 +305,10 @@ export async function rulesRequest(body: Any, d: RulesDeps): Promise<Record<stri
   if (job === 'conflicts') return { conflicts: validateConflicts(res.input, g, std, selfId), remaining: left };
   if (job === 'tidy') {
     const t = validateTidy(res.input);
-    return t ? { tidy: t, remaining: left } : { error: 'The AI couldn’t tidy that one — try again.', remaining: left };
+    return t ? { tidy: t, remaining: left } : { error: 'The Caddie couldn’t tidy that one — try again.', remaining: left };
   }
   const draft = validateDraft(res.input, c, g, std);
-  return draft ? { draft, remaining: left } : { error: 'The AI couldn’t draft a rule from that verdict — write it yourself.', remaining: left };
+  return draft ? { draft, remaining: left } : { error: 'The Caddie couldn’t draft a rule from that verdict — write it yourself.', remaining: left };
 }
 
 // ------------------------------------------------------------------ the database side (the person's own sign-in)

@@ -136,7 +136,7 @@ await ctx.addInitScript(([uid]) => {
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
   if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated' } }));
-  localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-notify-prompt', String(Date.now()));
+  localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */ localStorage.setItem('tgt-notify-prompt', String(Date.now()));
 }, ['99999999-9999-4999-8999-999999999999']);
 const page = await ctx.newPage();
 page.on('pageerror', (e) => fails.push(`page error: ${e}`));
@@ -144,6 +144,9 @@ page.on('dialog', (d) => d.accept());
 
 // 1. The trip: organisers see "Find a course" (Organise → Plan, ov14).
 await page.goto(`${BASE}#/plan/${PLAN}?view=organise&step=plan`);
+// ov26 (O2): "Find a course" is one of the "Other ways to do this" under the Next step.
+await page.getByTestId('other-ways').locator('summary').waitFor({ timeout: 15000 });
+await page.getByTestId('other-ways').locator('summary').click();
 await page.locator('[data-testid="tf-link"]').waitFor({ timeout: 15000 });
 check(true, 'the trip shows "Find a course" for the organiser');
 await page.locator('[data-testid="tf-link"]').click();

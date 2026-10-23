@@ -241,7 +241,7 @@ export function briefText(plan: TripPlan, tasksOn: boolean): string | null {
   const parts: string[] = [];
   if (plan.notes) parts.push(plan.notes);
   if (plan.travel === 'fly') parts.push('Travel: the group would like a flying trip (flying and multi-stop trips are coming soon to the planner).');
-  if (plan.costs.length) parts.push(`Rough costs each (AI estimate — check before booking):\n${costLines(plan).join('\n')}`);
+  if (plan.costs.length) parts.push(`Rough costs each (the Caddie’s rough guess — check before booking):\n${costLines(plan).join('\n')}`);
   if (!tasksOn && plan.places.length > 1) parts.push(`Other places to think about: ${plan.places.slice(1).map((p) => p.label).join(', ')}`);
   if (!tasksOn && plan.jobs.length) parts.push(`Jobs:\n${plan.jobs.map((j) => `• ${j}`).join('\n')}`);
   if (!tasksOn && plan.bring.length) parts.push(`Bring:\n${plan.bring.map((j) => `• ${j}`).join('\n')}`);
@@ -329,6 +329,7 @@ export const CHAT_TOOL = {
       name: { type: 'string', description: 'A working name, e.g. "March Away 2027"' },
       kind: { type: 'string', enum: ['trip', 'round'] },
       travel: { type: 'string', enum: ['drive', 'fly'], description: 'How they get there: drive (one region within a drive — the default) or fly (not planned yet; kept as a note)' },
+      headcount: { type: 'integer', description: 'About how many are coming, once they have said (e.g. 9). Leave it out if unknown — never guess.' },
       dates: { type: 'array', description: '2 to 4 weekend options (YYYY-MM-DD)', items: obj({ start_date: { type: 'string' }, end_date: { type: 'string' }, note: { type: 'string' } }, ['start_date']) },
       places: { type: 'array', description: '2 to 4 places, each with the library course ids courses_near found (up to 6; fewer is fine)', items: obj({
         place: { type: 'string' }, courses: { type: 'array', items: { type: 'string' } }, cost_each: { type: 'number' }, note: { type: 'string' },
@@ -342,6 +343,7 @@ export const CHAT_TOOL = {
     }),
     questions: { type: 'array', description: '1 to 3 short questions, each with 2 to 4 quick answers. A quick answer that needs typing ends with "…" (e.g. "Add another…").', items: obj({
       id: { type: 'string' }, text: { type: 'string' }, quick: { type: 'array', items: { type: 'string' } },
+      multi: { type: 'boolean', description: 'true when several quick answers make sense together (e.g. regions, extras, weekends, what matters) — the organiser can tick several then send. Leave out (false) for one-answer questions (driving or flying, how many).' },
     }, ['text', 'quick']) },
     done: { type: 'boolean', description: 'true when the organiser says it looks right and you have nothing left to ask' },
   }, ['message', 'questions']),
@@ -367,7 +369,12 @@ ASK FIRST. Don't do the whole plan from one vague message. The key facts are:
   1. roughly when (which month or weekends) and how many nights;
   2. roughly where (regions or towns, or how far they'll travel);
   3. how many are coming.
-Also ask early (with the first questions): "Driving or flying?" [Driving] [Flying] [Not sure].
+Also ask early: "Driving or flying?" [Driving] [Flying] [Not sure].
+WHICH QUESTIONS FIRST (you only get 3): pick in this order, skipping anything they've already said —
+  a. roughly WHEN ("Roughly when?" [March] [April] [Other…]) — always one of your first questions unless they've already said when;
+  b. how many are coming;
+  c. driving or flying, then how far they'll travel / where.
+  So a vague first message ("golf trip next year") gets: when, how many, driving or flying. Never leave out "when" to ask "how far" or "driving or flying".
   - Driving (the default, and "Not sure"): one region within a drive of home — that's what you plan.
   - Flying: say plainly that flying and multi-stop trips are coming soon to the app, and offer to plan a driving trip now or keep the idea for later. Don't plan flights. Put travel: "fly" on the draft and a short line in its notes (e.g. "Keen on a flying trip — coming soon"); if they then want a driving one, set travel: "drive".
 Budget each and must-haves (one big house, a particular course…) are good to know but not needed to start.
@@ -381,6 +388,8 @@ Building the draft:
 - 2 to 4 places (golf towns or areas). Look them ALL up in ONE courses_near call (places: ["Town A", "Town B", …]) and list the library course ids it returns (up to 6 a place). Fewer is fine. If the library has nothing for a place, keep the town and say "no courses in our list yet" in its note — don't search again.
 - 2 to 4 weekend options (Friday to Sunday unless they say otherwise).
 - rough costs each and a rough budget each (AUD, estimates), and a few optional extras worth offering (shirts or caps, a bus, a group dinner, a chef at the house, a brewery tour…) with rough costs.
+- headcount: how many are coming, once they've said (the accommodation searches use it). Leave it out while unknown.
+- Comps, trophies, the Cup / Ryder Cup, teams, formats and handicaps are NOT part of planning — don't ask about them and don't put them in extras. If they come up, say "We'll sort comps and teams closer to the trip" and carry on.
 - keep everything the organiser already agreed to (the current draft); only change what they asked about.
 - Searches cost turns and you only have a few: never repeat a search, and reply as soon as the lookups are back.
 
@@ -393,6 +402,7 @@ The reply:
   "These are the places I'd look at — any others?" [Looks good] [Add another…]
   "Budget about $800 each?" [Yes] [Less] [More]
   A quick answer that needs typing ends with "…".
+  Set multi: true when several answers make sense together (e.g. regions, extras, weekends, what matters most) — the organiser can tick several, then send. One-answer questions (driving or flying, how many) leave it out.
 - done: true only when the organiser says it looks right; still offer one question about anything else to tweak.
 (The app always shows "Or just say 'plan it' and I'll put a plan together now" under your reply — you don't need to write it.)
 
@@ -405,11 +415,11 @@ ${RESEARCH_RULES}
 ${GUARD}`;
 }
 
-export type ChatDraft = TripPlan & { extras: { label: string; pp: number | null }[] };
+export type ChatDraft = TripPlan & { extras: { label: string; pp: number | null }[]; headcount?: number };
 export type ChatReply = {
   message: string;
   draft: ChatDraft | null; // null: still asking the key facts (ov16)
-  questions: { id: string; text: string; quick: string[] }[];
+  questions: { id: string; text: string; quick: string[]; multi?: true }[]; // multi (ov22): pick several, then send
   done: boolean;
 };
 
@@ -417,6 +427,8 @@ const cleanExtras = (list: Any) => {
   const extras: { label: string; pp: number | null }[] = [];
   for (const e of Array.isArray(list) ? list.slice(0, PLAN_LIMITS.extras) : []) {
     const label = clean(typeof e === 'string' ? e : e?.label, 60);
+    // ov23: comps, the Cup and formats are sorted in the run-up, not while planning.
+    if (/\bryder\b|\bcup\b|\bformat\b|\bmatch ?play\b|\bstableford\b|\bambrose\b/i.test(label)) continue;
     if (label.length >= 2 && !extras.some((x) => x.label.toLowerCase() === label.toLowerCase())) extras.push({ label, pp: money(e?.pp, 5000) });
   }
   return extras;
@@ -433,6 +445,31 @@ const CHANGE_Q = { id: 'change', text: 'Anything to tweak — a course, the week
 /** "plan it" / "just suggest something" / "surprise me": stop asking and build the draft now (Josh, 22 Oct). */
 export const wantsPlanNow = (text: string) =>
   /\b(plan it|just plan|plan (it|one|something) (now|for (me|us))|just suggest|suggest something|surprise (me|us)|you (pick|choose|decide)|stop asking|enough questions)\b/i.test(String(text || ''));
+
+/** Has the organiser said roughly when? A month, a season, a holiday, a long weekend, "next month", a date. A year on
+ *  its own ("next year") isn't enough. */
+export const saidWhen = (text: string) => {
+  const t = String(text || '');
+  return /\b(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|jun(e)?|jul(y)?|aug(ust)?|sep(t|tember)?|oct(ober)?|nov(ember)?|dec(ember)?)\b/i.test(t)
+    || /\bMay\b/.test(t)
+    || /\b(summer|autumn|winter|spring|easter|christmas|xmas|new year'?s|long weekend|school hol(iday)?s|anzac|labour day|king'?s birthday|melbourne cup|this (week|weekend|month)|next (week|weekend|fortnight|month)|in (a|\d+) (weeks?|months?))\b/i.test(t)
+    || /\b\d{1,2}[/.-]\d{1,2}\b/.test(t);
+};
+const asksWhen = (q: { id?: string; text: string }) => q.id === 'when' || /\bwhen\b|month|weekend|dates?\b|time of year/i.test(q.text);
+export const WHEN_Q = { id: 'when', text: 'Roughly when?', quick: ['March', 'April', 'Other…'] };
+
+/**
+ * v8 (23 Oct, Josh): the first questions left out "when" (it asked how many, driving/flying, how far). On the first
+ * message, unless they've already said when, "when" is always one of the (at most 3) questions — first, ahead of
+ * how many and driving/flying/how far.
+ */
+export function whenFirst(reply: ChatReply, text: string): ChatReply {
+  if (!reply || saidWhen(text)) return reply;
+  const qs = reply.questions || [];
+  const i = qs.findIndex(asksWhen);
+  const questions = i >= 0 ? [qs[i], ...qs.filter((_, j) => j !== i)] : [WHEN_Q, ...qs];
+  return { ...reply, questions: questions.slice(0, 3) };
+}
 
 /** What the trip screen shows now (the organiser can change it there too), made small for the model. The app sends
  *  it from the trip builder's saved state; it's data, never instructions. */
@@ -460,7 +497,8 @@ export function validatePlanChat(raw: Any, ctx: TripPlanContext, opts: { lenient
   if (hasDraft(raw.draft)) {
     const v = validateTripPlan(raw.draft, ctx, { partial: true, lenient: opts.lenient });
     if (!v.ok || !v.plan) return { ok: false, errors: v.errors, value: null };
-    draft = { ...v.plan, extras: cleanExtras(raw.draft?.extras) };
+    const hc = Math.round(Number(raw.draft?.headcount));
+    draft = { ...v.plan, extras: cleanExtras(raw.draft?.extras), ...(hc > 0 && hc < 200 ? { headcount: hc } : {}) };
   }
   const questions: ChatReply['questions'] = [];
   const rawQs = Array.isArray(raw.questions) ? raw.questions : [];
@@ -473,7 +511,7 @@ export function validatePlanChat(raw: Any, ctx: TripPlanContext, opts: { lenient
       if (t && !quick.includes(t)) quick.push(t);
     }
     const id = (clean(q?.id, 30).toLowerCase().replace(/[^a-z0-9_-]+/g, '-') || `q${i + 1}`).slice(0, 30);
-    questions.push({ id, text, quick: quick.slice(0, PLAN_LIMITS.quick) });
+    questions.push({ id, text, quick: quick.slice(0, PLAN_LIMITS.quick), ...(q?.multi === true ? { multi: true as const } : {}) });
   });
   const done = raw.done === true && !!draft;
   if (!questions.length && !done) {

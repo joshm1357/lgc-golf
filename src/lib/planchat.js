@@ -5,7 +5,7 @@
 // chooses: nothing is ever narrowed to one answer for them. Pure functions, tested (planchat.test.js). The chat UI
 // itself (components/AiChat.jsx) is reusable by the Caddie later.
 
-import { startExtras } from './extras.js';
+import { startExtras, planningExtras } from './extras.js';
 
 export const MAX_TURNS = 10;     // questions per planning chat (each one counts as one helper question)
 export const KEEP_TURNS = 12;    // what's sent back to the helper each time (the last 12 messages)
@@ -79,7 +79,36 @@ export function cleanQuestions(list) {
     id: String(q?.id || `q${i + 1}`).slice(0, 30),
     text: String(q?.text || '').slice(0, 160),
     quick: (Array.isArray(q?.quick) ? q.quick : []).map((x) => String(x).slice(0, 30)).filter(Boolean).slice(0, MAX_QUICK),
+    // ov22: the helper says when several answers make sense together (regions, extras, weekends…).
+    ...(q?.multi === true ? { multi: true } : {}),
   })).filter((q) => q.text);
+}
+
+// ------------------------------------------------------------------ pick several, then send (ov22, Josh 23 Oct)
+// "When Plan the trip has multiple pre-filled options you can select, allow the selection of multiple, then click
+// submit." A question with multi: true has toggle chips and a "Send (3)" button; one-answer questions still send on tap.
+/** A quick answer that opens the box to type ("Other…") rather than being picked. */
+export const typesIt = (quick) => /(…|\.\.\.)$/.test(String(quick || '').trim());
+/** Tap a chip on a pick-several question: on → off, off → on (in the order they were picked). */
+export function togglePick(picks = [], quick) {
+  const q = String(quick || '').trim();
+  if (!q || typesIt(q)) return picks;
+  return picks.includes(q) ? picks.filter((x) => x !== q) : [...picks, q];
+}
+/** "Send (3)": the picks, sent together → { send } (null with nothing picked). */
+export function multiSend(question, picks = []) {
+  const list = (picks || []).map((x) => String(x).trim()).filter((x) => x && !typesIt(x));
+  if (!list.length) return null;
+  const about = String(question?.text || '').trim();
+  const words = list.join(', ');
+  return { send: about ? `${about} → ${words}` : words };
+}
+/** "Other…" on a pick-several question: the box opens with what's picked so far, ready to add to. */
+export function multiOther(question, picks = [], quick = 'Other…') {
+  const list = (picks || []).filter((x) => x && !typesIt(x));
+  if (!list.length) return quickChoice(question, quick);
+  const about = String(question?.text || '').trim();
+  return { ask: `${about ? `${about} → ` : ''}${list.join(', ')}, ` };
 }
 
 /** How many questions are left in this chat. */
@@ -126,9 +155,12 @@ export function sameExtra(a, b) {
 export function mergeDraftIntoBuild(prev, draft, stayAreas = [], { nights = 2 } = {}) {
   const start = builderStateFromDraft(draft, stayAreas, { nights });
   const tick = (labels) => (labels.length ? startExtras().map((e) => (labels.some((l) => sameExtra(l, e.label)) ? { ...e, suggested: true } : e)) : null);
+  // How many are coming (ov23): the helper's number, unless the organiser has set their own.
+  const hc = Number.isInteger(draft?.headcount) && draft.headcount > 0 && draft.headcount < 200 && prev?.headcountBy !== 'organiser'
+    ? { headcount: draft.headcount, headcountBy: 'ai' } : {};
   if (!prev) {
     const { extrasSuggested, ...rest } = start;
-    return { ...rest, ...(draft?.travel ? { travel: draft.travel } : {}), extras: tick(extrasSuggested), ai: { regions: start.regionOptions, weekends: start.weekends.map((w) => w.start) } };
+    return { ...rest, ...hc, ...(draft?.travel ? { travel: draft.travel } : {}), extras: tick(extrasSuggested), ai: { regions: start.regionOptions, weekends: start.weekends.map((w) => w.start) } };
   }
   const ai = prev.ai || { regions: [], weekends: [] };
   const sugg = { ...(prev.suggested || {}) };
@@ -151,16 +183,16 @@ export function mergeDraftIntoBuild(prev, draft, stayAreas = [], { nights = 2 } 
   let aiWeekends = ai.weekends || [];
   if (!prev.weekendsSettled) {
     const mine = weekends.filter((w) => !(ai.weekends || []).includes(w.start));
-    weekends = [...mine, ...start.weekends.filter((w) => !mine.some((m) => m.start === w.start))].slice(0, 4);
+    weekends = [...mine, ...start.weekends.filter((w) => !mine.some((m) => m.start === w.start))].slice(0, 26); // ov23: any number
     aiWeekends = weekends.filter((w) => !mine.includes(w)).map((w) => w.start);
   }
   // Extras: the list is the organiser's once it exists — the helper's ideas are just marked ✨.
-  let extras = prev.extras ?? tick(start.extrasSuggested);
+  let extras = planningExtras(prev.extras) ?? tick(start.extrasSuggested);
   if (Array.isArray(prev.extras) && start.extrasSuggested.length) {
     extras = extras.map((e) => (start.extrasSuggested.some((l) => sameExtra(l, e.label)) && e.state === 'off' ? { ...e, suggested: true } : e));
   }
   return {
-    ...prev, regionOptions, areaCourses, areaStays, suggested: sugg, weekends, extras,
+    ...prev, ...hc, regionOptions, areaCourses, areaStays, suggested: sugg, weekends, extras,
     // Driving or flying (ov16): flying isn't planned yet — it's kept so the trip screen can say so later.
     ...(draft?.travel ? { travel: draft.travel } : {}),
     ai: { regions: start.regionOptions.filter((r) => !own.includes(r)), weekends: aiWeekends },

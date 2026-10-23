@@ -1,12 +1,16 @@
 import React, { useEffect } from 'react';
-import { MapContainer, TileLayer, Circle, CircleMarker, Popup, Tooltip, useMap, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Circle, CircleMarker, Marker, Popup, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { shortName } from '../lib/placeinfo.js';
+import { WheelZoom, NamesToggle, useNamesPref, labelIcon, Declutter } from './PlanMapTools.jsx';
 
 // The trip finder's map (Stage 16.5): starting AREAS shaded (never pins on houses), and courses coloured by fit —
 // teal fits, amber check (facts unknown), grey doesn't fit. Esri imagery like the other maps, plus Esri's free place
 // names on top so towns can be read at this zoom. No keys, nothing paid. No animations: on a phone the map comes and
 // goes (List / Map), and Leaflet's zoom animation fails if its map is taken away mid-zoom.
+// ov22: scroll-wheel zoom (after a click, or with Ctrl/⌘) and the "Club names" switch (labels beside the course pins
+// that fit or need checking, overlapping ones hidden). The small starting-point map (labels={false}) has no names.
 
 const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 const ESRI_PLACES = 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}';
@@ -36,15 +40,18 @@ function Frame({ points }) {
  * onTap:   tap the map to place a starting area (optional)
  * onOpen:  open a course's details
  */
-export default function TripMap({ starts = [], results = [], picked = new Set(), onTap, onOpen, className = 'map tf-map', frame }) {
+export default function TripMap({ starts = [], results = [], picked = new Set(), onTap, onOpen, className = 'map tf-map', frame, labels = true }) {
+  const [names, setNames] = useNamesPref();
+  const showNames = labels && names;
   const pts = frame || [...starts, ...results.filter((r) => r.status !== 'no').slice(0, 15).map((r) => r.course)].filter((p) => p && p.lat != null);
   const centre = pts[0] ? [pts[0].lat, pts[0].lng] : [-33.87, 151.21];
   return (
-    <div className={className} data-testid="tf-map">
-      <MapContainer center={centre} zoom={8} style={{ height: '100%', width: '100%' }} scrollWheelZoom={false} zoomAnimation={false} markerZoomAnimation={false} fadeAnimation={false}>
+    <div className={`${className} pm-wrap`} data-testid="tf-map">
+      <MapContainer center={centre} zoom={8} style={{ height: '100%', width: '100%' }} scrollWheelZoom={false} wheelPxPerZoomLevel={120} zoomAnimation={false} markerZoomAnimation={false} fadeAnimation={false}>
         <TileLayer url={ESRI} maxZoom={18} attribution='Imagery © Esri · Places © Esri · Courses © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors' />
         <TileLayer url={ESRI_PLACES} maxZoom={18} />
         <Frame points={pts} />
+        <WheelZoom />
         {onTap && <Tap onTap={onTap} />}
         {starts.filter((s) => s.lat != null).map((s, i) => (
           <Circle key={`s${i}`} center={[s.lat, s.lng]} radius={6000} pathOptions={{ color: '#1E88E5', weight: 2, fillColor: '#1E88E5', fillOpacity: 0.25 }}>
@@ -67,7 +74,13 @@ export default function TripMap({ starts = [], results = [], picked = new Set(),
             </CircleMarker>
           );
         })}
+        {showNames && results.filter((r) => r.status !== 'no' && r.course.lat != null).slice(0, 40).map((r) => (
+          <Marker key={`l-${r.course.id}`} position={[r.course.lat, r.course.lng]} interactive={false} keyboard={false} zIndexOffset={-200}
+            icon={labelIcon(shortName(r.course.name), picked.has(r.course.id) ? 3 : r.status === 'fits' ? 2 : 1)} />
+        ))}
+        {labels && <Declutter dep={`${showNames}|${results.length}|${picked.size}`} />}
       </MapContainer>
+      {labels && <NamesToggle on={names} onChange={setNames} />}
     </div>
   );
 }

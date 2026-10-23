@@ -25,13 +25,33 @@ const cut = (s, n) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
 export const safeUrl = (u) => (/^https?:\/\/[^\s"'<>]+$/i.test(str(u)) ? str(u) : null);
 const money = (n) => (n == null || n === '' ? null : `$${Number(n) % 1 ? Number(n).toFixed(2) : Number(n)}`);
 
+/**
+ * v8 fix: fee text from the research says "9 holes 105 Mon-Thu / 131 Fri-Sun". In the dollar columns
+ * (green_fee_*, twilight_or_group_rates) put "$" before bare amounts: "9 holes $105 Mon-Thu / $131 Fri-Sun".
+ * Leaves alone amounts that already have "$", counts ("9 holes", "groups of 12", "4 players"), times ("2pm", "12:30"),
+ * percentages, years and dates.
+ */
+const NOT_MONEY_AFTER = /^\s*(?:holes?\b|players?\b|people\b|pax\b|ppl\b|golfers?\b|persons?\b|guests?\b|rounds?\b|nights?\b|days?\b|weeks?\b|months?\b|years?\b|yrs?\b|hrs?\b|hours?\b|mins?\b|minutes?\b|km\b|am\b|pm\b|a\.m\.|p\.m\.|st\b|nd\b|rd\b|th\b|x\b|or more\b|\+|%|:|\/\d|-\s*\d+\s*(?:holes?|players?|people|pax)\b)/i;
+const NOT_MONEY_BEFORE = /(?:\b(?:of|for|min|minimum|max|maximum|up to|over|under|top|ages?|no\.?|hole|after|before|until|from hole|tee)\s*|[$€£\d.,:/#A-Za-z]|\d\s*[-–]\s*)$/i;
+export function dollars(text) {
+  const t = str(text);
+  if (!t) return '';
+  return t.replace(/\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?/g, (m, at, all) => {
+    const before = all.slice(0, at);
+    const after = all.slice(at + m.length);
+    if (NOT_MONEY_BEFORE.test(before) || NOT_MONEY_AFTER.test(after)) return m;
+    if (/^(?:19|20)\d\d$/.test(m)) return m; // a year
+    return `$${m}`;
+  });
+}
+
 export function feesText(r) {
   if (!r) return '';
   const wd = money(r.fee_weekday);
   const we = money(r.fee_weekend);
   if (wd && we && wd !== we) return `${wd} weekdays · ${we} weekends`;
   if (wd || we) return `${wd || we} (18 holes)`;
-  return cut(tidy(r.details?.green_fee_weekday_aud), 80);
+  return cut(dollars(tidy(r.details?.green_fee_weekday_aud)), 80);
 }
 
 export const stars = (n) => (n >= 1 && n <= 5 ? '★'.repeat(n) + '☆'.repeat(5 - n) : '');
@@ -52,7 +72,7 @@ export function aboutLines(r) {
     ['Style', [str(d.style), tidy(String(d.difficulty || '').replace(/^\d\s*-\s*/, ''))].filter(Boolean).join(' · ')],
     ['Ranked', tidy(d.rankings)],
     ['Getting a game', [ACCESS[r.access_type] || '', tidy(d.access_route)].filter(Boolean).join('. ')],
-    ['Fees', [feesText(r), tidy(d.twilight_or_group_rates)].filter(Boolean).join('. ')],
+    ['Fees', [feesText(r), dollars(tidy(d.twilight_or_group_rates))].filter(Boolean).join('. ')],
     ['Visitor times', tidy(d.visitor_times)],
     ['Members have', tidy(d.members_times)],
     ['How to book', tidy(d.group_bookings_how) || tidy(d.booking_platform)],

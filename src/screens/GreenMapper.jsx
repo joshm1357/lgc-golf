@@ -50,7 +50,7 @@ export default function GreenMapper() {
 
   if (!data.ready) return <Loading />;
   if (!course) return <div className="page"><Header back title="Course not found" /></div>;
-  if (!status.is_admin) return <div className="page"><Header back title="Map the greens" /><div className="empty">Only the admin can map greens.</div></div>;
+  if (!status.is_admin) return <div className="page"><Header back title="Map the greens" /><div className="empty">Only an organiser can map greens.</div></div>;
 
   const setPoint = (key, p) => {
     setHoles((all) => all.map((x) => (x.n === h.n ? { ...x, [key]: r6(p) } : x)));

@@ -16,7 +16,11 @@
 //      here."
 //   H. The email form works out which: wrong password for an existing account → no account made, says so.
 //
-// Usage: node signin-first-test.mjs <passwordBuild> <shotDir>
+//   I. F2 (ov27, walkthrough review option B) on a "google,password,email" build: joining is ONE step — Google, or an
+//      emailed code (no password field) → pick name → the page (no notifications pop-up on a first visit, F1).
+//
+// Usage: node signin-first-test.mjs <passwordBuild> <shotDir> [codeBuild]
+//   codeBuild (optional, runs I): the same as passwordBuild but VITE_SIGN_IN=google,password,email.
 //   passwordBuild: VITE_SIGN_IN=google,password, staging database, VITE_BASE=/, VITE_NEW_GROUPS=on,
 //                  VITE_GOOGLE_CLIENT_ID=test-123.apps.googleusercontent.com, VITE_GOOGLE_HOSTS=localhost, served on
 //                  127.0.0.1 (Google redirect) and reached as localhost for Google's own button.
@@ -26,6 +30,7 @@ import fs from 'node:fs';
 const PW = process.argv[2] || 'http://127.0.0.1:4176/';
 const PW_GIS = PW.replace('127.0.0.1', 'localhost');
 const SHOTS = process.argv[3] || './shots-signin-first';
+const CODE = process.argv[4] || null;
 fs.mkdirSync(SHOTS, { recursive: true });
 
 const G = 'b0b0b0b0-0000-4000-8000-00000000000b';
@@ -98,6 +103,10 @@ function route(S) {
     }
     if (p === '/auth/v1/user') { const u = S.users.get(sub); return u ? json(userObj(u)) : err(401, 'bad_jwt', 'no user'); }
     if (p === '/auth/v1/authorize') return r.fulfill({ status: 302, headers: { location: 'https://accounts.google.com/o/oauth2/fake' }, body: '' });
+    if (p === '/auth/v1/otp') { // an emailed code; makes the account if there isn't one (shouldCreateUser)
+      if (!byEmail(body.email)) addUser(S, { id: '55555555-5555-4555-8555-555555555555', email: String(body.email).toLowerCase() });
+      return json({});
+    }
     if (p === '/auth/v1/resend' || p === '/auth/v1/recover') return json({});
     if (p === '/auth/v1/logout') return r.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*' }, body: '' });
     if (p.startsWith('/auth/v1/')) return json({});
@@ -150,7 +159,7 @@ async function phone(S, { sess = null, notifyAsked = false } = {}) {
   await ctx.addInitScript(([cfg]) => {
     if (sessionStorage.getItem('seeded')) return;
     sessionStorage.setItem('seeded', '1');
-    localStorage.setItem('tgt-whats-new', 'beta-1');
+    localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */
     if (cfg.notifyAsked) localStorage.setItem('tgt-notify-prompt', String(Date.now()));
     if (cfg.sess) localStorage.setItem('lgc-auth', cfg.sess);
   }, [{ notifyAsked, sess: sess ? JSON.stringify(sess) : null }]);
@@ -191,7 +200,9 @@ const LINK = `#/join/${INVITE}?to=%2Fcourses`;
   check(await page.getByText('Sign in so it’s you on any phone or laptop.').isVisible(), 'A: one screen first — "Join Test Group B — sign in so it’s you on any phone or laptop"');
   check(await page.getByRole('button', { name: /Continue with Google/ }).isVisible(), 'A: Continue with Google');
   check(await page.getByTestId('email-continue').isVisible(), 'A: email + password, one form');
-  check(await page.getByTestId('just-this-phone').isVisible(), 'A: a small "Just this phone for now"');
+  check(await page.getByTestId('just-this-phone').isVisible(), 'A: "Just this phone for now"');
+  check(await page.getByTestId('just-this-phone').evaluate((b) => b.classList.contains('btn')), 'A: "Just this phone for now" is a proper button (F2)');
+  check(/only on this phone/.test(await page.getByTestId('just-this-phone-help').innerText().catch(() => '')), 'A: with one line on what it means (F2)');
   check(await page.getByText(/go straight to what was shared/).isVisible(), 'A: says they’ll land on the shared page');
   check(!(await page.getByRole('button', { name: 'Join', exact: true }).isVisible().catch(() => false)), 'A: no Join button before signing in');
   await tapSize(page.getByRole('button', { name: /Continue with Google/ }), 'Continue with Google');
@@ -217,10 +228,10 @@ const LINK = `#/join/${INVITE}?to=%2Fcourses`;
   await shot(page, '04-pick-name');
   await page.getByRole('button', { name: /Kurt/ }).first().click();
   await page.getByRole('button', { name: /Yes, I'm Kurt/ }).click();
+  // ov27 (F1): one pop-up at a time — the notifications ask waits for the second visit.
   const notif = page.getByRole('dialog', { name: /Turn on notifications/ });
-  check(await notif.waitFor({ timeout: 8000 }).then(() => true, () => false), 'A: then the notifications pop-up');
+  check(!(await notif.waitFor({ timeout: 4000 }).then(() => true, () => false)), 'A: no notifications pop-up on the first visit (F1)');
   check(page.url().endsWith('#/courses'), 'A: on the shared page (?to=/courses)');
-  await notif.getByRole('button', { name: 'Not now' }).click();
   await page.waitForTimeout(4500);
   check(!(await saveSheet(page).isVisible().catch(() => false)), 'A: signed in → no Save your spot');
   check(page.url().endsWith('#/courses'), 'A: still on the page');
@@ -406,6 +417,38 @@ const LINK = `#/join/${INVITE}?to=%2Fcourses`;
   await shot(page, '13-wrong-password');
   await ctx.close();
 }
+
+// I. F2: one-step join on a "google,password,email" build — Google, or an emailed code (no password).
+if (CODE) {
+  const S = server();
+  const { ctx, page } = await phone(S);
+  await page.goto(`${CODE}${LINK}`);
+  await page.getByText('Join Test Group B').waitFor({ timeout: 15000 });
+  check(await page.getByRole('button', { name: /Continue with Google/ }).isVisible(), 'I: Continue with Google');
+  check(await page.getByLabel('Your email').isVisible(), 'I: an email box');
+  check(!(await page.getByLabel('Password', { exact: true }).isVisible().catch(() => false)), 'I: no password on the join screen');
+  check(!(await page.getByTestId('email-continue').isVisible().catch(() => false)), 'I: not the email + password form');
+  check(await page.getByTestId('just-this-phone').isVisible(), 'I: "Just this phone for now" button');
+  await shot(page, '14-join-code-only');
+  await noSideScroll(page, 'Join, code only');
+  await page.getByLabel('Your email').fill('new@example.com');
+  await page.getByRole('button', { name: 'Email me a code' }).click();
+  await page.getByLabel('6-digit code from the email').waitFor({ timeout: 8000 });
+  check(S.calls.some((c) => c.p === '/auth/v1/otp' && c.body?.email === 'new@example.com'), 'I: emails a code (no password asked)');
+  await page.getByLabel('6-digit code from the email').fill('123 456');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByText('Who are you?').waitFor({ timeout: 10000 });
+  const j = joins(S);
+  check(j.length === 1 && j[0].sub === '55555555-5555-4555-8555-555555555555', 'I: the link is used by the signed-in account');
+  await page.getByRole('button', { name: /Kurt/ }).first().click();
+  await page.getByRole('button', { name: /Yes, I'm Kurt/ }).click();
+  await page.waitForTimeout(4000);
+  check(!(await page.getByRole('dialog', { name: /Turn on notifications/ }).isVisible().catch(() => false)), 'I: no notifications pop-up on the first visit');
+  check(page.url().endsWith('#/courses'), 'I: straight to the shared page');
+  await shot(page, '15-join-code-landed');
+  check(page.errors.length === 0, `I: no page errors (${page.errors.join(' | ')})`);
+  await ctx.close();
+} else console.log('(I skipped: no code build given)');
 
 await browser.close();
 console.log(fails.length ? `\n${fails.length} FAILED` : '\nAll passed');

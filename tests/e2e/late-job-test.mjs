@@ -129,7 +129,7 @@ await ctx.addInitScript(([u]) => {
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: u, exp, role: 'authenticated' })}.x`;
   if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: u, aud: 'authenticated', role: 'authenticated', is_anonymous: true } }));
-  try { localStorage.setItem('tgt-notify-prompt', String(Date.now())); localStorage.setItem('tgt-whats-new', 'beta-1'); } catch { /* fine */ }
+  try { localStorage.setItem('tgt-notify-prompt', String(Date.now())); localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */ } catch { /* fine */ }
 }, ['99999999-9999-4999-8999-999999999999']);
 const page = await ctx.newPage();
 page.on('dialog', (d) => d.accept());
@@ -148,7 +148,7 @@ who = P1;
 await go('/rules');
 await page.getByText('Late organising job').first().waitFor({ timeout: 15000 });
 check(await page.getByText('0 strokes · 5 days').first().isVisible(), 'Rulebook lists the rule at 0 strokes · 5 days');
-check(await page.getByText('Fines', { exact: true }).first().isVisible(), 'it sits under Fines');
+check(await page.getByText('Fines & awards', { exact: true }).first().isVisible(), 'it sits under Fines & awards');
 check(await page.getByText(/Start your Rulebook/).count() > 0, 'a group with only the standard rule still gets the starter picker');
 await shot('lj1-rulebook');
 await noSideScroll('rulebook');
@@ -175,19 +175,22 @@ const ruleWrite = writes.find((w) => w.table === 'rules');
 check(ruleWrite && ruleWrite.body.late_strokes === 2 && ruleWrite.body.late_days === 5 && !('value' in ruleWrite.body), `saving sends the numbers, not the words (${JSON.stringify(ruleWrite?.body || {}).slice(0, 120)})`);
 check(db.rules[0].late_strokes === 2, 'the rule is now 2 strokes');
 
-// 2. Mike (owner): the Next step warns him.
+// 2. Mike (owner): his jobs warn him. ov25/ov27: a locked-in trip's page is the run-up, and "Your jobs" carries what
+// the old Next step card did (no separate Next step card).
 who = P2;
 await page.evaluate(() => localStorage.clear());
 await go(`/plan/${PLAN}?view=overview`);
-await page.getByTestId('next-step').waitFor({ timeout: 15000 });
+await page.getByTestId('runup-todos').waitFor({ timeout: 15000 });
+const busTodo = page.getByTestId('todo-job').filter({ hasText: 'Book the bus' }).first();
 try {
-  await page.getByTestId('next-step-late').waitFor({ timeout: 8000 });
-  const t = await page.getByTestId('next-step').innerText();
-  check(/Your job: Book the bus/.test(t) && /⚠️ 6 days late — 2 penalty strokes if it’s not done before the next round/.test(t), 'Mike’s Next step: ⚠️ 6 days late — 2 penalty strokes …');
-} catch { check(false, `Mike’s Next step warns him (saw "${(await page.getByTestId('next-step').innerText()).replace(/\s+/g, ' ')}")`); }
+  await busTodo.waitFor({ timeout: 8000 });
+  const t = await busTodo.innerText();
+  check(/⚠️ 6 days late — 2 penalty strokes if it’s not done before the next round/.test(t) && (await busTodo.getAttribute('class')).includes('late'), 'Mike’s jobs: Book the bus — ⚠️ 6 days late — 2 penalty strokes …');
+} catch { check(false, `Mike’s jobs warn him (saw "${(await page.getByTestId('runup-todos').innerText()).replace(/\s+/g, ' ')}")`); }
 await shot('lj5-owner-next-step');
 await noSideScroll('owner next step');
-await page.getByTestId('next-step').getByRole('button', { name: 'Open the job' }).click();
+await busTodo.getByRole('button', { name: 'Open' }).click();
+await page.getByTestId('job-row').filter({ hasText: 'Book the bus' }).first().locator('button').first().click();
 await sheet().getByTestId('late-badge').waitFor({ timeout: 5000 });
 check(await sheet().getByTestId('waive-penalty').count() === 0, 'Mike can’t waive his own penalty');
 await shot('lj6-owner-job');

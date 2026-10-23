@@ -20,10 +20,10 @@ const D = (key: string, label: string, o: Partial<Destination> = {}): Destinatio
   ({ key, label, needs: [], takes: [], organiser: false, feature: null, ...o });
 
 export const DESTINATIONS: Destination[] = [
-  D('trip_now', 'This trip'),
+  D('trip_now', 'Trip status'),
   D('leaderboard', 'Leaderboard', { takes: ['round'] }),
   D('score', 'Enter scores', { needs: ['round'] }),
-  D('comps_board', 'What we’re playing for'),
+  D('comps_board', 'Trophies & cups'),
   D('cup', 'The Cup', { feature: 'cup' }),
   D('rulebook', 'The Rulebook'),
   D('propose_rule', 'Propose a rule'),
@@ -34,7 +34,7 @@ export const DESTINATIONS: Destination[] = [
   D('setup_trip', 'Set up your trip', { takes: ['trip'], organiser: true }),
   D('trips', 'Trips', { feature: 'planner' }),
   D('trip_overview', 'Trip overview', { needs: ['plan'], feature: 'planner' }),
-  D('trip_organise', 'Organise the trip', { needs: ['plan'], feature: 'planner' }),
+  D('trip_organise', 'Plan the trip', { needs: ['plan'], feature: 'planner' }),
   D('history_import', 'Bring in our history', { organiser: true, feature: 'ai_helper' }),
   D('notifications', 'Notifications', { feature: 'notifications' }),
   D('profile', 'My profile'),

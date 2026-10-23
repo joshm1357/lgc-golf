@@ -4,7 +4,7 @@
 export const AREA_NAMES = {
   ask: 'Questions (Ask)',
   setup: 'Set it up for me',
-  plan: 'Plan it with AI',
+  plan: 'Plan it with the Caddie',
   apply: 'Do it (setup)',
   plan_apply: 'Create it (plan)',
 };
@@ -12,16 +12,16 @@ export const areaName = (a) => AREA_NAMES[a] || String(a || 'Other');
 
 const ERROR_NAMES = {
   capped: 'Hit the limit',
-  provider_busy: 'AI busy or down',
+  provider_busy: 'Caddie busy or down',
   provider_key: 'Key not working',
   provider_credit: 'Out of credit',
   provider_model: 'Model not found',
-  provider_refused: 'AI refused the request',
+  provider_refused: 'Caddie refused the request',
   bad_json: 'Muddled reply (bad JSON)',
   no_answer: 'No answer',
   too_many_rounds: 'Gave up (too many steps)',
   timeout: 'Too slow',
-  network: 'Couldn’t reach the AI',
+  network: 'Couldn’t reach the Caddie',
   odd_reply: 'Odd reply',
   crash: 'Helper crashed',
   apply_refused: '“Do it” refused',

@@ -120,7 +120,7 @@ await ctx.addInitScript(([u]) => {
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: u, exp, role: 'authenticated' })}.x`;
   if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: u, aud: 'authenticated', role: 'authenticated', is_anonymous: true } }));
-  try { localStorage.setItem('tgt-notify-prompt', String(Date.now())); localStorage.setItem('tgt-whats-new', 'beta-1'); } catch { /* fine */ }
+  try { localStorage.setItem('tgt-notify-prompt', String(Date.now())); localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */ } catch { /* fine */ }
 }, ['99999999-9999-4999-8999-999999999999']);
 const page = await ctx.newPage();
 page.on('dialog', (d) => d.accept());
@@ -149,6 +149,8 @@ await open();
 await waitNext(/Lock it in/, 'lock it in (dates are set)');
 await shot('tp1-lock');
 await card().getByRole('button', { name: 'Lock it in' }).click();
+// ov26 (V1): one box ("Lock in …? The open votes on where and when close"), then it's locked in.
+await page.getByTestId('confirm-yes').click();
 await waitNext(/Shortlist accommodation/, 'shortlist accommodation once locked in');
 const jobs = db.plan_items.filter((j) => j.kind === 'job');
 check(jobs.length === 8 && jobs.every((j) => j.formula_key && j.due !== undefined), `the formula made 8 jobs (${jobs.length})`);
@@ -179,7 +181,7 @@ await open('organise');
 await page.getByRole('button', { name: /Where to stay/ }).click();
 await sheet().getByText('The shortlist', { exact: true }).waitFor({ timeout: 5000 });
 const airbnb = await sheet().getByRole('link', { name: /Airbnb/ }).getAttribute('href');
-check(airbnb.includes('Nowra') && airbnb.includes(`checkin=${START}`) && airbnb.includes('adults=4'), 'search links have the town, dates and headcount');
+check(airbnb.includes('Nowra') && airbnb.includes(`checkin=${START}`) && airbnb.includes('adults=3'), 'search links have the town, dates and headcount (ov23: the 3 who said they’re in, not the maybe)');
 for (const [name, cost, sleeps] of [['Beach House', '2400', '12'], ['Farm Stay', '1800', '10']]) {
   await sheet().getByLabel('Name').fill(name);
   await sheet().getByLabel('Rough total $').fill(cost);
@@ -243,25 +245,31 @@ check(notes.some((n) => n.type === 'deposit_ask'), 'everyone keen is notified');
 check(db.plan_items.find((j) => j.formula_key === 'deposit_ask').stage === 'done' && !!db.plan_items.find((j) => j.formula_key === 'chase_deposits').due, 'ask job done; chase deposits due in a week');
 await waitNext(/4 deposits to collect/, '4 deposits to collect');
 
-// 6. Mike (keen): confirm and pay.
+// 6. Mike (keen): ov27 (R1 + M1) — the locked-in trip opens on Your weekend, whose money line says who to pay and how.
+//    "I've paid" takes his seat (he's in) and then says "waiting for Josh to confirm" — no Pay button.
 who = P2;
-await open('overview');
-await waitNext(/Confirm you’re in and pay your \$150 deposit/, 'Mike: confirm and pay');
+await page.goto(`${BASE}#/plan/${PLAN}?view=overview`);
+await page.reload();
+await page.getByTestId('your-weekend').waitFor({ timeout: 15000 });
+await page.waitForTimeout(500);
+const money = () => page.getByTestId('money-line');
+check(/Deposit \$150 · still to pay \$150 to Josh/.test(await money().innerText()), `Mike: one money line — pay Josh $150 (${(await money().innerText()).replace(/\n/g, ' / ')})`);
+check(await money().getByText('PayID 0400 000 000 — Josh').isVisible(), 'the organiser’s payment details are shown');
+check(/Pay Josh your \$150 deposit/.test(await page.getByTestId('runup-todos').innerText()), 'Mike’s to-dos: pay Josh the deposit');
 await shot('tp7-player-pay');
-await card().getByRole('button', { name: 'Confirm and pay' }).click();
-check(await sheet().getByText('PayID 0400 000 000 — Josh').isVisible(), 'the organiser’s payment details are shown');
-await shot('tp8-pay-sheet');
-await sheet().getByRole('button', { name: 'I’ve paid $150' }).click();
-await page.waitForTimeout(600);
+await money().getByRole('button', { name: 'I’ve paid $150' }).click();
+await page.waitForTimeout(800);
 check(db.plan_rsvps.find((r) => r.player_id === P2).status === 'in', 'Mike is now in');
 check(db.plan_transfers.some((t) => t.from_id === P2 && !t.to_id && Number(t.amount) === 150 && !t.confirmed), 'his payment waits to be ticked off');
-await waitNext(/Deposit sent/, 'Mike: waiting for the tick');
+check(/\$150 waiting for Josh to confirm/.test(await money().innerText()) && !(await page.getByTestId('ive-paid').count()), 'Mike: waiting for Josh to confirm — no Pay button');
+check(!(await page.getByTestId('todo-deposit').count()), 'no deposit to-do (or Pay button) while it waits for a tick');
+await shot('tp8-waiting');
 
 // 7. The organiser ticks it off — on Organise (ov14: organiser-only things never show on the Overview).
 who = P1;
 await page.goto(`${BASE}#/plan/${PLAN}?view=overview`);
 await page.reload();
-await page.getByTestId('overview-glance').waitFor({ timeout: 15000 });
+await page.getByTestId('your-weekend').waitFor({ timeout: 15000 });
 check(!(await card().count()), 'the organiser’s Overview has no organiser Next step on it');
 await open('organise');
 check(await page.getByTestId('step-lockin').getAttribute('data-state') === 'current', 'deposits: the Lock in step is current');

@@ -158,7 +158,7 @@ async function open(width, { mobile = false } = {}) {
     const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
     const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
     if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated' } }));
-    localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-notify-prompt', String(Date.now()));
+    localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */ localStorage.setItem('tgt-notify-prompt', String(Date.now()));
     Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });
     Object.defineProperty(navigator, 'clipboard', { value: { writeText: async (t) => { window.__copied = t; } }, configurable: true });
   }, ['99999999-9999-4999-8999-999999999999']);
@@ -201,7 +201,7 @@ async function flow(width, mobile = false) {
     check(main && side && side.x > main.x + main.width - 1, `${tag}: the status column sits down the right of the steps`);
     await page.screenshot({ path: `${SHOTS}/${tag}-1-organise.png`, fullPage: true });
     // Rounds & tee times and the set-up checklist are on the On the day step; the Tribunal is under More.
-    await page.getByRole('list', { name: 'Organising steps' }).getByRole('button', { name: /On the day/ }).click();
+    await page.getByRole('list', { name: 'Organising steps' }).getByRole('button', { name: /the run-up/i }).click();
     await page.getByTestId('panel-rounds').getByText(/8:00/).first().waitFor({ timeout: 10000 }).catch(() => {});
     check((await page.getByTestId('panel-rounds').innerText()).includes('8:00'), `${tag}: rounds show tee times (On the day)`);
     check(await page.getByTestId('panel-checklist').isVisible(), `${tag}: the set-up checklist is on On the day`);
@@ -210,7 +210,7 @@ async function flow(width, mobile = false) {
     check((await page.getByTestId('panel-tribunal').innerText()).includes('Di'), `${tag}: the open Tribunal case is listed (More)`);
 
     // 2. Close a vote on the Vote step (the leading option is picked by default).
-    await page.getByRole('list', { name: 'Organising steps' }).getByRole('button', { name: /Vote/ }).click();
+    await page.getByRole('list', { name: 'Organising steps' }).getByRole('button', { name: /Areas & weekends/ }).click(); // ov23: the vote is part of step 1
     await page.getByRole('button', { name: /Close now & pick the winner/ }).first().click();
     await page.getByRole('button', { name: 'Pick this winner' }).click();
     await page.getByTestId('panel-votes').getByText('No votes open').waitFor({ timeout: 8000 });

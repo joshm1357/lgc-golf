@@ -14,8 +14,10 @@ import { featureOn as featureOnIn } from '../lib/features.js';
 import { useData, useSession, cacheGet, cacheSet } from '../lib/store.jsx';
 import { readReply, canSend, remainingLabel, MAX_TEXT } from '../lib/aihelper.js';
 import { pickDeskPlan } from '../lib/desk.js';
+import { todayISO } from '../lib/plan.js';
 import {
   caddieContext, caddieSuggestions, caddieMode, fallbackIntro, sessionFlag, caddieIds, searchDestinations, goButton,
+  HELLO_TEXT, isPlanATrip,
 } from '../lib/caddie.js';
 import { Rate } from '../screens/AiHelper.jsx';
 import Thinking from './Thinking.jsx';
@@ -85,7 +87,10 @@ export default function CaddieChat({ onGo, ask: askNow }) {
   const ctx = useMemo(() => caddieContext(loc.pathname, loc.search, { round: data.defaultRound?.id }), [loc.pathname, loc.search, data.defaultRound?.id]);
   const isAdmin = !!status?.is_admin && !status?.viewing;
   const roundName = ctx.round_id ? data.rounds?.find((r) => r.id === ctx.round_id)?.name : '';
-  const suggestions = caddieSuggestions(ctx, { isAdmin, roundName });
+  // Walkthrough small fix (ov27): no "Who's leading today?" when nothing's being played.
+  const playDay = todayISO();
+  const playing = !!ctx.round_id || (data.rounds || []).some((r) => r.status === 'live' || (r.play_date && String(r.play_date).slice(0, 10) === playDay));
+  const suggestions = caddieSuggestions(ctx, { isAdmin, roundName, playing });
   const mode = caddieMode({
     viewing: !!status?.viewing, guest: status?.role === 'guest', quick: !!status?.quick, featureOn: isOn('ai_helper'),
     notSetUp: flag === 'not_set_up', capped: flag === 'capped', offline: !online || !!data.offline,
@@ -97,6 +102,8 @@ export default function CaddieChat({ onGo, ask: askNow }) {
     const q = String(raw || '').trim();
     if (!q || busy) return;
     setText('');
+    // "plan a trip" (the hello says to): over to ✨ Plan a trip.
+    if (isPlanATrip(q)) { window.dispatchEvent(new CustomEvent('caddie:open', { detail: { plan: true } })); return; }
     if (!mode.ai) {
       setThread((t) => [{ q, local: true, intro: fallbackIntro(mode), matches: find(q) }, ...t].slice(0, 10));
       return;
@@ -123,6 +130,10 @@ export default function CaddieChat({ onGo, ask: askNow }) {
 
   return (
     <div className="stack caddie-chat" style={{ gap: 10 }} data-testid="caddie-chat" data-ai={mode.ai ? 'on' : 'off'}>
+      {!thread.length && (
+        // ov22: the empty chat starts with Caddie saying hello — the same words as the first-visit bubble.
+        <div className="caddie-hello-msg" data-testid="caddie-greeting"><span aria-hidden="true">👋 </span>{HELLO_TEXT}</div>
+      )}
       {!mode.ai && <div className="small caddie-why" role="note">{fallbackIntro(mode).replace(/:$/, '.')}</div>}
       <div className="chips" style={{ padding: 0, flexWrap: 'wrap' }} role="group" aria-label="Try asking">
         {suggestions.map((q) => <button key={q} type="button" className="chip" disabled={busy} onClick={() => ask(q)}>{q}</button>)}

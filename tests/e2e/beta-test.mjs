@@ -3,6 +3,8 @@
 //   liveStyleBase: this branch built like live (no sign-in, new groups off), e.g. http://localhost:4301/lgc-golf/
 //   signInBase:    this branch built like staging (VITE_SIGN_IN=google,email, VITE_NEW_GROUPS=on), e.g. http://localhost:4302/
 //   productBase:   the product branch before this change, built like live, e.g. http://localhost:4303/lgc-golf/
+//                  (once Stage 1 is in the product branch, the same branch's live-style build: other features change these screens)
+// #/rules opens Governance → Rulebook, so its header (and the sidebar link) say Governance.
 import { chromium } from '/opt/npm-tools/node_modules/playwright/index.mjs';
 import fs from 'node:fs';
 
@@ -17,7 +19,7 @@ const COURSE = 'cccccccc-0000-4000-8000-000000000001';
 const ROUND = 'dddddddd-0000-4000-8000-000000000001';
 const PLAN = 'eeeeeeee-0000-4000-8000-000000000001';
 const now = '2026-10-20T08:00:00.000Z';
-const today = '2026-10-20';
+const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney' }).format(new Date()); // the app's 'today' is Sydney time (a live round from an earlier day isn't 'on now')
 const holes = Array.from({ length: 18 }, (_, i) => ({ n: i + 1, par: 4, si: i + 1 }));
 const db = {
   players: [
@@ -88,7 +90,7 @@ async function newPage(width, height = 900, { phone = false, seenNote = true } =
     const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
     const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
     if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated', is_anonymous: false, email: 'josh@example.com' } }));
-    if (seen && !sessionStorage.getItem('keep-note')) localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-notify-prompt', String(Date.now()));
+    if (seen && !sessionStorage.getItem('keep-note')) localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */ localStorage.setItem('tgt-notify-prompt', String(Date.now()));
   }, ['99999999-9999-4999-8999-999999999999', seenNote]);
   const page = await ctx.newPage();
   page.on('pageerror', (e) => fails.push(`page error: ${e}`));
@@ -117,7 +119,7 @@ const visible = (page, sel) => page.evaluate((s) => { const el = document.queryS
 
 // 1. Phone screens unchanged: pixel-compare this branch with the product branch at 375 px (live-style builds).
 const title = (page, text) => page.locator('.page .hdr-title', { hasText: text }).first().waitFor({ timeout: 15000 });
-for (const [hash, text, name] of [['#/', 'Saturday', 'leaderboard'], ['#/feed', 'Feed', 'feed'], ['#/plan', 'Spring Trip', 'trips'], ['#/rules', 'Rulebook', 'rulebook']]) {
+for (const [hash, text, name] of [['#/', 'Saturday', 'leaderboard'], ['#/feed', 'Feed', 'feed'], ['#/plan', 'Spring Trip', 'trips'], ['#/rules', 'Group rules', 'rulebook']]) {
   const shots = [];
   for (const base of [PRODUCT, LIVE]) {
     const { ctx, page } = await newPage(375, 812, { phone: true });
@@ -138,7 +140,7 @@ for (const [hash, text, name] of [['#/', 'Saturday', 'leaderboard'], ['#/feed', 
 {
   const { ctx, page } = await newPage(375, 812, { phone: true });
   await page.goto(LIVE + '#/more');
-  await page.locator('.page').getByText('Tell Josh').first().waitFor({ timeout: 15000 });
+  await page.locator('.page').getByText('Send feedback').first().waitFor({ timeout: 15000 });
   check(!(await visible(page, '.side')), '375 px: no sidebar');
   check(await visible(page, '.tabs'), '375 px: bottom bar shows');
   check(await noSideScroll(page), '375 px: no sideways scroll on More');
@@ -165,7 +167,7 @@ for (const w of [768, 1280, 1920]) {
     check(true, `${w} px: sidebar Trips opens the Trips tab`);
     await page.screenshot({ path: `${SHOTS}/${w}-trips.png` });
     check(await page.locator('.side .side-link.active').innerText() === 'Trips', `${w} px: Trips is marked as the current page`);
-    for (const [label, text] of [['Trophy Room', 'Trophy'], ['Rulebook', 'Rulebook'], ['Feed', 'Feed']]) {
+    for (const [label, text] of [['Trophy Room', 'Trophy'], ['Group rules', 'Group rules'], ['Feed', 'Feed']]) {
       await page.locator('.side').getByText(label, { exact: true }).click();
       let ok = false; try { await page.locator('.page .hdr-title', { hasText: text }).first().waitFor({ timeout: 6000 }); ok = true; } catch { /* below */ }
       check(ok && await noSideScroll(page), `${w} px: ${label} opens, no sideways scroll`);
@@ -209,21 +211,21 @@ for (const w of [768, 1280, 1920]) {
   const { ctx, page } = await newPage(1280, 900);
   await page.goto(LIVE + '#/plan');
   await page.getByText('Spring Trip').first().waitFor({ timeout: 15000 });
-  await page.locator('.side').getByText('Tell Josh').click();
-  await page.getByRole('dialog', { name: 'Tell Josh' }).waitFor();
+  await page.locator('.side').getByText('Send feedback').click();
+  await page.getByRole('dialog', { name: 'Send feedback' }).waitFor();
   await page.getByRole('button', { name: 'Something’s wrong' }).click();
   await page.locator('textarea').fill('ok');
-  await page.getByRole('button', { name: 'Send to Josh' }).click();
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
   check(await page.getByText('Type a few words first').isVisible(), 'feedback: too short is caught before sending');
   check(!rpcs.some((r) => r.name === 'send_feedback'), 'feedback: nothing sent yet');
   await page.locator('textarea').fill('The trip page jumped when I tapped In');
   await page.screenshot({ path: `${SHOTS}/1280-tell-josh.png` });
-  await page.getByRole('button', { name: 'Send to Josh' }).click();
-  await page.getByText('Sent to Josh. Thanks!').waitFor({ timeout: 5000 });
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await page.getByText('Sent. Thanks!').waitFor({ timeout: 5000 });
   const sent = rpcs.find((r) => r.name === 'send_feedback')?.body || {};
   check(sent.p_kind === 'problem' && sent.p_message === 'The trip page jumped when I tapped In' && sent.p_path === '#/plan' && !!sent.p_version,
     `feedback: sent problem / words / #/plan / version ${sent.p_version}`);
-  check(!(await page.getByRole('dialog', { name: 'Tell Josh' }).isVisible()), 'feedback: the sheet closes after sending');
+  check(!(await page.getByRole('dialog', { name: 'Send feedback' }).isVisible()), 'feedback: the sheet closes after sending');
   await ctx.close();
 }
 

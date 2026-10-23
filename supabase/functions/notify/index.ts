@@ -15,6 +15,15 @@ import webpush from 'npm:web-push@3.6.7';
 import { emailOnlyUsers, emailVoteOpen, emailVoteReminders } from './votemail.ts';
 import { VOTE_KINDS } from '../_shared/emailvotes.js';
 import { batchNonVoters, reminderGroups, batchMessage } from './batch.ts';
+// ov25: the run-up's personal reminders (a week out: "3 things waiting for you"; the day before: your car, room, tee
+// time and what you're bringing). The words are shared with the app's tests.
+import { dayBeforeMessage, countdownPush } from '../_shared/runup.js';
+// ov28: "your round" — the draw is out (I8), your tee time tomorrow (I11), swing alerts (I13).
+import { roundBits, drawOutFor, teeTomorrowFor, swingGap, matchSwing, pointsSwing } from './yourround.ts';
+// ov29: side games put out for an opt-in (098) — "Bo's put up $5 skins for Saturday. You in?"
+import { proposedBits, proposeProblem, gameProposedMessage } from './sidegames.ts';
+// ov31: automatic awards — the proposed winner in the morning, confirmed, a dispute upheld.
+import { AUTO_AWARD_KINDS, AUTO_AWARD_IMPORTANT, autoAwardSends } from './autoawards.ts';
 
 // The app's web address for links in notifications. Set APP_URL in the function's secrets when the app moves
 // (e.g. https://app.thegolftrip.club/); until then it's the GitHub Pages address.
@@ -52,7 +61,11 @@ const ALWAYS_NOW = new Set(['draw_open', 'test']);
 // Tribunal (061, queued from the database): a case about you, your committee's case, a case over to the organisers or
 // needing a casting vote, a report, a term ending, and "voting closes tomorrow".
 const IMPORTANT = new Set(['draw_open', 'test', 'job_assigned', 'job_due', 'payment_recorded', 'nudge_kitty', 'deposit_ask', 'nudge_deposit', 'trip_tomorrow', 'award',
-  'case_about_you', 'case_committee', 'case_fallback', 'case_casting', 'case_report', 'case_closing', 'term_ending']);
+  'case_about_you', 'case_committee', 'case_fallback', 'case_casting', 'case_report', 'case_closing', 'term_ending',
+  // ov28: who you're playing with and when you're off.
+  'draw_out', 'tee_tomorrow']);
+/** ov28: only worth it in the moment — "straight away" people get them; never saved up for a digest. */
+const NOT_IN_DIGEST = new Set(['swing']);
 
 /** Which feature each kind of message belongs to (Stage 3): nothing goes out for a switched-off feature. */
 const KIND_FEATURE: Record<string, string> = {
@@ -65,6 +78,9 @@ const KIND_FEATURE: Record<string, string> = {
   rule_proposed: 'rule_voting', draw_open: 'draw', award: 'awards', award_minor: 'awards', commentary: 'commentary',
   case_new: 'tribunal', case_about_you: 'tribunal', case_committee: 'tribunal', case_fallback: 'tribunal', case_casting: 'tribunal',
   case_report: 'tribunal', case_closing: 'tribunal', case_verdict: 'tribunal', term_ending: 'committees',
+  // ov28: swing alerts ride on live commentary's switch (and its buzz level); the draw-out and tee-time buzzes are
+  // core (teams, tee groups and Cup matches can each be set without any other feature).
+  swing: 'commentary',
   // rule_decided: not tied to voting — organisers deciding rules is part of the Rulebook itself.
 };
 /** Is a feature on for group g? (An older database without switches: everything on.) */
@@ -118,7 +134,7 @@ async function send(g: string, to: string[] | 'all', msg: Msg, except: string | 
   for (const u of users) {
     const m = mode.get(u) || 'instant';
     if (ALWAYS_NOW.has(kind) || m === 'instant' || (m === 'important' && IMPORTANT.has(kind))) now.push(u);
-    else if (m === 'digest') later.push(u);
+    else if (m === 'digest' && !NOT_IN_DIGEST.has(kind)) later.push(u);
   }
   if (later.length) {
     await db.from('notify_queue').insert(later.map((u) => ({ group_id: g, user_id: u, kind, title: msg.title, body: msg.body, url: msg.url })));
@@ -199,6 +215,29 @@ async function commentaryNow() {
   return sent;
 }
 
+// ------------------------------------------------------------------ ov31: automatic awards (migration 100)
+// The database's 5-minute job queues "🌙 Proposed — Latest out, last night: …", "✅ Confirmed — …" (to the winner) and
+// "⚖️ Dispute upheld — pick another claim" (to organisers) and calls this with the cron secret ({"type":"auto_awards"}).
+// "Straight away" people get them now; digest people at their hour (the hourly send); "only important" people get the
+// winner / organiser ones. They belong to Awards and fines (dinner_awards).
+for (const k of AUTO_AWARD_KINDS) KIND_FEATURE[k] = 'dinner_awards';
+for (const k of AUTO_AWARD_IMPORTANT) IMPORTANT.add(k);
+async function autoAwardsNow() {
+  const { data: waiting } = await db.from('notify_queue').select('id,group_id,user_id,kind,title,body,created_at')
+    .in('kind', AUTO_AWARD_KINDS).is('sent_at', null).order('created_at').limit(2000);
+  if (!waiting?.length) return 0;
+  const groups = [...new Set(waiting.map((w) => w.group_id))];
+  const { data: prefs } = await db.from('notify_prefs').select('group_id,user_id,mode').in('group_id', groups);
+  const on = new Map<string, boolean>();
+  for (const g of groups) on.set(g, (await featureOn(g, 'notifications')) && (await featureOn(g, 'dinner_awards')));
+  const { send, done } = autoAwardSends(waiting.filter((w) => on.get(w.group_id)), prefs || []);
+  let sent = 0;
+  for (const s of send) sent += await pushTo([s.user_id], { ...s.msg, url: `${APP}#/feed` });
+  const off = waiting.filter((w) => !on.get(w.group_id)).map((w) => w.id);
+  if (done.length || off.length) await db.from('notify_queue').update({ sent_at: new Date().toISOString() }).in('id', [...done, ...off]);
+  return sent;
+}
+
 const planUrl = (id: string, tab?: string) => `${APP}#/plan/${id}${tab ? `?tab=${tab}` : ''}`;
 const name = (p?: { name?: string; nickname?: string }) => (p?.nickname || p?.name || 'Someone').split(' ')[0];
 const sydneyDate = (offsetDays = 0) =>
@@ -210,7 +249,7 @@ const fmt = (d?: string | null) => {
 };
 
 async function players(g: string) {
-  const { data } = await db.from('players').select('id,name,nickname,approved').eq('group_id', g);
+  const { data } = await db.from('players').select('id,name,nickname,approved,handicap').eq('group_id', g);
   return (data || []).filter((p) => p.approved !== false);
 }
 async function admins(g: string) {
@@ -229,10 +268,11 @@ async function plan(g: string, id: string) {
   return mine(g, 'plans', id);
 }
 async function openPollNonVoters(g: string, planId: string, pollId?: string) {
-  let pq = db.from('plan_polls').select('id').eq('plan_id', planId).eq('status', 'open');
+  let pq = db.from('plan_polls').select('*').eq('plan_id', planId).eq('status', 'open');
   if (pollId) pq = pq.eq('id', pollId);
   const { data: polls } = await pq;
-  const pollIds = (polls || []).map((p) => p.id);
+  // ov23 (092): nobody is nudged for skipping the optional detail (an area's courses / places to stay).
+  const pollIds = (polls || []).filter((p) => p.optional !== true).map((p) => p.id);
   if (!pollIds.length) return [];
   const [{ data: opts }, { data: votes }, people] = await Promise.all([
     db.from('plan_options').select('id,poll_id').in('poll_id', pollIds),
@@ -269,6 +309,68 @@ async function kittyOwing(planId: string) {
     const received = transfers.filter((t) => t.to_id === pid).reduce((s, t) => s + Number(t.amount), 0);
     return { pid, owes: Math.round((share - fronted - paid - sent + received) * 100) / 100 };
   }).filter((x) => x.owes > 0.5);
+}
+
+/** ov25: what each person has waiting for a trip, and their day-before bits (car, room, tee time, what to bring).
+ *  Throws on a database without 094 (the caller falls back to the old message). */
+// deno-lint-ignore no-explicit-any
+async function runUpFor(g: string, pl: Record<string, any>, _ins: string[], dayBefore: boolean) {
+  const [{ data: items, error: e1 }, { data: people, error: e2 }, { data: groups }, { data: tr }, { data: rsvpsAll }, { data: tips }, pls] = await Promise.all([
+    db.from('plan_items').select('id,kind,title,owner_id,done,stage,bring_shared').eq('plan_id', pl.id),
+    db.from('trip_runup_people').select('player_id,handicap_checked_at,needs_lift').eq('plan_id', pl.id),
+    db.from('plan_groups').select('id,kind,name,driver_id,pickup_place,pickup_time').eq('plan_id', pl.id),
+    db.from('plan_transfers').select('from_id,to_id,amount,confirmed').eq('plan_id', pl.id),
+    db.from('plan_rsvps').select('player_id,status').eq('plan_id', pl.id),
+    db.from('trip_tips').select('player_id').eq('plan_id', pl.id),
+    players(g),
+  ]);
+  if (e1 || e2) throw new Error('before 094');
+  const byId = new Map(pls.map((p) => [p.id, p]));
+  const groupIds = (groups || []).map((x) => x.id);
+  const { data: members } = groupIds.length ? await db.from('plan_group_members').select('group_id,player_id').in('group_id', groupIds) : { data: [] as { group_id: string; player_id: string }[] };
+  let tees: { player_ids: string[]; tee_time: string }[] = [];
+  if (dayBefore && pl.trip_id) {
+    const { data: rounds } = await db.from('rounds').select('id,play_date').eq('trip_id', pl.trip_id).not('play_date', 'is', null).order('play_date').limit(1);
+    if (rounds?.[0]) tees = ((await db.from('tee_groups').select('player_ids,tee_time').eq('round_id', rounds[0].id)).data || []) as typeof tees;
+  }
+  const deposit = Number(pl.deposit_pp) || 0;
+  const paid = (pid: string) => (tr || []).filter((t) => t.from_id === pid && !t.to_id).reduce((s, t) => s + Number(t.amount || 0), 0);
+  // ov27 (I10): how they're getting there — 'driving' | 'car' | 'asked' | 'none'.
+  const lift = (pid: string) => {
+    const car = (groups || []).find((x) => x.kind === 'car' && (members || []).some((m) => m.group_id === x.id && m.player_id === pid));
+    if (car) return car.driver_id === pid ? 'driving' : 'car';
+    return (people || []).some((p) => p.player_id === pid && p.needs_lift) ? 'asked' : 'none';
+  };
+  const carsOn = (groups || []).some((x) => x.kind === 'car');
+  return {
+    deposit, paid, lift, carsOn,
+    hcpOf: (pid: string) => byId.get(pid)?.handicap ?? null,
+    waiting(pid: string) {
+      const mine = (items || []).filter((i) => i.owner_id === pid);
+      const r = (rsvpsAll || []).find((x) => x.player_id === pid);
+      return {
+        reply: !r || r.status === 'maybe',
+        deposit: deposit > 0 && paid(pid) < deposit - 0.5 ? `$${deposit}` : null,
+        jobs: mine.filter((i) => i.kind === 'job' && !(i.done || i.stage === 'done')).map((i) => i.title),
+        handicap: !(people || []).some((p) => p.player_id === pid && p.handicap_checked_at),
+        tip: !pl.tipping_off && !(tips || []).some((t) => t.player_id === pid),
+      };
+    },
+    dayBefore(pid: string) {
+      const inGroup = (kind: string) => (groups || []).find((x) => x.kind === kind && (members || []).some((m) => m.group_id === x.id && m.player_id === pid));
+      const car = inGroup('car');
+      const room = inGroup('room');
+      const tee = tees.filter((t) => (t.player_ids || []).includes(pid)).map((t) => t.tee_time).sort()[0] || null;
+      return {
+        car: car ? { name: car.name, driver: byId.get(car.driver_id) || null, driving: car.driver_id === pid, pickup_place: car.pickup_place, pickup_time: car.pickup_time } : null,
+        room: room ? { name: room.name, with: (members || []).filter((m) => m.group_id === room.id && m.player_id !== pid).map((m) => byId.get(m.player_id)).filter(Boolean) } : null,
+        tee,
+        bring: (items || []).filter((i) => i.kind === 'bring' && i.bring_shared && i.owner_id === pid).map((i) => i.title),
+        // Only nag about a lift once the trip has cars on the go.
+        lift: carsOn ? lift(pid) : null,
+      };
+    },
+  };
 }
 
 /** Only send each daily reminder once. */
@@ -309,8 +411,9 @@ async function dailyFor(g: string) {
     if (!(await once(`batch-closing:${grp.batch}:${today}`))) continue;
     const { data: b } = await db.from('vote_batches').select('id,plan_id,title,keen').eq('id', grp.batch).eq('group_id', g).maybeSingle();
     if (!b) continue;
-    const { data: all } = await db.from('plan_polls').select('id').eq('vote_batch', b.id).eq('status', 'open');
-    const pollIds = (all || []).map((x) => x.id);
+    // ov23 (092): the optional detail under an area doesn't count — select('*') so a database before 092 still works.
+    const { data: all } = await db.from('plan_polls').select('*').eq('vote_batch', b.id).eq('status', 'open');
+    const pollIds = (all || []).filter((x) => x.optional !== true).map((x) => x.id);
     const [{ data: votes }, { data: rs }, people] = await Promise.all([
       db.from('plan_votes').select('poll_id,player_id').in('poll_id', pollIds),
       db.from('plan_rsvps').select('player_id').eq('plan_id', b.plan_id),
@@ -330,13 +433,42 @@ async function dailyFor(g: string) {
     const missing = (await players(g)).filter((p) => !replied.has(p.id)).map((p) => p.id);
     sent += await send(g, missing, { title: `🙋 Last day: are you in for ${pl.name}?`, body: 'Tap to say In, Maybe or Out.', url: planUrl(pl.id, 'people') }, null, 'rsvp_deadline');
   }
-  // A week out and the day before → everyone who's in.
-  for (const [day, label] of [[week, 'is a week away'], [tomorrow, 'is tomorrow']] as const) {
+  // The countdown (ov25, ov27 I10): 30 days, a week and the day before → everyone who's in, each with their own message
+  // about ONE thing, and nothing when there's nothing to do (lib: _shared/runup.js countdownPush):
+  //   a month out — pay (else: are you in?);  a week out — handicap (else pay, else lift);
+  //   the day before — "Your car: Josh's, pick-up Leichhardt 6:30am Fri · Room 3 with Hamish · tee time 9:12".
+  const month = sydneyDate(30);
+  for (const [day, label] of [[month, 'is a month away'], [week, 'is a week away'], [tomorrow, 'is tomorrow']] as const) {
     const { data: soon } = await db.from('plans').select('*').eq('group_id', g).eq('start_date', day).neq('status', 'cancelled').eq('proposed', false);
     for (const pl of plannerOn ? soon || [] : []) {
       if (!(await once(`countdown:${pl.id}:${day}:${label}`))) continue;
       const { data: rs } = await db.from('plan_rsvps').select('player_id').eq('plan_id', pl.id).eq('status', 'in');
-      sent += await send(g, (rs || []).map((r) => r.player_id), { title: `⛳ ${pl.name} ${label}`, body: [pl.location_name, 'Check the details and what to bring.'].filter(Boolean).join(' · '), url: planUrl(pl.id, 'details') }, null, day === tomorrow ? 'trip_tomorrow' : 'trip_week');
+      const ins = (rs || []).map((r) => r.player_id);
+      const kind = day === tomorrow ? 'trip_tomorrow' : 'trip_week';
+      const each = await runUpFor(g, pl, ins, day === tomorrow).catch(() => null);
+      if (!each && day === month) continue; // the month-out push is new (ov27): nothing on an older database
+      if (!each) {
+        // Before 094 (or anything missing): the old message to everyone.
+        sent += await send(g, ins, { title: `⛳ ${pl.name} ${label}`, body: [pl.location_name, 'Check the details and what to bring.'].filter(Boolean).join(' · '), url: planUrl(pl.id, 'details') }, null, kind);
+        continue;
+      }
+      // What each still owes (confirmed money only — the same sums as the app) and who collects it.
+      const owing = day === tomorrow ? [] : await kittyOwing(pl.id).catch(() => []);
+      const org = (await players(g)).find((p) => p.id === (pl.organiser_id || pl.created_by));
+      for (const pid of ins) {
+        let msg;
+        if (day === tomorrow) msg = dayBeforeMessage(pl.name, pl.location_name, each.dayBefore(pid));
+        else {
+          const w = each.waiting(pid);
+          // v10 merge fix: the organiser who collects the deposits is never told to pay their own to themselves.
+          const owes = owing.find((o) => o.pid === pid)?.owes || (w.deposit && pid !== org?.id ? Math.max(0, each.deposit - each.paid(pid)) : 0);
+          msg = countdownPush(day === month ? 30 : 7, pl.name, {
+            owes, payTo: org ? name(org) : null, reply: w.reply, handicap: w.handicap, hcp: each.hcpOf(pid), lift: each.carsOn ? each.lift(pid) : null,
+          });
+        }
+        if (!msg) continue; // nothing to do: no message (no flooding)
+        sent += await send(g, [pid], { title: msg.title, body: msg.body, url: `${APP}#/plan/${pl.id}?view=overview`, tag: `runup-${pl.id}-${pid}` }, null, kind);
+      }
     }
   }
   // Jobs due tomorrow → their owner.
@@ -348,15 +480,42 @@ async function dailyFor(g: string) {
   return sent;
 }
 
+/** ov28 (I11): the evening call (7pm Sydney in summer, 6pm in winter) — "Your tee time tomorrow: 7:52" to everyone
+ *  with a tee time or playing group in a round tomorrow, with their lift if the trip's cars are sorted. Only when a
+ *  time or group is set ("If selected"); once per person per round. */
+async function evening() {
+  let sent = 0;
+  const tomorrow = sydneyDate(1);
+  const { data: rounds } = await db.from('rounds').select('id,group_id,trip_id').eq('play_date', tomorrow).neq('status', 'locked');
+  for (const r of rounds || []) {
+    const g = r.group_id as string;
+    if (!(await featureOn(g, 'notifications'))) continue;
+    const bits = await roundBits(db, g, r.id).catch(() => null);
+    if (!bits) continue;
+    // The trip's cars (run-up, 094), when there's a plan for it.
+    let car: (pid: string) => any = () => null;
+    if (r.trip_id && (await featureOn(g, 'planner'))) {
+      const { data: pl } = await db.from('plans').select('*').eq('group_id', g).eq('trip_id', r.trip_id).neq('status', 'cancelled').limit(1).maybeSingle();
+      const each = pl ? await runUpFor(g, pl, [], false).catch(() => null) : null;
+      if (each) car = (pid: string) => each.dayBefore(pid).car;
+    }
+    for (const { pid, msg } of teeTomorrowFor(bits, car)) {
+      if (!(await once(`tee-tomorrow:${r.id}:${pid}`))) continue;
+      sent += await send(g, [pid], { title: msg.title, body: msg.body, url: `${APP}#/trip-now/${r.trip_id}`, tag: `tee-${r.id}` }, null, 'tee_tomorrow');
+    }
+  }
+  return sent;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   try {
     await loadKeys();
     const body = await req.json().catch(() => ({}));
 
-    if (body.type === 'daily' || body.type === 'digest' || body.type === 'commentary') {
+    if (body.type === 'daily' || body.type === 'digest' || body.type === 'commentary' || body.type === 'evening' || body.type === 'auto_awards') {
       if (!cronSecret || req.headers.get('x-cron-secret') !== cronSecret) return json({ error: 'Not allowed' }, 401);
-      return json({ sent: body.type === 'daily' ? await daily() : body.type === 'commentary' ? await commentaryNow() : await digest() });
+      return json({ sent: body.type === 'daily' ? await daily() : body.type === 'commentary' ? await commentaryNow() : body.type === 'evening' ? await evening() : body.type === 'auto_awards' ? await autoAwardsNow() : await digest() });
     }
 
     // Everyone else must be a signed-in member of the group.
@@ -370,8 +529,8 @@ Deno.serve(async (req) => {
     if (!m) return json({ error: 'Join the group first' }, 403);
     const g = m.group_id as string;
     const me = { player_id: m.player_id as string | null, is_admin: m.role === 'organiser' };
-    const adminOnly = ['plan_new', 'trip_locked', 'rsvp_locked', 'nudge_votes', 'nudge_rsvp', 'nudge_kitty', 'groups_set', 'draw_open', 'deposit_ask', 'nudge_deposit', 'nudge_signin'];
-    if (adminOnly.includes(body.type) && !me.is_admin) return json({ error: 'Admin only' }, 403);
+    const adminOnly = ['plan_new', 'trip_locked', 'rsvp_locked', 'nudge_votes', 'nudge_rsvp', 'nudge_kitty', 'groups_set', 'draw_open', 'deposit_ask', 'nudge_deposit', 'nudge_signin', 'draw_out'];
+    if (adminOnly.includes(body.type) && !me.is_admin) return json({ error: 'Organisers only' }, 403);
     const from = me.player_id as string | null;
     // Someone who hasn't picked their name yet can't send anything to others (only the test buzz to themselves).
     if (!from && !me.is_admin && body.type !== 'test') return json({ error: 'Pick your name first' }, 403);
@@ -420,7 +579,7 @@ Deno.serve(async (req) => {
         if (!me.is_admin) {
           // The trip's organiser may pick winners when the group allows it.
           const [{ data: gr }, pl0] = await Promise.all([db.from('groups').select('vote_decider').eq('id', g).single(), plan(g, p.plan_id)]);
-          if (gr?.vote_decider !== 'admin_or_organiser' || !from || pl0.organiser_id !== from) return json({ error: 'Admin only' }, 403);
+          if (gr?.vote_decider !== 'admin_or_organiser' || !from || pl0.organiser_id !== from) return json({ error: 'Organisers only' }, 403);
         }
         if (!(await once(`poll-decided:${p.id}`))) break;
         const { data: o } = p.winner_option_id ? await db.from('plan_options').select('label').eq('id', p.winner_option_id).eq('group_id', g).maybeSingle() : { data: null };
@@ -532,7 +691,7 @@ Deno.serve(async (req) => {
         break;
       }
       case 'rule_decided': {
-        if (!me.is_admin) return json({ error: 'Admin only' }, 403);
+        if (!me.is_admin) return json({ error: 'Organisers only' }, 403);
         const r = await mine(g, 'rules', body.rule_id);
         if (!r || !['active', 'rejected', 'retired'].includes(r.status)) break;
         const verb = { active: '✅ New rule', rejected: '❌ Rule rejected', retired: '🗄️ Rule retired' }[r.status as 'active'];
@@ -541,11 +700,14 @@ Deno.serve(async (req) => {
       }
       case 'payment_recorded': {
         const t = await mine(g, 'plan_transfers', body.transfer_id);
-        if (!t || t.created_by !== from || !t.to_id || t.to_id === from) break;
-        if (!(await once(`payment:${t.id}`))) break;
+        if (!t || t.created_by !== from || t.to_id === from) break;
         const pl = await plan(g, t.plan_id);
+        // ov27 (M1): money paid in (no to_id — "the kitty") goes to the trip's organiser to tick off: tell them.
+        const to = t.to_id || pl.organiser_id || null;
+        if (!to || to === from) break;
+        if (!(await once(`payment:${t.id}`))) break;
         const ppl = await players(g);
-        sent = await send(g, [t.to_id], { title: `💸 ${name(ppl.find((p) => p.id === t.from_id))} says they paid you $${Number(t.amount).toFixed(2).replace(/\.00$/, '')}`, body: `${pl.name} — tap to confirm you got it.`, url: planUrl(pl.id, 'kitty') }, from, 'payment_recorded');
+        sent = await send(g, [to], { title: `💸 ${name(ppl.find((p) => p.id === t.from_id))} says they paid you $${Number(t.amount).toFixed(2).replace(/\.00$/, '')}`, body: `${pl.name} — tap to confirm you got it.`, url: planUrl(pl.id, 'kitty') }, from, 'payment_recorded');
         break;
       }
       case 'comment_added': {
@@ -566,9 +728,64 @@ Deno.serve(async (req) => {
         sent = await send(g, to, { title: `💬 ${name(ppl.find((p) => p.id === from))} on ${pl.name}`, body: text.length > 120 ? `${text.slice(0, 117)}…` : text, url: planUrl(pl.id, 'chat'), tag: `chat-${pl.id}` }, from, 'comment');
         break;
       }
+      case 'draw_out': {
+        // ov28 (I8): "The draw is out" for any teams / pairs / Cup matches / playing groups: each player gets their own
+        // line ("You & Bo v Kurt & Al, Thu 7:00am"). Once an hour per round at most (an organiser fiddling with groups
+        // doesn't buzz everyone ten times).
+        const bits = await roundBits(db, g, body.round_id);
+        if (!bits) throw new NotYours();
+        if (!(await once(`draw-out:${bits.round.id}:${Math.floor(Date.now() / 3600000)}`))) break;
+        for (const { pid, msg } of drawOutFor(bits)) {
+          sent += await send(g, [pid], { title: msg.title, body: msg.body, url: `${APP}#/trip-now/${bits.round.trip_id}`, tag: `draw-${bits.round.id}` }, null, 'draw_out');
+        }
+        break;
+      }
+      case 'swing': {
+        // ov28 (I13): swing alerts. The app says WHAT was just scored (a Cup match's hole, or a player's hole); this
+        // works out whether it's a swing and writes the words. Limits: the group's commentary buzz level (feed only =
+        // none), once per match state / per mover per hole, and one swing buzz a person per 10 or 30 minutes.
+        const gap = await swingGap(db, g);
+        if (gap == null) break;
+        const hole = Number(body.hole) || 0;
+        const bucket = Math.floor(Date.now() / (gap * 60000));
+        const room = async (pids: string[]) => {
+          const ok: string[] = [];
+          for (const pid of pids) if (await once(`swing-p:${pid}:${gap}:${bucket}`)) ok.push(pid);
+          return ok;
+        };
+        if (body.match_id) {
+          const s = await matchSwing(db, g, body.match_id, hole);
+          if (!s || !(await once(`swing-m:${s.key}`))) break;
+          sent = await send(g, await room(s.to.filter((p: string) => p !== from)), { title: '⚔️ The Cup', body: s.text, url: `${APP}#/cup/${body.match_id}`, tag: `swing-${body.match_id}` }, from, 'swing');
+        } else if (body.round_id) {
+          const mover = typeof body.player_id === 'string' ? body.player_id : from;
+          const s = mover ? await pointsSwing(db, g, body.round_id, mover, hole) : null;
+          if (!s || !(await once(`swing-pass:${body.round_id}:${mover}:${hole}`))) break;
+          sent = await send(g, await room([mover!]), { title: '⛳ On the move', body: s.text, url: `${APP}#/?r=${body.round_id}`, tag: `swing-${body.round_id}` }, null, 'swing');
+        }
+        break;
+      }
       case 'draw_open':
         sent = await send(g, 'all', { title: '🎲 The draw room is open', body: 'Open the app to watch it live.', url: APP }, from, 'draw_open');
         break;
+      // ---------------------------------------------------------------- ov29 side games (098) — own block for merging
+      case 'game_proposed': {
+        // Whoever put the game up (or an organiser), once per game, at most 3 a day from one person; only while the
+        // round hasn't started and the games feature is on. Everyone in the group but the proposer.
+        const bits = await proposedBits(db, g, body.game_id);
+        if (!bits) throw new NotYours();
+        const why = proposeProblem(bits.game, from, me.is_admin);
+        if (why) return json({ error: why }, 403);
+        if (['live', 'locked'].includes(bits.round.status) || !(await featureOn(g, 'games'))) break;
+        if (!(await once(`game-proposed:${bits.game.id}`))) break;
+        let room = false;
+        for (let i = 1; i <= 3 && !room; i++) room = await once(`game-proposed-by:${g}:${from}:${sydneyDate(0)}:${i}`);
+        if (!room) break;
+        const msg = gameProposedMessage(bits);
+        sent = await send(g, 'all', { ...msg, url: `${APP}#/games?r=${bits.round.id}&g=${bits.game.id}`, tag: `game-${bits.game.id}` }, from, 'game_proposed');
+        break;
+      }
+      // ---------------------------------------------------------------- end ov29
       default:
         return json({ error: 'Unknown notification' }, 400);
     }

@@ -36,7 +36,7 @@ const check = (ok, msg) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${msg}`); if 
 const browser = await chromium.launch();
 
 /** A phone: its own browser context, fake database and fake push. */
-async function phone({ ua = UA.android, permission = 'default', db = freshDb(), lastShown = null, sub = null } = {}) {
+async function phone({ ua = UA.android, permission = 'default', db = freshDb(), lastShown = null, sub = null, firstVisit = false } = {}) {
   const log = { rpcs: [], notify: [] };
   const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, userAgent: ua });
   await ctx.route('https://*.supabase.co/**', async (route) => {
@@ -81,8 +81,10 @@ async function phone({ ua = UA.android, permission = 'default', db = freshDb(), 
     const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
     const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
     if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated' } }));
-    localStorage.setItem('tgt-whats-new', 'beta-1');
+    localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */
     if (cfg.lastShown != null && !sessionStorage.getItem('seeded')) { localStorage.setItem(cfg.key, String(cfg.lastShown)); sessionStorage.setItem('seeded', '1'); }
+    // ov27 (F1): the ask waits for the second visit — these phones have been here once before, unless the test says.
+    if (!cfg.firstVisit && !localStorage.getItem('tgt-visits')) localStorage.setItem('tgt-visits', '1');
     // The fake phone: permission, a service worker and a push manager that remember a subscription for this tab.
     const st = JSON.parse(sessionStorage.getItem('fake-push') || 'null') || { permission: cfg.permission, sub: cfg.sub, requested: 0, subscribed: 0 };
     const save = () => sessionStorage.setItem('fake-push', JSON.stringify(st));
@@ -101,7 +103,7 @@ async function phone({ ua = UA.android, permission = 'default', db = freshDb(), 
     const reg = { pushManager, scope: '/' };
     const sw = { register: async () => reg, getRegistration: async () => reg, ready: Promise.resolve(reg), controller: null, addEventListener() {}, removeEventListener() {} };
     Object.defineProperty(Navigator.prototype, 'serviceWorker', { get: () => sw, configurable: true });
-  }, [UID, { permission, lastShown, sub, key: PROMPT_KEY }]);
+  }, [UID, { permission, lastShown, sub, key: PROMPT_KEY, firstVisit }]);
   const page = await ctx.newPage();
   page.on('pageerror', (e) => fails.push(`page error: ${e}`));
   return { ctx, page, log, db };
@@ -217,6 +219,24 @@ const appears = (page, ms = 8000) => sheet(page).waitFor({ timeout: ms }).then((
   await page.evaluate((k) => localStorage.removeItem(k), PROMPT_KEY);
   await page.reload();
   check(await appears(page), 'phone set up under someone else: asks me');
+  await ctx.close();
+}
+
+// 7. ov27 (F1): the very first visit — no pop-up (the start card / welcome covers it); the next visit asks. And "Not
+//    now" on the pop-up also puts the Home notifications card away.
+{
+  const { ctx, page } = await phone({ firstVisit: true });
+  await page.goto(`${BASE}#/`);
+  check(!(await appears(page, 5000)), 'first visit: no notifications pop-up');
+  // The app opened again (a new session on the same phone).
+  const page2 = await ctx.newPage();
+  await page2.goto(`${BASE}#/`);
+  check(await appears(page2), 'second visit: it asks');
+  await sheet(page2).getByRole('button', { name: 'Not now' }).click();
+  await page2.goto(`${BASE}#/plan`);
+  await page2.reload();
+  await page2.getByText(/Proposed|On now|Upcoming|No ideas on the go/).first().waitFor({ timeout: 10000 }).catch(() => {});
+  check(!(await page2.getByRole('button', { name: 'Turn on notifications' }).isVisible().catch(() => false)), '"Not now" on the pop-up: the Home notifications card stays away');
   await ctx.close();
 }
 

@@ -14,6 +14,7 @@ import { TeeGroupsCard } from './TeeGroups.jsx';
 import { RoundCompsCard, useScrollToRound } from './CompsBoard.jsx';
 import { CommentarySettings } from '../components/Commentary.jsx';
 import { isYearOnly, tripWhen } from '../lib/trips.js';
+import { drivesRule, drivesRoundLine } from '../lib/drives.js';
 
 async function run(fn, okMsg) {
   try {
@@ -53,11 +54,11 @@ export default function Admin() {
   if (!status?.is_admin) {
     return (
       <div className="page">
-        <Header back title="Admin" sub="For whoever's running the trip" />
+        <Header back title="Organiser tools" sub="For whoever's running the trip" />
         {/* No admin PIN any more (083): an organiser makes you one in Players & group, or sends you an organiser link. */}
         <div className="section">
           <div className="card pad stack" style={{ gap: 6 }}>
-            <strong>Only organisers can open Admin</strong>
+            <strong>Only organisers can open Organiser tools</strong>
             <span className="small muted">Ask an organiser to make you one (Players & group → People and roles), or to send you their organiser link.</span>
           </div>
         </div>
@@ -67,7 +68,7 @@ export default function Admin() {
 
   return (
     <div className="page">
-      <Header back title="Admin" sub="Set up trips, courses, players and rounds" />
+      <Header back title="Organiser tools" sub="Set up trips, courses, players and rounds" />
       <div className="section stack" style={{ paddingBottom: 20 }}>
         <Link to="/setup" className="card pad row" style={{ gap: 10, textDecoration: 'none', color: 'inherit', borderColor: 'var(--navy)' }}>
           <span aria-hidden="true">🧭</span><span className="grow"><strong>Set up your trip</strong> <span className="small muted">— the step-by-step guide</span></span><span className="muted">›</span>
@@ -295,12 +296,15 @@ function RoundRules({ round }) {
   const [rules, setRules] = useState(null);
   const [bonus, setBonus] = useState(String(round.comp_bonus ?? 0));
   const [drives, setDrives] = useState(String(round.min_drives ?? ''));
+  const [drivePen, setDrivePen] = useState(String(round.drive_penalty ?? '')); // 099: strokes per drive short, this round
   useEffect(() => {
     supabase.from('rules').select('*').eq('status', 'active').order('sort').then(({ data: r }) => setRules(r || []), () => setRules([]));
   }, []);
   const isA = round.format === 'ambrose';
   const s = roundSettingsFromRules(rules || [], round.format);
-  const changed = String(round.comp_bonus ?? 0) !== bonus || String(round.min_drives ?? '') !== drives;
+  const dr = drivesRule(rules || []);
+  const penChanged = String(round.drive_penalty ?? '') !== drivePen;
+  const changed = String(round.comp_bonus ?? 0) !== bonus || String(round.min_drives ?? '') !== drives || penChanged;
   const save = (patch, msg) => run(() => supabase.from('rounds').update(patch).eq('id', round.id), msg).then(data.reload);
   return (
     <details className="card pad" style={{ background: '#fff' }}>
@@ -311,10 +315,12 @@ function RoundRules({ round }) {
         {isA && (
           <div className="row">
             {bonusOn && <label className="field grow"><span>Side comp worth (strokes off)</span><input className="input" inputMode="numeric" value={bonus} onChange={(e) => setBonus(e.target.value.replace(/[^0-9]/g, ''))} /></label>}
-            <label className="field grow"><span>Minimum drives each</span><input className="input" inputMode="numeric" value={drives} onChange={(e) => setDrives(e.target.value.replace(/[^0-9]/g, ''))} placeholder="none" /></label>
+            <label className="field grow"><span>Minimum drives each</span><input className="input" inputMode="numeric" data-testid="round-min-drives" value={drives} onChange={(e) => setDrives(e.target.value.replace(/[^0-9]/g, ''))} placeholder={dr?.on ? 'by team size' : 'none'} /></label>
+            <label className="field grow"><span>Strokes per drive short</span><input className="input" inputMode="numeric" data-testid="round-drive-penalty" value={drivePen} onChange={(e) => setDrivePen(e.target.value.replace(/[^0-9]/g, ''))} placeholder={dr?.on ? `Rulebook: ${dr.strokes}` : 'none'} /></label>
           </div>
         )}
-        {changed && <button type="button" className="btn sm" onClick={() => save({ comp_bonus: bonusOn ? parseInt(bonus, 10) || 0 : 0, min_drives: drives ? Number(drives) : null }, 'Round settings saved')}>Save these settings</button>}
+        {isA && (dr?.on || drives) && <span className="small muted" data-testid="round-drives-line">{drivesRoundLine({ dr, round: { min_drives: drives === '' ? null : Number(drives), drive_penalty: drivePen === '' ? null : Number(drivePen) }, teamSizes: (data.teamsByRound?.[round.id] || []).map((t) => (t.players || []).filter(Boolean).length) }) || 'No minimum drives this round.'} Blank = the Rulebook’s numbers.</span>}
+        {changed && <button type="button" className="btn sm" onClick={() => save({ comp_bonus: bonusOn ? parseInt(bonus, 10) || 0 : 0, min_drives: drives ? Number(drives) : null, ...(penChanged ? { drive_penalty: drivePen === '' ? null : Math.min(10, Number(drivePen)) } : {}) }, 'Round settings saved')}>Save these settings</button>}
         {rules && s.applies.length > 0 && (
           <button type="button" className="btn ghost sm" onClick={() => {
             const patch = { rules: s.text };
@@ -626,7 +632,7 @@ function VotesAdmin() {
   return (
     <Section title="7. Trip votes — who picks the winner">
       <span className="small muted">Everyone votes on when and where. This decides who closes a vote and picks the winner. It applies to every trip in the group.</span>
-      {[['admin', 'The admin', 'Only admins pick winners (as now).'], ['admin_or_organiser', 'The admin or the trip’s organiser', 'Whoever suggested a trip (or who you make its organiser) can pick its winners too.']].map(([v, label, help]) => (
+      {[['admin', 'The group’s organisers', 'Only the group’s organisers pick winners (as now).'], ['admin_or_organiser', 'The group’s organisers or the trip’s organiser', 'Whoever suggested a trip (or who you make its organiser) can pick its winners too.']].map(([v, label, help]) => (
         <button key={v} type="button" className="chip" aria-pressed={value === v} disabled={value == null}
           style={{ textAlign: 'left', whiteSpace: 'normal', minHeight: 48, display: 'block' }} onClick={() => pick(v)}>
           <strong>{value === v ? '● ' : '○ '}{label}</strong><div className="small muted">{help}</div>

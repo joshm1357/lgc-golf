@@ -22,7 +22,7 @@ const PAST = 'eeeeeeee-0000-4000-8000-000000000004';
 const POLL1 = 'abababab-0000-4000-8000-000000000001';
 const POLL2 = 'abababab-0000-4000-8000-000000000002';
 const now = new Date().toISOString();
-const today = now.slice(0, 10);
+const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney' }).format(new Date()); // the app's 'today' is Sydney time
 const holes = Array.from({ length: 18 }, (_, i) => ({ n: i + 1, par: 4, si: i + 1, green: { lat: -35.0 + i * 0.001, lng: 150.5 } }));
 
 const db = {
@@ -131,7 +131,7 @@ STATUS.v = { is_member: true, is_admin: true, player_id: P1, group_name: 'L.G.C'
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
 await ctx.route('https://luogyzvrbedmicjejilr.supabase.co/**', fakeSupabase);
-await ctx.addInitScript(([uid]) => {
+await ctx.addInitScript(([uid]) => { try { localStorage.setItem('tgt-caddie-hello', '1'); } catch { /* ov22 */ }
   const exp = Math.floor(Date.now() / 1000) + 3600 * 24;
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
@@ -147,9 +147,9 @@ await page.goto(`${BASE}#/more`);
 await page.getByText('Players & group').waitFor({ timeout: 15000 });
 await page.waitForTimeout(800);
 const tabs = await page.locator('nav.tabs a').allInnerTexts();
-check(JSON.stringify(tabs) === JSON.stringify(['This trip', 'Players', 'More']), `feed and trips off: bottom bar is ${tabs.join(' / ')}`);
+check(JSON.stringify(tabs) === JSON.stringify(['Trips', 'Players', 'More']), `feed and trips off: bottom bar is ${tabs.join(' / ')}`);
 check(!(await page.getByText('Handicap Tribunal').count()), 'tribunal off: not in More');
-check(await page.getByText('The Rulebook').isVisible(), 'rulebook still there');
+check(await page.getByText('⚖️ Group rules').isVisible(), 'rulebook still there (ov19: inside ⚖️ Governance)');
 const w = await page.evaluate(() => document.scrollingElement.scrollWidth);
 check(w <= 375, `More: no sideways scroll (${w}px)`);
 await page.screenshot({ path: `${SHOTS}/f1-more.png` });

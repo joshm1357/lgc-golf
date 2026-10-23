@@ -106,7 +106,7 @@ await ctx.addInitScript(([uid]) => {
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
   if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated' } }));
-  localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-notify-prompt', String(Date.now()));
+  localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */ localStorage.setItem('tgt-notify-prompt', String(Date.now()));
 }, ['99999999-9999-4999-8999-999999999999']);
 const page = await ctx.newPage();
 page.on('pageerror', (e) => fails.push(`page error: ${e}`));
@@ -115,11 +115,11 @@ const text = () => page.locator('.page').first().innerText();
 
 // 1. The guided setup has the new step, between Rounds and Players.
 await page.goto(`${BASE}#/setup`);
-const stepBtn = page.getByRole('button', { name: /What are you playing for\?/ });
+const stepBtn = page.getByRole('button', { name: /^Trophies & cups/ });
 await stepBtn.waitFor({ timeout: 15000 });
 const order = await page.locator('.page .card > button strong').allInnerTexts();
 const iR = order.findIndex((t) => t.startsWith('Rounds'));
-const iC = order.findIndex((t) => t.startsWith('What are you playing for'));
+const iC = order.findIndex((t) => t.startsWith('Trophies & cups'));
 const iP = order.findIndex((t) => t.startsWith('Players'));
 check(iR >= 0 && iR < iC && iC < iP, `step sits between Rounds and Players (${order.join(' / ')})`);
 await stepBtn.click();
@@ -173,7 +173,7 @@ check(Number(db.trips[0].cup_points) === 8, 'the trip’s cup points are set too
 
 // 5. To-do lists.
 await page.reload();
-await page.getByRole('button', { name: /What are you playing for\?/ }).click();
+await page.getByRole('button', { name: /^Trophies & cups/ }).click();
 await page.getByText('6th Ryder Cup').first().waitFor();
 await page.waitForTimeout(600);
 const t5 = await text();

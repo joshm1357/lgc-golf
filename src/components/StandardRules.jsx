@@ -13,6 +13,7 @@ import { useOwnDefs } from '../screens/OwnComps.jsx';
 import { inUse, standardSections, overrideCount, freshIdeas, ideaToRule, STANDARD_VERSION } from '../lib/standardrules.js';
 import { conditionsLine } from '../lib/conditions.js';
 import { customSummary } from '../lib/customgames.js';
+import { drivesRule, drivesRoundLine } from '../lib/drives.js';
 
 export function StandardRules({ localRules }) {
   const data = useData();
@@ -29,8 +30,13 @@ export function StandardRules({ localRules }) {
   // What the group adds to a section: its own versions of a game, and its comp conditions.
   const extras = (key) => {
     const out = [];
-    for (const c of customGames.filter((x) => !x.retired && x.base_type === key)) out.push({ k: c.id, title: `Our game: ${c.name}`, text: `${customSummary(c)}. House rules: ${c.rules_text}` });
+    for (const c of customGames.filter((x) => !x.retired && x.base_type === key)) out.push({ k: c.id, title: `Our game: ${c.name}`, text: `${customSummary(c)}.${String(c.rules_text || '').trim() ? ` House rules: ${String(c.rules_text).trim()}` : ''}` });
     if ((key === 'ctp' || key === 'ld') && conditionsLine(builtin[key])) out.push({ k: key, title: 'Our conditions', text: conditionsLine(builtin[key]) });
+    // 099: the group's own drives numbers and penalty under Ambrose's "How it works".
+    if (key === 'ambrose') {
+      const dr = drivesRule(localRules || []);
+      if (dr?.on) out.push({ k: 'drives', title: 'Our drives rule', text: `${drivesRoundLine({ dr, round: null, teamSizes: [3, 4] })}. On 9 holes, half.` });
+    }
     if (key === 'own_comps') for (const d of ownDefs.filter((x) => !x.retired && conditionsLine(x.conditions))) out.push({ k: d.id, title: `${d.emoji || ''} ${d.name}`.trim(), text: conditionsLine(d.conditions) });
     return out;
   };

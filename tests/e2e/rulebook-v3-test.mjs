@@ -136,7 +136,7 @@ await ctx.addInitScript(([uid]) => {
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
   if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated' } }));
-  localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-notify-prompt', String(Date.now()));
+  localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */ localStorage.setItem('tgt-notify-prompt', String(Date.now()));
 }, ['99999999-9999-4999-8999-999999999999']);
 const page = await ctx.newPage();
 page.on('pageerror', (e) => fails.push(`page error: ${e}`));
@@ -220,7 +220,7 @@ await page.goto(`${BASE}#/tribunal/case/${CASE}`);
 const card = page.getByTestId('verdict-rulebook');
 await card.waitFor({ timeout: 15000 });
 await page.getByTestId('draft-source').waitFor({ timeout: 10000 });
-check((await page.getByTestId('draft-source').innerText()).includes('AI drafted this from the verdict — check it'), 'the case shows "AI drafted this from the verdict — check it"');
+check((await page.getByTestId('draft-source').innerText()).includes('The Caddie drafted this from the verdict — check it'), 'the case shows "The Caddie drafted this from the verdict — check it"');
 check(await page.getByTestId('draft-title').inputValue() === 'BD: OB is stroke and distance', 'the draft has the AI’s title');
 check(await page.getByTestId('draft-scope').inputValue() === `comp:${BD}`, 'the draft is for the BD Trophy');
 check(aiCalls.some((b) => b.mode === 'rules_draft' && b.case_id === CASE && Array.isArray(b.standard)), 'the app asked the AI with the case id and the standard rules (as data)');

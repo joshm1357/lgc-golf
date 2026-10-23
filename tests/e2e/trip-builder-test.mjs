@@ -165,7 +165,7 @@ await ctx.addInitScript(([uid]) => {
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
   if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated' } }));
-  localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-notify-prompt', String(Date.now()));
+  localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */ localStorage.setItem('tgt-notify-prompt', String(Date.now()));
 }, ['99999999-9999-4999-8999-999999999999']);
 const page = await ctx.newPage();
 page.on('pageerror', (e) => fails.push(`page error: ${e}`));
@@ -175,28 +175,33 @@ const step = (k) => page.locator(`[data-testid="tb-step-${k}"]`);
 
 // 1. The trip: "Build the trip" is the first card on a trip still being decided.
 await page.goto(`${BASE}#/plan/${PLAN}`);
-await page.locator('[data-testid="tb-link"]').first().waitFor({ timeout: 15000 });
-check(true, 'the trip shows "Build the trip" first');
-await page.locator('[data-testid="tb-link"]').first().click();
+// ov26 (O2): the organiser's one gold Next step button is "Start: plan where and when" (the trip builder).
+await page.getByTestId('primary').waitFor({ timeout: 15000 });
+check(/plan where and when/i.test(await page.getByTestId('primary').innerText()), 'the trip’s one big button starts the trip builder');
+check(!(await page.locator('[data-testid="tb-link"]').first().isVisible()), 'O2: the other ways (trip builder link, by hand, call a vote) are folded away');
+await page.getByTestId('primary').click();
 await step('area').waitFor({ timeout: 10000 });
 const stepsText = await page.locator('.tb-steps').innerText();
-check(/Area & weekends[\s\S]*🔒 Stay areas & courses[\s\S]*🔒 Call the courses[\s\S]*🔒 Pick the trip/.test(stepsText), 'steps in Josh’s order; later ones locked');
+check(/Areas & weekends[\s\S]*🔒 Courses & stays[\s\S]*🔒 Call the courses[\s\S]*🔒 Pick & lock in/.test(stepsText), 'steps in Josh’s order; later ones locked');
 await step('courses').getByRole('button').first().click();
-check((await step('courses').innerText()).includes('After: Area & weekends'), 'a locked step says what it comes after');
+check((await step('courses').innerText()).includes('After: the area is chosen'), 'a locked step says what it comes after');
 await step('area').getByRole('button').first().click();
 
 // 2. Area options + weekends → vote 1 "Where and when?" (one card, one notification).
+// ov23: areas go on through "The areas we're considering" (+ Add another area); every weekend in the window is a chip.
 await page.getByLabel('Area').fill('South');
-await page.locator('[data-testid="tb-region-hits"]').getByRole('button', { name: 'South Coast NSW' }).click();
+await page.locator('[data-testid="tb-region-hits"]').getByRole('button', { name: '+ South Coast NSW' }).click();
 await wait();
+await page.getByTestId('add-area').click();
 await page.getByLabel('Area').fill('Hunter');
-await page.locator('[data-testid="tb-region-hits"]').getByRole('button', { name: 'Hunter Valley' }).click();
+await page.locator('[data-testid="tb-region-hits"]').getByRole('button', { name: '+ Hunter Valley' }).click();
 await wait();
-const wk = page.locator('[data-testid="tb-weekend-options"] .chip');
-await wk.nth(0).click(); await wait(400);
-await wk.nth(1).click(); await wait(400);
+await page.locator('[data-testid="area-chip"][data-area="South Coast NSW"]').getByRole('button').first().click(); await wait();
+const wk = page.getByTestId('weekend-chip');
+await wk.nth(3).click(); await wait(400);
+await wk.nth(4).click(); await wait(400);
 check(state().regionOptions?.length === 2 && state().weekends?.length === 2, `two areas and two weekends chosen (${JSON.stringify(state().regionOptions)})`);
-check((await wk.nth(0).innerText()).match(/^Fri \d+/) != null, `weekends are Fri–Sun suggestions (${await wk.nth(0).innerText()})`);
+check((await wk.nth(3).innerText()).match(/^Fri \d+/) != null, `weekends are Fri–Sun (${(await wk.nth(3).innerText()).split('\n')[0]})`);
 // The area map (080): South Coast's courses on the table — several, never one.
 await page.locator('[data-testid="area-courses"]').getByText('Gerringong GC').waitFor({ timeout: 8000 });
 await page.locator('[data-testid="area-courses"]').getByLabel('Gerringong GC').check(); await wait(400);
@@ -213,33 +218,39 @@ const b1 = db.vote_batches[0];
 const v1polls = db.plan_polls.filter((p) => p.vote_batch === b1?.id);
 check(b1 && b1.title === 'Where and when?' && b1.keen === true, 'vote card "Where and when?" made, asking if you’re keen');
 check(v1polls.map((p) => p.question).join('|') === 'Which area?|Which weekend?|South Coast NSW: which courses?', `sections: ${v1polls.map((p) => p.question).join(', ')}`);
-check((db.plan_options.find((o) => o.poll_id === v1polls[0]?.id && o.label === 'South Coast NSW')?.notes || '').startsWith('Courses: Gerringong GC, Kiama GC'), 'the area on the ballot shows its course list');
+check(v1polls[2]?.optional === true && v1polls[2]?.area === 'South Coast NSW', 'the area’s courses are the optional detail (ov23)');
+check((db.plan_options.find((o) => o.poll_id === v1polls[0]?.id && o.label === 'South Coast NSW')?.notes || '').includes('Courses: Gerringong GC, Kiama GC'), 'the area on the ballot shows its course list');
 check(notifyCalls.filter((n) => n.type === 'poll_open').length === 1, `one notification for the whole card (${notifyCalls.filter((n) => n.type === 'poll_open').length})`);
 
 // The card on the trip's Vote tab: sections, keen, still to answer.
 await page.goto(`${BASE}#/plan/${PLAN}?tab=vote`);
 await page.locator('[data-testid="vote-batch"]').waitFor({ timeout: 10000 });
 const card = page.locator('[data-testid="vote-batch"]');
-check(await card.locator('[data-testid="vote-batch-section"]').count() === 3 && await card.locator('[data-testid="vote-batch-keen"]').count() === 1, 'ONE card with three sections and "Are you keen?"');
+check(await card.locator('[data-testid="vote-batch-section"]').count() === 2 && await card.locator('[data-testid="vote-detail-area"]').count() === 1 && await card.locator('[data-testid="vote-batch-keen"]').count() === 1, 'ONE card: area, weekend, the optional detail, "Are you keen?"');
 check(await page.locator('[data-testid="vote-batch"]').count() === 1 && !(await page.getByText('Which area?').count() > 1), 'the sections aren’t shown again as separate votes');
 // The organiser sees the results; "See it as a voter" shows the ballot (areas: Prefer / Option / Don't like).
 await card.getByTestId('see-as-voter').click(); await wait(300);
-await card.locator('[data-testid="vote-batch-section"]').nth(0).getByRole('button', { name: '⭐ Prefer' }).first().click(); await wait(600);
-await card.locator('[data-testid="vote-batch-section"]').nth(1).getByRole('button', { name: '✓ Can' }).first().click(); await wait(600);
-await card.locator('[data-testid="vote-batch-section"]').nth(2).getByRole('button', { name: '👍 Option' }).first().click(); await wait(600);
-await card.locator('[data-testid="vote-batch-keen"]').getByRole('button', { name: '✓ In' }).click(); await wait(600);
-check(await card.getByTestId('voter-thanks').isVisible(), 'answered everything: "Thanks — here’s how it’s looking"');
+await card.locator('[data-testid="vote-batch-section"]').nth(0).getByRole('button', { name: '⭐ Keen' }).first().click(); await wait(600);
+await card.locator('[data-testid="vote-batch-section"]').nth(1).getByRole('button', { name: '✓ Yes' }).first().click(); await wait(600);
+await card.locator('[data-testid="vote-batch-keen"]').getByRole('button', { name: '✓ Yes' }).click(); await wait(600);
+check(await card.getByTestId('voter-thanks').isVisible(), 'answered the main questions: "Thanks — here’s how it’s looking" (the detail is optional)');
+await card.getByTestId('vote-detail-area').getByRole('button').first().click(); await wait(300);
+await card.locator('[data-testid="vote-detail-section"]').nth(0).getByRole('button', { name: '👍 Happy with it' }).first().click(); await wait(600);
 await card.getByTestId('see-as-voter').click(); await wait(300);
 let waitingText = await card.locator('[data-testid="vote-batch-waiting"]').innerText();
 check(/Still to answer \(11\)/.test(waitingText) && !waitingText.includes('Josh'), `answered every section → off the "still to answer" list (${waitingText.slice(0, 40)})`);
 await page.screenshot({ path: `${SHOTS}/2-vote-card.png`, fullPage: true });
 
-// 3. The organiser picks: South Coast, the first weekend (settled).
+// 3. The organiser picks: South Coast; the weekends become primary and backup (ov23) — drop the backup here.
 await page.goto(`${BASE}#/plan/${PLAN}/build`);
 await step('area').waitFor({ timeout: 10000 });
-await page.getByTestId('going-here').click(); await wait();
-await page.locator('[data-testid="tb-weekends"] .row').first().getByRole('button', { name: 'Go with this' }).click(); await wait();
-check(state().region === 'South Coast NSW' && state().weekends.length === 1 && state().weekendsSettled === true, 'area decided, one weekend settled');
+// ov26 (O2): picking it yourself (skipping the vote) is one of the "Other ways to do this".
+await page.locator('[data-testid="area-start"] [data-testid="other-ways"] summary').click(); await wait(300);
+await page.getByTestId('going-here').click(); await wait(1200);
+check(state().region === 'South Coast NSW' && state().weekends.length === 2 && state().weekendsSettled === true, 'area decided; primary and backup weekends set');
+await step('area').getByRole('button').first().click(); await wait(300);
+await page.getByTestId('settled-weekend').nth(1).getByRole('button', { name: /^Drop/ }).click(); await wait();
+check(state().weekends.length === 1 && state().weekendsSettled === true, 'just the primary weekend now');
 check(state().days?.[1]?.options?.length === 2, `the stay day starts pre-filled from the area’s course set (${JSON.stringify(state().days?.[1]?.options)})`);
 const W = state().weekends[0];
 
@@ -250,7 +261,12 @@ const chipsText = await page.locator('[data-testid="tb-stay-chips"]').innerText(
 check(/Stay near:/.test(chipsText) && chipsText.includes('Nowra') && chipsText.includes('Jervis Bay'), `stay suggestions as chips (${chipsText.replace(/\s+/g, ' ').slice(0, 80)})`);
 await page.locator('[data-testid="tb-stay-chips"]').getByRole('button', { name: 'Nowra', exact: true }).click(); await wait();
 await page.locator('[data-testid="tb-map"]').scrollIntoViewIfNeeded();
-await page.locator('.tb-stay', { hasText: 'Jervis Bay' }).click(); await wait();
+// ov22: on a phone the first tap on a pin shows its summary, the second its details — "Stay at …" is in there.
+await page.locator('.tb-stay', { hasText: 'Jervis Bay' }).tap(); await wait(300);
+check(await page.getByTestId('place-tip').isVisible() && !(await page.getByTestId('stay-sheet').count()), 'ov22: first tap on a 🏠 pin → its summary card (not the details yet)');
+await page.locator('.tb-stay', { hasText: 'Jervis Bay' }).tap(); await wait(300);
+await page.getByTestId('stay-sheet').waitFor({ timeout: 5000 });
+await page.getByTestId('sheet-toggle').click(); await wait();
 check(state().stays?.map((s) => s.name).join(',') === 'Nowra,Jervis Bay (Huskisson)', `stay areas: ${state().stays?.map((s) => s.name).join(', ')}`);
 
 // 5. Day 1 — on the way: suggestions along the drive.
@@ -280,7 +296,12 @@ await page.screenshot({ path: `${SHOTS}/3-stay-day.png`, fullPage: true });
 await page.screenshot({ path: `${RSHOTS}/trip-builder-rows-375.png`, fullPage: true });
 
 // The course sheet: history, booking info, "✨ Look it up" as a draft.
-await days.nth(1).getByRole('button', { name: 'Nowra GC', exact: true }).click();
+// ov22: on a phone, the first tap on a course row's name shows its summary; the second opens everything.
+await days.nth(1).getByRole('button', { name: 'Nowra GC', exact: true }).tap(); await wait(300);
+const rowTip = await page.getByTestId('place-tip').innerText();
+check(rowTip.includes('Nowra GC') && rowTip.includes('★★★★☆ for groups') && !(await page.locator('[data-testid="tb-course"]').count()), `ov22: first tap on a course row → its summary card (${rowTip.replace(/\s+/g, ' ').slice(0, 90)})`);
+await page.screenshot({ path: `${SHOTS}/ov22-row-tip-375.png` });
+await days.nth(1).getByRole('button', { name: 'Nowra GC', exact: true }).tap();
 const sheet = page.locator('[data-testid="tb-course"]');
 await sheet.waitFor({ timeout: 5000 });
 const sheetText = await sheet.innerText();
@@ -325,13 +346,17 @@ check(ngJob?.body.includes('Phone 02 4421 0000'), 'the job carries the booking p
 const tee = (course, date) => page.locator('[data-testid="tb-call"]', { hasText: course }).locator(`[data-testid="tee-day"][data-date="${date}"]`);
 const dateOf = (n) => { const d = new Date(`${W.start}T00:00:00`); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 // Each course's call covers the whole weekend (080): available, the times on offer, then Save.
+// ov26 (O3): one form per course — only its golf days — and one Save.
 const enter = async (course, n, text) => {
+  const call = page.locator('[data-testid="tb-call"]', { hasText: course });
+  await call.getByTestId('call-fill').click();
   const t = tee(course, dateOf(n));
-  await t.getByTestId('tee-day-edit').click();
-  await t.getByRole('button', { name: '✓ Yes' }).click();
+  await t.getByTestId('tee-avail-yes').click();
   await t.getByLabel(`Times on offer ${dateOf(n)}`).fill(text);
-  await t.getByTestId('tee-day-save').click(); await wait(700);
+  await call.getByTestId('call-save').click(); await wait(700);
 };
+check((await page.locator('[data-testid="tb-call"]', { hasText: 'Shoalhaven Heads GC' }).locator('[data-testid="tee-day"]').count()) === 1, 'O3: Shoalhaven (a Friday option) is only asked about the Friday');
+check((await tee('Kiama GC', dateOf(0)).count()) === 0 && (await tee('Kiama GC', dateOf(2)).count()) === 1, 'O3: Kiama isn’t asked about the Friday (it’s not an option that day)');
 await enter('Shoalhaven Heads GC', 0, '10:20-10:40');
 await enter('Gerringong GC', 0, '9:00-9:10');
 await enter('Nowra GC', 1, '8:00-8:30');
@@ -348,22 +373,33 @@ await ngCall.locator('summary', { hasText: 'Ask about' }).click();
 check((await ngCall.getByTestId('call-checklist').innerText()).includes('Times outside members’ Sat comps'), 'ov17: the checklist asks for times outside the members’ Saturday');
 await ngCall.getByRole('button', { name: '📜 What to say' }).click();
 check((await ngCall.getByTestId('call-script').innerText()).includes('members have the course on Sat'), 'ov17: the script asks around the members’ day');
+check((await ngCall.getByTestId('call-script').innerText()).includes('3 tee times in a row — 12 players'), 'O6: the script says the same number as the screen (12 in)');
 await ngCall.scrollIntoViewIfNeeded();
 await page.screenshot({ path: `${RSHOTS}/trip-builder-call-375.png` });
 await page.screenshot({ path: `${SHOTS}/5-calls.png`, fullPage: true });
 
 // 9. Configurations: only workable ones (Worrigee and Gerringong left out), ranked; pick one.
 await step('configs').getByRole('button').first().click(); await wait(800);
-const cfgs = await page.locator('[data-testid="tb-config-text"]').allInnerTexts();
-check(cfgs.length >= 1 && cfgs.every((t) => !t.includes('Worrigee') && !t.includes('Gerringong')), `configurations leave out courses without 3 times in a row (${cfgs.length})`);
-check(/^Stay (Nowra|Jervis Bay \(Huskisson\)) · Fri Shoalhaven Heads GC 10:20–10:40 on the way · Sat Nowra GC 8:00–8:20 · Sun Kiama GC 9:10–9:30 on the way home$/.test(cfgs[0]), `top: "${cfgs[0]}"`);
+// ov26 (O4): the best way to do it as one card, one big "Lock this in"; the rest under "Other ways to do it".
+const bestText = await page.getByTestId('tb-best').innerText();
+check(!bestText.includes('Worrigee') && !bestText.includes('Gerringong'), 'the best way leaves out courses without 3 times in a row');
+const rounds = await page.getByTestId('tb-best-round').allInnerTexts();
+check(rounds.length === 3 && /Shoalhaven Heads GC[\s\S]*10:20–10:40/.test(rounds[0]) && /Nowra GC[\s\S]*8:00–8:20/.test(rounds[1]) && /Kiama GC[\s\S]*9:10–9:30/.test(rounds[2]), `the best: ${rounds.map((r) => r.replace(/\s+/g, ' ')).join(' | ')}`);
+check(/about \d+ min driving from where we stay/.test(await page.getByTestId('tb-best-cost').innerText()), 'the drive from where we stay');
 await page.screenshot({ path: `${SHOTS}/6-configs.png`, fullPage: true });
-await page.locator('[data-testid="tb-config"]').first().getByRole('button', { name: 'Pick this one' }).click(); await wait(1500);
+const openV1 = () => db.plan_polls.filter((p) => p.plan_id === PLAN && p.status === 'open' && p.vote_batch).length;
+await page.getByTestId('lock-this-in').click();
+await page.getByTestId('confirm-sheet').waitFor({ timeout: 5000 });
+check(/Lock in/.test(await page.locator('.sheet').last().innerText()), 'V1: one box before locking in');
+await page.getByTestId('confirm-yes').click(); await wait(2000);
 const plan = db.plans.find((p) => p.id === PLAN);
 check(plan.start_date === W.start && plan.end_date === dateOf(2) && /Nowra|Jervis/.test(plan.location_name), `the trip’s dates and place filled (${plan.start_date}–${plan.end_date}, ${plan.location_name})`);
 check(plan.repeat_shape?.rounds?.length === 3 && plan.repeat_shape.rounds.map((r) => r.format).join(',') === 'stableford,stableford,ambrose', `rounds per day with the usual formats (${plan.repeat_shape?.rounds?.map((r) => r.format).join(',')})`);
 check(db.courses.filter((c) => c.library_id).length === 3, 'the library courses are copied into the group (Nowra already there)');
 await page.locator('[data-testid="tb-picked"]').waitFor({ timeout: 5000 });
+check(plan.status === 'confirmed', 'V1: "Lock this in" locks the trip in');
+check(openV1() === 0, 'V1: the trip builder’s vote is closed at lock-in');
+check(db.plan_items.filter((i) => i.plan_id === PLAN && i.formula_key).length > 0, 'and the to-do list is made');
 
 // "Set it up in the app" (the existing trip setup) → the rounds.
 await page.getByRole('button', { name: /Set it up in the app/ }).click();
@@ -393,7 +429,7 @@ await page.reload();
 await step('area').waitFor({ timeout: 10000 });
 await step('calls').getByRole('button').first().click(); await wait(600);
 check(!(await page.locator('[data-testid="tb-make-calls"]').count()) && !(await page.getByLabel('Area').count()), 'a player sees it read-only');
-check((await page.locator('[data-testid="tb-call"]').count()) === 5 && !(await page.locator('[data-testid="tee-day-edit"]').count()), 'a player without a call job can’t enter tee times');
+check((await page.locator('[data-testid="tb-call"]').count()) === 5 && !(await page.locator('[data-testid="call-fill"]').count()), 'a player without a call job can’t enter tee times');
 await page.screenshot({ path: `${SHOTS}/9-player.png`, fullPage: true });
 
 // 12. Switched off: hidden.

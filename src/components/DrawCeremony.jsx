@@ -141,7 +141,7 @@ export default function DrawCeremony({ draw, onClose, actions = liveActions, dem
   const header = (
     <div style={{ textAlign: 'center' }}>
       <div style={{ fontFamily: "'Pirata One', serif", fontSize: 46, color: '#EBD496', lineHeight: 1 }}>The Draw</div>
-      <div style={sub}>{roundName} · {groupsMode ? `${draw.payload.groups.length} ${draw.payload.kind === 'car' ? 'cars' : 'rooms'}` : `${draw.payload.k} teams · ${draw.payload.balance ? 'random, kept close' : 'truly random'}`} · {draw.payload.pace === 'click' ? 'admin clicks through' : 'timed'}</div>
+      <div style={sub}>{roundName} · {groupsMode ? `${draw.payload.groups.length} ${draw.payload.kind === 'car' ? 'cars' : 'rooms'}` : `${draw.payload.k} teams · ${draw.payload.balance ? 'random, kept close' : 'truly random'}`} · {draw.payload.pace === 'click' ? 'organiser clicks through' : 'timed'}</div>
     </div>
   );
 
@@ -176,7 +176,7 @@ export default function DrawCeremony({ draw, onClose, actions = liveActions, dem
               <button type="button" className="btn ghost" disabled={busy} onClick={() => run(() => actions.cancel(draw))}>Close the room</button>
             </div>
           ) : (
-            <div style={{ textAlign: 'center', ...sub, fontSize: 16 }}>Waiting for the admin to start it… keep this screen open.</div>
+            <div style={{ textAlign: 'center', ...sub, fontSize: 16 }}>Waiting for the organiser to start it… keep this screen open.</div>
           )}
           <button type="button" className="btn ghost" onClick={onClose}>Watch later</button>
         </div>
@@ -308,7 +308,7 @@ function Ceremony({ draw, onClose, actions, header, busy, run, isAdmin, me, grou
             {triggered === 0 ? '🎱 Draw the first name' : nextIsNewTeam ? `🎱 Start ${teams[upNext.team].name}` : '🎱 Draw the next name'}
           </button>
         )}
-        {live && clickMode && !isAdmin && waitingForClick && <div style={{ textAlign: 'center', ...sub }}>Waiting for the admin to draw the next name…</div>}
+        {live && clickMode && !isAdmin && waitingForClick && <div style={{ textAlign: 'center', ...sub }}>Waiting for the organiser to draw the next name…</div>}
 
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(teams.length, 2)}, minmax(0, 1fr))`, gap: 10 }}>
           {teamRows.map((tm) => (
@@ -350,7 +350,7 @@ function Ceremony({ draw, onClose, actions, header, busy, run, isAdmin, me, grou
               <button type="button" className="btn ghost" disabled={busy} onClick={() => { if (window.confirm(`Scrap these ${groupsMode ? things : 'teams'} and go back to the draw room?`)) run(() => actions.reopen(draw)); }}>Scrap it — back to the draw room</button>
             </>
           )}
-          {!isAdmin && finished && draw.status !== 'locked' && <div style={{ textAlign: 'center', color: '#AFC0D4' }}>Waiting for the admin to lock it in…</div>}
+          {!isAdmin && finished && draw.status !== 'locked' && <div style={{ textAlign: 'center', color: '#AFC0D4' }}>Waiting for the organiser to lock it in…</div>}
           {(finished || !isAdmin) && <button type="button" className="btn ghost" onClick={onClose}>{finished ? 'Close' : 'Watch later'}</button>}
         </div>
       </div>

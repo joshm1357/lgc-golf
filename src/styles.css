@@ -50,6 +50,11 @@ img { max-width: 100%; }
 .seg-many .seg { grid-auto-flow: row; grid-template-columns: repeat(2, 1fr); gap: 4px; }
 .seg.light button { color: var(--text); }
 .seg.light button[aria-pressed="true"] { background: var(--navy); color: #fff; }
+/* ov19: Governance tabs (Rulebook · Tribunal · Committees) — links styled like .seg buttons */
+.gov-tabs a { display: flex; align-items: center; justify-content: center; min-height: 44px; border-radius: 9px; color: #fff; font-weight: 600; text-decoration: none; font-size: 15px; }
+.gov-tabs a.active { background: var(--gold); color: var(--text); font-weight: 700; }
+.gov-tab-two { display: flex; flex-direction: column; align-items: center; line-height: 1.1; }
+.gov-tab-two small { font-size: 11px; font-weight: 500; opacity: 0.85; }
 
 /* Chips */
 .chips { display: flex; gap: 8px; overflow-x: auto; padding: 12px 16px 2px; scrollbar-width: none; }
@@ -260,6 +265,13 @@ img { max-width: 100%; }
   .side-link { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 0 12px; border: 0; border-radius: 10px; background: none; color: var(--on-navy-muted); font-size: 15px; font-weight: 600; text-align: left; text-decoration: none; }
   .side-link:hover { background: var(--navy-2); color: #fff; }
   .side-link.active { background: var(--navy-2); color: #fff; box-shadow: inset 3px 0 0 var(--gold); }
+  /* ov21: Trips' sub-items (On now / Next / Last / Plan a trip), indented under it like a submenu. */
+  .side-group { display: flex; flex-direction: column; gap: 2px; }
+  .side-subitem { min-height: 40px; padding-left: 44px; font-size: 14px; font-weight: 600; min-width: 0; position: relative; }
+  .side-subitem::before { content: ''; position: absolute; left: 21px; top: 0; bottom: 0; border-left: 1px solid rgba(255,255,255,.18); }
+  .side-subitem .ellipsis { min-width: 0; }
+  .side-subitem.side-on { color: var(--gold); font-weight: 800; }
+  .side-subitem.side-on.active, .side-subitem.side-on:hover { color: var(--gold); }
   .side-feedback { border: 1px solid rgba(255, 255, 255, .22); }
 }
 
@@ -267,3 +279,12 @@ img { max-width: 100%; }
 .viewing-bar { position: sticky; top: 0; z-index: 45; display: flex; align-items: center; gap: 10px; padding: calc(8px + env(safe-area-inset-top, 0px)) 12px 8px; background: var(--court); color: #fff; font-size: 14px; }
 @media (min-width: 1024px) { .app.with-side > .viewing-bar { max-width: 900px; width: 100%; margin: 0 auto; border-radius: 0 0 12px 12px; } }
 .viewing-bar ~ .page .hdr { padding-top: 14px; } /* the bar already clears the notch */
+
+/* ov28 (walkthrough D2): your own row on a leaderboard — highlighted, and pinned when you're further down. */
+.lb-row.me { box-shadow: inset 5px 0 0 var(--navy); background: #EAF1FB; }
+.lb-row.me.lead { background: var(--gold-soft); }
+.lb-row.me .lb-name::after { content: ' · you'; font-size: 12px; font-weight: 700; color: var(--muted); }
+.lb-pin { position: sticky; top: 0; z-index: 2; border-bottom: 2px solid var(--navy) !important; }
+.lb-head { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); min-height: 0 !important; padding-top: 6px !important; padding-bottom: 6px !important; background: #fff; }
+/* "Enter score" sits over the page: leave room under the last row so it never covers one. */
+.fab-space { height: 96px; }

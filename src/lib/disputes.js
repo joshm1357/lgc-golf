@@ -5,7 +5,7 @@
 
 /** What can be disputed, by table → fields. Same list as private.dispute_fields in 082 (+ players.handicap, 087). Scores and names never. */
 export const DISPUTABLE = {
-  rounds: ['comp_bonus', 'min_drives', 'rules', 'format', 'ctp_holes', 'ld_holes', 'own_comps'],
+  rounds: ['comp_bonus', 'min_drives', 'rules', 'format', 'ctp_holes', 'ld_holes', 'own_comps', 'drive_penalty'],
   teams: ['handicap'],
   players: ['handicap'], // 087 (ov15): a player's handicap, from the players list
   round_games: ['stake', 'options', 'settings'],
@@ -15,8 +15,9 @@ export const DISPUTABLE = {
   side_comp_defs: ['how', 'unit', 'scoring', 'settings', 'conditions'],
   trophies: ['description'],
   custom_games: ['rules_text', 'settings'],
-  rules: ['value', 'title', 'detail', 'late_strokes', 'late_days'],
+  rules: ['value', 'title', 'detail', 'late_strokes', 'late_days', 'breach_strokes', 'drives_2', 'drives_3', 'drives_4'],
   score_adjustments: ['strokes'],
+  dinner_award_nominations: ['player_id'], // 093: appeal a fine or award from the Feed ("who's fined")
   standard: ['rule'],
 };
 
@@ -26,6 +27,7 @@ export const SOURCE = {
   trips: 'Trip setting', comps: 'Comp setting', side_comp_defs: 'Side comp setting', trophies: 'Trophy rule',
   custom_games: 'Game rules', rules: 'Rulebook rule', standard: 'Standard rule (built into the app)',
   score_adjustments: 'Penalty on the scorecard',
+  dinner_award_nominations: 'A fine or award from the Feed',
 };
 
 /** Is this reference something that can be disputed at all? */
@@ -149,8 +151,16 @@ export const APPLY_SPEC = {
   // Late organising jobs (085): the rule's two numbers, and one player's penalty (0 takes it off).
   'rules.late_strokes': NUM(0, 10, { whole: true, msg: 'Late job strokes: a whole number from 0 to 10' }),
   'rules.late_days': NUM(0, 60, { whole: true, msg: 'Days late: a whole number from 0 to 60' }),
-  'score_adjustments.strokes': NUM(0, 20, { whole: true, msg: 'Penalty strokes: a whole number from 0 to 20' }),
+  // 099: a penalty can be negative (strokes off); a rule's penalty, the drives numbers and a round's drive penalty.
+  'score_adjustments.strokes': NUM(-20, 20, { whole: true, msg: 'Penalty strokes: a whole number from −20 to 20' }),
+  'rules.breach_strokes': NUM(0, 10, { whole: true, msg: 'Penalty strokes: a whole number from 0 to 10' }),
+  'rules.drives_2': NUM(0, 9, { whole: true, msg: 'Drives each: a whole number from 0 to 9' }),
+  'rules.drives_3': NUM(0, 9, { whole: true, msg: 'Drives each: a whole number from 0 to 9' }),
+  'rules.drives_4': NUM(0, 9, { whole: true, msg: 'Drives each: a whole number from 0 to 9' }),
+  'rounds.drive_penalty': NUM(0, 10, { whole: true, blank: true, msg: 'Strokes per drive short: a whole number from 0 to 10' }),
 };
+/** The Rulebook numbers an upheld verdict can set in one tap (085 + 099). */
+export const RULE_NUMBERS = ['late_strokes', 'late_days', 'breach_strokes', 'drives_2', 'drives_3', 'drives_4'];
 export function applySpec(ref) {
   if (!ref || ref.key) return null;
   return APPLY_SPEC[`${ref.table}.${ref.field}`] || null;
@@ -158,7 +168,7 @@ export function applySpec(ref) {
 
 /** Can this person apply this case's verdict to the setting now? (Organisers; an upheld dispute about a setting; once.) */
 export function canApplyVerdict(c, role) {
-  const lateNumbers = c?.subject_kind === 'rule' && c?.subject_ref?.table === 'rules' && ['late_strokes', 'late_days'].includes(c?.subject_ref?.field);
+  const lateNumbers = c?.subject_kind === 'rule' && c?.subject_ref?.table === 'rules' && RULE_NUMBERS.includes(c?.subject_ref?.field);
   return !!c && role === 'organiser' && c.kind === 'ruling' && (c.subject_kind === 'setting' || lateNumbers) && c.status === 'passed'
     && !c.setting_applied_at && !!applySpec(c.subject_ref);
 }

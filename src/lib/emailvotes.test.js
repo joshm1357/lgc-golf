@@ -139,9 +139,9 @@ describe('the email', () => {
     expect(m.html).toContain('#/v/tok.SECRET?o=o3&amp;r=yes');
     expect(m.html).not.toContain('o=o3&amp;r=no');
     for (const s of ['in', 'maybe', 'out']) expect(m.html).toContain(`?rsvp=${s}`);
-    expect(m.html).toContain('✓ Can');
-    expect(m.html).toContain('I’m keen');
-    expect(m.text).toContain(`✓ Can: ${APP}#/v/tok.SECRET?o=o1&r=yes`);
+    expect(m.html).toContain('✓ Yes');
+    expect(m.html).toContain('? Maybe');
+    expect(m.text).toContain(`✓ Yes: ${APP}#/v/tok.SECRET?o=o1&r=yes`);
     expect(m.text).toContain('Closes Fri 30 Oct');
   });
   it('a stop link, an open-in-app link, and nothing else about the group', () => {

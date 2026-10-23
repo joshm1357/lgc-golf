@@ -150,7 +150,7 @@ await ctx.addInitScript(([uid]) => {
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
   if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated' } }));
-  localStorage.setItem('tgt-whats-new', 'beta-1');
+  localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */ localStorage.setItem('tgt-notify-prompt', String(Date.now() + 86400000 * 400));
 }, ['99999999-9999-4999-8999-999999999999']);
 const page = await ctx.newPage();
 page.on('pageerror', (e) => fails.push(`page error: ${e}`));
@@ -159,7 +159,7 @@ const as = async (who, hash) => { me = who; await page.goto(`${BASE}#${hash}`); 
 
 // 1. The Tribunal: one list, "Raise a case".
 await as(K, '/tribunal');
-check(await seen(page.getByText('The Tribunal').first(), 15000), 'Tribunal screen opens');
+check(await seen(page.getByTestId('gov-tab-tribunal'), 15000) && page.url().includes('#/governance/tribunal'), 'Tribunal screen opens (ov19: /tribunal → Governance, Tribunal tab)');
 await page.getByRole('button', { name: /Raise a case/ }).click();
 check(await seen(page.getByRole('button', { name: /Anything else/ })), 'raise sheet offers “Anything else”');
 check(await page.getByRole('button', { name: /Handicap/ }).isVisible(), '…and Handicap (today’s Tribunal)');
@@ -210,8 +210,8 @@ check(await seen(page.getByText(/GUILTY 2–0/), 15000), 'past verdicts list it'
 
 // 5. Governance settings: presets.
 await as(K, '/group');
-check(await seen(page.getByRole('link', { name: /Governance/ }), 15000), 'Players & group links to Governance');
-await page.getByRole('link', { name: /Governance/ }).click();
+check(await seen(page.getByRole('link', { name: /Group rules/ }), 15000), 'Players & group links to Governance');
+await page.getByRole('link', { name: /Group rules/ }).click();
 check(await seen(page.getByTestId('presets')), 'Governance screen opens with presets');
 for (const label of ['Organiser runs it', 'Majority rules', 'Club style', 'L.G.C (as today)']) check(await page.getByText(label, { exact: true }).isVisible(), `preset: ${label}`);
 check(await page.getByTestId('row-change_rule').getByText(/Any organiser/).isVisible(), 'today: an organiser decides rule changes');
@@ -223,7 +223,7 @@ check(await seen(page.getByTestId('row-change_rule').getByText(/Majority of play
 check(await page.getByText(/Changes here are a case/).isVisible(), 'after that, governance changes are a case');
 check(await page.getByRole('button', { name: 'Propose a change' }).first().isVisible(), '…so rows offer “Propose a change”');
 await page.screenshot({ path: `${SHOTS}/5-governance-majority.png`, fullPage: true });
-await as(BO, '/governance');
+await as(BO, '/governance/settings');
 check(await seen(page.getByTestId('presets'), 15000), 'a player can see the Governance screen');
 check(!(await page.getByRole('button', { name: 'Use this' }).first().isVisible().catch(() => false)), 'a player can’t switch presets directly');
 

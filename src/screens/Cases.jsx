@@ -20,6 +20,8 @@ import {
   disputeTitle, refForServer, valueWords, SOURCE, subjectLine, canApplyVerdict, applySpec, parseApplyValue, suggestedValue, appliedLine,
 } from '../lib/disputes.js';
 import { refreshDisputes } from '../components/RuleTag.jsx';
+import { ElectionPanel, electionRowWords } from '../components/Elections.jsx';
+import { isContest, electionStage } from '../lib/governance.js';
 
 const KIND_EMOJI = { new_rule: '📜', change_rule: '✏️', scrap_rule: '🗑️', ruling: '🔎', handicap: '⛳', other: '👔', election: '🪑', governance: '🏛️' };
 const SETTINGS_KINDS = ['new_rule', 'change_rule', 'scrap_rule', 'ruling', 'handicap', 'other', 'election', 'governance'];
@@ -32,17 +34,19 @@ export function useGovernance() {
   const [d, setD] = useState(null);
   const load = useCallback(async () => {
     const q = (t, sel = '*') => supabase.from(t).select(sel);
-    const [cases, votes, posts, settings, gg, committees, seats, ruleVotes, members, groups] = await Promise.all([
+    const [cases, votes, posts, settings, gg, committees, seats, ruleVotes, members, groups, nominations] = await Promise.all([
       q('cases').order('created_at', { ascending: false }), q('case_votes'), q('case_posts').order('created_at'),
       q('governance_settings'), q('governance_group'), q('committees').order('created_at'), q('committee_seats').order('seat_no'),
       q('rule_votes'), q('group_members', 'player_id,role'),
       status?.group_id ? supabase.from('groups').select('id,vote_decider').eq('id', status.group_id) : Promise.resolve({ data: [] }),
+      q('election_nominations').order('created_at'), // 090: an older database without it → none
     ]);
     setD({
       ok: !cases.error,
       cases: cases.data || [], votes: votes.data || [], posts: posts.data || [], settingsRows: settings.data || [],
       group: (gg.data || [])[0] || null, committees: committees.data || [], seats: seats.data || [], ruleVotes: ruleVotes.data || [],
       members: members.data || [], voteDecider: (groups.data || [])[0]?.vote_decider || 'admin',
+      nominations: nominations.error ? [] : nominations.data || [],
     });
   }, [status?.group_id]);
   useEffect(() => {
@@ -50,7 +54,7 @@ export function useGovernance() {
     // Close any case whose time is up and apply what's due (the hourly job does this too).
     supabase.rpc('governance_tick').then(({ data: n }) => { if (n > 0) load(); }, () => {});
   }, [load]);
-  useRealtime(['cases', 'case_votes', 'case_posts', 'governance_settings', 'governance_group', 'committees', 'committee_seats', 'rule_votes'], load);
+  useRealtime(['cases', 'case_votes', 'case_posts', 'governance_settings', 'governance_group', 'committees', 'committee_seats', 'rule_votes', 'election_nominations'], load);
   return useMemo(() => {
     if (!d) return null;
     const settings = effectiveSettings(d.settingsRows, { preset: null, voteDecider: d.voteDecider });
@@ -101,7 +105,8 @@ export function CaseRowNew({ c, g }) {
   const st = caseState(g, c);
   const subject = data.playersById[c.subject_id];
   const open = c.status === 'open';
-  const sub = open
+  const sub = isContest(c) ? electionRowWords(c, g)
+    : open
     ? `${KIND[c.kind]?.label} · ${st.state === 'organiser' ? 'an organiser decides' : st.state === 'casting' ? 'tie — casting vote' : st.state === 'fallback' ? 'with the organisers' : `${st.tally.for}–${st.tally.against} so far · ${closesIn(c.closes_at)}`}`
     : `${KIND[c.kind]?.label} · ${verdictWord(c)}${c.votes_for != null ? ` ${c.votes_for}–${c.votes_against}` : ''}${applyWords(c) && c.apply_state !== 'applied' ? ` · ${applyWords(c)}` : ''}`;
   return (
@@ -331,10 +336,14 @@ export function CaseHearing() {
   const words = voteWords(c.kind);
   const nextTrip = [...data.trips].filter((t) => t.start_date && t.start_date > sydneyDate()).sort((a, b) => a.start_date.localeCompare(b.start_date))[0];
   const shareOn = g.group?.share_cards !== false;
+  const contest = isContest(c);
+  const stage = electionStage(c);
   return (
     <div className="page">
       <header className="hdr court">
-        <div className="hdr-row"><Link to="/tribunal" className="back" style={{ textDecoration: 'none' }}>{Icon.back()}<span>Tribunal</span></Link></div>
+        <div className="hdr-row">{contest
+          ? <Link to="/governance/committees" className="back" style={{ textDecoration: 'none' }}>{Icon.back()}<span>Committees</span></Link>
+          : <Link to="/governance/tribunal" className="back" style={{ textDecoration: 'none' }}>{Icon.back()}<span>Tribunal</span></Link>}</div>
         <div className="row label" style={{ color: 'var(--gold)', gap: 6 }}>{Icon.gavel(16)}<span>{KIND[c.kind]?.label} · {open ? 'in session' : 'closed'}</span></div>
         <div className="hdr-row">
           {subject ? <Avatar player={subject} size={54} ring="var(--gold)" /> : <span aria-hidden style={{ fontSize: 40 }}>{KIND_EMOJI[c.kind]}</span>}
@@ -343,8 +352,8 @@ export function CaseHearing() {
             <div className="hdr-sub">Raised by {c.raised_via === 'assistant' ? `the assistant${raiser ? ` (for ${playerName(raiser)})` : ''}` : raiser ? playerName(raiser) : c.raised_via === 'rulebook' ? 'the Rulebook' : 'the Tribunal'} · {timeAgo(c.created_at)}</div>
           </div>
           <div data-testid="verdict-badge" style={{ background: '#fff', color: 'var(--text)', borderRadius: 10, padding: '6px 10px', textAlign: 'center', maxWidth: 110 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)' }}>{open ? 'VOTES' : 'VERDICT'}</div>
-            <div className="num" style={{ fontSize: open ? 22 : 17, lineHeight: 1.1 }}>{open ? `${st.tally.for}–${st.tally.against}` : verdictWord(c)}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)' }}>{contest ? 'ELECTION' : open ? 'VOTES' : 'VERDICT'}</div>
+            <div className="num" style={{ fontSize: open && !contest ? 22 : 17, lineHeight: 1.1 }}>{contest ? ({ nominating: 'Nominations', voting: 'Voting', casting: 'A tie', organiser: 'Organiser picks', done: verdictWord(c) })[stage] : open ? `${st.tally.for}–${st.tally.against}` : verdictWord(c)}</div>
           </div>
         </div>
       </header>
@@ -363,9 +372,10 @@ export function CaseHearing() {
           {rule && <Link to={`/rules/${rule.id}`} className="small">Open the rule →</Link>}
         </div>
 
+        {contest && <ElectionPanel c={c} g={g} />}
         <Hearing c={c} g={g} />
 
-        <div className="card pad stack" data-testid="vote-card">
+        {!contest && <div className="card pad stack" data-testid="vote-card">
           <div className="small muted">{ruleLine(c.kind, c.settings || {}, g.committees)}{open && c.stage === 'voting' && c.closes_at ? ` · ${closesIn(c.closes_at)}` : ''}</div>
           <div className="row between" style={{ fontWeight: 700 }}>
             <span>{words.for} {st.tally.for}</span>
@@ -383,7 +393,7 @@ export function CaseHearing() {
           {open && st.mode === 'organiser' && <div className="small muted">{st.state === 'casting' ? 'A tie: an organiser has the casting vote.' : st.state === 'fallback' ? 'Over to the organisers.' : 'An organiser decides — the votes are a show of hands.'}</div>}
           {open && <DecidePanel c={c} g={g} st={st} />}
           {!open && <Verdict c={c} g={g} subject={subject} nextTrip={nextTrip} shareOn={shareOn} />}
-        </div>
+        </div>}
         <CaseActions c={c} g={g} />
       </div>
     </div>
@@ -461,6 +471,7 @@ function Proposal({ c, rule, g }) {
   if (c.kind === 'scrap_rule' && rule) return <div><span className="muted small">Scrap:</span> <strong>{rule.title}</strong>{rule.value ? ` (${rule.value})` : ''}</div>;
   if (c.kind === 'ruling' && p.answer) return <div><span className="muted small">Suggested ruling:</span> {p.answer}</div>;
   if (c.kind === 'new_rule') return <div><strong>{p.title}</strong>{p.value ? ` (${p.value})` : ''}{p.detail ? <div className="small">{p.detail}</div> : null}</div>;
+  if (isContest(c)) return null;
   if (c.kind === 'election') {
     const com = g.committees.find((x) => x.id === p.committee_id);
     return <div>Put <strong>{playerName(data.playersById[p.candidate])}</strong> in seat {p.seat_no} of the <strong>{com?.name || 'committee'}</strong>{com ? ` (term: ${termLabel(com)})` : ''}.</div>;
@@ -652,9 +663,9 @@ export function GovernanceLink() {
   const { status } = useSession();
   if (!useFeature('tribunal') || !status?.is_member) return null;
   return (
-    <Link to="/governance" className="card pad row" style={{ gap: 10, textDecoration: 'none', color: 'inherit' }}>
+    <Link to="/governance/settings" className="card pad row" style={{ gap: 10, textDecoration: 'none', color: 'inherit' }}>
       <span style={{ fontSize: 22 }} aria-hidden>🏛️</span>
-      <span className="grow"><strong>Governance</strong><div className="small muted">Who decides what in the Tribunal</div></span>
+      <span className="grow"><strong>Group rules</strong><div className="small muted">Who decides what in the Tribunal</div></span>
       <span className="muted">{Icon.next()}</span>
     </Link>
   );
@@ -671,7 +682,7 @@ export function Governance() {
   const nav = useNavigate();
   const [editing, setEditing] = useState(null);
   if (!g) return <Loading />;
-  if (!g.ok) return <div className="page"><Header back title="Governance" /><div className="section empty">Governance isn’t set up on this database yet.</div></div>;
+  if (!g.ok) return <div className="page"><Header back title="Group rules" /><div className="section empty">Group rules aren’t set up on this database yet.</div></div>;
   const organiser = status.role === 'organiser';
   const direct = organiser && (g.settings.governance.decides === 'organiser' || !tribunalOn);
   const preset = g.group?.preset || null;
@@ -683,7 +694,7 @@ export function Governance() {
   }, 'Up for a vote');
   return (
     <div className="page">
-      <Header back title="Governance" sub="Who decides what in the Tribunal" />
+      <Header back title="How we decide things" sub="Group rules: who decides what" />
       <div className="section stack">
         <div className="card pad small">
           {direct
@@ -723,7 +734,13 @@ export function Governance() {
           </div>
         ))}
 
-        {committeesOn && <Committees g={g} direct={direct} />}
+        {committeesOn && (
+          <Link to="/governance/committees" className="card pad row" style={{ gap: 10, textDecoration: 'none', color: 'inherit' }} data-testid="committees-link">
+            <span style={{ fontSize: 22 }} aria-hidden>🪑</span>
+            <span className="grow"><strong>Committees and elections</strong><div className="small muted">{g.committees.length ? `${g.committees.length} committee${g.committees.length === 1 ? '' : 's'} — seats, terms and elections` : 'Set up a committee, its seats and terms'}</div></span>
+            <span className="muted">{Icon.next()}</span>
+          </Link>
+        )}
         {!committeesOn && organiser && <div className="small muted">Committees and terms are switched off (Players & group → Features), or pick Club style above.</div>}
 
         {organiser && (
@@ -812,93 +829,6 @@ function SettingSheet({ kind, g, direct, onClose, onPropose }) {
         {problems.map((p) => <div key={p} className="small" role="alert" style={{ color: 'var(--under)' }}>{p}</div>)}
         <div className="small muted">{ruleLine(kind, s, g.committees)}</div>
         <button type="button" className="btn gold block" disabled={busy || problems.length > 0 || !Object.keys(changed).length} onClick={save}>{direct ? 'Save' : 'Put it to the Tribunal'}</button>
-      </div>
-    </Sheet>
-  );
-}
-
-function Committees({ g, direct }) {
-  const data = useData();
-  const { status } = useSession();
-  const nav = useNavigate();
-  const [edit, setEdit] = useState(null);
-  const [busy, run] = useRun();
-  const players = [...data.players].sort((a, b) => playerName(a).localeCompare(playerName(b)));
-  const canStand = status.role !== 'guest' && canRaise({ role: status.role, settings: g.settings.election });
-  const nominate = (com, seatNo) => {
-    const name = window.prompt(`Who should take seat ${seatNo} of the ${com.name}? Type their name.`);
-    if (!name) return;
-    const p = players.find((x) => playerName(x).toLowerCase() === name.trim().toLowerCase() || x.name.toLowerCase() === name.trim().toLowerCase());
-    if (!p) { toast('No player by that name'); return; }
-    run(async () => {
-      const id = await must(supabase.rpc('raise_case', { p_kind: 'election', p_title: `${playerName(p)} for the ${com.name}`, p_proposal: { committee_id: com.id, seat_no: seatNo, candidate: p.id } }));
-      g.reload(); nav(`/tribunal/case/${id}`);
-    }, 'Election open');
-  };
-  return (
-    <div className="stack" data-testid="committees">
-      <div className="row between"><span className="label">Committees</span>{direct && <button type="button" className="btn ghost sm" onClick={() => setEdit({})}>+ Add a committee</button>}</div>
-      {!g.committees.length && <div className="small muted">No committees yet.</div>}
-      {g.committees.map((com) => (
-        <div key={com.id} className="card pad stack" style={{ gap: 6 }}>
-          <div className="row between"><strong>{com.name}</strong>{direct && <button type="button" className="btn ghost sm" onClick={() => setEdit(com)}>Edit</button>}</div>
-          <span className="small muted">Hears: {com.kinds.map((k) => KIND[k]?.label).join(', ') || 'nothing yet'} · {com.seats} seat{com.seats === 1 ? '' : 's'} · {com.fill === 'election' ? 'elected' : 'appointed'} · term {termLabel(com)}</span>
-          {Array.from({ length: com.seats }, (_, i) => i + 1).map((n) => {
-            const seat = g.seats.find((s) => s.committee_id === com.id && s.seat_no === n);
-            const holder = data.playersById[seat?.player_id];
-            const term = seat?.player_id ? termStatus({ started_at: seat.started_at, term_trips: com.term_trips, term_years: com.term_years }, { trips: data.trips }) : null;
-            return (
-              <div key={n} className="row small" style={{ gap: 8 }}>
-                <span className="muted" style={{ width: 52 }}>Seat {n}</span>
-                {holder ? <><Avatar player={holder} size={22} /><strong className="grow">{playerName(holder)}</strong></> : <span className="grow muted">Empty — the organisers decide until it’s filled</span>}
-                {term?.ended && <span style={{ color: 'var(--under)' }}>term up</span>}
-                {term?.soon && <span className="muted">term nearly up</span>}
-                {com.fill === 'election' && canStand && <button type="button" className="btn ghost sm" disabled={busy} onClick={() => nominate(com, n)}>Nominate</button>}
-                {com.fill === 'appointment' && status.role === 'organiser' && (
-                  <select className="select" style={{ maxWidth: 130 }} aria-label={`Appoint seat ${n}`} value={seat?.player_id || ''} onChange={(e) => run(async () => {
-                    await must(supabase.rpc('appoint_seat', { p_committee: com.id, p_seat_no: n, p_player: e.target.value || null })); g.reload();
-                  }, 'Appointed')}>
-                    <option value="">Empty</option>
-                    {players.map((p) => <option key={p.id} value={p.id}>{playerName(p)}</option>)}
-                  </select>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      ))}
-      {edit && <CommitteeSheet com={edit} g={g} onClose={() => setEdit(null)} />}
-    </div>
-  );
-}
-
-function CommitteeSheet({ com, g, onClose }) {
-  const [v, setV] = useState({ name: com.name || '', kinds: com.kinds || ['handicap'], seats: com.seats || 3, fill: com.fill || 'election', term_trips: com.term_trips ?? 2, term_years: com.term_years ?? 1 });
-  const [busy, run] = useRun();
-  const toggle = (k) => setV({ ...v, kinds: v.kinds.includes(k) ? v.kinds.filter((x) => x !== k) : [...v.kinds, k] });
-  const ok = v.name.trim().length >= 2 && Number(v.seats) >= 1;
-  return (
-    <Sheet title={com.id ? 'Edit committee' : 'New committee'} onClose={onClose}>
-      <div className="stack">
-        <label className="field"><span>Name</span><input className="input" value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} maxLength={40} placeholder="Handicap Committee" /></label>
-        <span className="label">Hears</span>
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-          {['handicap', 'new_rule', 'change_rule', 'scrap_rule', 'ruling', 'other'].map((k) => <button key={k} type="button" className="chip" aria-pressed={v.kinds.includes(k)} onClick={() => toggle(k)}>{KIND[k].label}</button>)}
-        </div>
-        <label className="field"><span>Seats</span><input className="input" type="number" min={1} max={15} value={v.seats} onChange={(e) => setV({ ...v, seats: Number(e.target.value) })} /></label>
-        {Number(v.seats) < 1 && <div className="small" role="alert" style={{ color: 'var(--under)' }}>A committee needs at least one seat.</div>}
-        <label className="field"><span>Seats are filled by</span>
-          <select className="select" value={v.fill} onChange={(e) => setV({ ...v, fill: e.target.value })}><option value="election">Election (a case)</option><option value="appointment">Appointment (an organiser)</option></select>
-        </label>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          <label className="field"><span>Term: trips</span><input className="input" type="number" min={0} max={20} value={v.term_trips ?? ''} onChange={(e) => setV({ ...v, term_trips: e.target.value === '' ? null : Number(e.target.value) })} placeholder="none" /></label>
-          <label className="field"><span>or years</span><input className="input" type="number" min={0} max={10} step={0.5} value={v.term_years ?? ''} onChange={(e) => setV({ ...v, term_years: e.target.value === '' ? null : Number(e.target.value) })} placeholder="none" /></label>
-        </div>
-        <span className="small muted">Term: {termLabel({ term_trips: v.term_trips || null, term_years: v.term_years || null })}. The holder keeps the seat until someone replaces them.</span>
-        <button type="button" className="btn gold block" disabled={busy || !ok} onClick={() => run(async () => {
-          await must(supabase.rpc('save_committee', { p_id: com.id || null, p_name: v.name.trim(), p_kinds: v.kinds, p_seats: Number(v.seats), p_fill: v.fill, p_term_trips: v.term_trips || null, p_term_years: v.term_years || null }));
-          g.reload(); onClose();
-        }, 'Saved')}>Save</button>
       </div>
     </Sheet>
   );

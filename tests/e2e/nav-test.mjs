@@ -4,8 +4,9 @@
 // --shots-only takes the screenshots of the main tabs at 375 and 1440 px (named <prefix>-<width>-<screen>.png) and
 // checks nothing — used for the "before" pictures on the old build.
 //
-// Checks: the first tab is "This trip" (Day 2 of 3) with today's leaderboard, the trip's comps and its feed, above the
-// Feed tab; an old #/?r=<round> recap link still lands on that round's leaderboard; #/comps redirects (to the live
+// Checks (ov21): no "This trip" tab — Trips is the first tab and home (#/) opens on the On now trip's status page (Day 2
+// of 3) with today's leaderboard, the trip's comps and its feed; the laptop sidebar has Trips with sub-items (On now /
+// Next, Last, or ✨ Plan a trip); an old #/?r=<round> recap link still lands on that round's leaderboard; #/comps redirects (to the live
 // round's side comps, or the trip's comps); Players & group opens on the players list; a player can't change a
 // handicap but can dispute it; an organiser changes one inline; the personal settings are on your own profile.
 import { chromium } from '/opt/npm-tools/node_modules/playwright/index.mjs';
@@ -182,7 +183,7 @@ async function open(width, { mobile = width < 600 } = {}) {
     const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
     const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: u, exp, role: 'authenticated' })}.x`;
     if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: u, aud: 'authenticated', role: 'authenticated' } }));
-    localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-notify-prompt', String(Date.now() + 86400000 * 400));
+    localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */ localStorage.setItem('tgt-notify-prompt', String(Date.now() + 86400000 * 400));
     try { sessionStorage.setItem('tgt-savespot-later', '1'); } catch { /* fine */ }
     Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });
   }, [uid(0)]);
@@ -222,7 +223,7 @@ if (SHOTS_ONLY) {
   process.exit(0);
 }
 
-// ---------------------------------------------------------------- 1. Phone: the first tab is This trip
+// ---------------------------------------------------------------- 1. Phone: Trips is the first tab; home is the trip on now
 {
   db = freshDb(); role = 'player';
   const { ctx, page } = await open(375);
@@ -232,7 +233,9 @@ if (SHOTS_ONLY) {
   const t = await card.innerText();
   check(t.includes('Hunter Weekend') && t.includes('Day 2 of 3'), `this trip: name and "Day 2 of 3" (${t.split('\n').slice(0, 3).join(' | ')})`);
   const tabs = await page.locator('nav.tabs .tab span').allInnerTexts();
-  check(tabs[0] === 'This trip' && tabs[1] === 'Feed', `bottom tabs: This trip first, Feed next (${tabs.join(', ')})`);
+  check(tabs[0] === 'Trips' && tabs[1] === 'Feed' && !tabs.includes('This trip'), `bottom tabs: Trips first, Feed next, no This trip (${tabs.join(', ')})`);
+  check(JSON.stringify(tabs) === JSON.stringify(['Trips', 'Feed', 'Players', 'More']), `bottom tabs: Trips · Feed · Players · More (${tabs.join(', ')})`);
+  check(await page.locator('nav.tabs .tab.active span').innerText() === 'Trips', 'home (the trip on now) sits under Trips');
   check(!tabs.includes('Leaderboard') && !tabs.includes('Comps'), 'no Leaderboard or Comps tab any more');
   check(tabs.includes('Players'), 'a Players tab');
   const board = page.getByTestId('trip-round-board');
@@ -256,7 +259,8 @@ if (SHOTS_ONLY) {
   await page.waitForFunction((r) => location.hash.includes(`r=${r}`), R2, { timeout: 5000 });
   await page.locator('.lb-cols').waitFor({ timeout: 10000 });
   check(true, 'tap → the full leaderboard of Saturday’s round');
-  check(await page.locator('nav.tabs .tab.active span').innerText() === 'This trip', 'the round’s leaderboard sits under This trip');
+  check(await page.locator('nav.tabs .tab.active span').innerText() === 'Trips', 'the round’s leaderboard sits under Trips');
+  check(await page.getByTestId('back-to-trip').getAttribute('href').then((h) => h.includes(`/trip-now/${TRIP}`)), '‹ back to the trip’s status page');
 
   // 2. Old recap links still land on the round.
   await go(page, `/?r=${R1}`);
@@ -356,22 +360,90 @@ if (SHOTS_ONLY) {
   await ctx.close();
 }
 
-// ---------------------------------------------------------------- 7. Desktop: sidebar, no trip
+// ---------------------------------------------------------------- 7. Desktop: Trips with sub-items (ov21)
 {
   db = freshDb(); role = 'organiser';
   const { ctx, page } = await open(1440);
   await go(page, '/');
   await page.getByTestId('this-trip').waitFor({ timeout: 15000 });
-  const side = await page.locator('nav.side .side-link span').allInnerTexts();
-  check(side[0] === 'This trip' && side[1] === 'Feed', `sidebar: This trip, then Feed (${side.join(', ')})`);
+  await page.getByTestId('side-on').waitFor({ timeout: 10000 });
+  const side = await page.locator('nav.side .side-links .side-link').allInnerTexts();
+  check(!side.includes('This trip'), `sidebar: no top-level This trip (${side.join(', ')})`);
+  // ov25: sub-items labelled by stage, at most three, then All trips.
+  check(side[0] === 'Trips' && side[1] === '⛳ On now: Hunter Weekend' && side[2] === '🏁 Previous: Bowral 2025' && side[3] === 'All trips →' && side[4] === 'Feed',
+    `sidebar: Trips › ⛳ On now: Hunter Weekend, 🏁 Previous: Bowral 2025, All trips →, then Feed (${side.join(', ')})`);
+  check(await page.getByTestId('side-on').evaluate((e) => e.classList.contains('active') && parseFloat(getComputedStyle(e).paddingLeft) > 30), 'On now is highlighted and indented under Trips');
   check(side.includes('Players & group') && !side.includes('Comps') && !side.includes('Leaderboard'), 'sidebar: Players & group; no Comps or Leaderboard');
-  await page.screenshot({ path: `${SHOTS}/check-1440-this-trip.png` });
-  // No trip on: the compact "plan one" card.
+  await page.screenshot({ path: `${SHOTS}/check-1440-trips-menu-on-now.png` });
+  // Previous trip → its status page.
+  await page.getByTestId('side-previous').click();
+  await page.waitForFunction((t) => location.hash.includes(`/trip-now/${t}`), OLD_TRIP, { timeout: 5000 });
+  await page.getByTestId('this-trip').waitFor({ timeout: 10000 });
+  const lt = await page.getByTestId('this-trip').innerText();
+  check(/last trip/i.test(lt) && lt.includes('Bowral 2025'), `Last: Bowral 2025 → its status page (${lt.split('\n').slice(0, 2).join(' | ')})`);
+  check(await page.getByTestId('side-previous').evaluate((e) => e.classList.contains('active')), 'the Previous sub-item is lit on its page');
+  // Next trip: nothing on today, a trip coming up.
+  const trip = db.trips.find((t) => t.id === TRIP);
+  Object.assign(trip, { start_date: '2027-03-19', end_date: '2027-03-21', name: 'March · Blue Mts' });
+  db.rounds = db.rounds.filter((r) => r.trip_id !== TRIP);
+  await go(page, '/'); await page.reload();
+  await page.getByTestId('side-upcoming').waitFor({ timeout: 15000 });
+  const up = await page.getByTestId('side-upcoming').innerText();
+  check(/^🔒 Upcoming: March · Blue Mts · \d+ (days|weeks)$/.test(up), `nothing on: the sub-item says Upcoming with a countdown (${up})`);
+  await page.getByTestId('this-trip').waitFor({ timeout: 10000 });
+  check(/next trip/i.test(await page.getByTestId('this-trip').innerText()), 'home: the next trip’s status page');
+  await page.screenshot({ path: `${SHOTS}/check-1440-trips-menu-next.png` });
+  // No trip coming up: ✨ Plan a trip first, home is Trips.
   db.trips = db.trips.filter((t) => t.id === OLD_TRIP);
-  db.rounds = db.rounds.filter((r) => r.trip_id === OLD_TRIP);
+  db.plans = db.plans.filter((p) => p.id === OLD_PLAN);
+  await page.reload();
+  await page.getByTestId('side-plan').waitFor({ timeout: 15000 });
+  const side2 = await page.locator('nav.side .side-links .side-link').allInnerTexts();
+  check(side2[0] === 'Trips' && side2[1] === '✨ Plan a trip' && side2[2] === '🏁 Previous: Bowral 2025', `no next trip: Trips › ✨ Plan a trip, Previous (${side2.slice(0, 3).join(', ')})`);
+  await page.getByTestId('trips-plan-it').waitFor({ timeout: 10000 });
+  check(true, 'home with no trip coming up: the Trips screen, with ✨ Plan a trip at the top');
+  check(await page.locator('nav.side .side-link.active').first().innerText() === 'Trips', 'Trips is lit on home when it shows Trips');
+  await page.screenshot({ path: `${SHOTS}/check-1440-trips-menu-plan.png` });
+  await page.getByTestId('side-plan').click();
+  await page.waitForTimeout(1200);
+  const mode = await page.locator('.caddie-modes').innerText().catch(() => '');
+  const planOn = await page.locator('.caddie-modes [aria-selected="true"]').innerText().catch(() => '');
+  check(/Plan a trip/.test(planOn), `✨ Plan a trip opens the Caddie in plan mode (${mode.replace(/\n/g, ' ')} / on: ${planOn})`);
+  await page.screenshot({ path: `${SHOTS}/check-1440-plan-a-trip-caddie.png` });
+  // Planner switched off: home is the small "no trip on" card.
+  db.group_features.find((f) => f.feature_key === 'planner').enabled = false;
   await page.reload();
   await page.getByTestId('no-trip').waitFor({ timeout: 15000 });
-  check((await page.getByTestId('no-trip').innerText()).includes('No trip on'), 'no trip on: "No trip on — plan one"');
+  check((await page.getByTestId('no-trip').innerText()).includes('No trip on'), 'planner off, no trip: "No trip on — plan one"');
+  await ctx.close();
+}
+
+// ---------------------------------------------------------------- 8. Phone: the top of Trips (ov21)
+{
+  db = freshDb(); role = 'player';
+  const { ctx, page } = await open(375);
+  await go(page, '/plan');
+  await page.getByTestId('trips-on').waitFor({ timeout: 15000 });
+  // ov25: one section per stage — On now (gold) first, Previous (muted) further down.
+  const onCard = await page.getByTestId('trips-on').innerText();
+  const lastCard = await page.getByTestId('trips-last').innerText();
+  const onY = (await page.getByTestId('trips-on').boundingBox()).y;
+  const lastY = (await page.getByTestId('trips-last').boundingBox()).y;
+  check(/On now/i.test(onCard) && onCard.includes('Hunter Weekend') && /Previous/i.test(lastCard) && lastCard.includes('Bowral 2025') && onY < lastY, 'Trips: On now card first, Previous further down');
+  check(await page.getByTestId('trips-on').evaluate((e) => e.classList.contains('stage-on')), 'On now card has the gold look');
+  check(!(await page.getByTestId('trips-plan-it').isVisible().catch(() => false)), 'a trip coming up: no Plan a trip card');
+  await page.screenshot({ path: `${SHOTS}/check-375-trips-top.png`, fullPage: true });
+  await page.getByTestId('trips-on').getByRole('link').first().click();
+  await page.waitForFunction((t) => location.hash.includes(`/trip-now/${t}`), TRIP, { timeout: 5000 });
+  check(await page.locator('nav.tabs .tab.active span').innerText() === 'Trips', 'the trip’s status page sits under Trips');
+  db.trips = db.trips.filter((t) => t.id === OLD_TRIP);
+  db.plans = db.plans.filter((p) => p.id === OLD_PLAN);
+  await go(page, '/plan'); await page.reload();
+  await page.getByTestId('trips-plan-it').waitFor({ timeout: 15000 });
+  const planY = (await page.getByTestId('trips-plan-it').boundingBox()).y;
+  const prevY = (await page.getByTestId('trips-last').boundingBox()).y;
+  check(planY < prevY && /Bowral 2025/.test(await page.getByTestId('trips-last').innerText()), 'no next trip: ✨ Plan a trip at the top, Previous below');
+  await page.screenshot({ path: `${SHOTS}/check-375-trips-top-plan.png`, fullPage: true });
   await ctx.close();
 }
 

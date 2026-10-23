@@ -8,10 +8,23 @@
 //   honourBoard, trophies }. Anything missing counts as empty.
 import { roundBoard, stablefordTrophyBoard, compBonuses, formatName } from './board.js';
 import { rankRows, formatToPar } from './scoring.js';
-import { cupTotals, toWin, pts } from './cup.js';
+import { cupTotals, toWin, pts, cupVerdict } from './cup.js';
+
+/** ov28 (W1): every round that counts is locked (finished) → the comp is decided ("won", not "leads"). */
+const done = (rounds = []) => rounds.length > 0 && rounds.every((r) => r.status === 'locked');
+
+/** "Lou leads", "Lou and Mo joint lead", "Lou won", "Lou and Mo tie for first". team: "Team 2 lead". */
+export function leadWho(rows = [], finished = false, team = false) {
+  const top = rows.filter((r) => r.rank === rows[0]?.rank);
+  if (!top.length) return '';
+  const names = top.length === 1 ? top[0].name : `${top.slice(0, -1).map((r) => r.name).join(', ')} and ${top[top.length - 1].name}`;
+  if (top.length > 1) return finished ? `${names} tie for first` : `${names} joint lead`;
+  return finished ? `${names} won` : `${names} ${team ? 'lead' : 'leads'}`;
+}
 import { playGame, moneyTally, formatMoney, GAME_INFO } from './games.js';
 import { compsForRound, sortOwnEntries } from './sidecomps.js';
 import { bestEntry, scoreText } from './awards.js';
+import { isCupComp, cupStandings, cleanCounts } from './cups.js'; // ov32: social, combined and eclectic cups
 
 // ------------------------------------------------------------------ the catalogue (the picker's cards)
 
@@ -90,6 +103,13 @@ export function cleanSettings(kind, settings = {}) {
     }
     if (Object.keys(sessions).length) out.sessions = sessions;
   }
+  // ov32 (101): a group cup played as kind 'manual' — what it is, which rounds, what counts.
+  if (kind === 'manual' && ['social', 'combined', 'eclectic'].includes(s.cup)) {
+    out.cup = s.cup;
+    if (Array.isArray(s.rounds)) out.rounds = s.rounds.filter((x) => /^[0-9a-f-]{36}$/.test(String(x))).slice(0, 20);
+    if (s.cup === 'eclectic' && typeof s.net === 'boolean') out.net = s.net;
+    if (s.cup !== 'eclectic' && s.counts) out.counts = cleanCounts(s.counts);
+  }
   return out;
 }
 
@@ -102,10 +122,20 @@ const byDate = (a, b) => String(a.play_date || a.created_at || '').localeCompare
  * trophy added from Admin or an older app version, or before the backfill ran) — so every trophy is a comp.
  */
 export function tripComps({ comps = [], trophies = [], tripId }) {
-  const mine = (comps || []).filter((c) => c.trip_id === tripId && !c.retired);
+  // ov28 (walkthrough: "BD Trophy listed twice in every comps list"): one line per trophy. A second live comp on the
+  // same trophy, or a trophy with no comp whose name matches a comp's (e.g. the BD Trophy comp and the old BD Trophy
+  // row), isn't listed again.
+  const seenTrophy = new Set();
+  const mine = (comps || []).filter((c) => c.trip_id === tripId && !c.retired).filter((c) => {
+    if (!c.trophy_id) return true;
+    if (seenTrophy.has(c.trophy_id)) return false;
+    seenTrophy.add(c.trophy_id);
+    return true;
+  });
   const linked = new Set((comps || []).map((c) => c.trophy_id).filter(Boolean));
+  const named = new Set(mine.map((c) => String(c.name || '').trim().toLowerCase()));
   const stand = (trophies || [])
-    .filter((t) => t.trip_id === tripId && !linked.has(t.id))
+    .filter((t) => t.trip_id === tripId && !linked.has(t.id) && !named.has(String(t.name || '').trim().toLowerCase()))
     .map((t, i) => ({
       id: `trophy-${t.id}`, virtual: true, trip_id: tripId, name: t.name, kind: kindForTrophy(t.type), round_ids: [],
       settings: {}, trophy_id: t.id, sort: 100 + i, created_at: t.created_at,
@@ -206,6 +236,7 @@ function addUp(rounds, boards, { by, value, higherBetter, unit }) {
  * cup → sides, won, projected, total, toWin, perRound; side_comps → results; games → settle.
  */
 export function compStandings(comp, data = {}) {
+  if (isCupComp(comp)) return cupStandings(comp, data); // ov32: worked out in cups.js (points, or the eclectic)
   const rounds = compRounds(comp, data.rounds || []);
   const base = { kind: comp.kind, rounds, rows: [], higherBetter: true, leaderText: null, note: '', empty: null };
   const fitting = rounds.filter((r) => fits(comp.kind, r));
@@ -224,7 +255,8 @@ export function compStandings(comp, data = {}) {
       const top = rows[0];
       return {
         ...base, rows, projection: b.projection, rounds: b.rounds,
-        leaderText: top && top.total > 0 ? `${top.name} leads · ${top.total} pts` : null,
+        leaderText: top && top.total > 0 ? `${leadWho(rows, done(b.rounds))} · ${top.total} pts` : null,
+        finished: done(b.rounds),
         note: 'Stableford points added up over the rounds that count. Ties: more points in the last round, then countback.',
         empty: rows.length ? null : 'Nobody’s playing the rounds that count yet.',
       };
@@ -246,7 +278,8 @@ export function compStandings(comp, data = {}) {
       const top = rows[0];
       return {
         ...base, rows, higherBetter: false,
-        leaderText: top?.played ? `${top.name} leads · ${top.text} net` : null,
+        leaderText: top?.played ? `${leadWho(rows, done(fitting))} · ${top.text} net` : null,
+        finished: done(fitting),
         note: 'Net score to par added up over the stroke play rounds that count. Lowest wins.',
         empty: rows.length ? null : 'Nobody’s playing the rounds that count yet.',
       };
@@ -258,7 +291,8 @@ export function compStandings(comp, data = {}) {
       const top = rows[0];
       return {
         ...base, rows, rounds: [round], higherBetter: b.higherBetter,
-        leaderText: top && isPlayed(top) ? `${top.name} ${round.status === 'locked' ? 'won' : 'leads'} · ${top.text}` : null,
+        leaderText: top && isPlayed(top) ? `${leadWho(rows, round.status === 'locked')} · ${top.text}` : null,
+        finished: round.status === 'locked',
         note: `The winner of ${round.name}.`,
         empty: rows.length ? null : `Nobody’s playing ${round.name} yet.`,
       };
@@ -285,7 +319,8 @@ export function compStandings(comp, data = {}) {
       const many = boards.length > 1;
       return {
         ...base, rows, higherBetter: !amb,
-        leaderText: top && (many || isPlayed(top)) ? `${top.name} lead · ${top.text}${amb ? ' net' : ''}` : null,
+        leaderText: top && (many || isPlayed(top)) ? `${leadWho(rows, done(fitting), true)} · ${top.text}${amb ? ' net' : ''}` : null,
+        finished: done(fitting),
         note: !many ? (amb ? 'Best net score wins.' : 'Most better-ball points wins.')
           : fixed ? `${amb ? 'Net scores' : 'Better-ball points'} added up over the rounds — the same ${amb ? 'teams' : 'pairs'} all trip.`
             : `New ${amb ? 'teams' : 'pairs'} each round, so each player carries their ${amb ? 'team’s net score' : 'pair’s points'}, added up over the rounds.`,
@@ -308,11 +343,13 @@ export function compStandings(comp, data = {}) {
         const ms = matches.filter((m) => m.round_id === r.id);
         return { round: r, matches: ms.length, ...cupTotals(ms) };
       });
-      const won = rows.find((r) => need && r.value >= need);
       const [A, B] = sides;
+      // ov28 (W1): one verdict in words — "Team Blue win 7–5", "All square 6–6", or "Not finished: 6 of 12 points
+      // played" once the trip's over — never "6½ to win" on a finished Cup.
+      const verdict = cupVerdict({ matches, total, names: { a: A?.name || 'Team 1', b: B?.name || 'Team 2' }, finished: done(rounds) });
       return {
-        ...base, rows, sides, won: tot.won, projected: tot.projected, total, toWin: need, perRound,
-        leaderText: won ? `${won.name} win · ${pts(won.value)}` : sides.length === 2 && matches.length ? `${A.name} ${pts(tot.won.a)} – ${pts(tot.won.b)} ${B.name}` : null,
+        ...base, rows, sides, won: tot.won, projected: tot.projected, total, toWin: need, perRound, verdict, finished: done(rounds),
+        leaderText: sides.length === 2 && matches.length ? verdict.text : null,
         note: total ? `${pts(total)} points in the Cup · ${pts(need)} to win.` : 'Points for each match won; a halved match splits them.',
         empty: sides.length < 2 ? 'The two sides aren’t set up yet.' : null,
       };
@@ -331,7 +368,8 @@ export function compStandings(comp, data = {}) {
       const top = rows[0];
       return {
         ...base, rows, results,
-        leaderText: top ? `${top.name} leads · ${top.text}` : null,
+        leaderText: top ? `${leadWho(rows, done(rounds))} · ${top.text}` : null,
+        finished: done(rounds),
         note: 'Each closest to the pin, longest drive and own side comp won counts one. Most wins takes it.',
         empty: !results.length ? 'No side comp holes set on the rounds that count.' : rows.length ? null : 'No winners yet.',
       };

@@ -17,6 +17,9 @@ const COURSE = 'cccccccc-0000-4000-8000-000000000001';
 const R1 = 'dddddddd-0000-4000-8000-000000000001';
 const R2 = 'dddddddd-0000-4000-8000-000000000002';
 const now = '2026-10-21T08:00:00.000Z';
+// The trip runs around Sydney's today (the app's 'today'), so it is never over when the test runs.
+const sydToday = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney' }).format(new Date());
+const addDays = (ymd, n) => { const t = new Date(`${ymd}T12:00:00Z`); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
 const holes = [[5, 17], [4, 9], [3, 8], [4, 3], [3, 11], [5, 16], [4, 18], [4, 15], [4, 1], [4, 6], [3, 14], [4, 5], [4, 10], [5, 7], [3, 12], [5, 2], [4, 13], [4, 4]]
   .map(([par, si], i) => ({ n: i + 1, par, si }));
 // Everyone makes par except: hole 1 Kurt birdie (a skin); hole 2 Al and Bo both birdie (tie — carries);
@@ -38,14 +41,14 @@ const db = {
     { id: A, name: 'Al Blue', nickname: null, handicap: 0, approved: true, created_at: now },
     { id: B, name: 'Bo Red', nickname: null, handicap: 0, approved: true, created_at: now },
   ],
-  trips: [{ id: TRIP, name: 'Hunter Weekend', start_date: '2026-10-20', end_date: '2026-10-22', status: 'active', created_at: now }],
+  trips: [{ id: TRIP, name: 'Hunter Weekend', start_date: addDays(sydToday, -1), end_date: addDays(sydToday, 1), status: 'active', created_at: now }],
   trophies: [], teams: [], team_players: [], quick_results: [], honour_board: [], round_pins: [],
   round_players: [K, A, B].flatMap((p) => [R1, R2].map((r) => ({ round_id: r, player_id: p, playing_handicap: 0 }))),
   scores,
   courses: [{ id: COURSE, name: 'Cypress Lakes', holes, created_at: now }],
   rounds: [
-    { id: R1, trip_id: TRIP, course_id: COURSE, name: 'Friday — Cypress Lakes', play_date: '2026-10-21', format: 'stableford', status: 'live', ld_holes: [], ctp_holes: [], comp_bonus: 0, own_comps: [], created_at: now },
-    { id: R2, trip_id: TRIP, course_id: COURSE, name: 'Saturday — Cypress Lakes', play_date: '2026-10-22', format: 'stableford', status: 'setup', ld_holes: [], ctp_holes: [], comp_bonus: 0, own_comps: [], created_at: now },
+    { id: R1, trip_id: TRIP, course_id: COURSE, name: 'Friday — Cypress Lakes', play_date: sydToday, format: 'stableford', status: 'live', ld_holes: [], ctp_holes: [], comp_bonus: 0, own_comps: [], created_at: now },
+    { id: R2, trip_id: TRIP, course_id: COURSE, name: 'Saturday — Cypress Lakes', play_date: addDays(sydToday, 1), format: 'stableford', status: 'setup', ld_holes: [], ctp_holes: [], comp_bonus: 0, own_comps: [], created_at: now },
   ],
   plans: [], plan_rsvps: [], plan_groups: [], plan_group_members: [], tribunal_cases: [], tribunal_votes: [], posts: [], rules: [],
   cup_sides: [], cup_matches: [], side_entries: [], side_comp_defs: [], side_comp_entries: [],
@@ -106,7 +109,7 @@ await ctx.addInitScript(([uid]) => {
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
   if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated' } }));
-  localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-notify-prompt', String(Date.now()));
+  localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */ localStorage.setItem('tgt-notify-prompt', String(Date.now()));
 }, ['99999999-9999-4999-8999-999999999999']);
 const page = await ctx.newPage();
 page.on('pageerror', (e) => fails.push(`page error: ${e}`));
@@ -141,6 +144,12 @@ const settle = clean(await page.getByTestId('settle-row').allInnerTexts());
 check(JSON.stringify(settle) === JSON.stringify(['Kurt pays Al Blue $65', 'Bo Red pays Al Blue $5']), `settle-up: Kurt pays Al $65, Bo pays Al $5 (got ${JSON.stringify(settle)})`);
 check((await page.locator('.page').innerText()).includes('Pick-ups'), 'pick-up rules shown on screen');
 await page.screenshot({ path: `${SHOTS}/2-games.png`, fullPage: true });
+// 2b. "How it works" (23 Oct): every game card has an ⓘ that explains it in plain words, with an example.
+await page.getByTestId('game-help-nassau').first().click();
+const helpText = await page.getByTestId('game-help-sheet').innerText();
+check(/front 9/i.test(helpText) && /Example/i.test(helpText) && /money/i.test(helpText), 'Nassau: How it works explains the three bets, with an example and the money');
+await page.screenshot({ path: `${SHOTS}/2b-nassau-help.png` });
+await page.getByRole('button', { name: 'Got it' }).click();
 
 // 3. Live: a new score changes things (the fake has no realtime, so reload). Al birdies 18: the skin with the 7
 //    carried from 11–17 (8 skins), and the 18 outright.
@@ -158,6 +167,7 @@ await page.goto(`${BASE}#/admin`);
 const sat = page.getByTestId('round-games').filter({ hasText: '+ Stableford pot $10' }).last();
 await sat.waitFor({ timeout: 15000 });
 await page.screenshot({ path: `${SHOTS}/3-admin.png`, fullPage: true });
+check(await page.getByTestId('games-explained').first().isVisible(), 'Admin: "Not sure what they are?" explains each game on offer');
 const satCount = await page.getByTestId('round-games').count();
 const satGames = page.getByTestId('round-games').nth(satCount - 1);
 await satGames.getByRole('button', { name: '+ Stableford pot $10' }).click();

@@ -242,7 +242,7 @@ function Handicaps() {
     <>
       <div className="card pad stack" style={{ gap: 10 }}>
         <div><strong>📈 Past handicaps</strong>
-          <div className="small muted">Shown on each player’s handicap history. Today’s handicaps don’t change — only the admin or the Tribunal changes those.</div></div>
+          <div className="small muted">Shown on each player’s handicap history. Today’s handicaps don’t change — only an organiser or the Tribunal changes those.</div></div>
 
         <div className="stack" style={{ gap: 6 }}>
           <span className="label">Add one</span>

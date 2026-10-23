@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { startOutbox, outboxCount, onOutboxChange, onOutboxDrop } from './lib/outbox.js';
 import { HashRouter, Routes, Route, Navigate, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { SessionProvider, DataProvider, useSession, useData, useFeature } from './lib/store.jsx';
-import { TabBar, Toaster, Loading, UpdateBanner, toast } from './components/ui.jsx';
+import { TabBar, Toaster, ConfirmHost, Loading, UpdateBanner, toast } from './components/ui.jsx';
 import { lazyScreen, LazyArea } from './lib/lazy.jsx';
 import { DrawOverlay } from './components/DrawOverlay.jsx';
 import { Sidebar } from './components/Sidebar.jsx';
@@ -30,7 +30,7 @@ import { personalCode } from './lib/personal.js';
 import { takeWelcome, welcomeName } from './lib/joinfirst.js';
 import ProfileSetup, { AwaitingApproval } from './screens/ProfileSetup.jsx';
 import Leaderboard from './screens/Leaderboard.jsx';
-import TripNow from './screens/TripNow.jsx';
+import TripNow, { useTripsMenu } from './screens/TripNow.jsx';
 import { pickActiveTrip } from './lib/activetrip.js';
 import ScoreEntry from './screens/ScoreEntry.jsx';
 import Feed from './screens/Feed.jsx';
@@ -46,15 +46,14 @@ const Profile = lazyScreen(() => import('./screens/Profile.jsx'));
 const Comps = lazyScreen(() => import('./screens/Comps.jsx'));
 const MapScreen = lazyScreen(() => import('./screens/MapScreen.jsx'));
 const Trophies = lazyScreen(() => import('./screens/Trophies.jsx'));
-const Tribunal = lazyScreen(() => import('./screens/Tribunal.jsx'));
 const TribunalCase = lazyScreen(() => import('./screens/Tribunal.jsx'), 'TribunalCase');
 const Courses = lazyScreen(() => import('./screens/Courses.jsx'));
 const Planner = lazyScreen(() => import('./screens/Trips.jsx'));
 const PlanDetail = lazyScreen(() => import('./screens/Planner.jsx'), 'PlanDetail');
-const Rulebook = lazyScreen(() => import('./screens/Rulebook.jsx'));
 const RulePage = lazyScreen(() => import('./screens/RulePage.jsx'));
 const CaseHearing = lazyScreen(() => import('./screens/Cases.jsx'), 'CaseHearing');
 const Governance = lazyScreen(() => import('./screens/Cases.jsx'), 'Governance');
+const GovernanceHub = lazyScreen(() => import('./screens/GovernanceHub.jsx'));
 const GreenMapper = lazyScreen(() => import('./screens/GreenMapper.jsx'));
 const Group = lazyScreen(() => import('./screens/Group.jsx'));
 const History = lazyScreen(() => import('./screens/History.jsx'));
@@ -73,6 +72,7 @@ const Ask = lazyScreen(() => import('./screens/AiHelper.jsx'));
 const AiImport = lazyScreen(() => import('./screens/AiImport.jsx'));
 const Stats = lazyScreen(() => import('./screens/Stats.jsx'));
 const DinnerAwards = lazyScreen(() => import('./screens/DinnerAwards.jsx'));
+const AwardRunPage = lazyScreen(() => import('./components/AutoAwards.jsx'), 'AwardRunPage'); // 100: a night's proposed winner
 // Stage 11c's laptop tools, at home where they belong since the Trip desk folded into Trips (22 Oct).
 const DeskForward = lazyScreen(() => import('./screens/Desk.jsx')); // old /desk… links forward to the new homes
 const PlayersTable = lazyScreen(() => import('./screens/DeskTables.jsx'), 'PlayersTable');
@@ -81,6 +81,7 @@ const CardPicker = lazyScreen(() => import('./screens/PaperCard.jsx'), 'CardPick
 const PaperCard = lazyScreen(() => import('./screens/PaperCard.jsx'), 'PaperCard');
 const PrintRound = lazyScreen(() => import('./screens/PaperCard.jsx'), 'PrintRound');
 const Present = lazyScreen(() => import('./screens/Present.jsx'), 'Present');
+const AwardsShow = lazyScreen(() => import('./screens/AwardsShow.jsx')); // ov28 (I14): the awards presentation
 const TripFinder = lazyScreen(() => import('./screens/TripFinder.jsx'));
 const TripBuilder = lazyScreen(() => import('./screens/TripBuilder.jsx'));
 const Notifications = lazyScreen(() => import('./screens/Notifications.jsx'));
@@ -104,12 +105,21 @@ function JoinInsideRoute({ code: given }) {
   );
 }
 
-// The first tab (ov15): This trip. A round's leaderboard is #/?r=<round> — every recap link already in a group chat
-// still lands on it. A quick round (one round, no trip) keeps its leaderboard here.
+// Home (#/). A round's leaderboard is #/?r=<round> — every recap link already in a group chat still lands on it. A
+// quick round (one round, no trip) keeps its leaderboard here. Otherwise (ov21, 23 Oct): the On now / Next trip's
+// status page if there is one, else the Trips screen (or the "no trip on" card when the planner is switched off).
 function Home() {
   const [params] = useSearchParams();
   const { status } = useSession();
-  return params.get('r') || status?.quick ? <Leaderboard /> : <TripNow />;
+  if (params.get('r') || status?.quick) return <Leaderboard />;
+  return <HomeTrip />;
+}
+function HomeTrip() {
+  const menu = useTripsMenu();
+  const plannerOn = useFeature('planner');
+  if (!menu.ready) return <Loading />;
+  if (menu.now || !plannerOn) return <TripNow menu={menu} />;
+  return <Planner />;
 }
 
 // The old Comps tab (#/comps): with a round it's that round's side comps (links from posts and awards). Without one:
@@ -126,10 +136,22 @@ function CompsRoute() {
 }
 
 // Screens of a switched-off feature (opened from an old post, a bookmark or a notification) say so instead of half-working.
+/** ov19: the Rulebook, Tribunal and Committees live under Governance. Old links redirect into the right tab, keeping
+ *  ?round= / ?f= / ?propose=. Deep links to one rule (/rules/:id) or one case (/tribunal/case/:id) keep their pages. */
+function GovRedirect({ to }) {
+  const loc = useLocation();
+  return <Navigate to={`${to}${loc.search}`} replace />;
+}
+
 function FeatureRoute({ feature, label, children }) {
   return useFeature(feature) ? children : (
     <div className="page"><div className="empty" style={{ marginTop: 40 }}>{label} is switched off for this group.<div className="small muted" style={{ marginTop: 6 }}>An organiser can switch it on in Players & group → Features.</div></div></div>
   );
+}
+/** A case's page: the Tribunal, or (ov19) an election when only committees are on. */
+function CaseRoute({ children }) {
+  const committees = useFeature('committees');
+  return committees ? children : <FeatureRoute feature="tribunal" label="The Tribunal">{children}</FeatureRoute>;
 }
 function DrawOverlayIfOn() {
   return useFeature('draw') ? <DrawOverlay /> : null;
@@ -274,19 +296,25 @@ function Inside() {
         <Route path="/notifications" element={<FeatureRoute feature="notifications" label="Phone notifications"><Notifications /></FeatureRoute>} />
         <Route path="/comps-board" element={<CompsBoard />} />
         <Route path="/trip/:tripId" element={<TripOverviewScreen />} />
-        <Route path="/ask" element={<FeatureRoute feature="ai_helper" label="The AI helper"><Ask /></FeatureRoute>} />
-        <Route path="/import" element={<FeatureRoute feature="ai_helper" label="The AI helper"><AiImport /></FeatureRoute>} />
+        <Route path="/trip-now/:tripId" element={<TripNow />} />
+        <Route path="/ask" element={<FeatureRoute feature="ai_helper" label="The Caddie"><Ask /></FeatureRoute>} />
+        <Route path="/import" element={<FeatureRoute feature="ai_helper" label="The Caddie"><AiImport /></FeatureRoute>} />
         <Route path="/cup" element={<FeatureRoute feature="cup" label="The Cup"><Cup /></FeatureRoute>} />
         <Route path="/cup/:matchId" element={<FeatureRoute feature="cup" label="The Cup"><CupMatch /></FeatureRoute>} />
         <Route path="/games" element={<FeatureRoute feature="games" label="Games and side bets"><Games /></FeatureRoute>} />
         <Route path="/replay/:roundId" element={<FeatureRoute feature="replay" label="Round replay"><Replay /></FeatureRoute>} />
         <Route path="/trophies" element={<FeatureRoute feature="trophies" label="The Trophy Room"><Trophies /></FeatureRoute>} />
-        <Route path="/tribunal" element={<FeatureRoute feature="tribunal" label="The Handicap Tribunal"><Tribunal /></FeatureRoute>} />
+        <Route path="/tribunal" element={<GovRedirect to="/governance/tribunal" />} />
+        <Route path="/cases" element={<GovRedirect to="/governance/tribunal" />} />
+        <Route path="/committees" element={<GovRedirect to="/governance/committees" />} />
         <Route path="/tribunal/:caseId" element={<FeatureRoute feature="tribunal" label="The Handicap Tribunal"><TribunalCase /></FeatureRoute>} />
         <Route path="/stats" element={<FeatureRoute feature="stats" label="Player stats"><Stats /></FeatureRoute>} />
-        <Route path="/dinner/:tripId?" element={<FeatureRoute feature="dinner_awards" label="Fines and dinner awards"><DinnerAwards /></FeatureRoute>} />
-        <Route path="/tribunal/case/:caseId" element={<FeatureRoute feature="tribunal" label="The Tribunal"><CaseHearing /></FeatureRoute>} />
-        <Route path="/governance" element={<FeatureRoute feature="tribunal" label="The Tribunal"><Governance /></FeatureRoute>} />
+        <Route path="/dinner/:tripId?" element={<FeatureRoute feature="dinner_awards" label="Fines & awards"><DinnerAwards /></FeatureRoute>} />
+        <Route path="/award-run/:runId" element={<FeatureRoute feature="dinner_awards" label="Fines & awards"><AwardRunPage /></FeatureRoute>} />
+        <Route path="/tribunal/case/:caseId" element={<CaseRoute><CaseHearing /></CaseRoute>} />
+        <Route path="/governance" element={<GovRedirect to="/governance/rulebook" />} />
+        <Route path="/governance/settings" element={<FeatureRoute feature="tribunal" label="The Tribunal"><Governance /></FeatureRoute>} />
+        <Route path="/governance/:tab" element={<GovernanceHub />} />
         <Route path="/player/:playerId" element={<Profile />} />
         <Route path="/courses" element={<Courses />} />
         <Route path="/admin" element={<Admin />} />
@@ -294,8 +322,8 @@ function Inside() {
         <Route path="/plan" element={<FeatureRoute feature="planner" label="The Trips planner"><Planner /></FeatureRoute>} />
         <Route path="/plan/:planId" element={<FeatureRoute feature="planner" label="The Trips planner"><PlanDetailRoute /></FeatureRoute>} />
         <Route path="/plan/:planId/find" element={<FeatureRoute feature="trip_finder" label="The trip finder"><TripFinder /></FeatureRoute>} />
-        <Route path="/plan/:planId/build" element={<FeatureRoute feature="trip_finder" label="The trip builder"><TripBuilder /></FeatureRoute>} />
-        <Route path="/rules" element={<Rulebook />} />
+        <Route path="/plan/:planId/build" element={<FeatureRoute feature="trip_finder" label="Plan the trip"><TripBuilder /></FeatureRoute>} />
+        <Route path="/rules" element={<GovRedirect to="/governance/rulebook" />} />
         <Route path="/rules/:ruleId" element={<RulePage />} />
         <Route path="/courses/:courseId/greens" element={<GreenMapper />} />
         <Route path="/guide/:courseId/:hole?" element={<FeatureRoute feature="gps" label="The course guide"><CourseGuide /></FeatureRoute>} />
@@ -312,6 +340,7 @@ function Inside() {
         <Route path="/round/:roundId/print" element={<PrintRound />} />
         <Route path="/round/:roundId/present" element={<Present />} />
         <Route path="/present" element={<Present />} />
+        <Route path="/present/awards/:tripId?" element={<AwardsShow />} />
         <Route path="/desk/*" element={<DeskForward />} />
         <Route path="*" element={<Home />} />
       </Routes>
@@ -326,6 +355,7 @@ function Inside() {
       <SaveSpotPrompt />
       <Caddie />
       <Toaster />
+      <ConfirmHost />
     </div>
   );
 }

@@ -145,7 +145,10 @@ await ctx.addInitScript(([uid, group]) => {
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
   if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated' } }));
   localStorage.setItem('lgc-group', group);
-  localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-notify-prompt', String(Date.now()));
+  localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */ localStorage.setItem('tgt-notify-prompt', String(Date.now()));
+  // ov27 (F1): a new organiser's three-step start hides Home's other ways to start a trip; this test is about the
+  // Trips tab's own Caddie button, so the start has been put away (it's checked in trip-page-test).
+  localStorage.setItem('tgt-starter', JSON.stringify({ [group]: { hidden: true } }));
 }, ['99999999-9999-4999-8999-999999999999', GROUP]);
 const page = await ctx.newPage();
 page.on('pageerror', (e) => fails.push(`page error: ${e}`));
@@ -153,11 +156,11 @@ page.on('dialog', (d) => d.accept());
 
 // 1. Trips tab: Plan it with AI + Ask chip.
 await page.goto(`${BASE}#/plan`);
-await page.getByRole('button', { name: /✨ (Plan it with AI|Carry on your plan)/ }).waitFor({ timeout: 15000 });
+await page.getByRole('button', { name: /✨ (Plan it with the Caddie|Carry on your plan)/ }).waitFor({ timeout: 15000 });
 check(true, 'organiser sees "✨ Plan it with AI" on the Trips tab');
 check(await page.getByText('✨ Ask about our trips').isVisible(), 'the Ask chip shows on the Trips tab');
 await page.screenshot({ path: `${SHOTS}/1-trips.png`, fullPage: true });
-await page.getByRole('button', { name: /✨ (Plan it with AI|Carry on your plan)/ }).click();
+await page.getByRole('button', { name: /✨ (Plan it with the Caddie|Carry on your plan)/ }).click();
 const box = page.getByLabel('Your message');
 check((await box.getAttribute('placeholder')).startsWith('Weekend away in March'), 'the example is the placeholder');
 check(await page.getByRole('button', { name: 'Send', exact: true }).isDisabled(), 'Send waits for some words');
@@ -207,10 +210,10 @@ await page.screenshot({ path: `${SHOTS}/5-ask-round.png`, fullPage: true });
 
 // 3. Josh's Wishes screen: the AI tab.
 await page.goto(`${BASE}#/wishes`);
-await page.getByRole('button', { name: '✨ AI helper' }).click();
-await page.getByLabel('AI helper usage').waitFor({ timeout: 10000 });
-const usage = await page.getByLabel('AI helper usage').innerText();
-check(/75%/.test(usage) && /Hit the limit/.test(usage) && /Plan it with AI/.test(usage) && /example\/cheap-model/.test(usage) && /AI busy or down — 1×/.test(usage), 'Wishes → AI helper: 👍 share, cap hits, areas, models, errors');
+await page.getByRole('button', { name: '✨ The Caddie' }).click();
+await page.getByLabel('Caddie usage').waitFor({ timeout: 10000 });
+const usage = await page.getByLabel('Caddie usage').innerText();
+check(/75%/.test(usage) && /Hit the limit/.test(usage) && /Plan it with the Caddie/.test(usage) && /example\/cheap-model/.test(usage) && /Caddie busy or down — 1×/.test(usage), 'Wishes → AI helper: 👍 share, cap hits, areas, models, errors');
 await page.screenshot({ path: `${SHOTS}/6-wishes-ai.png`, fullPage: true });
 
 // 4. A player: the Ask chip, but no Plan button.
@@ -218,7 +221,7 @@ organiser = false;
 await page.goto(`${BASE}#/plan`);
 await page.reload();
 await page.getByText('✨ Ask about our trips').waitFor({ timeout: 15000 });
-check(!(await page.getByRole('button', { name: /✨ (Plan it with AI|Carry on your plan)/ }).isVisible().catch(() => false)), 'a player doesn’t get "Plan it with AI"');
+check(!(await page.getByRole('button', { name: /✨ (Plan it with the Caddie|Carry on your plan)/ }).isVisible().catch(() => false)), 'a player doesn’t get "Plan it with AI"');
 organiser = true;
 
 // 5. Switched off: hidden everywhere, the function never called.
@@ -228,14 +231,14 @@ await page.goto(`${BASE}#/plan`);
 await page.reload();
 await page.getByText('💡 Suggest a trip or round').waitFor({ timeout: 15000 });
 await page.waitForTimeout(500);
-check(!(await page.getByRole('button', { name: /✨ (Plan it with AI|Carry on your plan)/ }).isVisible().catch(() => false)), 'switched off: no Plan it with AI');
+check(!(await page.getByRole('button', { name: /✨ (Plan it with the Caddie|Carry on your plan)/ }).isVisible().catch(() => false)), 'switched off: no Plan it with AI');
 check(!(await page.getByText('✨ Ask about our trips').isVisible().catch(() => false)), 'switched off: no Ask chip on Trips');
 await page.goto(`${BASE}#/leaderboard`);
 await page.getByText('Wednesday — Kurri').first().waitFor({ timeout: 15000 });
 await page.waitForTimeout(500);
 check(!(await page.getByText('✨ Ask about this round').isVisible().catch(() => false)), 'switched off: no Ask chip on the leaderboard');
 await page.goto(`${BASE}#/ask?about=round`);
-await page.getByText('The AI helper is switched off for this group.').waitFor({ timeout: 10000 });
+await page.getByText('The Caddie is switched off for this group.').waitFor({ timeout: 10000 });
 check(true, 'switched off: /ask says so');
 check(calls.length === before, 'switched off: the function isn’t called');
 

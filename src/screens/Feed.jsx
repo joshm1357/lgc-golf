@@ -2,10 +2,18 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { sendOrQueue } from '../lib/outbox.js';
 import { supabase, friendlyError } from '../lib/supabase.js';
-import { useData, useRealtime, useSession, playerName } from '../lib/store.jsx';
+import { useData, useRealtime, useSession, useFeature, playerName } from '../lib/store.jsx';
 import { Header, Avatar, Icon, Sheet, timeAgo, toast, PhotoButtons } from '../components/ui.jsx';
 import { DinnerAwardsLink } from '../components/DinnerAwardsLink.jsx';
 import { isCommentaryPost } from '../lib/commentary.js';
+import { usePostChips, PostChips, FineSheet } from '../components/AwardsFines.jsx';
+import { useFeedClaims, ClaimChips, AwardRunCard, runIdFromLink, FromScoresProposer } from '../components/AutoAwards.jsx';
+import { BringAsk } from '../components/BringAsk.jsx';
+import { bringAskPlan } from '../lib/runup.js';
+import { SideGameAsk, sideGameFromLink } from '../components/GamesChip.jsx'; // ov29 (098)
+import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
+
+const CapTipChip = lazyScreen(() => import('../components/CupStandings.jsx'), 'CapTipChip', { inline: true }); // ov32: 🧢 next to 🏷
 
 const REACTIONS = ['🔥', '😂', '👏', '🤦', '🍺'];
 
@@ -41,6 +49,12 @@ export default function Feed() {
 
   useEffect(() => { load(); }, [load]);
   useRealtime(['posts', 'comments', 'reactions'], load);
+  // 093: fines and awards put on posts ("🏷 Fined: Wrong ball ($5)").
+  const [chips, reloadChips] = usePostChips(useMemo(() => posts.map((p) => p.id), [posts]));
+  const [fining, setFining] = useState(null); // { post, who }
+  const canFine = useFeature('dinner_awards') && !status.viewing && status.role !== 'guest' && !!me;
+  // 100: "Claim Latest out?" on night photos; the morning's proposal with Confirm / Dispute.
+  const claims = useFeedClaims();
 
   async function toggleReact(post, emoji) {
     const mine = reactions.find((r) => r.post_id === post.id && r.player_id === me && r.emoji === emoji);
@@ -67,16 +81,19 @@ export default function Feed() {
           <Post key={p.id} post={p} me={me}
             comments={comments.filter((c) => c.post_id === p.id)}
             reactions={reactions.filter((r) => r.post_id === p.id)}
-            onReact={(e) => toggleReact(p, e)} onChanged={load} isAdmin={status.is_admin} />
+            onReact={(e) => toggleReact(p, e)} onChanged={load} isAdmin={status.is_admin}
+            chips={chips[p.id] || []} onChips={reloadChips} onFine={canFine ? (who) => setFining({ post: p, who }) : null} claims={claims} />
         ))}
         {posts.length >= limit && <button type="button" className="btn ghost" onClick={() => setLimit(limit + 40)}>Load older posts</button>}
       </div>
       {composing && <Composer onClose={() => setComposing(false)} onPosted={load} />}
+      {claims.trip && <FromScoresProposer trip={claims.trip} />}
+      {fining && <FineSheet post={fining.post} who={fining.who} onClose={() => setFining(null)} onSaved={reloadChips} />}
     </div>
   );
 }
 
-function Post({ post, me, comments, reactions, onReact, onChanged, isAdmin }) {
+function Post({ post, me, comments, reactions, onReact, onChanged, isAdmin, chips = [], onChips, onFine, claims }) {
   const data = useData();
   const author = post.player_id ? data.playersById[post.player_id] : null;
   const [text, setText] = useState('');
@@ -121,12 +138,18 @@ function Post({ post, me, comments, reactions, onReact, onChanged, isAdmin }) {
       {post.photo_url && <img className="post-photo" src={post.photo_url} alt={post.body || 'Photo from the course'} loading="lazy" />}
       <div className="pad stack" style={{ paddingTop: post.photo_url ? 10 : 0 }}>
         {!auto && post.body && <div style={{ fontSize: 16, lineHeight: 1.4 }}>{post.body}</div>}
+        <PostChips chips={chips} onChanged={onChips} />
+        {runIdFromLink(post.link) ? <AwardRunCard runId={runIdFromLink(post.link)} compact /> : <ClaimChips post={post} claims={claims} />}
+        {bringAskPlan(post.link) && <BringAsk planId={bringAskPlan(post.link)} />}
+        {sideGameFromLink(post.link) && <SideGameAsk gameId={sideGameFromLink(post.link)} />}
         <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
           {counts.map((c) => (
             <button key={c.e} type="button" className="react" aria-pressed={c.mine} onClick={() => onReact(c.e)} aria-label={`React ${c.e}`}>
               <span>{c.e}</span>{c.n > 0 && <span>{c.n}</span>}
             </button>
           ))}
+          {onFine && <button type="button" className="react" onClick={() => onFine(post.player_id || null)} aria-label="Fine or award" data-testid="fine-post">🏷 Fine / award</button>}
+          {!auto && <LazyArea quiet><CapTipChip post={post} /></LazyArea>}
         </div>
         {comments.length > 2 && !showAll && (
           <button type="button" className="small muted" style={{ background: 'none', border: 0, padding: 0, textAlign: 'left' }} onClick={() => setShowAll(true)}>View all {comments.length} comments</button>
@@ -134,6 +157,7 @@ function Post({ post, me, comments, reactions, onReact, onChanged, isAdmin }) {
         {shown.map((c) => (
           <div key={c.id} style={{ fontSize: 15, lineHeight: 1.35 }}>
             <strong>{playerName(data.playersById[c.player_id])}</strong> {c.body}
+            {onFine && c.player_id && <button type="button" className="small muted" style={{ background: 'none', border: 0, padding: '0 0 0 6px' }} aria-label={`Fine or award ${playerName(data.playersById[c.player_id])}`} onClick={() => onFine(c.player_id)}>🏷</button>}
           </div>
         ))}
         <form onSubmit={comment} className="row">

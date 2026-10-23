@@ -2,11 +2,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { useData, useSession, playerName, useFeature } from '../lib/store.jsx';
-import { Avatar, Sheet, Icon, toast } from '../components/ui.jsx';
+import { Avatar, Sheet, Icon, toast, askConfirm } from '../components/ui.jsx';
 import { fmtRange, countdown, icsFor, nudgeText, mapsLink, kitty, money, DEFAULT_BRING, todayISO, daysUntil } from '../lib/plan.js';
 import { REVEAL_MS } from '../lib/draw.js';
 import { notify, appLink, downloadFile } from '../lib/push.js';
 import { useRun, must, feedPost, everyone, shareNudge } from './Planner.jsx';
+import { LeftoverKitty, useRolledIn } from '../components/AwardsFines.jsx'; // 093: the leftover kitty rule
+import { MoneyLine } from '../components/MoneyLine.jsx'; // M1: one money line per person
+import { collectorOf, youLabel, theyLabel } from '../lib/money.js';
 
 const canEdit = (item, me, isAdmin) => isAdmin || item.created_by === me || item.owner_id === me;
 
@@ -283,6 +286,9 @@ export function JobsTab({ pd }) {
 
 // ---------------------------------------------------------------- Kitty
 
+// M1 (Josh, 23 Oct — walkthrough review option A): one money line per person on top (components/MoneyLine.jsx), the
+// organiser's "who still has to pay" with one Remind, and the full table behind Details. One word for where money goes:
+// "pay Josh" (the trip's organiser collects it), never "the kitty".
 // table: the costs table is on screen above (a laptop) — skip the costs list here, it would be there twice.
 export function KittyTab({ pd, table = false }) {
   const data = useData();
@@ -293,150 +299,114 @@ export function KittyTab({ pd, table = false }) {
   const [busy, run] = useRun();
   const inIds = pd.rsvps.filter((r) => r.status === 'in').map((r) => r.player_id);
   const k = kitty(pd.costs, pd.payments, inIds, pd.transfers);
+  const rolledIn = useRolledIn(pd.plan, kitty);
+  const collector = collectorOf(pd.plan, data.playersById);
   const mine = k.people.find((p) => p.player_id === me);
-  const owing = k.people.filter((p) => p.balance > 0.5);
-  const who = (id) => (id === 'kitty' ? 'the kitty' : playerName(data.playersById[id]));
+  const who = (id) => (id === 'kitty' ? collector.name : playerName(data.playersById[id]));
   const payInfo = (id) => (id === 'kitty' ? pd.plan.kitty_note : data.playersById[id]?.pay_details);
-  const label = (b) => (b > 0.5 ? { t: `owes ${money(b)}`, c: 'var(--under)' } : b < -0.5 ? { t: `owed ${money(-b)}`, c: '#1F7A4D' } : { t: 'square ✓', c: 'var(--navy)' });
-  const myPays = k.settle.filter((s) => s.from === me);
-  const myGets = k.settle.filter((s) => s.to === me);
-  // Waiting for a tick: payments to me, and (for the admin) money paid into the kitty.
-  const toConfirm = pd.transfers.filter((t) => !t.confirmed && (t.to_id === me || (!t.to_id && status.is_admin)));
-  const pendingTo = (to) => pd.transfers.filter((t) => !t.confirmed && t.from_id === me && (t.to_id || 'kitty') === to).reduce((s, t) => s + Number(t.amount), 0);
+  const tone = (b) => (b > 0.5 ? 'var(--under)' : b < -0.5 ? '#1F7A4D' : 'var(--navy)');
   const splitLabel = (c) => (c.split_between?.length ? c.split_between.map((id) => playerName(data.playersById[id])).join(', ') : `everyone in (${inIds.length})`);
-
-  const paid = (s) => run(async () => {
-    const t = await must(supabase.from('plan_transfers').insert({ plan_id: pd.plan.id, from_id: me, to_id: s.to === 'kitty' ? null : s.to, amount: s.amount }).select().single());
-    if (t.to_id) await notify('payment_recorded', { transfer_id: t.id });
-    pd.reload();
-  }, `Recorded — ${who(s.to)} will be asked to confirm`);
 
   return (
     <>
-      {mine && (
-        <div className="card pad stack" style={{ gap: 6, background: mine.balance > 0.5 ? '#FFF1EE' : 'var(--gold-soft)', borderColor: mine.balance > 0.5 ? 'var(--under)' : 'var(--gold)' }}>
-          <div className="label">You</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: label(mine.balance).c }}>{label(mine.balance).t}</div>
-          <div className="small muted">Your share {money(mine.share)}{mine.fronted ? ` · you paid ${money(mine.fronted)} for the group` : ''}{mine.paid ? ` · into kitty ${money(mine.paid)}` : ''}{mine.sent ? ` · sent ${money(mine.sent)}` : ''}{mine.received ? ` · received ${money(mine.received)}` : ''}</div>
-          {myPays.map((s) => (
-            <div key={`${s.from}-${s.to}`} className="card pad stack" style={{ gap: 6, background: '#fff' }}>
-              <div style={{ fontWeight: 800, fontSize: 17 }}>Pay {who(s.to)} {money(s.amount)}</div>
-              {payInfo(s.to)
-                ? <button type="button" className="btn ghost sm" onClick={() => shareNudge(payInfo(s.to))} style={{ justifyContent: 'flex-start' }}>📋 {payInfo(s.to)}</button>
-                : <span className="small muted">{who(s.to)} hasn’t added payment details yet.</span>}
-              {pendingTo(s.to) >= s.amount - 0.5
-                ? <span className="small" style={{ fontWeight: 700 }}>⏳ You said you paid {money(pendingTo(s.to))} — waiting for {who(s.to)} to confirm.</span>
-                : <button type="button" className="btn gold sm" disabled={busy} onClick={() => paid(s)}>I’ve paid {money(s.amount)}</button>}
+      <MoneyLine pd={pd} />
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+        <button type="button" className="btn ghost sm" data-testid="add-cost" onClick={() => setCostFor({})}>+ Add a cost {status.is_admin ? '' : 'I paid'}</button>
+      </div>
+      <MyPayDetails />
+      {/* Near the end of the trip (the last night on), what's left goes where the group's rule says. */}
+      <LeftoverKitty pot={pd.plan.status === 'done' || (pd.plan.end_date && daysUntil(pd.plan.end_date) <= 1) ? k.kitty : 0} people={inIds.length} money={money} rolledIn={rolledIn} />
+
+      <details className="kitty-details" data-testid="kitty-details" open={table || undefined}>
+        <summary className="label" style={{ padding: '8px 0', cursor: 'pointer', minHeight: 44 }}>Details — every cost, who pays who, everyone</summary>
+        <div className="stack" style={{ gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, textAlign: 'center' }}>
+            {[['Total spent', money(k.total)], ['Your share', money(mine?.share || 0)], ['Still to settle', money(k.toCollect)]].map(([l, v]) => (
+              <div key={l} className="card pad"><div className="num" style={{ fontSize: 22 }}>{v}</div><div className="small muted">{l}</div></div>
+            ))}
+          </div>
+          {mine && <div className="small" data-testid="you-label" style={{ fontWeight: 800, color: tone(mine.balance) }}>{youLabel(mine.balance)}</div>}
+          {pd.plan.kitty_note && <div className="card pad"><div className="label">Paying {collector.name}</div><div style={{ fontSize: 16, fontWeight: 600 }}>{pd.plan.kitty_note}</div></div>}
+
+          {!table && (pd.costs.length === 0 ? <div className="small muted">No costs yet. Paid for the house, a round or dinner? Add it — the app splits it and works out who pays who.</div> : (
+            <div className="card">
+              {pd.costs.map((c) => {
+                const mayEdit = status.is_admin || c.created_by === me;
+                return (
+                  <button key={c.id} type="button" disabled={!mayEdit} className="row between" onClick={() => setCostFor(c)}
+                    style={{ width: '100%', padding: '10px 14px', border: 0, borderBottom: '1px solid var(--line-soft)', background: '#fff', textAlign: 'left', color: 'inherit', gap: 8 }}>
+                    <span className="grow"><strong>{c.title}</strong>
+                      <div className="small muted">{c.paid_by ? `Paid by ${playerName(data.playersById[c.paid_by])}` : `Paid by ${collector.name} from the money paid in`} · split: {splitLabel(c)}</div>
+                      {c.note && <div className="small muted">{c.note}</div>}
+                    </span>
+                    <span className="num" style={{ fontSize: 18, whiteSpace: 'nowrap' }}>{money(c.amount)}{c.per_head && <span className="small muted" style={{ fontFamily: 'inherit' }}> each</span>}</span>
+                  </button>
+                );
+              })}
             </div>
           ))}
-          {myGets.length > 0 && <div className="small"><strong>Owed to you:</strong> {myGets.map((s) => `${who(s.from)} ${money(s.amount)}`).join(' · ')}</div>}
-        </div>
-      )}
-      {toConfirm.map((t) => (
-        <div key={t.id} className="card pad stack" style={{ gap: 6, borderColor: 'var(--gold)' }}>
-          <div><strong>{who(t.from_id)}</strong> says they paid {t.to_id ? 'you' : 'into the kitty'} <strong>{money(t.amount)}</strong>.</div>
-          <div className="row" style={{ gap: 8 }}>
-            <button type="button" className="btn gold sm" disabled={busy} onClick={() => run(async () => { await must(supabase.from('plan_transfers').update({ confirmed: true }).eq('id', t.id)); pd.reload(); }, 'Confirmed ✓')}>✓ Got it</button>
-            <button type="button" className="btn ghost sm" disabled={busy} onClick={() => { if (window.confirm('Remove this payment? Their balance goes back up.')) run(async () => { await must(supabase.from('plan_transfers').delete().eq('id', t.id)); pd.reload(); }, 'Removed'); }}>Not received</button>
-          </div>
-        </div>
-      ))}
 
-      <MyPayDetails />
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, textAlign: 'center' }}>
-        {[['Total spent', money(k.total)], ['Your share', money(mine?.share || 0)], ['Still to settle', money(k.toCollect)]].map(([l, v]) => (
-          <div key={l} className="card pad"><div className="num" style={{ fontSize: 22 }}>{v}</div><div className="small muted">{l}</div></div>
-        ))}
-      </div>
-      {pd.plan.kitty_note && <div className="card pad"><div className="label">Paying into the kitty</div><div style={{ fontSize: 16, fontWeight: 600 }}>{pd.plan.kitty_note}</div></div>}
-
-      <div className="row between"><span className="label">{table ? 'A cost with the details (who shares it, per head, a note)' : 'Costs'}</span><button type="button" className="btn ghost sm" onClick={() => setCostFor({})}>+ Add a cost {status.is_admin ? '' : 'I paid'}</button></div>
-      {!table && (<>
-      {pd.costs.length === 0 ? <div className="small muted">Nothing yet. Paid for the house, a round or dinner? Add it — the app splits it and works out who pays who.</div> : (
-        <div className="card">
-          {pd.costs.map((c) => {
-            const mayEdit = status.is_admin || c.created_by === me;
-            return (
-              <button key={c.id} type="button" disabled={!mayEdit} className="row between" onClick={() => setCostFor(c)}
-                style={{ width: '100%', padding: '10px 14px', border: 0, borderBottom: '1px solid var(--line-soft)', background: '#fff', textAlign: 'left', color: 'inherit', gap: 8 }}>
-                <span className="grow"><strong>{c.title}</strong>
-                  <div className="small muted">{c.paid_by ? `Paid by ${playerName(data.playersById[c.paid_by])}` : 'From the kitty'} · split: {splitLabel(c)}</div>
-                  {c.note && <div className="small muted">{c.note}</div>}
-                </span>
-                <span className="num" style={{ fontSize: 18, whiteSpace: 'nowrap' }}>{money(c.amount)}{c.per_head && <span className="small muted" style={{ fontFamily: 'inherit' }}> each</span>}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      </>)}
-      {k.settle.length > 0 && (
-        <>
-          <span className="label">Who pays who</span>
-          <div className="card">
-            {k.settle.map((s) => (
-              <div key={`${s.from}-${s.to}`} className="row between" style={{ padding: '8px 14px', borderBottom: '1px solid var(--line-soft)', gap: 8 }}>
-                <span className="grow"><strong>{who(s.from)}</strong> → <strong>{who(s.to)}</strong>{payInfo(s.to) && <div className="small muted">{payInfo(s.to)}</div>}</span>
-                <span className="num" style={{ fontSize: 18 }}>{money(s.amount)}</span>
-                {s.from === 'kitty' && status.is_admin && (
-                  <button type="button" className="btn ghost sm" disabled={busy} onClick={() => run(async () => {
-                    // A refund from the kitty = that person has that much less in the kitty.
-                    const cur = Number(pd.payments.find((x) => x.player_id === s.to)?.paid || 0);
-                    await must(supabase.from('plan_payments').upsert({ plan_id: pd.plan.id, player_id: s.to, paid: Math.round((cur - s.amount) * 100) / 100, updated_at: new Date().toISOString() }));
-                    pd.reload();
-                  }, 'Refund recorded')}>Refunded</button>
-                )}
+          {k.settle.length > 0 && (
+            <>
+              <span className="label">Who pays who</span>
+              <div className="card">
+                {/* Money paid in is already with the organiser who collects it: no "Josh → Josh" line. */}
+                {k.settle.filter((s) => !(s.from === 'kitty' && s.to === collector.id)).map((s) => (
+                  <div key={`${s.from}-${s.to}`} className="row between" style={{ padding: '8px 14px', borderBottom: '1px solid var(--line-soft)', gap: 8 }}>
+                    <span className="grow"><strong>{who(s.from)}</strong> → <strong>{who(s.to)}</strong>{payInfo(s.to) && <div className="small muted">{payInfo(s.to)}</div>}</span>
+                    <span className="num" style={{ fontSize: 18 }}>{money(s.amount)}</span>
+                    {s.from === 'kitty' && status.is_admin && (
+                      <button type="button" className="btn ghost sm" disabled={busy} onClick={() => run(async () => {
+                        // A refund of money paid in = that person has that much less paid in.
+                        const cur = Number(pd.payments.find((x) => x.player_id === s.to)?.paid || 0);
+                        await must(supabase.from('plan_payments').upsert({ plan_id: pd.plan.id, player_id: s.to, paid: Math.round((cur - s.amount) * 100) / 100, updated_at: new Date().toISOString() }));
+                        pd.reload();
+                      }, 'Refund recorded')}>Refunded</button>
+                    )}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-          <span className="small muted">The fewest payments that square everyone up. It updates as payments are ticked off.</span>
-        </>
-      )}
+              <span className="small muted">The fewest payments that square everyone up. It updates as payments are ticked off.</span>
+            </>
+          )}
 
-      <span className="label">Everyone</span>
-      {k.people.length > 0 ? (
-        <div className="card">
-          {[...k.people].sort((a, b) => b.balance - a.balance).map((p) => {
-            const pl = data.playersById[p.player_id];
-            const l = label(p.balance);
-            return (
-              <button key={p.player_id} type="button" disabled={!status.is_admin} className="row" onClick={() => setPayFor(p)}
-                style={{ width: '100%', padding: '8px 14px', border: 0, borderBottom: '1px solid var(--line-soft)', background: '#fff', textAlign: 'left', color: 'inherit' }}>
-                <Avatar player={pl} size={30} />
-                <span className="grow"><strong>{playerName(pl)}</strong><div className="small muted">share {money(p.share)}{p.fronted ? ` · paid ${money(p.fronted)} for group` : ''}</div></span>
-                <span style={{ fontWeight: 800, color: l.c }}>{l.t}</span>
-              </button>
-            );
-          })}
-        </div>
-      ) : <div className="small muted">Shares are split between everyone who’s <strong>In</strong> unless a cost says otherwise.</div>}
+          <span className="label">Everyone</span>
+          {k.people.length > 0 ? (
+            <div className="card">
+              {[...k.people].sort((a, b) => b.balance - a.balance).map((p) => {
+                const pl = data.playersById[p.player_id];
+                const first = String(playerName(pl) || 'Someone').split(' ')[0];
+                return (
+                  <button key={p.player_id} type="button" disabled={!status.is_admin} className="row" onClick={() => setPayFor(p)}
+                    style={{ width: '100%', padding: '8px 14px', border: 0, borderBottom: '1px solid var(--line-soft)', background: '#fff', textAlign: 'left', color: 'inherit' }}>
+                    <Avatar player={pl} size={30} />
+                    <span className="grow"><strong>{playerName(pl)}</strong><div className="small muted">share {money(p.share)}{p.fronted ? ` · paid ${money(p.fronted)} for the group` : ''}</div></span>
+                    <span style={{ fontWeight: 800, color: tone(p.balance) }}>{p.player_id === me ? youLabel(p.balance) : theyLabel(first, p.balance).slice(first.length + 1)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : <div className="small muted">Shares are split between everyone who’s <strong>In</strong> unless a cost says otherwise.</div>}
 
-      {pd.transfers.length > 0 && (
-        <details>
-          <summary className="label" style={{ padding: '8px 0', cursor: 'pointer' }}>Payments made ({pd.transfers.length})</summary>
-          <div className="card">
-            {pd.transfers.map((t) => (
-              <div key={t.id} className="row between" style={{ padding: '8px 14px', borderBottom: '1px solid var(--line-soft)' }}>
-                <span className="small"><strong>{who(t.from_id)}</strong> → {t.to_id ? who(t.to_id) : 'the kitty'} · {t.confirmed ? '✓ confirmed' : 'waiting to be confirmed'}</span>
-                <span className="row" style={{ gap: 6 }}>
-                  <span className="num">{money(t.amount)}</span>
-                  {(status.is_admin || t.created_by === me || t.to_id === me) && <button type="button" className="btn ghost sm" aria-label="Remove payment" onClick={() => { if (window.confirm('Remove this payment?')) run(async () => { await must(supabase.from('plan_transfers').delete().eq('id', t.id)); pd.reload(); }); }}>{Icon.x(14)}</button>}
-                </span>
+          {pd.transfers.length > 0 && (
+            <>
+              <span className="label">Payments made ({pd.transfers.length})</span>
+              <div className="card">
+                {pd.transfers.map((t) => (
+                  <div key={t.id} className="row between" style={{ padding: '8px 14px', borderBottom: '1px solid var(--line-soft)' }}>
+                    <span className="small"><strong>{who(t.from_id)}</strong> → {who(t.to_id || 'kitty')} · {t.confirmed ? '✓ confirmed' : 'waiting to be confirmed'}</span>
+                    <span className="row" style={{ gap: 6 }}>
+                      <span className="num">{money(t.amount)}</span>
+                      {(status.is_admin || t.created_by === me || t.to_id === me) && <button type="button" className="btn ghost sm" aria-label="Remove payment" onClick={async () => { if (await askConfirm({ title: 'Remove this payment?', yes: 'Remove it' })) run(async () => { await must(supabase.from('plan_transfers').delete().eq('id', t.id)); pd.reload(); }); }}>{Icon.x(14)}</button>}
+                    </span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </details>
-      )}
-
-      {status.is_admin && <span className="small muted">Admin: tap someone to record money they’ve put into the kitty.</span>}
-      {owing.length > 0 && (
-        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-          <button type="button" className="btn ghost sm" onClick={() => shareNudge(nudgeText('kitty', { plan: pd.plan, names: owing.map((p) => playerName(data.playersById[p.player_id])), url: appLink(`/plan/${pd.plan.id}?tab=kitty`) }))}>💬 Nudge in Messenger</button>
-          {status.is_admin && <button type="button" className="btn ghost sm" disabled={busy} onClick={() => run(async () => { const r = await notify('nudge_kitty', { plan_id: pd.plan.id }); toast(`Reminder sent to ${r.sent || 0} phone${r.sent === 1 ? '' : 's'}`); })}>🔔 Remind who owes</button>}
+            </>
+          )}
+          {status.is_admin && <span className="small muted">Organiser: tap someone to record money they’ve paid {collector.name} another way (cash, or a transfer you’ve checked).</span>}
         </div>
-      )}
+      </details>
       {costFor && <CostSheet pd={pd} inIds={inIds} cost={costFor.id ? costFor : null} onClose={() => setCostFor(null)} />}
       {payFor && <PaySheet pd={pd} person={payFor} onClose={() => setPayFor(null)} />}
     </>
@@ -524,7 +494,7 @@ function CostSheet({ pd, inIds, cost, onClose }) {
           else await must(supabase.from('plan_costs').insert(row));
           pd.reload(); onClose();
         }, 'Saved')}>Save</button>
-        {cost && <button type="button" className="btn ghost block" onClick={() => { if (window.confirm('Remove this cost?')) run(async () => { await must(supabase.from('plan_costs').delete().eq('id', cost.id)); pd.reload(); onClose(); }, 'Removed'); }}>Remove</button>}
+        {cost && <button type="button" className="btn ghost block" onClick={async () => { if (await askConfirm({ title: 'Remove this cost?', yes: 'Remove it' })) run(async () => { await must(supabase.from('plan_costs').delete().eq('id', cost.id)); pd.reload(); onClose(); }, 'Removed'); }}>Remove</button>}
       </div>
     </Sheet>
   );
@@ -532,6 +502,7 @@ function CostSheet({ pd, inIds, cost, onClose }) {
 
 function PaySheet({ pd, person, onClose }) {
   const data = useData();
+  const collector = collectorOf(pd.plan, data.playersById);
   const current = pd.payments.find((p) => p.player_id === person.player_id)?.paid || 0;
   const [paid, setPaid] = useState(String(current || ''));
   const [busy, run] = useRun();
@@ -542,10 +513,10 @@ function PaySheet({ pd, person, onClose }) {
   return (
     <Sheet title={playerName(data.playersById[person.player_id])} onClose={onClose}>
       <div className="stack">
-        <div className="small">Share {money(person.share)} · currently {person.balance > 0.5 ? `owes ${money(person.balance)}` : person.balance < -0.5 ? `owed ${money(-person.balance)}` : 'square'}</div>
-        <label className="field"><span>Total they’ve put into the kitty $</span><input className="input" inputMode="decimal" value={paid} onChange={(e) => setPaid(e.target.value)} /></label>
+        <div className="small">Share {money(person.share)} · {theyLabel(String(playerName(data.playersById[person.player_id]) || 'They').split(' ')[0], person.balance)}</div>
+        <label className="field"><span>Total they’ve paid {collector.name} (cash or checked transfers) $</span><input className="input" inputMode="decimal" value={paid} onChange={(e) => setPaid(e.target.value)} /></label>
         <button type="button" className="btn gold block" disabled={busy} onClick={() => save(paid)}>Save</button>
-        {person.balance > 0.5 && <button type="button" className="btn ghost block" disabled={busy} onClick={() => save(Number(current) + person.balance)}>They’ve paid the lot into the kitty ({money(Number(current) + person.balance)})</button>}
+        {person.balance > 0.5 && <button type="button" className="btn ghost block" disabled={busy} onClick={() => save(Number(current) + person.balance)}>They’ve paid {collector.name} the lot ({money(Number(current) + person.balance)})</button>}
       </div>
     </Sheet>
   );
@@ -669,7 +640,7 @@ function GroupSheet({ pd, kind, group, groups, members, inIds, onClose }) {
           </div>
         )}
         <button type="button" className="btn gold block" disabled={busy || !v.name?.trim()} onClick={save}>Save</button>
-        {group && <button type="button" className="btn ghost block" disabled={busy} onClick={() => { if (window.confirm(`Remove ${group.name}?`)) run(async () => { await must(supabase.from('plan_groups').delete().eq('id', group.id)); pd.reload(); onClose(); }, 'Removed'); }}>Remove</button>}
+        {group && <button type="button" className="btn ghost block" disabled={busy} onClick={async () => { if (await askConfirm({ title: `Remove ${group.name}?`, yes: 'Remove it' })) run(async () => { await must(supabase.from('plan_groups').delete().eq('id', group.id)); pd.reload(); onClose(); }, 'Removed'); }}>Remove</button>}
       </div>
     </Sheet>
   );

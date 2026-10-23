@@ -7,7 +7,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useRealtime, useSession, playerName, cacheGet, cacheSet, useFeature } from '../lib/store.jsx';
-import { Header, Avatar, AvatarStack, Sheet, Loading, Icon, toast } from '../components/ui.jsx';
+import { Header, Avatar, AvatarStack, Sheet, Loading, Icon, toast, askConfirm } from '../components/ui.jsx';
 import {
   tallyPoll, nonVoters, suggestions, fmtRange, countdown, nudgeText, RSVP_LABEL, DEFAULT_BRING, todayISO, money,
 } from '../lib/plan.js';
@@ -17,11 +17,14 @@ import { TripFinderCard } from '../components/TripFinderCard.jsx';
 import { TripBuilderCard } from '../components/TripBuilderCard.jsx';
 import { VoteBatches } from '../components/VoteBatchCard.jsx';
 import { TripOverview } from './TripOverview.jsx';
-import { NextStepCard, makeTripJobs } from './TripPlan.jsx';
+import { NextStepCard, makeTripJobs, lockInTrip, redateTripJobs } from './TripPlan.jsx';
+import { openPlanningPolls, lockInWords, closePlanningVotes, closedAtLockIn } from '../lib/lockin.js';
 import { OrganiseView } from './OrganiseSteps.jsx';
 import { OverviewVotes } from '../components/OverviewVotes.jsx';
 import { defaultView } from '../lib/tripsummary.js';
-import { tripStage } from '../lib/trips.js';
+import { tripStage, planIsEmpty, canCallOff } from '../lib/trips.js';
+import { RunUp } from '../components/RunUp.jsx';
+import { showRunUp } from '../lib/runup.js';
 
 const PLAN_TABLES = ['plans', 'plan_polls', 'plan_options', 'plan_votes', 'plan_rsvps', 'plan_items', 'plan_costs', 'plan_payments', 'plan_groups', 'plan_group_members', 'plan_transfers', 'plan_comments'];
 const STATUS_LABEL = { planning: 'Planning', confirmed: 'Locked in', done: 'Done', cancelled: 'Called off' };
@@ -29,12 +32,60 @@ const STATUS_LABEL = { planning: 'Planning', confirmed: 'Locked in', done: 'Done
 export { useRun, must } from '../lib/run.js';
 import { useRun, must } from '../lib/run.js';
 import { NotifyCard } from '../components/NotifyCard.jsx';
-import { PollCard } from '../components/PollCard.jsx';
+import { PollCard, DecidedLine } from '../components/PollCard.jsx';
 import { HowItGoesOut } from '../components/CallVote.jsx';
 import { defaultCloses } from '../lib/callvote.js';
 import { useDesktop } from '../components/Sidebar.jsx';
 
 export { NotifyCard };
+
+// ---------------------------------------------------------------- Call it off / bring it back / delete (ov21)
+// A live trip ("March") was hard-deleted with one tap on a browser "OK" box. Now "Call it off" keeps everything and
+// can be undone; real deletion is only for an empty plan, and the organiser types the trip's name first.
+const missingFn = (e) => /PGRST202|42883|function|schema cache/i.test(`${e?.code} ${e?.message}`);
+
+/** Call a trip off (off = true) or bring it back. 091's call_off_plan records who; an older database: the admin's
+ *  plain update. */
+export async function callOffPlan(plan, off, isAdmin) {
+  const { error } = await supabase.rpc('call_off_plan', { p_plan: plan.id, p_off: off });
+  if (!error) return;
+  if (!missingFn(error) || !isAdmin) throw error;
+  const back = plan.trip_id ? 'confirmed' : 'planning';
+  await must(supabase.from('plans').update({ status: off ? 'cancelled' : back }).eq('id', plan.id));
+}
+
+/** Delete an EMPTY plan (091's delete_empty_plan checks it's empty; an older database: a plain delete). */
+export async function deleteEmptyPlan(plan) {
+  const { error } = await supabase.rpc('delete_empty_plan', { p_plan: plan.id });
+  if (!error) return;
+  if (!missingFn(error)) throw error;
+  await must(supabase.from('plans').delete().eq('id', plan.id));
+}
+
+/** "Called off by Josh · Bring it back" — on a called-off trip. */
+export function CalledOffBanner({ plan, reload }) {
+  const data = useData();
+  const { status } = useSession();
+  const [busy, run] = useRun();
+  const by = data.playersById[plan.cancelled_by];
+  const can = canCallOff({ isAdmin: !!status.is_admin, me: status.player_id, plan });
+  const when = plan.cancelled_at ? new Date(plan.cancelled_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : null;
+  return (
+    <div className="card pad stack" data-testid="called-off-banner" style={{ gap: 8, background: 'var(--gold-soft)', borderColor: 'var(--gold)' }}>
+      <div>
+        <strong>{plan.proposed ? 'This idea was passed on' : 'Called off'}{by ? ` by ${playerName(by)}` : ''}</strong>
+        {when && <span className="small muted"> · {when}</span>}
+        <div className="small">Everything’s kept — the votes, who was in, the jobs and the kitty.{can ? '' : ' An organiser can bring it back.'}</div>
+      </div>
+      {can && (
+        <button type="button" className="btn gold" data-testid="bring-it-back" disabled={busy}
+          onClick={() => run(async () => { await callOffPlan(plan, false, !!status.is_admin); reload?.(); }, 'It’s back on')}>
+          ↩︎ Bring it back
+        </button>
+      )}
+    </div>
+  );
+}
 
 export function feedPost(me, plan, body) {
   return supabase.from('posts').insert({ kind: 'user', player_id: me, body, link: `/plan/${plan.id}` });
@@ -121,7 +172,9 @@ export function PlanDetail() {
   // A player's vote link (?tab=vote) lands on the Overview, where the votes are; organisers get Organise → Vote.
   const fromTab = tab ? (tab === 'vote' && !isAdmin ? 'overview' : 'organise') : null;
   const asked = params.get('view');
-  const view = stage === 'cancelled' ? 'organise'
+  // ov27 (R2): a guest has no Organise view — always the overview.
+  const guest = status.role === 'guest';
+  const view = guest && stage !== 'cancelled' ? 'overview' : stage === 'cancelled' ? 'organise'
     : asked === 'organise' || asked === 'overview' ? asked : fromTab || defaultView(stage, isAdmin);
   const sub = [plan.start_date ? `${fmtRange(plan.start_date, plan.end_date)} · ${countdown(plan.start_date)}` : 'Dates TBC', plan.location_name || 'Location TBC'].join(' · ');
   // Laptop + one of the trip's organisers: the slim status column down the right (was the Trip desk, 22 Oct).
@@ -132,9 +185,9 @@ export function PlanDetail() {
     <div className={'page' + (desk ? ' org-desk-page' : '')}>
       <Header back="Trips" title={plan.name} sub={sub}
         right={(isAdmin || (plan.proposed && plan.created_by === status.player_id)) && <button type="button" className="btn ghost sm" style={{ color: '#fff', background: 'transparent', borderColor: 'rgba(255,255,255,.45)' }} onClick={() => setEditing(true)}>Edit</button>}>
-        {plan.status !== 'cancelled' && (
+        {plan.status !== 'cancelled' && !guest && (
           <div className="chips" role="tablist" aria-label="View" style={{ margin: '4px -16px 0', padding: '0 16px' }}>
-            {[{ value: 'overview', label: '⛳ Overview' }, { value: 'organise', label: '🧰 Organise' }].map((v) => (
+            {[{ value: 'overview', label: '⛳ Overview' }, { value: 'organise', label: '🧰 Plan the trip' }].map((v) => (
               <button key={v.value} type="button" role="tab" className="chip" aria-selected={v.value === view} onClick={() => setView(v.value)}
                 style={v.value === view ? { background: '#fff', borderColor: '#fff', color: 'var(--navy)', fontWeight: 800 } : { background: 'transparent', borderColor: 'rgba(255,255,255,.35)', color: '#fff' }}>{v.label}</button>
             ))}
@@ -144,12 +197,15 @@ export function PlanDetail() {
       {view === 'overview' ? (
         <>
           {/* A player's own next thing (a deposit, a job). Organisers get theirs on Organise; votes are below. */}
-          {!isAdmin && <NextStepCard pd={pd} stage={stage} onTab={setTab} hideVotes />}
+          {/* ov27 (R1): on a locked-in trip the run-up's own "Your to-dos" carry this, under Your weekend. */}
+          {!isAdmin && !showRunUp(stage) && <NextStepCard pd={pd} stage={stage} onTab={setTab} hideVotes />}
           <div className="section">
             {plan.proposed && !isAdmin && <div style={{ marginBottom: 12 }}><ProposalBanner plan={plan} reload={pd.reload} /></div>}
             <TripOverview trip={trip} plan={plan} rsvps={pd.rsvps} items={pd.items} stage={stage} onOrganise={(t) => setView('organise', t)}
-              votes={<OverviewVotes pd={pd} />} />
-            {!isAdmin && plan.status === 'planning' && <div style={{ marginTop: 14 }}><TripBuilderCard pd={pd} /></div>}
+              votes={showRunUp(stage) ? null : <OverviewVotes pd={pd} />}
+              runUp={showRunUp(stage) ? <RunUp pd={pd} trip={trip} onOrganise={(t) => setView('organise', t)} /> : null} />
+            {/* ov23: the same for organisers and players — "how it's coming together", never "Build the trip" here. */}
+            {plan.status === 'planning' && <div style={{ marginTop: 14 }}><TripBuilderCard pd={pd} viewer /></div>}
             {/* After the trip: rate the course and the dinner awards belong with the summary. */}
             {stage === 'done' && <div className="stack" style={{ marginTop: 14 }}><TripFinderCard pd={pd} /><TripExtras pd={pd} viewer /></div>}
           </div>
@@ -157,7 +213,7 @@ export function PlanDetail() {
       ) : (
         <OrganiseView pd={pd} stage={stage} trip={trip} wide={wide} desk={desk} onEdit={() => setEditing(true)} />
       )}
-      {editing && <PlanSheet plan={plan} onClose={() => setEditing(false)} onSaved={() => pd.reload()} />}
+      {editing && <PlanSheet plan={plan} pd={pd} onClose={() => setEditing(false)} onSaved={() => pd.reload()} />}
     </div>
   );
 }
@@ -221,20 +277,24 @@ export function Checklist({ pd, onGo, open: startOpen = false }) {
 // ---------------------------------------------------------------- Vote
 
 // The Vote step on Organise: the votes (organiser results), Call a vote, and the decided ones.
-export function VoteTab({ pd }) {
+// showCall=false: the screen already has its own Call a vote button (Organise step 1 while planning), so one per screen.
+export function VoteTab({ pd, showCall = true }) {
   const { status } = useSession();
   const [creating, setCreating] = useState(false);
   const open = pd.polls.filter((p) => p.status === 'open' && !p.vote_batch); // combined cards (077) show in VoteBatches
-  const closed = pd.polls.filter((p) => p.status === 'closed' && !p.vote_batch);
+  // V1: votes closed when the trip was locked in show as one line ("Decided: Fri 22 – Mon 25 Jan, Nowra").
+  const atLockIn = pd.polls.filter((p) => !p.vote_batch && closedAtLockIn(p, pd.plan));
+  const closed = pd.polls.filter((p) => p.status === 'closed' && !p.vote_batch && !atLockIn.includes(p));
   return (
     <>
-      {pd.polls.length === 0 && <div className="empty">No votes yet.{status.is_admin ? ' Put one up — dates, place, or anything else.' : ' The admin will put one up.'}</div>}
+      {pd.polls.length === 0 && <div className="empty">No votes yet.{status.is_admin ? ' Put one up — dates, place, or anything else.' : ' An organiser will put one up.'}</div>}
       <VoteBatches pd={pd} />
       {open.map((p) => <PollCard key={p.id} poll={p} pd={pd} />)}
-      {status.is_admin && <button type="button" className="btn ghost block" onClick={() => setCreating(true)} data-testid="call-a-vote">🗳️ Call a vote</button>}
-      {closed.length > 0 && <span className="label">Decided</span>}
+      {status.is_admin && showCall && <button type="button" className="btn ghost block" onClick={() => setCreating(true)} data-testid="call-a-vote">🗳️ Call a vote</button>}
+      {(closed.length > 0 || atLockIn.length > 0) && <span className="label">Decided</span>}
+      {atLockIn.length > 0 && <DecidedLine plan={pd.plan} titles={atLockIn.map((p) => p.question)} />}
       {closed.map((p) => <PollCard key={p.id} poll={p} pd={pd} />)}
-      <p className="note" style={{ margin: 0 }}>Dates: ✓ Can · ? Maybe · ✗ Can’t. Places: ⭐ Prefer · 👍 Option · 👎 Don’t like. The first is 2 points, the middle 1. Anyone can add an option. {pd.voteDecider === 'admin_or_organiser' ? 'The admin or the trip’s organiser' : 'The admin'} closes the vote and picks the winner.</p>
+      <p className="note" style={{ margin: 0 }}>Dates: ✓ Yes · ? Maybe · ✗ No. Places: ⭐ Keen · 👍 Happy with it · 👎 Not keen. The first is 2 points, the middle 1. Anyone can add an option. {pd.voteDecider === 'admin_or_organiser' ? 'A group organiser or the trip’s organiser' : 'An organiser'} closes the vote and picks the winner.</p>
       {creating && <PollSheet pd={pd} onClose={() => setCreating(false)} />}
     </>
   );
@@ -461,7 +521,7 @@ export function PeopleTab({ pd }) {
       )}
       {status.is_admin && (
         <div className="card pad stack" style={{ gap: 8 }}>
-          <span className="label">Admin</span>
+          <span className="label">Organiser</span>
           {locked ? (
             <button type="button" className="btn ghost" disabled={busy} onClick={() => run(async () => { await must(supabase.from('plans').update({ rsvp_locked: false }).eq('id', plan.id)); pd.reload(); }, 'Unlocked — the lads can change their answer')}>🔓 Unlock the list</button>
           ) : (
@@ -469,6 +529,8 @@ export function PeopleTab({ pd }) {
               if (!window.confirm(`Lock in the ${by('in').length} who are in? After this only you can change who’s coming.`)) return;
               run(async () => {
                 await must(supabase.from('plans').update({ rsvp_locked: true, status: plan.status === 'planning' ? 'confirmed' : plan.status }).eq('id', plan.id));
+                // V1: locking the list locks the trip in, so its votes on where and when close too.
+                if (plan.status === 'planning') await closePlanningVotes(supabase, pd.polls);
                 await feedPost(me, plan, `🔒 ${plan.name}: the list is locked — ${by('in').length} in: ${withP(by('in')).map(({ p }) => playerName(p)).join(', ')}.`);
                 await notify('rsvp_locked', { plan_id: plan.id });
                 pd.reload();
@@ -506,7 +568,7 @@ export function ProposalBanner({ plan, reload }) {
   const by = data.playersById[plan.created_by];
   return (
     <div className="card pad stack" style={{ gap: 8, background: 'var(--gold-soft)', borderColor: 'var(--gold)' }}>
-      <div><strong>💡 An idea from {by ? playerName(by) : 'one of the lads'}.</strong> <span className="small">Vote on when and where, say if you’d be in, and talk it over on Chat — the admin decides whether it goes ahead.</span></div>
+      <div><strong>💡 An idea from {by ? playerName(by) : 'one of the lads'}.</strong> <span className="small">Vote on when and where, say if you’d be in, and talk it over on Chat — an organiser decides whether it goes ahead.</span></div>
       {status.is_admin && (
         <div className="row" style={{ gap: 8 }}>
           <button type="button" className="btn gold sm" disabled={busy} onClick={() => run(async () => {
@@ -515,7 +577,10 @@ export function ProposalBanner({ plan, reload }) {
             await notify('plan_new', { plan_id: plan.id });
             reload();
           }, 'Approved — planning’s open')}>✅ Approve — start planning</button>
-          <button type="button" className="btn ghost sm" disabled={busy} onClick={() => { if (window.confirm('Pass on this suggestion?')) run(async () => { await must(supabase.from('plans').update({ status: 'cancelled' }).eq('id', plan.id)); reload(); }, 'Passed'); }}>Pass</button>
+          <button type="button" className="btn ghost sm" disabled={busy} onClick={async () => {
+            if (!(await askConfirm({ title: 'Pass on this idea?', body: 'It moves to “Called off” on Trips with its votes and replies kept. You can bring it back.', yes: 'Pass on it' }))) return;
+            run(async () => { await callOffPlan(plan, true, true); reload(); }, 'Passed');
+          }}>Pass</button>
         </div>
       )}
     </div>
@@ -524,10 +589,56 @@ export function ProposalBanner({ plan, reload }) {
 
 // ---------------------------------------------------------------- Create / edit a plan (admin, or a suggestion from anyone)
 
-function PlanSheet({ plan, onClose, onSaved }) {
+/** The bottom of Edit (ov21): "Call it off" (keeps everything, undoable) and — only for an empty plan — Delete,
+ *  after typing the trip's name. No browser "OK" boxes. */
+function EndPlan({ plan, pd, onClose }) {
   const { status } = useSession();
   const data = useData();
   const nav = useNavigate();
+  const [busy, run] = useRun();
+  const isAdmin = !!status.is_admin;
+  const can = canCallOff({ isAdmin, me: status.player_id, plan });
+  const empty = planIsEmpty(pd, data.rounds);
+  const mine = !isAdmin && plan.proposed && plan.created_by === status.player_id;
+  if (!can && !(empty && mine)) return null;
+  const callOff = async () => {
+    const yes = await askConfirm({
+      title: mine ? 'Withdraw your idea?' : `Call off ${plan.name}?`,
+      body: 'Everything’s kept — the votes, who was in, the jobs and the kitty. It moves to “Called off” on Trips, and an organiser can bring it back.',
+      yes: mine ? 'Withdraw it' : 'Call it off',
+    });
+    if (!yes) return;
+    run(async () => { await callOffPlan(plan, true, isAdmin); onClose(); pd?.reload?.(); }, mine ? 'Withdrawn' : 'Called off — tap Bring it back to undo');
+  };
+  const del = async () => {
+    const yes = await askConfirm({
+      title: `Delete ${plan.name}?`,
+      body: 'Nobody has replied, voted or added anything yet, so it can go for good. This can’t be undone.',
+      yes: 'Delete for good', typeName: plan.name,
+    });
+    if (!yes) return;
+    run(async () => { await deleteEmptyPlan(plan); onClose(); nav('/plan'); }, 'Deleted');
+  };
+  return (
+    <div className="stack" style={{ gap: 8, marginTop: 6, paddingTop: 10, borderTop: '1px solid var(--line-soft)' }}>
+      {can && plan.status !== 'cancelled' && (
+        <button type="button" className="btn ghost block" data-testid="call-it-off" disabled={busy} onClick={callOff}>
+          {mine ? 'Withdraw my idea' : '✋ Call it off'}
+        </button>
+      )}
+      {empty && (isAdmin || mine) && (
+        <button type="button" className="btn ghost block" data-testid="delete-plan" disabled={busy} onClick={del} style={{ color: 'var(--under)' }}>
+          Delete for good
+        </button>
+      )}
+      {!empty && isAdmin && <span className="small muted" data-testid="no-delete-note">It has replies, votes or jobs on it, so it can’t be deleted — call it off instead (that keeps everything).</span>}
+    </div>
+  );
+}
+
+function PlanSheet({ plan, pd, onClose, onSaved }) {
+  const { status } = useSession();
+  const data = useData();
   const [v, set] = useState(() => plan || { kind: 'trip', name: '', status: 'planning' });
   const [busy, run] = useRun();
   const f = (k) => ({ value: v[k] ?? '', onChange: (e) => set({ ...v, [k]: e.target.value }) });
@@ -541,6 +652,8 @@ function PlanSheet({ plan, onClose, onSaved }) {
     };
     if (plan) {
       await must(supabase.from('plans').update(row).eq('id', plan.id));
+      // O7: the usual jobs move with the dates (the database does it too from 095).
+      if (pd && row.start_date && plan.start_date && row.start_date !== String(plan.start_date).slice(0, 10)) await redateTripJobs({ ...plan, ...row }, pd.items, plan.start_date).catch(() => 0);
       onSaved?.(plan); onClose();
       return;
     }
@@ -551,7 +664,7 @@ function PlanSheet({ plan, onClose, onSaved }) {
       await feedPost(status.player_id, created, `💡 New idea: ${created.name}${created.start_date ? ` (${fmtRange(created.start_date, created.end_date)})` : ''}${created.location_name ? ` at ${created.location_name}` : ''}. Open it and say if you’d be in.`);
       await notify('plan_proposed', { plan_id: created.id });
       onClose(); onSaved?.(created);
-      toast('Suggested — the admin has been told');
+      toast('Suggested — the organisers have been told');
       return;
     }
     const created = await must(supabase.from('plans').insert(row).select().single());
@@ -590,19 +703,14 @@ function PlanSheet({ plan, onClose, onSaved }) {
             )}
             {status.is_admin && (
               <label className="field"><span>Status</span>
-                <select className="select" {...f('status')}>{Object.entries(STATUS_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+                <select className="select" {...f('status')}>{Object.entries(STATUS_LABEL).filter(([k]) => k !== 'cancelled' || plan.status === 'cancelled').map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
               </label>
             )}
           </>
         )}
         {!plan && !status.is_admin && <label className="field"><span>Pitch it to the lads (optional)</span><textarea className="textarea" rows={3} style={{ padding: 12 }} {...f('brief')} placeholder="Why it’d be great, rough cost, who’s keen…" /></label>}
         <button type="button" className="btn gold block" disabled={busy || !v.name?.trim()} onClick={save}>{plan ? 'Save' : status.is_admin ? 'Start planning' : 'Suggest it'}</button>
-        {plan && (
-          <button type="button" className="btn ghost block" onClick={() => {
-            if (!window.confirm(status.is_admin ? `Delete "${plan.name}" and all its votes, jobs and kitty? This can’t be undone. (To keep it but call it off, set Status to Called off.)` : `Withdraw your suggestion "${plan.name}"?`)) return;
-            run(async () => { await must(supabase.from('plans').delete().eq('id', plan.id)); onClose(); nav('/plan'); }, 'Deleted');
-          }}>{status.is_admin ? 'Delete this plan' : 'Withdraw my suggestion'}</button>
-        )}
+        {plan && <EndPlan plan={plan} pd={pd} onClose={onClose} />}
       </div>
     </Sheet>
   );
@@ -617,21 +725,19 @@ export function LockInCard({ pd }) {
   const [busy, run] = useRun();
   const { plan } = pd;
   if (!status.is_admin || plan.proposed || plan.status !== 'planning') return null;
-  const openVotes = pd.polls.filter((p) => p.status === 'open' && p.kind !== 'other').length;
+  const openVotes = openPlanningPolls(pd.polls).length;
   if (!plan.start_date) {
     return <div className="small muted" style={{ fontWeight: 600 }}>🔒 Once the dates are picked you can lock it in{openVotes ? ' — close the dates vote first' : ' (Edit → dates)'}.</div>;
   }
   return (
-    <button type="button" className="card pad row" disabled={busy} style={{ textAlign: 'left', color: 'inherit', width: '100%', borderColor: 'var(--navy)', gap: 12 }}
-      onClick={() => {
-        if (openVotes && !window.confirm(`${openVotes} vote${openVotes === 1 ? ' is' : 's are'} still open. Lock it in anyway?`)) return;
+    <button type="button" className="card pad row" disabled={busy} style={{ textAlign: 'left', color: 'inherit', width: '100%', borderColor: 'var(--navy)', gap: 12 }} data-testid="lock-in-card"
+      onClick={async () => {
+        // V1: one box; the open votes on where and when close when it's locked in.
+        if (!(await askConfirm(lockInWords(plan, pd.polls)))) return;
         run(async () => {
-          await must(supabase.from('plans').update({ status: 'confirmed' }).eq('id', plan.id));
-          await feedPost(status.player_id, plan, `🔒 ${plan.name} is locked in: ${fmtRange(plan.start_date, plan.end_date)}${plan.location_name ? ` at ${plan.location_name}` : ''}. Say if you’re in.`);
-          await notify('trip_locked', { plan_id: plan.id });
-          await makeTripJobs({ ...pd, plan: { ...plan, status: 'confirmed' } }, status).catch(() => 0);
+          await lockInTrip(pd, status);
           pd.reload();
-        }, 'Locked in — the to-do list is ready');
+        }, 'Locked in — the votes are closed and the jobs are ready');
       }}>
       <span style={{ fontSize: 26 }}>🔒</span>
       <span className="grow"><strong>Lock it in</strong><div className="small muted">{fmtRange(plan.start_date, plan.end_date)} · {plan.location_name || 'place TBC'} — makes it a trip in the app, ready for rounds.</div></span>
@@ -674,7 +780,7 @@ export function ChatTab({ pd }) {
               <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{c.body}</div>
               {(mine || status.is_admin) && (
                 <button type="button" className="small" style={{ border: 0, background: 'none', padding: 0, color: 'var(--muted)', marginTop: 2 }}
-                  onClick={() => { if (window.confirm('Delete this message?')) run(async () => { await must(supabase.from('plan_comments').delete().eq('id', c.id)); pd.reload(); }); }}>Delete</button>
+                  onClick={async () => { if (await askConfirm({ title: 'Delete this message?', yes: 'Delete it' })) run(async () => { await must(supabase.from('plan_comments').delete().eq('id', c.id)); pd.reload(); }); }}>Delete</button>
               )}
             </div>
           </div>

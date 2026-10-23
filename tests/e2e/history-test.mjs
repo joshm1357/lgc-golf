@@ -135,7 +135,7 @@ STATUS.v = NEW;
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
 await ctx.route('https://luogyzvrbedmicjejilr.supabase.co/**', fakeSupabase);
-await ctx.addInitScript(([uid]) => {
+await ctx.addInitScript(([uid]) => { try { localStorage.setItem('tgt-caddie-hello', '1'); } catch { /* ov22 */ }
   const exp = Math.floor(Date.now() / 1000) + 3600 * 24;
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
@@ -211,7 +211,7 @@ check(order.join('|') === 'HOLDER · 2025|2023|2019', `Trophy Room: history and 
 check(await page.getByText('+ Add past winners from before the app').isVisible(), 'organiser can add past winners from the Trophy Room');
 await page.screenshot({ path: `${SHOTS}/h3-trophies.png`, fullPage: true });
 await page.goto(`${BASE}#/plan`);
-await page.getByText('Past trips').waitFor({ timeout: 15000 });
+await page.getByTestId('trips-section-done').waitFor({ timeout: 15000 }); // ov25: "Previous"
 check(await page.getByText('Mike Morris', { exact: true }).first().isVisible() && await page.getByText(/🏆 The Cup:/).isVisible(), 'a past trip shows its winners');
 await page.screenshot({ path: `${SHOTS}/h4-past-trip.png`, fullPage: true });
 

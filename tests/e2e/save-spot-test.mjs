@@ -133,7 +133,7 @@ async function phone(S, { session: sess = null, notifyAsked = false, save = null
   await ctx.addInitScript(([cfg]) => {
     if (sessionStorage.getItem('seeded')) return;
     sessionStorage.setItem('seeded', '1');
-    localStorage.setItem('tgt-whats-new', 'beta-1');
+    localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */
     if (cfg.notifyAsked) localStorage.setItem('tgt-notify-prompt', String(Date.now()));
     if (cfg.sess) localStorage.setItem('lgc-auth', cfg.sess);
     if (cfg.save) localStorage.setItem('tgt-save-spot', JSON.stringify(cfg.save));
@@ -175,19 +175,17 @@ async function joinAsKurt(page, base) {
   await page.getByText('Courses', { exact: true }).first().waitFor({ timeout: 10000 });
 }
 
-// 1. Join from the link → name → notifications pop-up → Save your spot → email + password → code → same user, same page.
+// 1. Join from the link → name → Save your spot (ov27 F1: the notifications ask waits for the second visit) → email + password → code → same user, same page.
 {
   const S = server({ confirm: true });
   const { ctx, page } = await phone(S);
   await joinAsKurt(page, PW);
   check(page.url().endsWith('#/courses'), 'join: lands on the shared page (?to=/courses)');
   const notif = page.getByRole('dialog', { name: /Turn on notifications/ });
-  check(await notif.waitFor({ timeout: 8000 }).then(() => true, () => false), 'the notifications pop-up comes first');
-  check(!(await saveSheet(page).isVisible().catch(() => false)), 'Save your spot waits while the notifications one is open');
-  await page.waitForTimeout(4000);
-  check(!(await saveSheet(page).isVisible().catch(() => false)), '…and keeps waiting');
-  await notif.getByRole('button', { name: 'Not now' }).click();
+  // ov27 (F1): one pop-up a visit, and the notifications ask waits for the second visit — so Save your spot is this
+  // first visit's one pop-up.
   check(await saveSheet(page).waitFor({ timeout: 8000 }).then(() => true, () => false), 'then Save your spot, once');
+  check(!(await notif.isVisible().catch(() => false)), 'no notifications pop-up on top of it (one pop-up a visit, F1)');
   const txt = await saveSheet(page).innerText();
   check(/Connect Google or email so you can sign in on your laptop/.test(txt), 'it says why, in plain words (ov13 wording)');
   check(await saveSheet(page).getByRole('button', { name: /Continue with Google/ }).isVisible(), 'Continue with Google');
@@ -338,7 +336,7 @@ async function joinAsKurt(page, base) {
   await page.getByLabel('Password', { exact: true }).fill('fairway123');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.getByRole('link', { name: 'Leaderboard' }).first().waitFor({ timeout: 10000 }).catch(() => null);
-  check(await page.getByRole('link', { name: 'This trip' }).first().isVisible().catch(() => false), 'signed in: straight back into the group');
+  check(await page.getByRole('link', { name: 'Trips', exact: true }).first().isVisible().catch(() => false), 'signed in: straight back into the group');
   const st = S.calls.filter((c) => c.p === '/rest/v1/rpc/my_status').pop();
   check(st?.sub === UID, 'same user id on the new phone, so the same group and player');
   await page.goto(`${PW}#/more`);
@@ -368,7 +366,7 @@ async function joinAsKurt(page, base) {
   const v = S.calls.find((c) => c.p === '/auth/v1/verify');
   check(v?.body.type === 'recovery', 'the code is checked as a password reset');
   check(S.user.password === 'newpass123', 'the new password is saved');
-  check(await page.getByRole('link', { name: 'This trip' }).first().isVisible().catch(() => false), 'and they’re in');
+  check(await page.getByRole('link', { name: 'Trips', exact: true }).first().isVisible().catch(() => false), 'and they’re in');
   await ctx.close();
 }
 
@@ -449,7 +447,7 @@ async function joinAsKurt(page, base) {
   await ctx.close();
 }
 
-// 8. Organiser: who's saved their spot, and Remind.
+// 8. Organiser: who's saved their spot, and Remind (v8: a small count with Remind on the players list header).
 {
   const S = server();
   S.joined = true; S.player = K; S.admin = true; S.user.is_anonymous = false; S.user.email = 'kurt@example.com';
@@ -458,26 +456,26 @@ async function joinAsKurt(page, base) {
   await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(PW).origin });
   await page.addInitScript(() => { navigator.share = undefined; });
   await page.goto(`${PW}#/group`);
-  await page.getByText('🔗 Personal links').waitFor({ timeout: 15000 });
-  check(await page.getByText(/1 of 2 signed in/).waitFor({ timeout: 8000 }).then(() => true, () => false), 'organiser: how many have saved their spot');
-  check(await page.getByText('✓ Signed in', { exact: true }).isVisible(), 'organiser: ✓ signed in (no email address shown, ov15)');
-  const remind = page.getByRole('button', { name: 'Remind Mike to save their spot' });
-  check(await remind.isVisible(), 'organiser: Remind for Mike (on the app, not signed in)');
-  check(!(await page.getByRole('button', { name: 'Remind Kurt to save their spot' }).isVisible().catch(() => false)), 'no Remind for someone signed in');
+  await page.getByTestId('players-list').waitFor({ timeout: 15000 });
+  check(await page.getByTestId('not-signed-in').getByText('1 not signed in yet').waitFor({ timeout: 8000 }).then(() => true, () => false), 'organiser: how many haven’t saved their spot');
+  check(!(await page.getByText('🔗 Personal links').isVisible().catch(() => false)), 'organiser: no Personal links card');
+  check(!(await page.locator('.page').innerText()).includes('@example.com'), 'organiser: no email address shown (ov15)');
+  const remind = page.getByTestId('not-signed-in').getByRole('button', { name: /Remind/ });
+  check(await remind.isVisible(), 'organiser: Remind (Mike is on the app, not signed in)');
   await tapSize(remind, 'Remind');
-  await page.getByText('🔗 Personal links').scrollIntoViewIfNeeded();
   await page.screenshot({ path: `${SHOTS}/14-organiser.png` });
   await noSideScroll(page, 'Players & group');
   await remind.click();
-  await page.getByText('Reminder sent to Mike’s phone').waitFor({ timeout: 8000 }).catch(() => null);
+  await page.getByText('Reminder sent to 1 phone').waitFor({ timeout: 8000 }).catch(() => null);
   check(S.notify.some((n) => n.type === 'nudge_signin' && n.player_id === M), 'Remind sends the notification nudge to Mike');
-  check(await page.getByText('Reminder sent to Mike’s phone').isVisible().catch(() => false), 'Remind: says it went');
-  // The server hasn't got this kind yet (or Mike has notifications off): a message to paste instead.
+  check(!S.notify.some((n) => n.type === 'nudge_signin' && n.player_id === K), 'no nudge for Kurt (signed in)');
+  check(await page.getByText('Reminder sent to 1 phone').isVisible().catch(() => false), 'Remind: says it went');
+  // The server hasn't got this kind yet (or notifications are off): a message to paste instead.
   S.notifyReply = { error: 'Unknown notification' };
   await remind.click();
   await page.waitForTimeout(1000);
   const clip = await page.evaluate(() => navigator.clipboard.readText()).catch(() => '');
-  check(/G'day Mike/.test(clip) && /Save your spot/.test(clip), 'no notification possible: a chat message is copied instead');
+  check(/G'day all/.test(clip) && /Save your spot/.test(clip), 'no notification possible: a chat message is copied instead');
   await ctx.close();
 }
 

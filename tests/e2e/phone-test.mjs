@@ -17,7 +17,7 @@ const ROUND = 'dddddddd-0000-4000-8000-000000000001';
 const PLAN = 'eeeeeeee-0000-4000-8000-000000000001';
 const ROOM = 'ffffffff-0000-4000-8000-000000000001';
 const now = new Date().toISOString();
-const today = now.slice(0, 10);
+const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney' }).format(new Date()); // the app's 'today' is Sydney time
 const holes = Array.from({ length: 18 }, (_, i) => ({ n: i + 1, par: 4, si: i + 1, green: { lat: -35.0 + i * 0.001, lng: 150.5 } }));
 
 const db = {
@@ -93,7 +93,7 @@ const ctx = await browser.newContext({
   geolocation: { latitude: -35.0012, longitude: 150.5 }, permissions: ['geolocation'],
 });
 await ctx.route('https://luogyzvrbedmicjejilr.supabase.co/**', fakeSupabase);
-await ctx.addInitScript(([uid]) => {
+await ctx.addInitScript(([uid]) => { try { localStorage.setItem('tgt-caddie-hello', '1'); } catch { /* ov22 */ }
   const exp = Math.floor(Date.now() / 1000) + 3600 * 24;
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
@@ -111,7 +111,7 @@ page.on('pageerror', (e) => errors.push(`[${step}] ${String(e)} ${String(e.stack
 const scripts = new Set();
 page.on('request', (r) => { const u = r.url(); if (u.includes('/assets/') && u.endsWith('.js')) scripts.add(u.split('/').pop()); });
 
-// 1. The first screen (This trip since ov15, with today's leaderboard) opens with only the starting file.
+// 1. The first screen (the trip on now — ov15/ov21 — with today's leaderboard) opens with only the starting file.
 await page.goto(BASE);
 await page.getByText('Saturday').first().waitFor({ timeout: 15000 });
 await page.waitForTimeout(800);
@@ -134,7 +134,7 @@ check(listed.every((f) => cached.includes(`/lgc-golf/${f}`)), `service worker sa
 await page.reload(); // now controlled by the service worker
 await page.getByText('Saturday').first().waitFor();
 await ctx.setOffline(true);
-for (const [hash, text] of [['#/tribunal', 'Tribunal'], ['#/plan', 'Ideas and voting'], [`#/comps?r=${ROUND}`, 'Closest'], ['#/admin', 'Admin']]) {
+for (const [hash, text] of [['#/tribunal', 'Tribunal'], ['#/plan', 'Suggest a trip or round'], [`#/comps?r=${ROUND}`, 'Closest'], ['#/admin', 'Organiser tools']]) {
   await page.evaluate((h) => { window.location.hash = h; }, hash);
   let ok = false;
   // Scoped to the page: on a laptop build the (hidden on phones) sidebar has the same words.

@@ -228,11 +228,11 @@ export function parseReply(cfg: AiConfig, j: Any, sentBody: string): Reply | nul
 
 /** Friendly words for an HTTP failure (and a short code for the usage log). */
 export function httpFailure(status: number): { code: string; message: string } {
-  if (status === 401 || status === 403) return { code: 'provider_key', message: 'The AI helper’s key isn’t working — tell the app’s owner.' };
-  if (status === 402) return { code: 'provider_credit', message: 'The AI helper has run out of credit — tell the app’s owner.' };
-  if (status === 404) return { code: 'provider_model', message: 'The AI helper’s model isn’t available — tell the app’s owner.' };
-  if (status === 429 || status === 529 || status >= 500) return { code: 'provider_busy', message: 'The AI helper is busy right now — try again in a minute.' };
-  return { code: 'provider_refused', message: 'The AI helper couldn’t answer that one.' };
+  if (status === 401 || status === 403) return { code: 'provider_key', message: 'The Caddie’s key isn’t working — tell the app’s owner.' };
+  if (status === 402) return { code: 'provider_credit', message: 'The Caddie has run out of credit — tell the app’s owner.' };
+  if (status === 404) return { code: 'provider_model', message: 'The Caddie’s model isn’t available — tell the app’s owner.' };
+  if (status === 429 || status === 529 || status >= 500) return { code: 'provider_busy', message: 'The Caddie is busy right now — try again in a minute.' };
+  return { code: 'provider_refused', message: 'The Caddie couldn’t answer that one.' };
 }
 
 /** Call the model once. Never throws. */
@@ -243,7 +243,7 @@ export async function callModel(cfg: AiConfig, o: { system: string; tools: ToolD
     res = await fetchFn(endpoint(cfg), { method: 'POST', headers: headers(cfg), body, signal: AbortSignal.timeout(timeoutMs) });
   } catch (e) {
     const timeout = /timeout|abort/i.test(String((e as Error)?.name || '') + String((e as Error)?.message || ''));
-    return { ok: false, code: timeout ? 'timeout' : 'network', message: timeout ? 'The AI helper took too long — try again.' : 'Couldn’t reach the AI helper just now — try again in a minute.' };
+    return { ok: false, code: timeout ? 'timeout' : 'network', message: timeout ? 'The Caddie took too long — try again.' : 'Couldn’t reach the Caddie just now — try again in a minute.' };
   }
   if (!res.ok) {
     await res.body?.cancel().catch(() => {});
@@ -253,9 +253,9 @@ export async function callModel(cfg: AiConfig, o: { system: string; tools: ToolD
   // OpenRouter and some others send errors with a 200.
   if (j?.error) {
     const st = Number(j.error.code ?? j.error.status);
-    return { ok: false, ...(Number.isFinite(st) && st >= 400 ? httpFailure(st) : { code: 'provider_refused', message: 'The AI helper couldn’t answer that one.' }) };
+    return { ok: false, ...(Number.isFinite(st) && st >= 400 ? httpFailure(st) : { code: 'provider_refused', message: 'The Caddie couldn’t answer that one.' }) };
   }
   const reply = parseReply(cfg, j, body);
-  if (!reply) return { ok: false, code: 'odd_reply', message: 'The AI helper sent back something odd — try again.' };
+  if (!reply) return { ok: false, code: 'odd_reply', message: 'The Caddie sent back something odd — try again.' };
   return { ok: true, reply };
 }

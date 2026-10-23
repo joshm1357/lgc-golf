@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { tripStage, sortTrips, stillToDecide, closesLabel, canDecide, suggestionOptions, defaultCloses, lastTripDay, isYearOnly, tripWhen } from './trips.js';
+import { tripStage, sortTrips, stillToDecide, closesLabel, canDecide, suggestionOptions, defaultCloses, lastTripDay, isYearOnly, tripWhen, planIsEmpty, canCallOff } from './trips.js';
 
 const T = '2026-10-18'; // a Sunday
 
@@ -45,6 +45,20 @@ describe('sortTrips', () => {
   });
   it('nothing locked in → no big card', () => {
     expect(sortTrips([plans[2]], [], T).now).toBeNull();
+  });
+  it('splits trips being planned from ideas', () => {
+    const s = sortTrips(plans, [], T);
+    expect(s.planning.map((x) => x.plan.id)).toEqual(['d']);
+    expect(s.suggested.map((x) => x.plan.id)).toEqual(['c']);
+  });
+  it('v8: the live "March" shape (planning, not proposed, no dates, organiser set, no trip) is being planned', () => {
+    const march = { id: '17f1ac42', kind: 'trip', name: 'March', status: 'planning', proposed: false, start_date: null, end_date: null,
+      location_name: 'Blue mountains', organiser_id: 'p1', trip_id: null, created_at: '2026-10-18' };
+    const past = { id: 'sc', status: 'done', start_date: '2026-10-16', end_date: '2026-10-18', trip_id: 't1' };
+    const s = sortTrips([march, past], [{ id: 't1', status: 'active', start_date: '2026-10-16', end_date: '2026-10-18' }], '2026-10-23');
+    expect(s.planning.map((x) => x.plan.id)).toEqual(['17f1ac42']);
+    expect(s.now).toBeNull();
+    expect(s.past.map((x) => x.plan.id)).toEqual(['sc']);
   });
 });
 
@@ -134,5 +148,36 @@ describe('year-only past trips (brought in from history)', () => {
     expect(isYearOnly({ status: 'locked', start_date: '2019-06-01', end_date: '2019-06-01' })).toBe(false);
     expect(tripWhen({ status: 'locked', start_date: '2026-10-16', end_date: '2026-10-18' })).toBe('Fri 16 – Sun 18 Oct 2026');
     expect(tripWhen({}, 'Dates TBC')).toBe('Dates TBC');
+  });
+});
+
+describe('planIsEmpty (ov21: only an empty plan can be deleted)', () => {
+  const plan = { id: 'p', created_by: 'me', trip_id: null };
+  const pd = (extra = {}) => ({ plan, rsvps: [], votes: [], items: [], costs: [], payments: [], transfers: [], comments: [], ...extra });
+  it('a fresh plan with only its creator’s own "I’m in" is empty', () => {
+    expect(planIsEmpty(pd({ rsvps: [{ player_id: 'me', status: 'in' }] }))).toBe(true);
+  });
+  it('anyone else’s reply, a vote, a job, a cost, a payment, chat or a round makes it not empty', () => {
+    expect(planIsEmpty(pd({ rsvps: [{ player_id: 'mate', status: 'maybe' }] }))).toBe(false);
+    expect(planIsEmpty(pd({ votes: [{ id: 'v' }] }))).toBe(false);
+    expect(planIsEmpty(pd({ items: [{ id: 'i' }] }))).toBe(false);
+    expect(planIsEmpty(pd({ costs: [{ id: 'c' }] }))).toBe(false);
+    expect(planIsEmpty(pd({ payments: [{ id: 'x' }] }))).toBe(false);
+    expect(planIsEmpty(pd({ transfers: [{ id: 'x' }] }))).toBe(false);
+    expect(planIsEmpty(pd({ comments: [{ id: 'x' }] }))).toBe(false);
+    expect(planIsEmpty({ ...pd(), plan: { ...plan, trip_id: 't' } }, [{ id: 'r', trip_id: 't' }])).toBe(false);
+    expect(planIsEmpty({ ...pd(), plan: { ...plan, trip_id: 't' } }, [{ id: 'r', trip_id: 'other' }])).toBe(true);
+  });
+  it('no plan: never', () => { expect(planIsEmpty(null)).toBe(false); });
+});
+
+describe('canCallOff', () => {
+  it('organisers, the trip’s organiser, or the suggester of an unapproved idea', () => {
+    expect(canCallOff({ isAdmin: true, me: 'x', plan: {} })).toBe(true);
+    expect(canCallOff({ isAdmin: false, me: 'o', plan: { organiser_id: 'o' } })).toBe(true);
+    expect(canCallOff({ isAdmin: false, me: 's', plan: { proposed: true, created_by: 's' } })).toBe(true);
+    expect(canCallOff({ isAdmin: false, me: 's', plan: { proposed: false, created_by: 's' } })).toBe(false);
+    expect(canCallOff({ isAdmin: false, me: 'z', plan: { organiser_id: 'o' } })).toBe(false);
+    expect(canCallOff({ isAdmin: false, me: null, plan: { organiser_id: null } })).toBe(false);
   });
 });

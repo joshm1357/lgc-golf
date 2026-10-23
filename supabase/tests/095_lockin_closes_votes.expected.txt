@@ -1,0 +1,14 @@
+RESULTS: 1. mike locks it in (rows changed) → ok 0
+2. votes still open after mike → ok 6
+3. josh locks it in → ok confirmed
+4. votes left open → ok Shirt colour?
+5. closed with no winner → ok 5
+6. josh calls a dates vote after lock-in → ok open
+7. josh renames the trip → ok Lock-in test 2
+8. the new vote is still open → ok open
+9. josh moves it a week later → ok 37
+10. jobs after a week later → ok Reserve accommodation +17, Transport / who’s driving +27, Chase deposits +37, Pay the balance +5, Buy the trophy +3
+11. josh moves it 30 days sooner → ok 7
+12. jobs after 30 days sooner → ok Reserve accommodation +0, Transport / who’s driving +0, Chase deposits +7, Pay the balance +5, Buy the trophy +3
+13. josh calls the function directly → refused: permission denied for schema private
+(The results come back joined with " | " in one error message; shown one per line here.)

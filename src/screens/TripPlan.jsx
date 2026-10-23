@@ -5,18 +5,21 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
 import { useData, useSession, playerName, useFeature, useRealtime } from '../lib/store.jsx';
-import { Avatar, Sheet, Icon, toast } from '../components/ui.jsx';
+import { Avatar, Sheet, Icon, toast, askConfirm } from '../components/ui.jsx';
 import { fmtRange, money, todayISO, tallyPoll } from '../lib/plan.js';
 import { notify, shareText } from '../lib/push.js';
 import { useRun, must } from '../lib/run.js';
 import {
-  nextStep, buildJobs, jobStage, blockedBy, sortJobs, stagePatch, allocateOrder, addDays, JOB_STAGE_LABEL, FORMULA_BY_KEY,
+  nextStep, buildJobs, jobStage, blockedBy, sortJobs, stagePatch, allocateOrder, addDays, JOB_STAGE_LABEL, FORMULA_BY_KEY, redateJobs,
 } from '../lib/tripjobs.js';
+import { lockIn, lockInWords } from '../lib/lockin.js';
 import {
   budgetSummary, suggestedDeposit, defaultBudget, depositStatus, stayLinks, cleanStay, KIND, linesPerPerson,
 } from '../lib/tripbudget.js';
 import { tripStage } from '../lib/trips.js';
 import StaySearch from '../components/StaySearch.jsx';
+import { tripHeadcount } from '../lib/weekends.js';
+import { coursesDone as builderCoursesDone } from '../lib/tripsteps.js';
 import { CallVoteSheet } from '../components/CallVote.jsx';
 import { useLateJobs, LateBadge, WaiveButton } from '../components/LateJobs.jsx';
 import { lateJobs } from '../lib/latejobs.js';
@@ -57,8 +60,12 @@ export function useTripExtras(pd) {
       builder: {
         weekends: countWeekends(state), areas: stateNames(state), cards,
         weekendList: Array.isArray(state?.weekends) ? state.weekends : [],
-        // Areas on the table with places to stay picked but no accommodation idea or list yet (080).
-        noStayList: Object.entries(state?.areaStays || {}).filter(([area, pins]) => (pins || []).length && (!state.region || state.region === area)
+        // ov23: where the builder is up to (area chosen? primary and backup weekends set?) and how many are coming.
+        started: !!state, region: state?.region || null, weekendsSettled: !!state?.weekendsSettled,
+        state, coursesDone: builderCoursesDone(state), // the shared step lines and "done" (lib/tripsteps.js)
+        headcount: Number(state?.headcount) > 0 ? Number(state.headcount) : null, headcountBy: state?.headcountBy || null, nights: state?.nights ?? null,
+        // The chosen area with places to stay picked but no accommodation idea or list yet (080; ov23: after the area's chosen).
+        noStayList: Object.entries(state?.areaStays || {}).filter(([area, pins]) => (pins || []).length && state.region === area
           && !stays.some((x) => x.area === area || (!x.area && state.region === area))).map(([area]) => area),
         teeOptions: tees.filter((t) => (t.times || []).length || (t.ranges || []).length).length,
         callJobIds: [...new Set([...tees.map((t) => t.job_id), ...Object.values(state?.callJobs || {})].filter(Boolean))],
@@ -71,7 +78,6 @@ export function useTripExtras(pd) {
   return { ...ex, reload: load };
 }
 
-const keenIds = (pd) => pd.rsvps.filter((r) => r.status === 'in' || r.status === 'maybe').map((r) => r.player_id);
 const reserveJob = (pd) => pd.items.find((i) => i.kind === 'job' && i.formula_key === 'reserve_stay');
 const accomTotal = (pd, ex) => {
   const r = reserveJob(pd);
@@ -92,6 +98,27 @@ export async function makeTripJobs(pd, status) {
   const { error } = await supabase.from('plan_items').insert(rows);
   if (error && error.code !== '23505') throw error;
   return rows.length;
+}
+
+/**
+ * Lock a trip in (V1, every lock-in path in the app uses this): the trip is locked in, its open votes on where and
+ * when close (lib/lockin.js — the database's 095 trigger does it too), one Feed post, everyone's told, and the
+ * to-do list is made.
+ */
+export async function lockInTrip(pd, status) {
+  const plan = pd.plan;
+  await lockIn(supabase, plan, pd.polls);
+  await supabase.from('posts').insert({ kind: 'user', player_id: status.player_id, body: `🔒 ${plan.name} is locked in: ${fmtRange(plan.start_date, plan.end_date)}${plan.location_name ? ` at ${plan.location_name}` : ''}. Say if you’re in.`, link: `/plan/${plan.id}` });
+  await notify('trip_locked', { plan_id: plan.id });
+  await makeTripJobs({ ...pd, plan: { ...plan, status: 'confirmed' } }, status).catch(() => 0);
+}
+
+/** O7: the usual jobs follow the trip's dates. oldStart: the start before a change (null: just fix jobs due after
+ *  the trip). Organisers only; quietly does nothing if it can't. → how many moved */
+export async function redateTripJobs(plan, items, oldStart = null) {
+  const moves = redateJobs(plan, items, { oldStart });
+  for (const m of moves) await supabase.from('plan_items').update({ due: m.due }).eq('id', m.id);
+  return moves.length;
 }
 
 // ---------------------------------------------------------------- The Next step card
@@ -136,16 +163,11 @@ export function useStepActions(pd, ex, { onTab, onOther } = {}) {
     if (a.type === 'trip_plan') { setSheet({ kind: 'budget' }); return; }
     if (a.type === 'builder' || a.type === 'plan_builder') { nav(`/plan/${plan.id}/build`); return; }
     if (a.type === 'lock') {
-      const openVotes = pd.polls.filter((p) => p.status === 'open').length;
-      if (openVotes && !window.confirm(`${openVotes} vote${openVotes === 1 ? ' is' : 's are'} still open. Lock it in anyway?`)) return;
-      run(async () => {
-        // Same as the Lock it in card: lock, tell the feed and everyone, then make the to-do list.
-        await must(supabase.from('plans').update({ status: 'confirmed' }).eq('id', plan.id));
-        await supabase.from('posts').insert({ kind: 'user', player_id: status.player_id, body: `🔒 ${plan.name} is locked in: ${fmtRange(plan.start_date, plan.end_date)}${plan.location_name ? ` at ${plan.location_name}` : ''}. Say if you’re in.`, link: `/plan/${plan.id}` });
-        await notify('trip_locked', { plan_id: plan.id });
-        await makeTripJobs({ ...pd, plan: { ...plan, status: 'confirmed' } }, status).catch(() => 0);
+      // V1: the same as the Lock it in card — one box, and the open votes on where and when close.
+      askConfirm(lockInWords(plan, pd.polls)).then((yes) => yes && run(async () => {
+        await lockInTrip(pd, status);
         pd.reload();
-      }, 'Locked in — the to-do list is ready');
+      }, 'Locked in — the votes are closed and the jobs are ready'));
       return;
     }
     if (a.type === 'go') { nav(a.to); return; }
@@ -210,7 +232,7 @@ export function TripPlanCards({ pd, only = null }) {
   const rows = [
     tasksOn && { k: 'stay', icon: '🏠', title: 'Where to stay', sub: chosen ? `${chosen.name}${chosen.total_cost != null ? ` · ${money(chosen.total_cost)}` : ''}` : ex.stays.length ? `${ex.stays.length} on the shortlist` : plan.start_date ? 'Find 2–3 places, then the group votes' : 'Once the dates are known' },
     costsOn && { k: 'budget', icon: '🧾', title: 'Trip plan', sub: ex.budget.length ? `${money(sum.total)} · ${money(sum.perPerson)} each${sum.basis === 'keen' ? ' if everyone keen comes' : ''}` : status.is_admin ? 'Costs, food plan and the deposit' : 'Not started yet' },
-    costsOn && dep && { k: 'deposits', icon: '💳', title: `Deposits · ${money(plan.deposit_pp)} each`, sub: `${dep.people.filter((p) => p.state === 'paid').length} of ${dep.people.length} paid` },
+    costsOn && dep && { k: 'deposits', icon: '💳', title: `Deposits · ${money(plan.deposit_pp)} each`, sub: `${dep.people.filter((p) => p.state === 'paid').length} of ${dep.people.length} paid (in or maybe)` },
   ].filter(Boolean).filter((r) => !only || only.includes(r.k));
   if (!rows.length) return null;
   return (
@@ -437,7 +459,8 @@ function StaySheet({ pd, ex, onClose, onTab }) {
   const plan = pd.plan;
   const [v, setV] = useState({});
   const [busy, run] = useRun();
-  const keen = keenIds(pd).length || data.players.filter((p) => p.approved !== false).length;
+  // ov23: the trip's real head count — the number set (organiser / plan chat), else who's in, else the group.
+  const keen = tripHeadcount({ set: ex.builder.headcount, setBy: ex.builder.headcountBy, rsvps: pd.rsvps, players: data.players }).people;
   const towns = ex.builder.areas.length ? ex.builder.areas : [plan.location_name].filter(Boolean);
   const shortlistJob = pd.items.find((i) => i.formula_key === 'shortlist_stay');
   const mayRun = status.is_admin || (me && (plan.organiser_id === me || shortlistJob?.owner_id === me));

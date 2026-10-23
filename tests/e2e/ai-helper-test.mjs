@@ -96,7 +96,7 @@ await ctx.addInitScript(([uid, group]) => {
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
   if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated' } }));
   localStorage.setItem('lgc-group', group);
-  localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-notify-prompt', String(Date.now()));
+  localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */ localStorage.setItem('tgt-notify-prompt', String(Date.now()));
 }, ['99999999-9999-4999-8999-999999999999', GROUP]);
 const page = await ctx.newPage();
 page.on('pageerror', (e) => fails.push(`page error: ${e}`));
@@ -180,7 +180,7 @@ await page.goto(`${BASE}#/more`);
 await page.getByText('Players & group').waitFor({ timeout: 10000 });
 check(!(await page.getByText('✨ Ask the AI helper').isVisible().catch(() => false)), 'no Ask in More (the Caddie button is the way in)');
 await page.goto(`${BASE}#/ask`);
-await page.getByText('The AI helper is switched off for this group.').waitFor({ timeout: 10000 });
+await page.getByText('The Caddie is switched off for this group.').waitFor({ timeout: 10000 });
 check(true, 'switched off: /ask says so');
 check(calls.length === before, 'switched off: the function isn’t called');
 

@@ -10,9 +10,18 @@ describe('custom games', () => {
     expect(fromRound.settings).toMatchObject({ net: false, press: 2, stake: 20, front: null });
   });
 
-  it('is only custom with a house rule; settings must be the base game’s standard options', () => {
+  it('house rules are optional (098); settings must be the base game’s standard options', () => {
     const c = { ...copyFrom('skins'), settings: { net: true, carry: false, stake: 5 } };
-    expect(customProblems(c)).toEqual([expect.stringMatching(/house rule/)]);
+    // No house rules: just the group's saved version of skins (its own name, stake and options).
+    expect(customProblems(c)).toEqual([]);
+    expect(customProblems({ ...c, rules_text: '   ' })).toEqual([]);
+    expect(customProblems({ ...c, rules_text: undefined })).toEqual([]);
+    expect(customProblems({ ...c, rules_text: 'x'.repeat(1001) })[0]).toMatch(/up to 1000/);
+    expect(customRow({ ...c, rules_text: undefined }).rules_text).toBe('');
+    expect(customRow({ ...c, rules_text: '  ' }).rules_text).toBe('');
+    const saved = withCustom({ id: 'g', kind: 'skins', stake: 5, custom_game_id: 'c1' }, { c1: { id: 'c1', ...customRow(c) } });
+    expect(saved.house_rules).toBe('');
+    expect(saved.name).toBe('Skins — our way');
     expect(customProblems({ ...c, rules_text: 'Loser of each skin shouts a beer' })).toEqual([]);
     expect(customProblems({ ...c, rules_text: 'x'.repeat(5), settings: { scoring: 'stroke' } })[0]).toMatch(/scoring isn’t an option/);
     expect(customProblems({ ...c, rules_text: 'house', settings: { carry: 'yes' } })[0]).toMatch(/isn’t one of the choices/);

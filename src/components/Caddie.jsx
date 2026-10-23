@@ -5,6 +5,9 @@
 //   * Laptop (1024 px and up) and the desk: a panel docked down the right, which folds away to a slim tab.
 //   * Never greyed out (Josh, 22 Oct): when the AI can't answer, it still takes you to the right page
 //     (components/CaddieChat.jsx, lib/caddie.js). Hidden only on full-screen views (TV, print, replay, score entry…).
+// ov22 (Josh 23 Oct): Caddie says hello once on a device — a small speech bubble from the button (phone) or beside the
+// docked tab (laptop). ov27 (F1, walkthrough review): it waits for the second visit, and for a visit no other pop-up
+// has had (one pop-up at a time — lib/firstopen.js).
 // The chat itself is loaded when first opened, so the leaderboard stays quick to load.
 // Two modes (ov16, 22 Oct): Ask (CaddieChat) and ✨ Plan a trip (CaddiePlan) — "Plan it with AI" IS the Caddie: the
 // planning chat sits beside the trip screen (laptop) or in a sheet that folds down to show it (phone), and the trip
@@ -12,8 +15,11 @@
 import React, { useEffect, useLayoutEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Sheet } from './ui.jsx';
+import { useSession, useFeature } from '../lib/store.jsx';
 import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
-import { caddieHidden, usesPanel } from '../lib/caddie.js';
+import { caddieHidden, usesPanel, HELLO_TEXT, helloSeen, markHelloSeen, shouldSayHello } from '../lib/caddie.js';
+import { previewOf } from '../lib/preview.js';
+import { noteVisit, popupThisVisit, helloReady, takePopup } from '../lib/firstopen.js';
 import './caddie.css';
 
 const CaddieChat = lazyScreen(() => import('./CaddieChat.jsx'), 'default', { inline: true });
@@ -85,6 +91,29 @@ function useFabLift(active, pathname) {
   return lift;
 }
 
+/**
+ * v8 (23 Oct, Josh): "The Claude connector or other AI connector should be at the bottom of the Caddie to note the
+ * option." A quiet line under the Ask chat. Organisers go to the Claude connector switch (Players & group → Features,
+ * highlighted); everyone else is told to ask an organiser.
+ */
+function ConnectorNote({ onGo }) {
+  const { status } = useSession() || {};
+  const on = useFeature('connector');
+  const organiser = !!status?.is_admin && !status?.viewing;
+  return (
+    <div className="small muted" data-testid="caddie-connector" style={{ padding: '10px 2px 2px', borderTop: '1px solid var(--line-soft)', marginTop: 8 }}>
+      {organiser ? (
+        <button type="button" onClick={() => onGo('/group?feature=connector')}
+          style={{ border: 0, background: 'none', padding: 0, font: 'inherit', color: 'inherit', textDecoration: 'underline', textAlign: 'left', minHeight: 44 }}>
+          Use your own AI? Connect Claude or ChatGPT to your group →
+        </button>
+      ) : (
+        <span>Use your own AI? Claude or ChatGPT can connect to your group{on ? ' — ask your organiser for the link.' : ' — ask your organiser to switch it on.'}</span>
+      )}
+    </div>
+  );
+}
+
 export function Caddie() {
   const loc = useLocation();
   const navigate = useNavigate();
@@ -97,6 +126,37 @@ export function Caddie() {
   const [mode, setMode] = useState(() => { try { return sessionStorage.getItem(MODE_KEY) === 'plan' ? 'plan' : 'ask'; } catch { return 'ask'; } });
   const [folded, setFolded] = useState(false); // the phone's planning sheet, folded down to show the trip
   const lift = useFabLift(!hidden && !panel, loc.pathname);
+  const { status } = useSession() || {};
+  const viewing = !!status?.viewing || !!previewOf();
+  const [hello, setHello] = useState(false);
+  // Say hello once the first screen has settled and nothing else has popped up (checks again every 2 s until then).
+  useEffect(() => {
+    if (hello || hidden || helloSeen()) return undefined;
+    // F1: not on the first visit, and not on a visit that has already had its one pop-up.
+    if (!helloReady({ visits: noteVisit(), had: popupThisVisit() })) return undefined;
+    let live = true;
+    let t = 0;
+    const later = (ms) => {
+      t = setTimeout(() => {
+        if (!live || helloSeen()) return;
+        if (!helloReady({ visits: noteVisit(), had: popupThisVisit() })) return; // something else popped up first
+        const otherPopUp = !!document.querySelector('.sheet-bg, [role="dialog"]');
+        if (shouldSayHello({ seen: false, hidden, viewing, caddieOpen: open || (panel && panelOpen), otherPopUp })) { takePopup('caddie-hello'); setHello(true); }
+        else later(2000);
+      }, ms);
+    };
+    later(3200);
+    return () => { live = false; clearTimeout(t); };
+  }, [hello, hidden, viewing, open, panel, panelOpen]);
+  const helloDone = (askNow) => {
+    markHelloSeen();
+    setHello(false);
+    if (!askNow) return;
+    setMode('ask'); setFolded(false);
+    if (panel) setPanelOpen(true); else setOpen(true);
+  };
+  // Opening the Caddie yourself counts as having met it.
+  useEffect(() => { if (hello && (open || (panel && panelOpen))) helloDone(false); }, [open, panelOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const f = (e) => {
@@ -129,7 +189,7 @@ export function Caddie() {
   const go = (path) => { if (mode === 'plan') setFolded(true); else setOpen(false); navigate(path); };
   const chat = (
     <LazyArea fallback={<div className="small muted" style={{ padding: 12 }}>Opening…</div>} onClose={() => { setOpen(false); setPanelOpen(false); }}>
-      {mode === 'plan' ? <CaddiePlan onGo={go} /> : <CaddieChat onGo={go} ask={ask} />}
+      {mode === 'plan' ? <CaddiePlan onGo={go} /> : <><CaddieChat onGo={go} ask={ask} /><ConnectorNote onGo={go} /></>}
     </LazyArea>
   );
   const tabs = (
@@ -139,13 +199,26 @@ export function Caddie() {
     </div>
   );
   const title = mode === 'plan' ? 'Plan a trip' : 'Ask the caddie';
+  const bubble = hello && !viewing && (
+    <div className={`caddie-hello no-print ${panel ? 'at-tab' : 'at-btn'}`} role="status" aria-label="Caddie says hello" data-testid="caddie-hello"
+      style={!panel && lift ? { bottom: `${lift + 70}px` } : undefined}>
+      <p><span aria-hidden="true">👋 </span>{HELLO_TEXT}</p>
+      <div className="row" style={{ gap: 8 }}>
+        <button type="button" className="btn gold sm" onClick={() => helloDone(true)} data-testid="caddie-hello-ask">Ask me something</button>
+        <button type="button" className="btn ghost sm" onClick={() => helloDone(false)} data-testid="caddie-hello-ok">Got it</button>
+      </div>
+    </div>
+  );
 
   if (panel) {
     if (!panelOpen) {
       return (
-        <button type="button" className="caddie-tab no-print" data-testid="caddie" aria-label="Ask the caddie" onClick={() => setPanelOpen(true)}>
-          <CaddieGlyph size={26} /><span>Caddie</span>
-        </button>
+        <>
+          <button type="button" className="caddie-tab no-print" data-testid="caddie" aria-label="Ask the caddie" onClick={() => setPanelOpen(true)}>
+            <CaddieGlyph size={26} /><span>Caddie</span>
+          </button>
+          {bubble}
+        </>
       );
     }
     return (
@@ -166,6 +239,7 @@ export function Caddie() {
         style={lift ? { bottom: `${lift}px` } : undefined} onClick={() => { setOpen(true); setFolded(false); }}>
         <CaddieGlyph />
       </button>
+      {!open && bubble}
       {open && mode !== 'plan' && <Sheet title="Ask the caddie" onClose={() => setOpen(false)}>{tabs}{chat}</Sheet>}
       {open && mode === 'plan' && (
         // Not a modal: the trip screen stays usable above it, and it folds down to a bar to see the whole page.

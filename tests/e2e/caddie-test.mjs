@@ -106,7 +106,7 @@ async function newCtx(viewport) {
     const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
     if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated' } }));
     localStorage.setItem('lgc-group', group);
-    localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-notify-prompt', String(Date.now()));
+    localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */ localStorage.setItem('tgt-notify-prompt', String(Date.now()));
   }, ['99999999-9999-4999-8999-999999999999', GROUP]);
   const page = await ctx.newPage();
   page.on('pageerror', (e) => fails.push(`page error: ${e}`));
@@ -140,6 +140,7 @@ check(await visible(page.getByRole('button', { name: 'Who’s leading in Wednesd
 check(await visible(page.getByRole('button', { name: 'Change the teams' })), 'organisers get "Change the teams"');
 check((await page.getByTestId('caddie-chat').getAttribute('data-ai')) === 'on', 'AI on');
 await page.screenshot({ path: `${SHOTS}/2-sheet.png` });
+check(/Connect Claude or ChatGPT to your group/.test(await page.getByTestId('caddie-connector').innerText().catch(() => '')), 'v8: a quiet line at the bottom notes the Claude / ChatGPT connector (organiser)');
 await box(page).fill('How do I change the teams?');
 await page.getByRole('button', { name: 'Ask', exact: true }).click();
 await page.getByText('Tap Go there and change the teams').waitFor({ timeout: 10000 });
@@ -190,10 +191,10 @@ let before = calls.length;
 await caddie.click();
 await page.getByTestId('caddie-chat').waitFor({ timeout: 10000 });
 check((await page.getByTestId('caddie-chat').getAttribute('data-ai')) === 'off', 'feature off: the caddie still opens (not greyed)');
-check(await visible(page.getByText(/the AI is switched off for your group/).first()), 'feature off: it says why in one line');
+check(await visible(page.getByText(/the Caddie is switched off for your group/).first()), 'feature off: it says why in one line');
 await box(page).fill('ambrose teams');
 await page.getByRole('button', { name: 'Find it' }).click();
-await page.getByText('I can’t answer questions yet — the AI is switched off for your group — but I can take you to the right page:').waitFor({ timeout: 5000 });
+await page.getByText('I can’t answer questions yet — the Caddie is switched off for your group — but I can take you to the right page:').waitFor({ timeout: 5000 });
 check(await visible(page.getByRole('button', { name: /Teams & pairs.*Go there/ })), 'feature off: "ambrose teams" → Teams & pairs');
 await page.screenshot({ path: `${SHOTS}/5-off.png` });
 await box(page).fill('money');
@@ -213,7 +214,7 @@ await page.reload();
 await caddie.click();
 await box(page).fill('Where are the rules?');
 await page.getByRole('button', { name: 'Ask', exact: true }).click();
-await page.getByText(/the AI isn’t switched on for your group — but I can take you/).first().waitFor({ timeout: 10000 });
+await page.getByText(/the Caddie isn’t switched on for your group — but I can take you/).first().waitFor({ timeout: 10000 });
 check(await visible(page.getByRole('button', { name: /The Rulebook.*Go there/ })), 'not set up: says so and offers the Rulebook');
 before = calls.length;
 await box(page).fill('gimme');
@@ -228,18 +229,38 @@ await ctx.close();
 guest = true; organiser = false;
 {
   const { ctx: g, page: gp } = await newCtx({ width: 375, height: 812 });
-  await gp.goto(`${BASE}#/rules`);
+  await gp.goto(`${BASE}#/rules`);   // redirects into Governance → Rulebook
+  await gp.waitForURL(/governance\/rulebook/, { timeout: 15000 }).catch(() => {});
+  await gp.waitForTimeout(800);
   await gp.getByTestId('caddie').click();
   await gp.getByTestId('caddie-chat').waitFor({ timeout: 15000 });
-  check(await visible(gp.getByText(/the AI is for the group’s players/).first()), 'guest: says the AI is for the group’s players');
+  check(await visible(gp.getByText(/the Caddie’s answers are for the group’s players/).first()), 'guest: says the AI is for the group’s players');
   await box(gp).fill('teams rules');
   await gp.getByRole('button', { name: 'Find it' }).click();
   await gp.getByRole('button', { name: /The Rulebook.*Go there/ }).waitFor({ timeout: 5000 });
   check(!(await visible(gp.getByRole('button', { name: /Teams & pairs/ }))), 'guest: no organiser-only places');
+  check(/ask your organiser to switch it on/.test(await gp.getByTestId('caddie-connector').innerText().catch(() => '')), 'v8: not an organiser → “ask your organiser to switch it on” (connector off)');
   await gp.screenshot({ path: `${SHOTS}/7-guest.png` });
   await g.close();
 }
 guest = false; organiser = true;
+
+// 7b. v8: the organiser's connector line goes to Players & group → Features, the Claude connector highlighted.
+{
+  const { ctx: o, page: op } = await newCtx({ width: 375, height: 812 });
+  await op.goto(`${BASE}#/rules`);   // redirects into Governance → Rulebook
+  await op.waitForURL(/governance\/rulebook/, { timeout: 15000 }).catch(() => {});
+  await op.waitForTimeout(800);
+  await op.getByTestId('caddie').click();
+  await op.getByTestId('caddie-connector').waitFor({ timeout: 15000 });
+  await op.getByTestId('caddie-connector').getByRole('button').click();
+  await op.waitForURL(/#\/group\?feature=connector/, { timeout: 10000 });
+  const row = op.locator('[data-feature="connector"]');
+  await row.waitFor({ timeout: 15000 });
+  check(await row.getAttribute('data-highlight') === 'true', 'v8: organiser → Features with the Claude connector highlighted');
+  await op.screenshot({ path: `${SHOTS}/7b-connector-highlight.png` });
+  await o.close();
+}
 
 // 8. No signal: says so; the search still works.
 {

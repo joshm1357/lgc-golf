@@ -332,7 +332,7 @@ Deno.test('plan: Create it re-checks, then writes the plan, votes, jobs, bring l
   assertEquals(writes.map((w: Any) => w[0]), ['plan', 'votes', 'items', 'rsvp', 'post']);
   const row = writes[0][1];
   assertEquals([row.kind, row.name, row.status, row.proposed, row.budget_pp], ['trip', 'March Away 2027', 'planning', false, 500]);
-  assertMatch(row.brief, /Rough costs each \(AI estimate — check before booking\):\n• Golf: ~\$180/);
+  assertMatch(row.brief, /Rough costs each \(the Caddie’s rough guess — check before booking\):\n• Golf: ~\$180/);
   assertEquals(row.start_date, undefined); // dates are voted on
   const votes = writes[1][1];
   assertEquals(votes.dates[0], { start_date: '2027-03-12', end_date: '2027-03-14', label: 'Fri 12 Mar – Sun 14 Mar' });

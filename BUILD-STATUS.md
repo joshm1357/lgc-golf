@@ -771,6 +771,16 @@ phone width `tests/e2e/stage10-test.mjs`.
 ## Later
 - Dinner awards voting, fines.
 
+## Future
+- **A proper broadcast voice for the replay (Josh decides; nothing built, nothing paid for).** Today the replay's voice
+  is the phone's own built-in voice (free, works offline, but it sounds like a phone — "too mechanical"). A natural
+  commentator voice needs a hosted text-to-speech service (for example the big cloud providers or a specialist voice
+  company). What it would take: an account and a key kept on the server (an Edge Function, never in the app), the
+  replay's lines sent there and the audio played back, and saving each round's audio once so it isn't paid for twice.
+  Cost is per character read — a replay is about 1,500–2,500 characters, so roughly cents per replay on most services,
+  more for the premium "actor" voices; it would also need a monthly cap. The replay already waits for each line to
+  finish, so swapping the voice in is a small change in `src/lib/voice.js`.
+
 ## Launch hosting (20 Oct 2026, branch `launch-hosting`, not merged)
 - The app works at any address: `VITE_BASE` (default `/lgc-golf/`, so GitHub Pages is unchanged). `sw.js` and the
   manifest work out their own address. `notify` reads `APP_URL`. There's a safety catch: a non-GitHub build must name
@@ -1164,3 +1174,748 @@ screen, "Viewing as Mike · read only", and Stop.
 - **Used by:** the AI planner (facts in course search, new `region_guide` tool, ask-first rules on member times /
   access / stay-and-play / deal sites); course page and trip builder "About this course for groups" block; tee-time
   call job (phone, enquiry/booking links, member-times warning).
+
+## ov18 — v8 fixes, branch `ov18-v8-fixes`, 23 Oct 2026 (no database changes)
+- **Trips "March" missing:** not a filter bug. Live logs show the plan row was deleted on 22 Oct 10:05 UTC by an
+  organiser account (desktop Chrome, the Planner's Delete button). Trips now shows trips an organiser has started
+  (status planning, not proposed, dates or not) under **Being planned** (with the organiser's name), apart from
+  **Ideas** (suggestions). `sortTrips` gains `planning` / `suggested` (`ideas` kept for older callers).
+- **Score flicker:** scores came from the phone's copy straight away, side comp entries a moment later, so the board
+  first showed the total without the bonus. `useSideEntriesState` (saved copy + `loaded`, retries) and
+  `readyBoard` (board.js) — a board with bonus strokes waits (loading) until the side entries are known. Used by
+  This trip's short board, the full leaderboard and the Trophy Room.
+- **Organiser settings:** sign-ins without a name fold into "N old sign-ins without a name" (open to see, give a name);
+  not counted. Look preview: samples separated ("A gold button" / "🏆 2026"). Course research fees: `dollars()`
+  adds $ to bare amounts in green_fee_* / twilight text (not "9 holes", times, %, years; never $$).
+- **AI planning chat:** "Roughly when?" is one of the first questions unless they said when (prompt order: when >
+  how many > driving/flying/how far), with a code check (`whenFirst`) on the first reply.
+- **Josh, 07:01:** "🔗 Personal links" card removed. Players list header: "N not signed in yet" + 🔔 Remind. A player's
+  card: "Send <name> a sign-in link" only when that player isn't signed in (fallback).
+- **Josh, 07:07:** Running jokes (`in_jokes`) no longer a switch — follows Live commentary (app), and the database
+  key is switched with commentary and set the same in presets. Caddie (Ask): quiet line "Use your own AI? Connect
+  Claude or ChatGPT to your group →" (organisers → Players & group → Features, Claude connector highlighted; others
+  "ask your organiser…").
+- **Tested:** Vitest 1293 (80 files); Deno 162; e2e pass: trips, board-bonus (new), nav, trip-overview,
+  organise-tidy, course-research, plan-ux, phone, desktop, look, caddie, jokes, links, signin-home, save-spot.
+## ov19 — Governance hub, committees and elections, branch `ov19-governance-hub`, 23 Oct 2026
+- **Hub:** one "⚖️ Governance" item (sidebar and More) with tabs Rulebook · Tribunal · Committees
+  (`#/governance/rulebook|tribunal|committees`). Old `#/rules`, `#/tribunal`, `#/cases`, `#/committees`, `#/governance`
+  redirect into the right tab (keeping `?round=`, `?f=`, `?propose=`); `#/rules/:id` and `#/tribunal/case/:id` keep their
+  pages. Settings moved to `#/governance/settings` ("How we decide things"). Top of the hub: a plain-words summary built
+  from the decision rules (`howWeDecideLine`) and a "How groups work" note.
+- **Data (090, additive, staging only):** `committees.term_limit / staggered / nominate_hours`, `committee_seats.term_no /
+  half_term / vacant_reminded_at`, `cases.election_phase`, new `election_nominations` and `election_ballots` (secret:
+  you read only your own). New functions: `save_committee_v2`, `call_election`, `nominate`, `answer_nomination`,
+  `vote_election`, `decide_election`, `resign_seat`, `election_turnout`. Re-created with the same arguments:
+  `case_evaluate`, `vote_case`, `decide_case`, `seat_term_ended`, `governance_tick_group` (elections + term ends on the
+  hourly `lgc-governance-hourly`). A trigger on seats keeps term counts and enforces term limits / one seat per person
+  on every path (old yes/no elections and appointments too).
+- **Tested:** SQL `supabase/tests/090_committees_elections.sql` (54 checks, rolled back); Vitest 1303 (committees 23
+  new); e2e new `governance-hub-test.mjs` (49 checks); governance, rulebook ×3, dispute, nav, desktop, phone, features
+  pass (governance / rulebook / features tests updated for the hub). Note: rulebook, phone and features tests need a
+  build with the default database address (their fakes route only that address).
+## ov20 — Round replay: a story, not every hole, branch `ov20-replay-pacing`, 23 Oct 2026
+Front end only; no database change. Josh: "a bit quick… group some holes… more about the key moments… slow down for
+the end… the voice gets cut off."
+- **Beats (`src/lib/replaybeats.js`, new, pure):** quiet holes share a beat (up to 4 holes, split at the turn); key
+  moments get their own — lead changes, eagles and aces always, then (about 2 in 5 holes at most) big swings (the gap
+  moves 3+ on one hole, new in `replay.js`), ties for the lead, blow-ups, climbers, side comp wins and birdies. A lone
+  quiet hole joins the key beat next to it (fewer transitions). The 9th always ends a beat (the turn). The last three
+  holes get a beat each, after the "3 to play" card, then the winner. Every beat ends with the board as it stood after
+  its last hole, so the standings are followed the whole way. An 18-hole round is now ~10–13 beats instead of 18.
+- **Lines:** each beat uses the group's live commentary (`commentary` table, 071) for a hole in it when one was
+  written; otherwise a line made from the beat ("Holes 1–4: a steady start. Josh & Hamish out in front, by 1 shot.").
+  Side comp wins are always mentioned. The round report (when written) is read on the end card. New Broadcast and
+  Larrikins lines for stretches, standings, the turn and the last holes; team names now get "they" verbs ("Josh &
+  Hamish go past").
+- **Pacing:** Normal by default — each step holds long enough to read its line (about 18 letters a second plus a
+  settle; at least 4 s, 5 s for key moments, 5.5 s for the last holes, 7.5 s for the winner); gentle 0.7 s fades and
+  the board rows slide ~0.7 s into the beat. Speed control under the top bar: **Normal · Fast ⏩ (about 2×) · Skip to
+  the end ⏭** (to the winner). Fast is remembered on the phone. Tap right / left, hold or ❚❚ to pause, as before.
+  Reduced-motion phones get no movement. An 18-hole replay is ~1:40 at Normal, ~50 s at Fast.
+- **Voice (`src/lib/voice.js`, new):** off by default (🔈 / 🔊). When on, the next step waits for the line to finish
+  (onend), a new line always cancels the old one first and a late "finished" from an old line never counts, pause /
+  skip stop it cleanly (play again reads the line from the top), and a phone that never says "finished" moves on after
+  a generous wait. Picks the best local voice (en-AU, then en-GB; "enhanced"/"natural" first; never Apple's joke
+  voices), rate 0.92 (1.08 on Fast). A proper broadcast voice is under **Future**.
+- **Removed:** the old per-hole `buildTimeline` / `frameMs` (`replay.js`) and `captionsFor` (`replay-lines.js`) —
+  replaced by `buildStory`. `?quick=1` (or the old `?fast=1`) is the 150 ms test mode.
+- **Tests:** Vitest 1305 pass (new `replaybeats.test.js`, 28: grouping, key beats, turn, last three, side comps, lines,
+  team verbs, timing, speeds, skip, commentary matching, voice pick, never-overlapping speaker). Playwright
+  `replay-test.mjs` 62 checks pass (grouped beats, Normal ≥ 4 s a beat, Fast about half, Skip → winner, pause, voice off
+  by default, stubbed voice waits for onend / never overlaps / pause cuts it). Screenshots at 375 px.
+
+## ov21 — Trips menu (no "This trip" item) and "Call it off" instead of delete, branch `ov21-trips-menu`, 23 Oct 2026
+Josh: "I don't know why it has 'This trip' as a menu item … under Trips … Last trip and Next trip; if no next trip
+then have Plan it." And: a live trip ("March") was hard-deleted last night through a plain browser "OK" box.
+- **Which trip is which (`src/lib/activetrip.js`):** `tripsMenu()` → `now` (On now: a round live or today, or between
+  its first and last day; else the soonest still to come = Next), `last` (most recent finished), `planIt` (no next).
+  Trips whose plan was called off never count (`liveTrips`). `menuLabel` → "On now: …", "Next: …", "Last: …".
+- **Laptop sidebar:** no top-level "This trip". **Trips** with indented sub-items: On now / Next (gold when on now),
+  Last, or **✨ Plan a trip** (opens the Caddie in plan mode) when nothing's coming up.
+- **Phone tabs:** **Trips · Feed · Players · More** (Trips first; Governance stays in More). Trips is lit on home,
+  Trips, a trip's pages and its status page.
+- **Top of Trips:** big On now / Next trip card, Last trip card, then ✨ Plan a trip if there's no next trip, then
+  Being planned, ideas, past trips — and a folded **Called off** section.
+- **Home (#/):** the On now / Next trip's status page if there is one, else Trips (planner off: the "No trip on"
+  card). `#/?r=<round>` recap links unchanged. A trip's status page is `#/trip-now/<trip>` (TripNow.jsx). The round
+  leaderboard's back link goes to its trip's status page.
+- **Call it off (Planner):** Edit → **✋ Call it off** (in-app sheet: everything kept) → "Called off by Josh ·
+  Bring it back". Organisers (or the trip's organiser / the suggester of an unapproved idea) can bring it back. The
+  Status picker no longer offers "Called off" (so who called it off is always recorded). **Delete for good** only
+  for an EMPTY plan (no replies but the creator's own, votes, jobs, costs, payments, chat or rounds —
+  `planIsEmpty` in trips.js), after typing the trip's name. A plan with anything in it shows why it can't be deleted.
+- **No browser OK boxes for removals in the planner:** new `askConfirm()` / `ConfirmHost` (ui.jsx) replaces
+  window.confirm on: delete plan, pass on an idea, delete a chat message, remove a payment (×2), a cost, a room/car,
+  a vote option. (Lock-it-in confirms are left; other screens' confirms are out of scope.)
+- **Migration 091 (`091_call_off_plan.sql`, additive):** `plans.cancelled_by / cancelled_at / cancelled_from`;
+  `call_off_plan(plan, off)`, `delete_empty_plan(plan)`, `plan_is_empty(plan)`; a `plans_delete_guard` trigger that
+  refuses an app user's direct delete of a non-empty plan (any app version). Deletes inside database functions, by
+  the service key, or cascades from deleting a group aren't affected. **NOT yet applied to staging** — the apply was
+  stopped at the approval step. The app works without it (falls back to the old admin update/delete, minus "by
+  <name>"), so it's safe either way.
+- **Also:** shortcuts ("g h" = home), Caddie go_to `trip_now` is now "Trip status" (+ `#/trip-now/<id>` context;
+  routes.ts label edited — redeploy ai-helper whenever convenient, nothing breaks before), What's new text, Guide.
+- **Tests:** Vitest 1353 pass (new tripsMenu ×8, planIsEmpty/canCallOff ×4). Playwright: `nav-test` all pass
+  (rewritten for Trips first, sidebar sub-items On now / Next / Last / Plan a trip, home route, Trips top cards);
+  new `calloff-test` 17 checks pass; `organise-tidy`, `desktop`, `plan-ux` pass. `phone`, `trips`, `features`,
+  `signin-home`, `save-spot`, `board-bonus`, `trip-overview` fail at the same step on release-v9 too (stale
+  fixtures/env) — their "This trip" references were updated anyway.
+## ov22 — Caddie says hello, pick several answers, planning maps, branch `ov22-caddie-hello`, 23 Oct 2026
+Front end only; no database change (one small change to the ai-helper function's planning chat — see 2).
+- **1. Caddie says hello (Josh 08:10):** the first time someone's in the app on a device (after joining and picking a
+  name — never on join / sign-in screens, never over another pop-up such as the notifications sheet), a speech bubble
+  pops from the Caddie button (phone, above it — never over the tab bar) or beside the docked Caddie tab (laptop):
+  "👋 Hi, I'm Caddie. Ask me anything about the group, the rules or the next trip — or say 'plan a trip'. I'm here to
+  help." [Ask me something] opens the Caddie; [Got it] closes it. Once per device (`tgt-caddie-hello`, try/catch);
+  opening the Caddie yourself counts too. The empty Ask chat starts with the same hello; typing "plan a trip" there
+  switches to ✨ Plan a trip. No pop-in animation with reduced motion. Rules in `lib/caddie.js` (helloSeen,
+  markHelloSeen, shouldSayHello, isPlanATrip). Every e2e test seeds `tgt-caddie-hello` so the bubble stays out of
+  their way; `hello-maps-test` checks it.
+- **2. Pick several quick answers, then send (08:14):** a planning-chat question the helper marks `multi: true`
+  (regions, extras, weekends, what matters) has toggle chips — tap several, then "Send (3)" sends "Which areas? →
+  Hunter Valley, South Coast, Central West". One-answer questions still send on tap; "Other…" still opens the box
+  (with the picks so far). `ai-helper/plan.ts`: `multi` (boolean, optional) on the reply tool's questions, one prompt
+  line saying when to use it, and validation keeps `multi: true` only. Client: `planchat.js` (cleanQuestions keeps
+  multi; togglePick, multiSend, multiOther), `AiChat.jsx`.
+- **3. Maps zoom with the scroll wheel (08:24):** planning maps (trip builder, area start, trip finder) zoom with the
+  wheel after a click on the map (until the pointer leaves it), or any time with Ctrl/⌘; a "Scroll to zoom" hint shows
+  on the first hover. Pinch and +/− as before. `PlanMapTools.jsx` WheelZoom.
+- **4. Hover a course ↔ its pin (08:25):** hover a course or place-to-stay row (or the "+ course" / "Stay near"
+  chips) → its pin grows, bounces once and shows its name, and the map pans to it if it's off-screen; hover a pin →
+  its row lights up.
+- **5. Club names (08:25):** a small "Club names" switch top-right of the planning maps, on by default, remembered
+  per device (`tgt-map-names`); short names ("Kiama", "The Vintage") beside course pins; labels that would overlap are
+  hidden (the more important pin keeps its label; 🏠 stay labels always show; the pointed-at pin always shows).
+- **6. Hover for a quick summary, click for everything (08:26):** pins and rows. Summary card — a course: style,
+  ★ good for groups, weekday/weekend fee, drive, visitor times; a place to stay: type, places saved, sleeps, price,
+  nearest courses. Click (or on a phone: first tap = summary, second tap or "More →" = details) → the course sheet
+  (moved from TripBuilder.jsx to `components/PlaceSheets.jsx`, used by the area start too): on-the-table / add-to-day
+  button, the group's history and rating, "About this course for groups" (fees + group rates, visitor & member times,
+  how to book with links and phone, stay and play, sources, "Researched … — check with the club"), "More about it"
+  (every other researched field: signature, practice, food & drink, pace, dress code, best months, weather, crowds,
+  nearby courses, accommodation…, club website), shared booking info, the group's social golf times, holes / par /
+  where, "See it on a map". A stay sheet: courses nearby with drive times, saved places with sleeps, cost, notes and
+  links, a stay / don't-stay button. In the area start, ticking the box still puts things on the table; a click on a
+  pin now opens its details (the toggle is in the sheet). Tap vs mouse is judged per press (touch laptops work both
+  ways). Pure rules in `lib/placeinfo.js`.
+- **Fixed on the way:** Leaflet's layers (z-index 400+) could sit over sheets opened on top of a map — the planning
+  maps now keep them inside (`isolation: isolate`).
+- **Tested:** Vitest 1379 (83 files; new `hello-multi-maps.test.js` 22); Deno 165 across the functions (3 new for
+  `multi`); e2e new `hello-maps-test.mjs` 79 checks; plan-ux, caddie, trip-builder (updated for first tap / second
+  tap), nav, phone, desktop, tripfinder pass.
+
+## ov24 — Awards and fines (23 Oct 2026, branch `ov24-awards-fines`, migration 093, staging only)
+- Propose an award or fine (Rulebook rule, Fines & awards; group's usual decision rule), with a reward (strokes /
+  points / $ / drink / title / bragging / words) and the proof a claim needs (photo / time / number, "latest wins").
+- Opinions on a fine's size (Too much / About right / Too little + comment); dispute the amount with RuleTag.
+- Run-up "Awards & fines for this trip" (Organise → On the day) and "What's up for grabs" on the Overview; a week-out
+  reminder to everyone and "N proposals waiting" to organisers (cron `lgc-awards-runup`, once per trip).
+- "🏷 Fine / award" on any feed post or comment → chip on the post → into the dinner vote; organiser removes,
+  the fined person appeals (dispute on the nomination). Closing the vote settles it on the server: result post and
+  strokes on the winner's next round (`award_strokes`, shown on the leaderboard with late-job penalties).
+- Standard "Leftover kitty" rule for every group (on the bar / split / roll over / trophy winner / words); shown
+  on the kitty near the trip's end (split shows each share; roll over shows the next trip's starting balance).
+- Tests: `src/lib/awardsfines.test.js` (17); SQL `supabase/tests/093_awards_fines.sql` (part A run; part B needs a
+  person to confirm UPDATE/DELETE in the MCP); Playwright `tests/e2e/awards-fines-test.mjs` (all pass).
+
+## ov25 — The run-up, and trip stages that each look different, branch `ov25-run-up`, 23 Oct 2026 (migration 094)
+- **Trips list by stage:** ⛳ On now (gold) · 🔒 Upcoming (navy, "16 days") · 🧭 Being organised (outline, "voting on
+  dates" / "calling courses") · 💡 Proposed (dashed, "3 keen") · 🏁 Previous (muted, "Oct 2025", winners) · ✖️ Called
+  off (folded). Sidebar sub-items by stage (at most 3) + "All trips →". Looks in `src/lib/runup.js` + `components/runup.css`.
+- **The run-up** (`components/RunUp.jsx`) on an Upcoming trip's Overview: countdown header + your day-before line;
+  your to-dos (reply, deposit, jobs with late warnings, what you're bringing, handicap check, tip); getting there
+  (cars: I need a lift / I've got seats / hop in, driver puts people in, pick-up place + time; rooms); up for a vote
+  (trip votes + open rule cases); what's up for grabs (slots for ov23/ov24 in `components/runupSlots.js`); rules +
+  "Propose a change"; side activities (I'm in, cost each → kitty); what to bring (shared ideas, I'll bring it,
+  📣 Ask the group → one Feed post with "I'll bring it" buttons); form guide; tipping (organiser can turn off; locks
+  at the first tee); trip chat highlights. No car fuel/toll split (Josh 08:46) — normal kitty costs.
+- **Reminders:** a week out, only to people with something waiting ("3 things waiting for you"); the day before,
+  each person's car, room, tee time and what they're bringing. Words in `supabase/functions/_shared/runup.js`.
+- **094 (additive):** plan_groups driver/pick-up; plans.tipping_off; plan_items.bring_shared; plan_costs.activity_id;
+  tables trip_activities, trip_activity_people, trip_runup_people, trip_tips (same-group, no guest writes, planner
+  switch); functions runup_offer_car / join_car / leave_car / claim_bring, tips_close_at. NOT yet applied to staging
+  (the apply needed an approval nobody could give in this run) — checked in PGlite with `supabase/tests/094_run_up_test.sql`.
+- **Tests:** `src/lib/runup.test.js` (32); e2e `runup-test.mjs` new; trips / trip-overview / nav / phone / history updated.
+
+## ov23 — Weekends shortlist, areas, vote depth, comps in the run-up (23 Oct 2026, branch `ov23-weekends-comps`, not merged)
+Josh (08:30–08:39, using Build the trip on live). The order is now: **1 Plan** (areas + weekends shortlist + how long
++ who's coming) → **2 Vote** (area + weekends + how long; each area's courses and places are optional detail) →
+**3 Call the courses** (only the winning area's courses, about the **primary and backup weekends**) → **4 Pick & lock
+in** → **5 Jobs & money** → **6 Comps & on the day**. Step keys unchanged (`book`, `lockin`, `day`), so old links work.
+- **Step 1 "Areas & weekends":** "The areas we're considering" bar (chips, ✕, "+ Add another area" with search and
+  the region guide list, 📊 Compare) — `components/AreaBar.jsx`. EVERY weekend in the window (default the next 6
+  months, organiser picks the start month and 3–12 months), grouped by month, tagged 🏖️ long weekend (NSW public
+  holidays) / 🎒 school holidays (NSW Eastern division, 2026–Jan 2028 from education.nsw.gov.au), tick any number,
+  plus your own dates — `components/WeekendPicker.jsx`, `lib/weekends.js`. Nights changes keep the shortlist (dates
+  resized). "How long?" can be set or put to the vote (1/2/3 nights / day trip; 3 nights → Thursday or Monday).
+  "Who's coming?" number. No accommodation in step 1 (moved to step 2, `components/StayIdeas.jsx`).
+- **Head count:** `tripHeadcount` — the number set (organiser, or the plan chat's `headcount`), else who said
+  they're in, else the group; never a default. Links say "for 9 people · 5+ bedrooms" and the number can be changed
+  there (saved to the trip). The Organise stay sheet uses it too.
+- **The vote:** "How deep?" — Areas only, or Areas + what's in them. Detail questions ("Hunter Valley: which
+  courses?" / "…: where to stay?") are optional: not needed to count as answered, never nudged (app, reminders,
+  emails). Ballot groups them under "📍 If it's <area>" with "Go into the detail →". Every option has a one-line
+  summary (course: style · ★ for groups · fees · drive; place: courses within 30 min; area: courses within 30 min ·
+  drive · $ a round · region-guide line) and "ⓘ Details" (sheet with the course research; hover tooltip on a
+  laptop) — `components/OptionDetails.jsx`. Results in the builder (`components/AreaVoteResults.jsx`): area winner,
+  rankings inside each area, "N went into the detail", how long, weekends Primary/Backup; "Choose this one" picks
+  the area, its favourite courses first, its voted places ticked, and sets Primary + Backup at the winning length.
+- **Call the courses:** locked until the area's chosen and weekends set. Script line "Primary: …; Backup: …" on
+  every call job. "It's not working? Open it up": add the next weekend from the vote as another backup, or re-open
+  the area choice (runner-up) — nothing lost.
+- **Comps & on the day (Organise step 6):** `components/RunUp.jsx` + `lib/runup.js` — What's up for grabs (tick
+  which comps are on; Cup only when the group uses it; standings link), Rules for this trip (Rulebook, up for a
+  vote, under dispute, Propose a rule change), Handicaps check (last change, open disputes, tap to dispute,
+  "Review handicaps" until marked done), then Teams and the draw. Ryder Cup removed from planning extras (old saved
+  lists cleaned); the AI planner is told not to ask about comps ("we'll sort comps and teams closer to the trip").
+- **Overview:** the same for everyone — no "Organise this trip"/"Build the trip" in the body; "You've voted ✓ — see
+  results or change my votes".
+- **Migration 092 (`092_vote_detail.sql`, additive):** `plan_polls.optional`, `plan_polls.area`. Applied to
+  **staging** only. The app sends them only for detail questions.
+- **Edge functions changed (deploy to staging when convenient):** ai-helper (`plan.ts`: draft `headcount`, comps
+  rule, comp extras filtered), notify (optional polls skipped), `_shared/emailvotes.js` (optional polls skipped).
+- **One step list (merge with release-v10, Josh's follow-up):** `src/lib/tripsteps.js` is the ONLY list of a trip's
+  steps — Organise's step cards and the trip builder's tabs both read it, with the same summary lines ("Hunter Valley ·
+  Primary Fri 13 – Mon 16 Nov · Backup …"): 1 Areas & weekends (incl. the vote and primary/backup) · 2 Courses & stays ·
+  3 Call the courses · 4 Pick & lock in · 5 Jobs & money · 6 Comps & on the day. No separate Plan or Vote step; old
+  `?step=plan` / `?step=vote` links open step 1. The builder shows all six (5 and 6 link to Organise). New Next steps
+  "Pick the course options each day and where to stay" and "Call the courses: make the call jobs".
+- **Merged release-v10 (ov22):** the vote card's ⓘ Details opens ov22's course / place-to-stay sheets (one sheet everywhere).
+- **Tests:** Vitest 1389 pass (new weekends ×20, areavote ×10, runup ×4, step order). Deno ai-helper/notify/_shared
+  154 pass. Playwright: new `weekends-comps-test` 61 checks; `trip-builder`, `plan-ux`, `organise-tidy`,
+  `trip-overview`, `desktop`, `trip-plan`, `trip-extras`, `caddie`, `trips`, `email-votes` all pass.
+
+## ov28 — Teams and groups, tee times, the day, results (23 Oct 2026, branch `ov28-teams-day-results`)
+
+From Josh's walkthrough review (C1, C2, D1, D2, W1, I8, I9, I11, I12, I13, I14, I16 and small fixes), with his notes:
+general (not Cup-only), any meal (not "dinner"), don't flood.
+
+- **C1 Your round** (`components/YourRound.jsx`, rules + words in `supabase/functions/_shared/yourround.js`, app helpers in
+  `lib/yourround.js`): your team (colour and name), partner(s), opponents / opposing teams, playing group, tee time and
+  start hole — for a Cup match, an Ambrose team, a 4BBB pair or a plain playing group. Renders nothing when nothing's
+  assigned. Props `trip`, `round`, `me` (W2's "Your weekend" card can mount it). On the day screen, the Cup board (top,
+  your match first and marked) and the comps board. Reuses what exists: `cup_matches` / `cup_sides`, `teams` /
+  `team_players`, `tee_groups` — no new team tables. Maybes, no-replies and non-payers are marked in the Cup team and
+  match pickers and the tee group chips, with "Nudge them: are you coming?" (existing `nudge_rsvp`), and the player
+  sees "You're in Kurt's draw for Team Red. Are you coming?" on their round card. Team links say "Join Team Red".
+- **C2 Tee times:** a tee time and start hole on each Cup match (add, and edit in the list); matches keep their order.
+  Tee groups prefill the first time from the call-the-courses times. Organisers get "Set the playing groups" for rounds
+  in the next 5 days with no groups (on the day screen and the Overview's run-up, via TripStatus).
+- **D1 Day screen** (`components/TripStatus.jsx`): a Cup day leads with the Cup score ("if it finished now"), your
+  match first; then Your round, fines so far, and the board — hidden on a Cup day when nobody's entering Stableford.
+- **D2 Leaderboard:** headings always; points order by default with an "On pace" toggle (`board.js orderBoard`); "Lou and
+  Mo joint lead"; your row (or team's) highlighted and pinned; room under the last row for Enter score.
+- **W1 Results** (`components/TripResults.jsx`, maths `lib/results.js`): at the top of a finished trip — winner and
+  trophy, trophies handed over ("Mo wins the BD Trophy 2026, takes it from Bo", one-tap engrave for organisers), Cup
+  verdict from the real matches ("Team Blue win 7–5" / "All square" / "Not finished: 6 of 12 points played"), podium per
+  round, side comps, fines tally, who tipped right, best photos, then "Plan the next trip". `moneyLine` prop for W2's
+  `MoneyLine.jsx` (not there yet). Comps say "won" once their rounds are locked. Trophy Room shows the new holder
+  straight away. The Overview's old Honours card now only shows for trips with no rounds (tiny edit in W2's file).
+- **I8 The draw is out:** organiser button on the Cup set-up and on saved tee groups → Feed post + notify `draw_out`
+  (each player's own line, once an hour per round).
+- **I9 Tipping (migration 097, feature `tipping`):** tip the Cup, a match, or a round's winner; locks at the start
+  (in the database); "7 tipped Red, 4 tipped Blue"; bragging rights only.
+- **I11 Night before:** new evening job (`lgc-evening-tee-times`, 08:00 UTC) → notify `evening` → `tee_tomorrow`,
+  only to people with a time or group tomorrow, with their lift if cars are sorted.
+- **I12** Fines-so-far ticker on the day screen; "Fine someone" there and on the hole screen (ov24's FineSheet).
+- **I13 Swing alerts:** notify `swing` — a Cup match changing hands / back to level (to everyone not in it), and "You've
+  just passed Mo" (only to the mover). Under live commentary's switch and buzz level (feed only = none; often 10 min,
+  sometimes 30 min per person), "straight away" people only, never digested, once per match state / mover hole.
+- **I14 Awards presentation** `#/present/awards/<trip>` (`screens/AwardsShow.jsx`): winners one by one. "Dinner awards"
+  is now "Awards and fines" everywhere in the UI (feature key unchanged).
+- **I16** "This time last year" + six-month "suggest the next trip" nudge (`components/Memories.jsx`, on This trip and
+  Trips).
+- **Small fixes:** BD Trophy listed once; match results stop when decided ("won 10&8", never "10&2", extra holes noted);
+  Go-karts "I'm in" is solid green "✓ You're in" when in. Also fixed: opening a Cup match straight from a link crashed
+  (a hook after an early return).
+- **Migration 097** (`097_your_round_tips.sql`, additive, not applied): `cup_matches.tee_time/start_hole`, `tips` table
+  with RLS (members read, own pick, no guests, same group, feature switch, locks), feature `tipping`, the evening job.
+  Test: `supabase/tests/097_your_round_tips.sql` (+ expected) — passed on a PGlite stand-in.
+- **Tests:** Vitest 1502 pass (new yourround, results, ov28). Deno notify/_shared 14 pass; notify type-checks. Browser:
+  new `your-round`, `day-screen`, `results`; cup, comps, fourball, tee-groups, awards, awards-fines, runup, trip-extras,
+  trip-overview (updated for the results page), trips, jokes, stroke, links, nav, phone, history, own-comps,
+  commentary, desktop pass. `quick` and `signin-first` fail the same way on v10-int (not touched here).
+- **Deploy when convenient:** the notify function (new kinds). Apply 097 on staging, then live.
+
+## ov26 — Votes and the organiser's planning flow (23 Oct 2026, branch `ov26-votes-organising`, migration 095)
+
+From Josh's walkthrough review: V1–V4, O1–O7 and ideas I3–I6 (option A everywhere).
+
+- **V1 Lock-in closes the planning votes** (`lib/lockin.js`, migration 095 trigger): every way of locking in — Planner's
+  Lock it in card, the Next step / builder's "Lock this in", "Set it up in the app", "Lock in who's coming" — shows one
+  box and closes the open votes on where and when (dates, places, stays, vote cards, the optional detail). Votes on
+  anything else stay open. A closed one shows as one line: "Decided: Fri 22 – Mon 25 Jan, Nowra".
+- **V2** Weekends on a ballot with "How long?" show the shortest trip plus "Plus Mon 25 if we go 3 nights". After the
+  vote: "3 nights won, so it's Fri 22 – Mon 25 Jan. 1 person only said yes to a shorter trip — check with them (Bo)".
+  Choosing the area sets the length to the winner.
+- **V3** "Are you in?" first; header line "South Coast NSW · about $450 each · 2 h drive · 9 in so far"; the same words
+  everywhere (Yes / Maybe / No; places Keen / Happy with it / Not keen — also in the vote emails); detail folded last.
+- **V4** Under a third went into the detail: "Only 1 of 4 picked courses and places — not enough to go by. You choose."
+- **O1** One "Up to step 4 of 6: Pick & lock in" line on Organise, the builder and its card; step 5's tick and "x of y
+  jobs done" count the same jobs; a locked-in trip never points back at step 1.
+- **O2** One gold Next step button per screen; the rest under "Other ways to do this" (`components/OtherWays.jsx`).
+- **O3** Call the courses: golf days only, one form per course ("Nothing that weekend", one Save), the script and the
+  screen use the same headcount, due dates "by Fri 30 Oct".
+- **O4** Pick & lock in: the best way as one card (courses, tee times, about $ each, drive) with one "Lock this in";
+  "The backup weekend also works"; the others and "Ask the group instead" under Other ways.
+- **O5** A weekend falls through (`lib/tripnews.js`): one banner "… is out. … works at both courses → Go with …"; "Open
+  it up" only when nothing works; dead weekends come off open votes and are never offered again; new calls go back on
+  the caller's list and they're told; re-opening the area asks first, keeps the old work under "Before you reopened"
+  and sends a fresh vote; a late joiner never sees "You've voted ✓". One Feed post per change.
+- **O6** One headcount rule, `lib/headcount.js` ("9 in · 1 maybe · 1 not replied", targets labelled "for 10
+  (target)"). Used by the builder, the call script, stay searches, the vote card; ov28's `peopleStatus` now uses it
+  (`replyOf`). Deposits say who they count ("0 of 10 paid (in or maybe)").
+- **O7** When the start date changes the usual jobs move with it (app + 095 trigger), never after the trip or into the
+  past; jobs already due after the trip are pulled back; overdue ones show in red.
+- **I3** Last day of a vote: "Waiting on Lou, Mo and Pete" + "Nudge them in the group chat" (pre-written message).
+- **I4** The vote's result: one Feed post ("It's Hunter Valley, Fri 22 – Mon 25 Jan. 3 nights. 10 votes to 6.") and a
+  result card with Share and Add to calendar.
+- **I5** The last call done: "📞 Al rang 3 courses and got tee times every day ⛳" in the Feed, once.
+- **I6** Going with the backup sends a one-tap "Still good for Fri 15 – Sun 17 Jan?" to everyone.
+- **Migration 095** (`095_lockin_closes_votes.sql`, additive, not applied): two trigger functions in `private` (lock-in
+  closes planning votes; jobs follow the start date). No tables, columns or checks touched. Test:
+  `supabase/tests/095_lockin_closes_votes.sql` (+ expected).
+- **Tests:** Vitest 1541 pass (new lockin, headcount, tripnews, ov26). Deno notify / vote-link / email 23 pass, notify
+  and vote-link type-check. Browser: new `ov26-votes` (V1, I3, O5, I6, I5); `weekends-comps` now covers V2, V3, V4, I4
+  and re-open; trip-builder, plan-ux, organise-tidy, email-votes, trip-plan, tripfinder, trips, your-round,
+  trip-overview, runup pass.
+- **Deploy when convenient:** the notify and vote-link functions (new answer words in vote emails). Apply 095 on
+  staging, then live.
+## ov29 — Side games: proposing, opting in, optional house rules (23 Oct 2026, branch `ov29-side-games-opt-in`, migration 098)
+
+From Josh's walkthrough notes: "The side games need to be proposed by someone to other people, or put out for an
+opt-in" and "You need to fill in the house rules, but it should not be a compulsory field."
+
+- **A. Who's in:** each side game is "Everyone in the round" (the default; every existing game and every game an
+  organiser adds stays this way) or "Opt-in" (`round_games.who_in`). Organisers can switch it in the game editor.
+  Settle-up (`lib/games.js playGame` → `subjectsIn`) counts only those in, for results and money, for every kind
+  (skins, Nassau, Stableford pot, birdie pool, eclectic). Ambrose: a team is in if any of its players is in — the line
+  "Ambrose: a team is in if any of its players is in…" shows on the game card. Opt-ins close when the round goes live
+  (or locked), or at the first tee time if tee groups have one (Sydney time) — same rule in the app (`optInState`) and
+  the database (`side_game_open`). An organiser can add or take out anyone, even after it closes.
+- **B. Anyone proposes:** "🎲 Put up a side game" on the Games screen for any member (not guests): pick a round that's
+  still open, a game and a stake. It's opt-in and the proposer is in automatically (database trigger). One Feed post
+  "🎲 Bo’s put up $5 skins for Saturday. You in?" (made by the database, once per game) with In / Out under it. One
+  notification, new notify kind `game_proposed` in its own block (`supabase/functions/notify/sidegames.ts`): once per
+  game, at most 3 a day from one person, never after the round starts. The proposer or an organiser can "Take it down"
+  (retired, never deleted) before the round. Up to 3 games up per person per round. A proposer can't change a game
+  (people opted in to what they saw) — take it down and put up a new one. Opt-in games aren't copied by "Do it again".
+- **C. House rules optional:** `customProblems` no longer needs them; the field says "House rules (optional)"; with
+  none, a custom game is the group's saved version of a standard game. No empty "House rules:" line anywhere (Your own
+  games card, How it works, the Rulebook's standard rules).
+- **D. Screens:** Games screen and the day screen (`SideGamesToday` in TripStatus) show who's in by name, "I'm in /
+  I'm out" while open, and "Opt-in closes at the first tee (8:10am Sat)". Run-up: `components/SideGamesOnOffer.jsx`
+  ("$5 skins Sat (6 in) [I'm in]"), a one-line mount in RunUp.jsx.
+- **Migration 098** (`098_side_games_opt_in.sql`, not applied): additive — `round_games.who_in` (default 'everyone') and
+  `offered_at`, table `round_game_players` (RLS: members read; own row in/out; organiser anyone; no guests; same group;
+  feature switch; closes at first tee), `side_game_closes_at` / `side_game_open`, policies "members propose" /
+  "proposer changes" / "proposer removes" beside 055's "organisers change" (untouched), the Feed post trigger.
+  **The one agreed non-additive change** (own block at the end): drops 073's `custom_games_rules_text_check`
+  (3–1000 letters) and adds `custom_games_rules_text_len` (0–1000). Column stays NOT NULL ('' = none).
+  Test `supabase/tests/098_side_games_opt_in.sql` (+ expected, 37 checks) — passed on the PGlite stand-in with all
+  114 migrations; 098 re-runs cleanly.
+- **Tests:** Vitest 1516 pass (opt-in maths for every kind, Ambrose teams, closing time, words, house rules optional,
+  repeat skips opt-in offers). Deno `notify/sidegames.test.ts` 3 pass; notify type-checks. Browser: new
+  `side-games-test` (propose → opt in → settle-up counts only those in, Feed In/Out, day screen, take it down, house
+  rules optional); games, runup (now checks the offer line), rulebook-v2, trip-overview, awards-fines pass.
+- **Deploy when convenient:** the notify function (new kind `game_proposed`). Apply 098 on staging, then live.
+## ov30 — Rule penalties and Ambrose drives (23 Oct 2026, branch `ov30-rule-penalties`, migration 099, not applied)
+Josh: "not taking 6 drives from each player is 2 strokes per drive under the requirement".
+- **Any rule can carry a penalty** (`rules.breach_strokes`, 0–10): set in the rule's edit sheet ("Penalty for breaking
+  it"), shown on the rule page and as "⚖️ +2 if broken" in the Rulebook; changed and disputed the usual Rulebook way
+  (in a group that changes rules by vote, an organiser can't just change it — the database refuses).
+- **Standard rule "Ambrose minimum drives"** in every group (`system_key 'ambrose_drives'`): 6 each in a three, 4 in a
+  four, 6 in a pair over 18 holes; fives share the four's total (3 each); half on 9; never more than a fair share of the
+  holes; +2 a drive short. L.G.C's own "6 drives" rule is turned into it (no duplicate). Rule page shows the numbers
+  (each disputable) and a table for pairs to fives, 18 and 9 holes. Organiser can change N and P for one round (Admin →
+  round → Rules for this round: "Minimum drives each" / "Strokes per drive short"; blank = the Rulebook's).
+- **Whose drive?** (`components/AmbroseDrives.jsx`, mounted on Ambrose score entry): one tap per player, saved per hole
+  with the score (`scores.tee_shot_player`, queues offline the same way), tracker "Drives: Al 3/6 · Bo 5/6 …", warning
+  "Cy needs 4 more in 3 holes: +2 strokes coming", "Cy needs one" on the next tee, a nudge when none is picked and a list
+  of holes saved without one.
+- **Applying penalties:** on lock the server writes each shortfall as a `score_adjustments` row on the team
+  ("Drives: Cy 4 of 6 (+4)", kind `rule_breach`, rule_id set); re-lock re-counts (a waived or verdict-settled row is
+  left alone). While live, the board shows "⏳ +2 drives" projected (shown, not counted) and the team card has the
+  tracker. "⚖️ Penalty" on score entry: pick the rule, who, strokes (default from the rule), hole, note — organisers
+  apply straight on; players propose and an organiser confirms or declines (on score entry and the leaderboard);
+  guests get no button. All writes through security-definer RPCs (`apply_rule_penalty`, `decide_rule_penalty`,
+  `waive_rule_penalty`). Ambrose → counts on the team; other formats → the player. Organiser waives a rule penalty in
+  one tap from the scorecard (stays, struck out). Anyone (not guests) disputes it via its RuleTag. Negative strokes show
+  as 🏆 bonus lines.
+- **Shown in:** the round's rules line on the leaderboard, Ambrose "How it works" (standard rules: "Our drives rule",
+  and the standard text now says 6/4 and +2), and "Rules for this trip" (run-up and comps on the day).
+- **Migration 099** (`099_rule_penalties.sql`): new nullable columns (`rules.breach_strokes/drives_2/3/4`,
+  `rounds.drive_penalty`, `score_adjustments.applied_by/proposed_by/hole/note/breach_key`), table `penalty_proposals`
+  (RLS: members read, server writes only, same group), RPCs above, lock trigger. **One check dropped and re-added,
+  widened:** `score_adjustments_kind_check` now allows 'late_job', 'rule_breach', 'award'. Also puts back 085's
+  late-job numbers in `dispute_value` / `apply_dispute_verdict` (087 had dropped them). Test:
+  `supabase/tests/099_rule_penalties.sql` (+ expected), run on a local Postgres 16 by the first builder.
+- **Tests:** Vitest all pass (new `drives.test.js`, 22). Browser: new `rule-penalty` (whose drive → warning → offline →
+  lock → +strokes → waive; Penalty sheet organiser/player/guest; Rulebook) passes; late-job, board-bonus, dispute,
+  rulebook, rulebook-v2, rulebook-v3, governance, desktop, your-round, runup, weekends-comps, awards-fines, stroke,
+  fourball, results, day-screen, replay, trip-overview, side-comp-library pass.
+## ov31 — Automatic awards: claims from posts, the morning's proposed winner, cup points (23 Oct 2026, branch `ov31-auto-awards`, migration 100, not applied anywhere)
+- **When it runs.** An award or fine runs once a trip (as before), each day or each night (`runs`, with a claim
+  window `window_from`/`window_to` and `propose_time`). A time proof decided by latest / earliest runs each night by
+  default ("Latest out": 9pm–6am Sydney, proposed 7am). Each night gets its own copy of the award (`parent_id`), so
+  older apps just see "Latest out · Fri night" with its claims.
+- **Claim from a post.** A Feed photo posted in a window gets "🌙 Claim Latest out?" (one tap, for whoever posted
+  it) or "👤 Someone else". The time is the post's server time (`posts.server_at`, set by the database). Guests can't.
+- **Morning proposal.** The 5-minute job (`private.auto_awards_job`) ranks the night's claims at 7am (or an hour
+  before the first tee, if earlier) and posts once: "🌙 Proposed — Latest out, last night: Hamish 2:47am 📷 (+2),
+  Bo 1:15am 📷 (+1) · −1 stroke. Confirm or dispute by the first tee (8am)." No claims, no post. New notify kinds
+  `award_proposed` / `award_confirmed` / `award_overturned` (own block in notify: `autoawards.ts`).
+- **Confirm, change or dispute.** The proposal card (in the Feed and at `/award-run/:id`): organiser Confirm, Pick
+  another, No winner; anyone (not guests) Dispute → a Tribunal case, and it waits. A dispute on one person's points
+  line holds just that line. Nobody disputes → it confirms itself at the first tee (noon with no round).
+- **Rewards land.** Strokes → `score_adjustments` kind 'award' ("Latest out (−1)", rule_id set) on the winner's next
+  round (or when one goes live). Money / drink / title: on the run (`award_runs.worth`) and the results page
+  (`AutoAwardResults` / `useAutoAwardResults` in components/AutoAwards.jsx, mounted in TripResults).
+- **From the scores.** An award can be a side-comp library 'auto' key (`from_scores`). When a round is locked the
+  app works out the standings (sidecomplib) and calls `award_propose_from_scores` (once per award per round).
+- **Points to cups.** `comp_id` on rules / dinner_awards; `points` setting: winner / per unit (threshold, whole or
+  part, cut-off, cap) / placings; fines take off. New table `cup_points` (confirmed, non-waived rows count;
+  source_type award, fine, activity, manual, penalty, kudos) for ov32.
+- **Files:** supabase/migrations/100_auto_awards.sql, supabase/tests/100_auto_awards.sql (+ expected),
+  src/lib/autoawards.js (+ test), src/components/AutoAwards.jsx, supabase/functions/notify/autoawards.ts (+ test),
+  tests/e2e/auto-awards-test.mjs. Small mounts in Feed.jsx, DinnerAwards.jsx, AwardsFines.jsx (ProposeSheet settings),
+  TripResults.jsx, App.jsx (route), notify/index.ts (one block).
+- **Tests:** Vitest 1531 pass (28 new). Deno notify 10 pass, index type-checks. SQL test 100 run in PGlite on every
+  migration (with ov30's real 099 too). Browser: auto-awards, awards-fines, awards, results pass.
+## ov33 — The presentation: click-through 3, 2, 1 for any award, comp, trophy or cup (23 Oct 2026, branch `ov33-presentation`)
+Josh: "For any of the awards, need a click-through presentation screen. Honourable mentions, then 3, 2, 1. Both phone
+and desktop sized." Built on ov28's `#/present/awards/<trip>` (same route, same screen file). No database change.
+- **The list and the steps** (`src/lib/presentation.js`, pure): `presentationItems(trip, data)` turns the trip's results
+  into items — side comp holes, awards and fines, the fines tally, who tipped right, best photos, each round's podium,
+  other trophies, cups, and the main trophy. Podium items: title → honourable mentions (4th and beyond, only with a
+  story) → 3rd → 2nd → 1st. One-winner items (awards like "Latest out", fines, side comps, the match play Cup):
+  title → nominations that missed out (reason, claim or photo) → winner. Ties share a place ("Joint 2nd" shows both;
+  no 3rd after it).
+- **Running order:** side comps → fines → awards → extras → the rounds → other trophies → cups → main trophy last.
+  The organiser unticks, drags (laptop) or ↑↓ (phone); kept on that device per trip (localStorage). `?only=<item>`
+  presents one item (each decided award has "🎤 Present this one").
+- **Controls:** tap (left third = back), space / → / Enter forward, ← back, W skip to winner, F full screen (laptop,
+  where the browser allows), Esc. Progress bar, "Next: Longest drive · 7", "Skip to winner", a short build-up beat
+  ("In second place…") before each reveal; tapping during the beat reveals straight away.
+- **Two sizes** (`src/screens/presentation.css`): phone portrait — big type, one thing per screen, 60 px thumb buttons;
+  laptop/TV landscape (≥ 900 px wide) — names up to 170 px, title card side by side with the trophy.
+- **Reduced motion:** no animation and no beat delay; every reveal still works.
+- **Share to the Feed** after each item: one tap, through the outbox (`sendOrQueue`), with a post id made from the trip
+  and the item (`postIdFor`), so it's one post per item even from two phones; the screen checks the Feed for it.
+- **Kept working:** the live leaderboard "Present" (`screens/Present.jsx`) — it now also links to the presentation once
+  the round is locked. The results page button is "🎤 The presentation" (shown even with awards and fines off).
+- **useTripResults** (additive): podiums carry `rows` to 7th, sides carry their `round`, and `sideEntries`.
+- **⚠️ ov32 extension point:** `cupStandingsItem({ cup, standings })` in `lib/presentation.js`, fed by
+  `data.cups = [{ cup, standings }]`; `useCupsForPresentation()` in `screens/AwardsShow.jsx` returns `[]` until ov32's
+  `cupStandings(cup, data)` lands — then map the trip's cups through it. Breakdowns ("Cap tips 🧢 12 · Vibe points 8")
+  become the mentions' story. A unit test already covers the shape.
+- **Tests:** Vitest 1523 pass (new `presentation.test.js`, 20: running order, mentions, ties, one-winner awards, cups,
+  share). Browser: new `presentation-test.mjs` (375 phone taps with the beat, 1440 laptop keyboard + reduced motion,
+  share twice → one post, live Present still works); `results-test` updated for the new screen; `desktop`,
+  `awards-fines` pass. Screenshots: phone and desktop in the scratchpad `presentation-shots/`.
+## ov27 — The trip page, money, guests and first open (23 Oct 2026, branch `ov27-trip-page-money`, migration 096)
+
+From Josh's walkthrough review (R1 A, M1 A, R2 A, F1 A, F2 B, ideas I1, I7, I10, I15 and the small fixes in these files).
+Merged with v10-int (ov28): "Your round" is mounted in Your weekend, and the money line is the results page's Settle up.
+
+- **R1 Your weekend** (`components/YourWeekend.jsx`, words in `lib/yourweekend.js`): the top of a locked-in trip's page —
+  dates and countdown, where we're staying (tap for maps), each day's course with ov28's `YourRound` (team, partner,
+  opponents, group, tee time; "Tee time and group to come" until it's set), your car, your money line and "Seats
+  confirmed: 6 of 10 (paid)" (I7). Then **Your to-dos** (every one with a button), then everything else folded under
+  **More about this trip**, each section once (getting there, votes, what's up for grabs, rules, side activities, what
+  to bring, form guide, tipping, chat, then the plan by day). TripOverview adds nothing above the run-up any more.
+- **M1 One money line** (`components/MoneyLine.jsx`, `lib/money.js`): "Your share $535 · paid $200 · still to pay $335
+  to Josh (PayID …) [I've paid]"; after "I've paid": "waiting for Josh to confirm", no Pay button. "pay Josh" (the trip's
+  organiser), never "the kitty". Organisers: payments waiting for a tick, a short "still to pay" list with ONE Remind
+  (a buzz, else a group-chat message); the full table is behind Details on the Kitty tab. "You owe" (never "YOU owes").
+- **I15 Settle up:** `<MoneyLine tripId settle />` passed as TripResults' `moneyLine` (TripOverview and TripNow).
+- **R2 Guest view:** "You're Josh's guest for the …" on Your weekend; no votes, no Organise tab, no group rules or tipping,
+  and only to-dos with a button (the money).
+- **F1 First open** (`components/FirstOpen.jsx`, `lib/firstopen.js`): the organiser of a new group gets a three-step start
+  on Home (1 invite your mates — ready-made group-chat message, then who's joined (I1); 2 suggest the next trip;
+  3 notifications); a new player or guest gets a welcome card (group, faces in, next trip or "nothing planned yet").
+  One pop-up a visit; the notifications ask and Caddie's hello wait for the second visit; the Home notifications card
+  goes away for 30 days after "Not now" (card or pop-up).
+- **F2 One-step join** (`screens/Join.jsx`, `lib/savespot.js signInModes().joinCode`): when `VITE_SIGN_IN` lists `email`,
+  the join screen is Google or an emailed code only (no password). "Just this phone for now" is a proper button with a
+  line on what it means. **Live today is `google,password`, so nothing changes there until Josh switches it** (below).
+- **I10 Countdown pushes** (`_shared/runup.js countdownPush`, notify `daily`): 30 days out → pay; 7 days → handicap,
+  else pay, else lift; the day before → your car etc., or "No lift sorted yet" when that's the one thing. Nothing when
+  there's nothing to do. Only people who said In get them.
+- **Small fixes:** "You owe"; no Pay button while waiting; dates written "by Fri 30 Oct"; notifications card gone after
+  "Not now"; the chosen notification option's second line readable; Caddie doesn't suggest "Who's leading today?" with
+  no round on; "Tell Josh" → "Send feedback"; a just-added bring item doesn't say "Nobody yet" next to "I'll bring it";
+  "admin" → "organiser" on the name-pick screens.
+- **Migration 096** (`096_trip_page_money.sql`, additive, not applied): two policies on `plan_transfers` so the TRIP's
+  organiser (plans.organiser_id, their player in that row's group) can tick off or remove money paid in (to_id null) for
+  their own trip. Nothing dropped. Test `supabase/tests/096_trip_page_money_test.sql` (+ expected): passes on a PGlite
+  stand-in, and without 096 the organiser's tick does nothing (checked).
+- **Headcount:** `lib/money.js peopleIn` is a local helper marked for switching to ov26's `lib/headcount.js` (not in
+  v10-int yet).
+- **Tests:** Vitest 1547 pass (money, firstopen, yourweekend, caddie, savespot). Deno notify/_shared 14 pass; notify
+  type-checks. Browser: new `trip-page` (R1, M1, R2, F1); `signin-first` (new part I on a `google,password,email`
+  build), `save-spot`, `signin-home`, `beta`, `links`, `notify-prompt` (updated for one pop-up a visit), runup,
+  trip-overview, trip-plan, results, your-round, day-screen, awards-fines, hello-maps, caddie, trips, desktop, plan-ux,
+  trip-extras, nav, phone, organise-tidy, trip-builder, cup pass.
+- **Josh to do:** to turn on the one-step join on live, set `infra/cloudflare.json` → `sign_in.live` to
+  `"google,password,email"` (join links: Google or a code; the front door still takes passwords people have set) or
+  `"google,email"` (a code everywhere). Check the Supabase "Magic link" and "Confirm sign up" emails include
+  `{{ .Token }}` (docs/SIGN-IN-SETUP.md). Deploy the notify function. Apply 096 on staging, then live.
+## ov32 — The group's cups, cap tips, vibe points (23 Oct 2026, branch `ov32-cups`, migration 101, staging only)
+**Run order:** 101 after 100 (ov31's `cup_points`). Not applied to any Supabase project.
+- **Library** (`cups`): golf (Stableford, stroke, Ambrose, 4BBB, match play, eclectic), weekend, combined; real trophy: has_trophy / photo / held_by. Backfill makes a library cup from each golf comp already played for.
+- **Up for grabs in the run-up** (components/CupsUpForGrabs.jsx inside CompsOnTheDay, so Organise step 6 shows the same): organisers tick cups on, set the specifics (rounds and each round's format, what counts, placings scale, cap tip settings and the group's name for them), "+ New cup". Players see the list read-only with one line on how to win.
+- **What counts** (src/lib/cups.js `cupStandings`): awards & fines, activities, adjustments, cap tips (cup_points); golf placings, Cup matches, side comps and dots, skins/bets won, tipping (097 + 094), rule breaches (score_adjustments 'rule_breach'), vibe points — worked out at standings time. Breakdown per player, e.g. "Latest out +2 · 🧢 Cap tips ×1 +1 · Vibe +2 (1 photo)". `compStandings` hands cup comps to `cupStandings`, so the trip page, comps board, Trophy Room and results all use it.
+- **Cap tips** (`cap_tips`): from a Feed post chip, a player's card or the day screen; "3 left to give"; undo for 10 minutes; each writes cup_points 'kudos'. The database enforces allowance / most to one person / no self / guests.
+- **Organiser entries**: side activity placings and adjustments with a reason (`add_cup_points`, `waive_cup_points`), shown to everyone and disputable (cup_points.points, 100).
+- **Day screen**: the cups card under "Counts for". **Results**: each cup's standings, the hand-over, the real cup's photo; Trophy Room shows the photo and who has it.
+- **"Do you have a cup for this?"** Yes → photo + who has it; Not yet → run-up reminder + ComingSoon ("🛒 Get one: coming soon", "I'm interested" → one beta idea "Interested: trophy_shop (<cup>)").
+- **Tests:** src/lib/cups.test.js (23), supabase/tests/101_cups.sql (54 checks, run in PGlite with 001–100 + a 099 stand-in), tests/e2e/cups-test.mjs (29 checks). Existing cup, comps, runup, results, awards, awards-fines, day-screen, weekends-comps, your-round, own-comps, stage2 e2e and all vitest pass.
+
+## v10 wording pass and the full test run (23 Oct 2026, branch `v10-wording`, from `v10-final`, no database changes)
+
+**Job 1 — one word per thing (Josh's N1 option A).** Only words people see changed: labels, buttons, headings, toasts,
+notification and error text, Caddie text, help text. Component, route, test-id and database names are unchanged.
+
+| Thing | Now called | Notes |
+|---|---|---|
+| Planning area | **Plan the trip** | The trip page's tab is now "🧰 Plan the trip" (it was "Organise"). Changing it broke nothing — the tab's value is still `organise`, so links (`?view=organise`) work. The map screen (`/plan/:id/build`, was "Build the trip") is also headed "Plan the trip"; links to it say "Plan the trip on the map →" / "on the map". |
+| Person in charge | **organiser** | The Admin screen is now **Organiser tools** (More, the shortcut search, every "Admin → …" pointer). "Only the admin…" → "Only an organiser…". |
+| The helper | **the Caddie** | "Plan it with the Caddie", "Import with the Caddie", every "The AI helper …" message from the ai-helper function. The privacy page says "The Caddie (the AI helper)" so it's still clear it's AI. Messages *to* the model ("the AI company") left alone. |
+| Trophies and comps | **Trophies & cups** | Run-up part, Overview card, comps board title, setup-guide step, Caddie destination. |
+| Fines and awards | **Fines & awards** | Every screen, the share card, the feature name, the cup source name. |
+| Tasks | **Your jobs** | Run-up "Your to-dos" and Overview "Your bits" → "Your jobs"; "the to-do list" → "the jobs". The Plan the trip money step keeps its "📋 Jobs" tab (it's everyone's jobs, not yours). |
+| Governance | **Group rules** | Sidebar, More, hub title, "How we decide things" subtitle. Tabs stay Rulebook · Tribunal · Committees, with **Tribunal** now subtitled "Disputes". |
+| Step 6 | **The run-up** | `src/lib/tripsteps.js`; its blurb now "Trophies & cups, rules, handicaps, teams". |
+
+Also: "Tell Josh" → "Send feedback" (Josh's feedback screen); computer-style dates fixed in the Rulebook's round picker
+(`2026-10-31` → "Sat 31 Oct 2026") and the history import's "is in the future" message ("31 Oct 2026"). "You owes" was
+already fixed (`money.js` youLabel/theyLabel); none left. Not changed (database text, no DB changes in this job): the
+feature name inside `require_feature` errors (e.g. "Dinner Awards is switched off") — a later migration can rename it.
+
+**Job 2 — the full test run**
+- Vitest: 1,694 pass (1,692 + 2 new for the deposit fix).
+- Deno: notify / vote-link / _shared 30 pass; ai-helper + lgc-mcp 149 pass; notify and vote-link type-check. No
+  `node_modules` left in `supabase/functions`.
+- Migrations 092–101: every migration (001–101, 119 files) loads in order into PGlite; a name check finds nothing in
+  092–101 that uses a table, column or function made later (three hits were false alarms: `rules.proposed_by`,
+  `trips.cup_points`, the word "cups" in a comment). SQL tests 093–101 all give their expected results on the full chain
+  (094–097 with a stand-in for staging's test people). The 097 test was stale: its rounds had no course and its round
+  player no playing handicap (both required since 001) — fixed in the test.
+- e2e: **75 of 75 pass** — 68 on the default build, quick / start / stage9 on VITE_NEW_GROUPS=on, signin-first (72 checks, incl. the google,password,email build), signin-home (78), save-spot (88) on the sign-in builds at 127.0.0.1, beta (46) with this branch's own live-style build as its product build. (stage10 timed out once under load; passes on its own and in the full rerun.)
+
+**Merge bugs found and fixed (app)**
+- The organiser who collects the deposits was told "Pay Josh your $300 deposit" (to themselves) in the run-up's Your
+  jobs, the money line (no costs yet) and the 30/7-day countdown push. `myTodos` (collectorId), `myMoney` and notify now
+  skip the collector. Unit tests added.
+
+**Stale tests fixed (the app was right)**
+- late-job, ov26-votes: a locked-in trip's page is the run-up (ov25/ov27) — no Next step card or Overview glance; the
+  late warning is checked on Your jobs instead.
+- cups: Trophies & cups sits under "More about this trip" (ov27) — the test opens it first.
+- ai-helper-v2: a new organiser's three-step start (ov27 F1) hides Home's other "start a trip" buttons; the test puts the
+  start away first.
+- desktop, trips and 20 others: the new words.
+
+**Every string changed** (file, was, now):
+
+| File | Was | Now |
+|---|---|---|
+| `screens/Planner.jsx` | label: '🧰 Organise' | label: '🧰 Plan the trip' |
+| `screens/TripBuilder.jsx` | title="Build the trip" | title="Plan the trip" |
+| `components/TripBuilderCard.jsx` | 'Build the trip' | 'Plan the trip' |
+| `App.jsx` | label="The trip builder" | label="Plan the trip" |
+| `screens/OrganiseSteps.jsx` | 🗺️ Open the trip builder → | 🗺️ Plan the trip on the map → |
+| `screens/OrganiseSteps.jsx` | ⛳ Course options each day, in the trip builder → | ⛳ Course options each day, on the map → |
+| `screens/OrganiseSteps.jsx` | The tee times so far, in the trip builder → | The tee times so far, on the map → |
+| `screens/AiPlanner.jsx` | 'Couldn’t open the trip builder.' | 'Couldn’t open Plan the trip.' |
+| `screens/AiPlanner.jsx` | 🗺️ Open in the trip builder instead | 🗺️ Plan it on the map instead |
+| `lib/tripbuilder.js` | 'Then put the times in on the trip builder (Trip → Build the trip → Tee times). Nothing is booked yet.' | 'Then put the times in on the trip (Trip → Plan the trip → Call the courses). Nothing is booked yet.' |
+| `lib/tripjobs.js` | label: 'Build the trip' | label: 'Plan the trip' |
+| `lib/caddie.js` | 'Organise the trip' | 'Plan the trip' |
+| `fn/ai-helper/routes.ts` | 'Organise the trip' | 'Plan the trip' |
+| `components/ExtrasPanel.jsx` | Organise → Comps &amp; on the day. | Plan the trip → The run-up. |
+| `lib/tripsteps.js` | title: 'Comps & on the day', blurb: 'What’s up for grabs, rules, handicaps, teams' | title: 'The run-up', blurb: 'Trophies & cups, rules, handicaps, teams' |
+| `components/DrawCeremony.jsx` | 'admin clicks through' | 'organiser clicks through' |
+| `components/DrawCeremony.jsx` | Waiting for the admin to start it… | Waiting for the organiser to start it… |
+| `components/DrawCeremony.jsx` | Waiting for the admin to draw the next name… | Waiting for the organiser to draw the next name… |
+| `components/DrawCeremony.jsx` | Waiting for the admin to lock it in… | Waiting for the organiser to lock it in… |
+| `components/Distances.jsx` | only the admin can clear a pin. | only an organiser can clear a pin. |
+| `components/Distances.jsx` | ' Ask the admin to map them.' | ' Ask an organiser to map them.' |
+| `screens/GreenMapper.jsx` | Only the admin can map greens. | Only an organiser can map greens. |
+| `screens/Comps.jsx` | >Admin → Rounds< | >Organiser tools → Rounds< |
+| `screens/Trophies.jsx` | >Add trophies in Admin< | >Add trophies in Organiser tools< |
+| `screens/Planner.jsx` | ' The admin will put one up.' | ' An organiser will put one up.' |
+| `screens/Planner.jsx` | 'The admin or the trip’s organiser' : 'The admin' | 'A group organiser or the trip’s organiser' : 'An organiser' |
+| `screens/Planner.jsx` | <span className="label">Admin</span> | <span className="label">Organiser</span> |
+| `screens/Planner.jsx` | the admin decides whether it goes ahead. | an organiser decides whether it goes ahead. |
+| `screens/Planner.jsx` | 'Suggested — the admin has been told' | 'Suggested — the organisers have been told' |
+| `screens/DrawDemo.jsx` | 'View as admin' | 'View as organiser' |
+| `screens/Rulebook.jsx` | 'the admin' | 'an organiser' |
+| `screens/Rulebook.jsx` | It goes up for a vote; the admin decides. | It goes up for a vote; an organiser decides. |
+| `screens/Admin.jsx` | Only organisers can open Admin | Only organisers can open Organiser tools |
+| `screens/Admin.jsx` | title="Admin" | title="Organiser tools" |
+| `screens/Admin.jsx` | ['admin', 'The admin', 'Only admins pick winners (as now).'], ['admin_or_organiser', 'The admin or the trip’s organiser', | ['admin', 'The group’s organisers', 'Only the group’s organisers pick winners (as now).'], ['admin_or_organiser', 'The group’s organisers or the trip’s organise |
+| `screens/TripSetup.jsx` | add them in Admin. | add them in Organiser tools. |
+| `screens/TripSetup.jsx` | add it in Admin → Courses | add it in Organiser tools → Courses |
+| `screens/TripSetup.jsx` | Add it in Admin → Courses | Add it in Organiser tools → Courses |
+| `screens/TripSetup.jsx` | reopen it in Admin → Trips. | reopen it in Organiser tools → Trips. |
+| `screens/SetupGuide.jsx` | use <Link to="/admin">Admin</Link>. | use <Link to="/admin">Organiser tools</Link>. |
+| `screens/SetupGuide.jsx` | >Go to Admin< | >Go to Organiser tools< |
+| `screens/SetupGuide.jsx` | add it in Admin → Courses | add it in Organiser tools → Courses |
+| `screens/SetupGuide.jsx` | are set in Admin → Rounds &amp; teams | are set in Organiser tools → Rounds &amp; teams |
+| `screens/SetupGuide.jsx` | >Admin → Players< | >Organiser tools → Players< |
+| `screens/Start.jsx` | add a course and a trip in More → Admin. | add a course and a trip in More → Organiser tools. |
+| `screens/History.jsx` | only the admin or the Tribunal changes those. | only an organiser or the Tribunal changes those. |
+| `screens/Leaderboard.jsx` | >Pick the pairs in Admin< | >Pick the pairs in Organiser tools< |
+| `screens/Games.jsx` | An organiser adds them in Admin → Rounds | An organiser adds them in Organiser tools → Rounds |
+| `screens/Trips.jsx` | 'the admin locks it in' | 'an organiser locks it in' |
+| `screens/Trips.jsx` | 'The admin picks the winners and locks it in.' | 'An organiser picks the winners and locks it in.' |
+| `screens/Trips.jsx` | 'The admin locks it in.' | 'An organiser locks it in.' |
+| `screens/More.jsx` | label: 'Admin' | label: 'Organiser tools' |
+| `components/Shortcuts.jsx` | label: 'Admin' | label: 'Organiser tools' |
+| `fn/ai-helper/logic.ts` | add it by hand in Admin → Courses. | add it by hand in Organiser tools → Courses. |
+| `fn/notify/index.ts` | 'Admin only' | 'Organisers only' |
+| `fn/lgc-mcp/index.ts` | Reopen it in Admin first. | Reopen it in Organiser tools first. |
+| `fn/lgc-mcp/index.ts` | 'Post a message to the group feed (as the admin).' | 'Post a message to the group feed (as the organiser).' |
+| `fn/lgc-mcp/index.ts` | Push notifications go out when the admin opens votes from the app. | Push notifications go out when an organiser opens votes from the app. |
+| `App.jsx` | label="The AI helper" | label="The Caddie" |
+| `components/CaddiePlan.jsx` | Planning with the AI is switched off for this group. | Planning with the Caddie is switched off for this group. |
+| `components/CaddiePlan.jsx` | Only an organiser can plan a trip with the AI. | Only an organiser can plan a trip with the Caddie. |
+| `components/CaddiePlan.jsx` | Costs are rough AI estimates — check before booking. | Costs are the Caddie’s rough guesses — check before booking. |
+| `screens/AiPlanner.jsx` | Costs are rough AI estimates — check before booking. | Costs are the Caddie’s rough guesses — check before booking. |
+| `components/RuleLayers.jsx` | 'The AI helper didn’t answer — check your signal and try again.' | 'The Caddie didn’t answer — check your signal and try again.' |
+| `components/RuleLayers.jsx` | 'The AI found no clashes' | 'The Caddie found no clashes' |
+| `components/RuleLayers.jsx` | ' · the AI says' | ' · the Caddie says' |
+| `components/RuleLayers.jsx` | '✨ Check for clashes with AI' | '✨ Ask the Caddie to check for clashes' |
+| `components/RuleLayers.jsx` | The AI suggests (check it says the same thing): | The Caddie suggests (check it says the same thing): |
+| `components/RuleLayers.jsx` | '✨ The AI is drafting the rule change from the verdict…' | '✨ The Caddie is drafting the rule change from the verdict…' |
+| `components/RuleLayers.jsx` | '✨ AI drafted this from the verdict — check it' | '✨ The Caddie drafted this from the verdict — check it' |
+| `components/RuleLayers.jsx` | 'The AI couldn’t draft it — here’s the case’s own wording to start from.' | 'The Caddie couldn’t draft it — here’s the case’s own wording to start from.' |
+| `components/PlaceSheets.jsx` | 'Couldn’t reach the AI helper — try again' | 'Couldn’t reach the Caddie — try again' |
+| `components/ForgetJokes.jsx` | The AI starts fresh from today’s chat. | The Caddie starts fresh from today’s chat. |
+| `components/ForgetJokes.jsx` | The AI quietly picks up running jokes | The Caddie quietly picks up running jokes |
+| `components/AiUsage.jsx` | No AI helper questions yet. | No Caddie questions yet. |
+| `components/AiUsage.jsx` | "AI helper usage" | "Caddie usage" |
+| `components/AiUsage.jsx` | Which AI answered | Which model answered |
+| `lib/aiusage.js` | 'Plan it with AI' | 'Plan it with the Caddie' |
+| `lib/aiusage.js` | 'AI busy or down' | 'Caddie busy or down' |
+| `lib/aiusage.js` | 'AI refused the request' | 'Caddie refused the request' |
+| `lib/aiusage.js` | 'Couldn’t reach the AI' | 'Couldn’t reach the Caddie' |
+| `lib/caddie.js` | 'quick rounds don’t have the AI' | 'quick rounds don’t have the Caddie’s answers' |
+| `lib/caddie.js` | 'the AI is for the group’s players' | 'the Caddie’s answers are for the group’s players' |
+| `lib/caddie.js` | 'the AI is switched off for your group' | 'the Caddie is switched off for your group' |
+| `lib/caddie.js` | 'the AI isn’t switched on for your group' | 'the Caddie isn’t switched on for your group' |
+| `lib/caddie.js` | 'your group’s used up its AI questions for now' | 'your group’s used up its Caddie questions for now' |
+| `lib/features.js` | description: 'The AI quietly picks up running jokes | description: 'The Caddie quietly picks up running jokes |
+| `lib/features.js` | name: 'AI helper' | name: 'The Caddie' |
+| `screens/Legal.jsx` | <strong>The AI helper</strong> | <strong>The Caddie (the AI helper)</strong> |
+| `screens/Legal.jsx` | (with the AI helper), once a day the AI reads the | (with the Caddie), once a day the Caddie reads the |
+| `screens/More.jsx` | — or ✨ import with AI | — or ✨ import with the Caddie |
+| `screens/Wishes.jsx` | '✨ AI helper' | '✨ The Caddie' |
+| `screens/AiImport.jsx` | '✨ Import with AI' | '✨ Import with the Caddie' |
+| `screens/AiPlanner.jsx` | 'Plan it with AI' | 'Plan it with the Caddie' |
+| `screens/AiPlanner.jsx` | "✨ Plan it with AI" | "✨ Plan it with the Caddie" |
+| `screens/AiPlanner.jsx` | "Plan it with AI" | "Plan it with the Caddie" |
+| `fn/ai-helper/import.ts` | 'This AI model can’t read photos — paste the text instead.' | 'The Caddie can’t read photos on this setup — paste the text instead.' |
+| `fn/ai-helper/plan.ts` | (AI estimate — check before booking) | (the Caddie’s rough guess — check before booking) |
+| `fn/ai-helper/rules.ts` | 'Only an organiser can use the AI on the Rulebook.' | 'Only an organiser can use the Caddie on the Rulebook.' |
+| `fn/ai-helper/index.ts` | 'The AI helper | 'The Caddie |
+| `fn/ai-helper/import.ts` | 'The AI helper | 'The Caddie |
+| `fn/ai-helper/coursebook.ts` | 'The AI helper | 'The Caddie |
+| `fn/ai-helper/providers.ts` | 'The AI helper | 'The Caddie |
+| `fn/ai-helper/rules.ts` | 'The AI helper | 'The Caddie |
+| `fn/ai-helper/logic.ts` | 'The AI helper | 'The Caddie |
+| `fn/ai-helper/coursebook.ts` | 'The AI got | 'The Caddie got |
+| `fn/ai-helper/coursebook.ts` | 'The AI couldn’t | 'The Caddie couldn’t |
+| `fn/ai-helper/coursebook.ts` | 'The AI can’t | 'The Caddie can’t |
+| `fn/ai-helper/rules.ts` | 'The AI got | 'The Caddie got |
+| `fn/ai-helper/rules.ts` | 'The AI couldn’t | 'The Caddie couldn’t |
+| `fn/ai-helper/providers.ts` | Couldn’t reach the AI helper | Couldn’t reach the Caddie |
+| `components/Shortcuts.jsx` | 'What we’re playing for' | 'Trophies & cups' |
+| `components/TripStatus.jsx` | >What we’re playing for< | >Trophies &amp; cups< |
+| `components/RunUp.jsx` | 'what’s up for grabs' | 'trophies & cups' |
+| `components/RunUp.jsx` | title="What’s up for grabs" | title="Trophies & cups" |
+| `components/CompsOnTheDay.jsx` | <strong>🏆 What’s up for grabs</strong> | <strong>🏆 Trophies &amp; cups</strong> |
+| `components/CompsOnTheDay.jsx` | <>Usually up for grabs: <strong> | <>Usually played for: <strong> |
+| `lib/caddie.js` | D('comps_board', 'What we’re playing for', | D('comps_board', 'Trophies & cups', |
+| `lib/caddie.js` | words: ['playing for', 'prizes', | words: ['trophies', 'trophies & cups', 'playing for', 'prizes', |
+| `fn/ai-helper/routes.ts` | D('comps_board', 'What we’re playing for') | D('comps_board', 'Trophies & cups') |
+| `lib/beta.js` | its leaderboards, what you’re playing for and its posts. | its leaderboards, its trophies & cups and its posts. |
+| `lib/setupguide.js` | title: 'What are you playing for?' | title: 'Trophies & cups' |
+| `screens/CompPicker.jsx` | <strong>What are you playing for?</strong> | <strong>Trophies &amp; cups</strong> |
+| `screens/CompsBoard.jsx` | title="What we’re playing for" | title="Trophies & cups" |
+| `screens/CompsBoard.jsx` | '+ Pick what you’re playing for' | '+ Pick the trophies & cups' |
+| `screens/TripOverview.jsx` | "🎁 What’s up for grabs" | "🎁 Trophies & cups" |
+| `components/CupsUpForGrabs.jsx` | '${x.cup.name} is up for grabs' | '${x.cup.name} is on for this trip' |
+| `components/CupsUpForGrabs.jsx` | ' and put up for grabs' | ' and put on for this trip' |
+| `components/CupsUpForGrabs.jsx` | ' and put it up for grabs' | ' and put it on for this trip' |
+| `App.jsx` | label="Awards and fines" | label="Fines & awards" |
+| `components/AutoAwards.jsx` | "Awards and fines" | "Fines & awards" |
+| `components/AutoAwards.jsx` | 🌙 Nightly awards and fines | 🌙 Nightly fines &amp; awards |
+| `components/AutoAwards.jsx` | Points from awards and fines | Points from fines &amp; awards |
+| `components/runupSlots.jsx` | "🏷 Awards & fines" | "🏷 Fines & awards" |
+| `components/AwardsFines.jsx` | '🏷 Awards & fines for this trip' | '🏷 Fines & awards for this trip' |
+| `components/AwardsFines.jsx` | >Awards &amp; fines →< | >Fines &amp; awards →< |
+| `components/AwardsFines.jsx` | fines and awards belong to a trip. | fines &amp; awards belong to a trip. |
+| `components/RunUp.jsx` | 🍽️ Awards & fines for this trip | 🍽️ Fines & awards for this trip |
+| `lib/shareCard.js` | eyebrow: '🍽️ FINES AND DINNER AWARDS', title: d.title \|\| 'Dinner awards' | eyebrow: '🍽️ FINES & AWARDS', title: d.title \|\| 'Fines & awards' |
+| `lib/drives.js` | award: 'awards and fines' | award: 'fines & awards' |
+| `lib/cups.js` | name: 'Awards and fines' | name: 'Fines & awards' |
+| `lib/dinnerawards.js` | tripName \|\| 'Awards and fines' | tripName \|\| 'Fines & awards' |
+| `lib/features.js` | name: 'Awards and fines' | name: 'Fines & awards' |
+| `lib/features.js` | vote for the trip’s awards and fines, then | vote for the trip’s fines & awards, then |
+| `screens/DinnerAwards.jsx` | "Awards and fines" | "Fines & awards" |
+| `screens/DinnerAwards.jsx` | No trip yet — awards and fines belong to a trip. | No trip yet — fines &amp; awards belong to a trip. |
+| `screens/DinnerAwards.jsx` | — awards and fines' | — fines & awards' |
+| `screens/TripExtras.jsx` | 🍽️ Fines and dinner awards → | 🍽️ Fines &amp; awards → |
+| `screens/TripOverview.jsx` | 🏅 Awards &amp; fines | 🏅 Fines &amp; awards |
+| `screens/TripOverview.jsx` | <strong>🙋 Your bits</strong> | <strong>🙋 Your jobs</strong> |
+| `components/RunUp.jsx` | title="Your to-dos" | title="Your jobs" |
+| `components/RunUp.jsx` | Sign in to see your to-dos. | Sign in to see your jobs. |
+| `lib/lockin.js` | Then the to-do list is made and everyone’s told. | Then the jobs are made and everyone’s told. |
+| `lib/tripjobs.js` | . Then the to-do list is made. | . Then the jobs are made. |
+| `lib/tripjobs.js` | title: 'Make the to-do list' | title: 'Make the jobs' |
+| `screens/TripPlan.jsx` | 'Locked in — the votes are closed and the to-do list is ready' | 'Locked in — the votes are closed and the jobs are ready' |
+| `screens/Planner.jsx` | 'Locked in — the votes are closed and the to-do list is ready' | 'Locked in — the votes are closed and the jobs are ready' |
+| `screens/TripBuilder.jsx` | 'Locked in — the votes are closed and the to-do list is ready. Set the rounds up below.' | 'Locked in — the votes are closed and the jobs are ready. Set the rounds up below.' |
+| `screens/CompPicker.jsx` | (its to-do list takes you there) | (its jobs take you there) |
+| `lib/governance.js` | label: 'Governance change' | label: 'Group rules change' |
+| `screens/Cases.jsx` | <strong>Governance</strong> | <strong>Group rules</strong> |
+| `screens/Cases.jsx` | <Header back title="Governance" /><div className="section empty">Governance isn’t set up on this database yet. | <Header back title="Group rules" /><div className="section empty">Group rules aren’t set up on this database yet. |
+| `screens/Cases.jsx` | sub="Governance settings: who decides what" | sub="Group rules: who decides what" |
+| `screens/GovernanceHub.jsx` | title="⚖️ Governance" | title="⚖️ Group rules" |
+| `screens/GovernanceHub.jsx` | aria-label="Governance" | aria-label="Group rules" |
+| `screens/More.jsx` | label: '⚖️ Governance' | label: '⚖️ Group rules' |
+| `components/Sidebar.jsx` | label: 'Governance' | label: 'Group rules' |
+| `components/Shortcuts.jsx` | 'Governance' | 'Group rules' |
+| `screens/Josh.jsx` | From More → Tell Josh. | From Send feedback (More, or the sidebar). |
+| `screens/GovernanceHub.jsx` | { key: 'tribunal', label: 'Tribunal' }, | { key: 'tribunal', label: 'Tribunal', sub: 'Disputes' }, |
+| `screens/GovernanceHub.jsx` | data-testid={'gov-tab-${t.key}'}>{t.label} | data-testid={'gov-tab-${t.key}'}>{t.sub ? <span className="gov-tab-two">{t.label}<small>{t.sub}</small></span> : t.label} |
+| `components/Shortcuts.jsx` | words: ['elections', 'how we decide'] } | words: ['governance', 'elections', 'how we decide'] } |
+| `components/Shortcuts.jsx` | { label: 'Tribunal', to: '/governance/tribunal', kind: 'Screen' } | { label: 'Tribunal', to: '/governance/tribunal', kind: 'Screen', words: ['disputes', 'dispute'] } |
+| `components/Shortcuts.jsx` | { label: 'Organiser tools', to: '/admin', kind: 'Screen' } | { label: 'Organiser tools', to: '/admin', kind: 'Screen', words: ['admin', 'settings'] } |
+| `components/Shortcuts.jsx` | { label: 'Trophies & cups', to: '/comps-board', kind: 'Screen', words: ['comps', 'standings', 'side comps'] } | { label: 'Trophies & cups', to: '/comps-board', kind: 'Screen', words: ['comps', 'standings', 'side comps', 'playing for', 'up for grabs'] } |
+| `components/RuleLayers.jsx` | {r.play_date ? ' · ${r.play_date}' : ''} | {r.play_date ? ' · ${fmtRange(r.play_date)}' : ''} |
+| `lib/history.js` | problems.push('Line ${n}: ${date} is in the future') | problems.push('Line ${n}: ${shortDate(date)} is in the future') |

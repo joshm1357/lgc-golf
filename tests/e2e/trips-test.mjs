@@ -86,13 +86,14 @@ function filterRows(rows, params) {
   });
 }
 
+const me = { admin: true, player: P1 };
 async function fakeSupabase(route) {
   const req = route.request();
   const url = new URL(req.url());
   const method = req.method();
   const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*', 'content-range': '0-0/*' }, body: JSON.stringify(body) });
   if (method === 'OPTIONS') return json({});
-  if (url.pathname.startsWith('/rest/v1/rpc/my_status')) return json({ is_member: true, is_admin: true, player_id: P1, group_name: 'L.G.C', group_id: GROUP, role: 'organiser', groups: [{ id: GROUP, name: 'L.G.C', slug: 'lgc', role: 'organiser' }] });
+  if (url.pathname.startsWith('/rest/v1/rpc/my_status')) return json({ is_member: true, is_admin: me.admin, player_id: me.player, group_name: 'L.G.C', group_id: GROUP, role: me.admin ? 'organiser' : 'player', groups: [{ id: GROUP, name: 'L.G.C', slug: 'lgc', role: me.admin ? 'organiser' : 'player' }] });
   if (url.pathname.startsWith('/rest/v1/rpc/')) { writes.push({ method: 'RPC', table: url.pathname.split('/').pop(), body: req.postData() ? JSON.parse(req.postData()) : null }); return json(url.pathname.endsWith('start_trip_votes') ? 2 : null); }
   if (url.pathname.startsWith('/rest/v1/')) {
     const table = url.pathname.split('/')[3];
@@ -118,7 +119,7 @@ const check = (ok, msg) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${msg}`); if 
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
 await ctx.route('https://luogyzvrbedmicjejilr.supabase.co/**', fakeSupabase);
-await ctx.addInitScript(([uid]) => {
+await ctx.addInitScript(([uid]) => { try { localStorage.setItem('tgt-caddie-hello', '1'); } catch { /* ov22 */ }
   const exp = Math.floor(Date.now() / 1000) + 3600 * 24;
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
@@ -136,20 +137,34 @@ const noSideScroll = async (label) => {
 
 // 1. The Trips tab.
 await page.goto(`${BASE}#/plan`);
-await page.getByText('NEXT UP').first().waitFor({ timeout: 15000 });
+await page.getByTestId('trips-next').waitFor({ timeout: 15000 });
 await page.waitForTimeout(600);
-check(await page.getByText('Summer Classic').first().isVisible(), 'now and next: the next locked-in trip is the big card');
-check(await page.getByText('Ideas and voting').isVisible(), 'ideas section shows');
+check(/Summer Classic/.test(await page.getByTestId('trips-next').innerText()), 'Upcoming: the next locked-in trip is the first Upcoming card');
+check(await page.getByTestId('trips-section-idea').isVisible() && /Proposed/i.test(await page.getByTestId('trips-section-idea').innerText()), 'Proposed section shows');
 check(await page.getByText('Dates: 2 options, closes').first().isVisible(), 'idea card says what is still to decide');
-check(await page.getByText('Past trips').isVisible() && await page.getByText('South Coast 2026').isVisible(), 'past trips listed');
+check(await page.getByTestId('trips-section-done').isVisible() && /South Coast 2026/.test(await page.getByTestId('trips-section-done').innerText()), 'Previous trips listed');
+{
+  // ov25: each stage looks different — its own label, icon, class and tag, in order.
+  const order = await page.locator('[data-testid^="trips-section-"], [data-testid="trips-being-planned"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
+  check(order.join(',') === 'trips-section-locked,trips-being-planned,trips-section-idea,trips-section-done', `stage sections in order: Upcoming, Being organised, Proposed, Previous (${order.join(',')})`);
+  const looks = await page.locator('.trip-card').evaluateAll((els) => els.map((e) => ({ stage: e.dataset.stage, cls: e.className, pill: e.querySelector('[data-testid="stage-pill"]')?.textContent, tag: e.querySelector('[data-testid="stage-tag"]')?.textContent })));
+  const of = (st) => looks.find((l) => l.stage === st) || {};
+  check(/🔒 Upcoming/.test(of('locked').pill) && /stage-upcoming/.test(of('locked').cls) && /^(\d+ (days|weeks)|Tomorrow|Today)$/.test(of('locked').tag), `Upcoming: navy, 🔒, a countdown (${of('locked').tag})`);
+  check(/🧭 Being organised/.test(of('deciding').pill) && /stage-organising/.test(of('deciding').cls) && /calling courses|voting|getting started/.test(of('deciding').tag), `Being organised: outline, 🧭, what it's up to (${of('deciding').tag})`);
+  check(/💡 Proposed/.test(of('idea').pill) && /stage-proposed/.test(of('idea').cls) && /keen/.test(of('idea').tag), `Proposed: dashed, 💡, how many are keen (${of('idea').tag})`);
+  check(/🏁 Previous/.test(of('done').pill) && /stage-previous/.test(of('done').cls) && /^[A-Z][a-z]{2} \d{4}$/.test(of('done').tag), `Previous: muted, 🏁, month and year (${of('done').tag})`);
+  const borders = await page.locator('.trip-card').evaluateAll((els) => els.map((e) => `${e.dataset.stage}:${getComputedStyle(e).borderTopStyle}`));
+  check(borders.includes('idea:dashed') && borders.some((b) => /^deciding:solid/.test(b)), `Proposed is dashed, Being organised is a solid outline (${borders.join(' ')})`);
+  check((await page.getByTestId('trips-next').locator('a').first().getAttribute('href')).includes(`/plan/${NEXT}`), 'an Upcoming trip opens its trip page (The run-up)');
+}
 check((await page.locator('nav.tabs').innerText()).includes('Trips'), 'bottom bar says Trips');
 await page.screenshot({ path: `${SHOTS}/t1-trips.png`, fullPage: true });
 await noSideScroll('Trips tab');
 {
   // Finished 4 days ago, trip still 'active' in the app: a past trip, never "On now".
   const tripsText = await page.locator('.page').innerText();
-  const pastPart = tripsText.slice(tripsText.toLowerCase().indexOf('past trips'));
-  check(pastPart.includes('South Coast Trip 2026'), 'a finished trip still marked active is listed with the past trips');
+  const pastPart = await page.getByTestId('trips-section-done').innerText();
+  check(pastPart.includes('South Coast Trip 2026'), 'a finished trip still marked active is listed with the Previous trips');
   check(!/on now/i.test(tripsText), 'nothing says "On now" (the finished trip is done)');
   await page.goto(`${BASE}#/plan/${SC_PLAN}`);
   await page.getByText('South Coast Trip 2026').first().waitFor({ timeout: 10000 });
@@ -158,7 +173,7 @@ await noSideScroll('Trips tab');
   check(!/on now/i.test(planText) && /Done/.test(planText), 'its page says Done, not On now');
   await page.screenshot({ path: `${SHOTS}/t1b-finished-active.png`, fullPage: true });
   await page.goto(`${BASE}#/plan`);
-  await page.getByText('NEXT UP').first().waitFor({ timeout: 15000 });
+  await page.getByTestId('trips-next').waitFor({ timeout: 15000 });
 }
 
 // 2. Suggest a trip: makes the plan, opens its votes.
@@ -179,13 +194,13 @@ const rpc = writes.find((w) => w.method === 'RPC' && w.table === 'start_trip_vot
 check(!!ins && ins.body.name === 'Winter Escape' && ins.body.proposed === false, 'suggestion saved as a trip (admin: not just an idea)');
 check(!!rpc && rpc.body.p_dates.length === 1 && rpc.body.p_dates[0].end_date === '2027-06-13' && rpc.body.p_places[0].label === 'Orange', 'its dates and place votes are opened with the options typed');
 
-// 3. An idea: the steps (Plan is current — approve or pass), its votes under Vote, chat under More.
+// 3. An idea: the steps (step 1 Areas & weekends is current — approve or pass; ov23 put its votes in the same step), chat under More.
 await page.goto(`${BASE}#/plan/${IDEA}`);
-await page.getByTestId('step-plan').waitFor({ timeout: 10000 });
-check(await page.getByTestId('step-plan').getAttribute('data-state') === 'current', 'an idea: the Plan step is current');
-check(await page.getByTestId('step-plan').getByRole('button', { name: /Approve/ }).isVisible(), 'an idea: Approve is on the Plan step');
+await page.getByTestId('step-area').waitFor({ timeout: 10000 });
+check(await page.getByTestId('step-area').getAttribute('data-state') === 'current', 'an idea: step 1 (Areas & weekends) is current');
+check(await page.getByTestId('step-area').getByRole('button', { name: /Approve/ }).isVisible(), 'an idea: Approve is on step 1');
 check(await page.getByText('Organiser:').first().isVisible(), 'organiser shown');
-await page.getByTestId('step-vote').getByRole('button').first().click();
+await page.getByTestId('step-area').locator('.org-step-hdr').click();
 await page.getByText('Which weekend works?').first().waitFor({ timeout: 10000 });
 await page.screenshot({ path: `${SHOTS}/t3-idea-vote.png`, fullPage: true });
 await noSideScroll('Trip vote tab');
@@ -200,7 +215,7 @@ await page.screenshot({ path: `${SHOTS}/t4-chat.png`, fullPage: true });
 await noSideScroll('Chat tab');
 
 // 4. Admin closes a vote through the server step.
-await page.getByTestId('step-vote').getByRole('button').first().click();
+await page.getByTestId('step-area').locator('.org-step-hdr').click();
 await page.getByRole('button', { name: /Close now & pick the winner/ }).first().click();
 writes.length = 0;
 await page.getByRole('button', { name: 'Pick this winner' }).click();
@@ -213,18 +228,50 @@ await page.getByRole('button', { name: /Lock it in/ }).first().waitFor({ timeout
 await page.screenshot({ path: `${SHOTS}/t5-lock-in.png`, fullPage: true });
 writes.length = 0;
 await page.getByRole('button', { name: /Lock it in/ }).first().click();
+// ov26 (V1): one box first — the open votes on where and when close too.
+await page.getByTestId('confirm-yes').click();
 await page.waitForTimeout(800);
 check(writes.some((w) => w.method === 'PATCH' && w.table === 'plans' && w.body.status === 'confirmed'), 'lock it in sets the trip to Locked in');
 
 // 6. Admin setting.
 await page.goto(`${BASE}#/admin`);
 await page.getByText('7. Trip votes').click();
-await page.getByText('The admin or the trip’s organiser').waitFor();
+await page.getByText('The group’s organisers or the trip’s organiser').waitFor();
 writes.length = 0;
-await page.getByText('The admin or the trip’s organiser').click();
+await page.getByText('The group’s organisers or the trip’s organiser').click();
 await page.waitForTimeout(600);
 check(writes.some((w) => w.method === 'RPC' && w.table === 'set_vote_decider' && w.body.p_value === 'admin_or_organiser'), 'admin can let organisers pick winners');
 await page.screenshot({ path: `${SHOTS}/t6-admin.png` });
+
+// 7. v8 fix (23 Oct 2026): live L.G.C's "March" — a trip being planned with no dates — must show on Trips,
+// for the organiser and for members. Exactly the live shape: kind trip, status planning, proposed false, no dates,
+// location_name "Blue mountains", organiser set, trip_id null; plus the past South Coast trip.
+{
+  const MARCH = '17f1ac42-4b37-43ff-96e5-d67890e2c663';
+  db.plans = [
+    { id: MARCH, kind: 'trip', name: 'March', status: 'planning', proposed: false, start_date: null, end_date: null, location_name: 'Blue mountains',
+      organiser_id: P2, created_by: P1, trip_id: null, rsvp_locked: false, created_at: now },
+    db.plans.find((p) => p.id === SC_PLAN),
+  ];
+  db.plan_polls = []; db.plan_options = [];
+  for (const who of [{ admin: true, player: P1, label: 'organiser' }, { admin: false, player: P3, label: 'member' }]) {
+    Object.assign(me, who);
+    await page.goto(`${BASE}#/`);
+    await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (k.startsWith('lgc-cache-')) localStorage.removeItem(k); });
+    await page.goto(`${BASE}#/plan`);
+    await page.reload();
+    await page.getByTestId('trips-section-done').waitFor({ timeout: 15000 });
+    await page.waitForTimeout(500);
+    const section = page.getByTestId('trips-being-planned');
+    check(await section.isVisible() && /Being organised/i.test(await section.innerText()), `${who.label}: a "Being organised" section shows`);
+    const txt = await section.innerText().catch(() => '');
+    check(/March/.test(txt) && /Blue mountains/.test(txt) && /When: to be voted on/.test(txt), `${who.label}: March (no dates, Blue mountains) is listed under Being organised`);
+    check(/organiser Mike/.test(txt), `${who.label}: its organiser is named`);
+    check(!(await page.getByText('Nothing locked in yet').isVisible()), `${who.label}: no "Nothing locked in yet" while a trip is being planned`);
+    check(await page.getByText('South Coast Trip 2026').isVisible(), `${who.label}: the past South Coast trip still shows`);
+    if (who.admin) await page.screenshot({ path: `${SHOTS}/t7-being-planned.png`, fullPage: true });
+  }
+}
 
 check(errors.length === 0, `no page errors (${errors.join(' | ')})`);
 await browser.close();

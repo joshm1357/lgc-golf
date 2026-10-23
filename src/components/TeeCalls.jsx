@@ -13,7 +13,7 @@ import { useData, useSession, useRealtime, playerName } from '../lib/store.jsx';
 import { toast } from './ui.jsx';
 import { useRun, must } from '../lib/run.js';
 import { notify } from '../lib/push.js';
-import { callProgress, canFinishCall, callChecklist, callScript, parseRanges, dayShort, bestPerDay, socialLine, slotsFor } from '../lib/teegrid.js';
+import { callProgress, canFinishCall, callChecklist, callScript, dayShort, bestPerDay, socialLine, slotsFor, datesByWeekend, formChanges, formFrom } from '../lib/teegrid.js';
 import { bestBlock } from '../lib/tripbuilder.js';
 import { bulkAllocate, callMode, jobStage, stagePatch } from '../lib/tripjobs.js';
 import { memberWarning, contactLinks } from '../lib/courseresearch.js';
@@ -70,56 +70,39 @@ export function CallsWho({ items, callJobIds, org, reload }) {
 
 const AVAIL = [['yes', '✓ Yes'], ['no', '✗ No'], ['unknown', '? Not sure']];
 
-/** One day of one course: available, times on offer, how many, price, note. */
-function DayRow({ planId, courseId, jobId, date, row, need, canEdit, me, onSaved }) {
-  const [v, setV] = useState(() => ({ available: row?.available || null, ranges: (row?.ranges || []).map((r) => r.replace('-', '–')).join(', '), capacity: row?.capacity ?? '', price: row?.price ?? '', notes: row?.notes || '' }));
-  const [busy, run] = useRun();
-  const [open, setOpen] = useState(false);
-  useEffect(() => { setV({ available: row?.available || null, ranges: (row?.ranges || []).map((r) => r.replace('-', '–')).join(', '), capacity: row?.capacity ?? '', price: row?.price ?? '', notes: row?.notes || '' }); }, [row?.updated_at]); // eslint-disable-line react-hooks/exhaustive-deps
+/** What a saved day says: "Not asked yet" / "✗ Nothing that day" / "✓ 3 in a row 8:00–8:20" … */
+function dayStatus(row, need) {
+  if (!row?.available && !(row?.ranges || []).length && !(row?.times || []).length) return 'Not asked yet';
+  if (row.available === 'no') return '✗ Nothing that day';
+  if (row.available === 'unknown') return '? Not sure — ask again?';
   const block = bestBlock(slotsFor(row), need, { earliest: 0 });
-  const save = (patch = {}) => run(async () => {
-    const next = { ...v, ...patch };
-    const ranges = next.available === 'no' ? [] : parseRanges(next.ranges);
-    if (next.available === 'yes' && !ranges.length && !(row?.times || []).length) throw new Error('Put in the times they offered, e.g. 7:30–9:00');
-    await must(supabase.from('trip_tee_options').upsert({
-      plan_id: planId, play_date: date, course_id: courseId, job_id: jobId, entered_by: me, available: next.available, ranges,
-      capacity: next.capacity === '' ? null : Math.max(1, Math.min(400, Number(next.capacity) || 1)),
-      price: next.price === '' ? null : Number(String(next.price).replace(/[^0-9.]/g, '')) || null, notes: next.notes || null,
-      ...(row ? {} : { times: [] }),
-    }, { onConflict: 'plan_id,play_date,course_id' }));
-    setOpen(false);
-    onSaved();
-  }, 'Saved');
-  const status = !row?.available && !(row?.ranges || []).length && !(row?.times || []).length ? 'Not asked yet'
-    : row.available === 'no' ? '✗ Nothing that day' : row.available === 'unknown' ? '? Not sure — ask again?'
-      : block ? `✓ ${need} in a row ${block.text}` : `${(row.ranges || []).map((r) => r.replace('-', '–')).join(', ') || 'Times in'}${need > 1 ? ' — not enough in a row?' : ''}`;
+  return block ? `✓ ${need} in a row ${block.text}` : `${(row.ranges || []).map((r) => r.replace('-', '–')).join(', ') || 'Times in'}${need > 1 ? ' — not enough in a row?' : ''}`;
+}
+
+/** One day of one course on the form (O3): what they said, the times when it's a yes, how many, price, a note. */
+function DayRow({ date, row, need, editing, v, set }) {
   return (
     <div className="stack" style={{ gap: 4, borderTop: '1px solid var(--line-soft)', paddingTop: 6 }} data-testid="tee-day" data-date={date}>
       <div className="row between small" style={{ gap: 6 }}>
         <strong>{dayShort(date)}</strong>
-        <span data-testid="tee-day-status" style={{ fontWeight: 700, color: row?.available === 'no' ? 'var(--under)' : row?.available ? 'var(--navy)' : 'var(--muted)' }}>{status}</span>
+        {!editing && <span data-testid="tee-day-status" style={{ fontWeight: 700, color: row?.available === 'no' ? 'var(--under)' : row?.available ? 'var(--navy)' : 'var(--muted)' }}>{dayStatus(row, need)}</span>}
       </div>
-      {(row?.capacity || row?.price || row?.notes) && <span className="small muted">{[row.capacity ? `takes ${row.capacity}` : null, row.price != null ? `$${Number(row.price)} each` : null, row.notes].filter(Boolean).join(' · ')}</span>}
-      {canEdit && !open && <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={() => setOpen(true)} data-testid="tee-day-edit">{row ? 'Change' : 'Fill in'}</button>}
-      {canEdit && open && (
+      {!editing && (row?.capacity || row?.price || row?.notes) && <span className="small muted">{[row.capacity ? `takes ${row.capacity}` : null, row.price != null ? `$${Number(row.price)} each` : null, row.notes].filter(Boolean).join(' · ')}</span>}
+      {editing && (
         <div className="stack" style={{ gap: 6 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
-            {AVAIL.map(([k, l]) => <button key={k} type="button" className="btn ghost sm" aria-pressed={v.available === k} style={v.available === k ? { background: 'var(--navy)', color: '#fff', borderColor: 'var(--navy)' } : {}} onClick={() => setV({ ...v, available: k })}>{l}</button>)}
+            {AVAIL.map(([k, l]) => <button key={k} type="button" className="btn ghost sm" aria-pressed={v.available === k} data-testid={`tee-avail-${k}`} style={v.available === k ? { background: 'var(--navy)', color: '#fff', borderColor: 'var(--navy)' } : {}} onClick={() => set({ ...v, available: k })}>{l}</button>)}
           </div>
           {v.available === 'yes' && (
             <>
-              <input className="input" value={v.ranges} onChange={(e) => setV({ ...v, ranges: e.target.value })} placeholder="Times on offer, e.g. 7:30–9:00, 1pm–2pm" aria-label={`Times on offer ${date}`} />
+              <input className="input" value={v.ranges} onChange={(e) => set({ ...v, ranges: e.target.value })} placeholder="Times on offer, e.g. 7:30–9:00, 1pm–2pm" aria-label={`Times on offer ${date}`} />
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                <input className="input" inputMode="numeric" value={v.capacity} onChange={(e) => setV({ ...v, capacity: e.target.value.replace(/\D/g, '') })} placeholder="Players they can take" aria-label={`How many ${date}`} />
-                <input className="input" inputMode="decimal" value={v.price} onChange={(e) => setV({ ...v, price: e.target.value })} placeholder="$ each" aria-label={`Price ${date}`} />
+                <input className="input" inputMode="numeric" value={v.capacity} onChange={(e) => set({ ...v, capacity: e.target.value.replace(/\D/g, '') })} placeholder="Players they can take" aria-label={`How many ${date}`} />
+                <input className="input" inputMode="decimal" value={v.price} onChange={(e) => set({ ...v, price: e.target.value })} placeholder="$ each" aria-label={`Price ${date}`} />
               </div>
             </>
           )}
-          <input className="input" value={v.notes} maxLength={300} onChange={(e) => setV({ ...v, notes: e.target.value })} placeholder="Note (optional)" aria-label={`Note ${date}`} />
-          <div className="row" style={{ gap: 6 }}>
-            <button type="button" className="btn sm grow" disabled={busy || !v.available} onClick={() => save()} data-testid="tee-day-save">Save</button>
-            <button type="button" className="btn ghost sm" onClick={() => setOpen(false)}>Cancel</button>
-          </div>
+          {v.available && <input className="input" value={v.notes} maxLength={300} onChange={(e) => set({ ...v, notes: e.target.value })} placeholder="Note (optional)" aria-label={`Note ${date}`} />}
         </div>
       )}
     </div>
@@ -157,18 +140,42 @@ export function SocialTimes({ courseId, row, canEdit, onSaved }) {
   );
 }
 
-/** One course's call: who's on it, the checklist, a script, every day in the window, social times, done. */
-export function CourseCall({ planId, courseId, name, job, dates, need, rows, social, canEdit, me, groupName, onSaved, owner, booking, research }) {
+/**
+ * One course's call (O3, Josh's walkthrough): who's on it, the checklist, a script, then ONE form — a row for each
+ * GOLF day (the days this course is an option on, every weekend still in play; travel days with no golf aren't asked
+ * about), "Nothing that weekend" for a weekend they can't do, and one Save. Then the social times, and done.
+ *   dates: this course's golf dates; weekends: the settled weekends (for "Nothing that weekend");
+ *   people: how many are playing (lib/headcount.js — the same number as the screen); onFinished: after "That's the
+ *   call done".
+ */
+export function CourseCall({ planId, courseId, name, job, dates, weekends = [], need, people = null, rows, social, canEdit, me, groupName, onSaved, owner, booking, research, onFinished }) {
   const [busy, run] = useRun();
   const [script, setScript] = useState(false);
   const [gapsMsg, setGapsMsg] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState(() => formFrom(rows, dates));
+  const key = `${dates.join(',')}|${rows.map((r) => r.updated_at || r.available).join(',')}`;
+  useEffect(() => { if (!editing) setForm(formFrom(rows, dates)); }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
   const p = callProgress(rows, dates, social);
+  const groups = datesByWeekend(dates, weekends);
+  const setDay = (d, v) => setForm((f) => ({ ...f, [d]: v }));
+  const nothing = (g) => setForm((f) => ({ ...f, ...Object.fromEntries(g.dates.map((d) => [d, { ...(f[d] || {}), available: 'no', ranges: '' }])) }));
+  const saveAll = () => run(async () => {
+    const { upserts, problem } = formChanges(form, rows, { planId, courseId, jobId: job?.id || null, me });
+    if (problem) throw new Error(problem);
+    if (upserts.length) await must(supabase.from('trip_tee_options').upsert(upserts, { onConflict: 'plan_id,play_date,course_id' }));
+    setEditing(false);
+    setGapsMsg('');
+    onSaved();
+    return upserts.length ? `Saved ${upserts.length} day${upserts.length === 1 ? '' : 's'}` : 'Nothing changed';
+  }).then((m) => m && toast(m));
   const finish = () => {
     const f = canFinishCall(p);
-    if (!f.ok) { setGapsMsg(`${f.message} Every day needs an answer — “not sure” is fine.`); return; }
+    if (!f.ok) { setGapsMsg(`${f.message} Every golf day needs an answer — “not sure” is fine.`); return; }
     run(async () => {
       await must(supabase.from('plan_items').update(stagePatch('done')).eq('id', job.id));
       onSaved();
+      await onFinished?.(job);
       return f.nudge ? `Done. ${f.nudge}` : 'Done — thanks!';
     }).then((m) => m && toast(m));
   };
@@ -193,24 +200,41 @@ export function CourseCall({ planId, courseId, name, job, dates, need, rows, soc
       {canEdit && !done && (
         <details className="small">
           <summary style={{ fontWeight: 700, cursor: 'pointer' }}>Ask about</summary>
-          <ul style={{ margin: '4px 0', paddingLeft: 18 }} data-testid="call-checklist">{[...callChecklist(dates, { need }), ...(warn?.days.length ? [`Times outside members’ ${warn.days.join(' and ')} comps`] : [])].map((x) => <li key={x}>{x}</li>)}</ul>
+          <ul style={{ margin: '4px 0', paddingLeft: 18 }} data-testid="call-checklist">{[...callChecklist(dates, { need, people }), ...(warn?.days.length ? [`Times outside members’ ${warn.days.join(' and ')} comps`] : [])].map((x) => <li key={x}>{x}</li>)}</ul>
         </details>
       )}
       {canEdit && !done && (
         script
-          ? <div className="small" style={{ background: 'var(--ground)', borderRadius: 10, padding: 8 }} data-testid="call-script">“{callScript({ course: name, group: groupName, need, dates, memberDays: warn?.days || [] })}” <button type="button" className="btn ghost sm" onClick={() => setScript(false)}>Hide</button></div>
+          ? <div className="small" style={{ background: 'var(--ground)', borderRadius: 10, padding: 8 }} data-testid="call-script">“{callScript({ course: name, group: groupName, need, people, dates, memberDays: warn?.days || [] })}” <button type="button" className="btn ghost sm" onClick={() => setScript(false)}>Hide</button></div>
           : <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={() => setScript(true)}>📜 What to say</button>
       )}
-      {dates.map((d) => (
-        <DayRow key={d} planId={planId} courseId={courseId} jobId={job?.id || null} date={d} need={need} me={me} canEdit={canEdit}
-          row={rows.find((r) => String(r.play_date).slice(0, 10) === d)} onSaved={onSaved} />
+      {!dates.length && <span className="small muted">No golf days for this course yet.</span>}
+      {groups.map((g) => (
+        <div key={g.start} className="stack" style={{ gap: 2 }} data-testid="call-weekend">
+          <div className="row between small" style={{ gap: 6, marginTop: 4 }}>
+            <span className="muted" style={{ fontWeight: 700 }}>{g.label}</span>
+            {editing && <button type="button" className="btn ghost sm" onClick={() => nothing(g)} data-testid="nothing-that-weekend">Nothing that weekend</button>}
+          </div>
+          {g.dates.map((d) => (
+            <DayRow key={d} date={d} need={need} editing={editing} row={rows.find((r) => String(r.play_date).slice(0, 10) === d)}
+              v={form[d] || { available: null, ranges: '', capacity: '', price: '', notes: '' }} set={(v) => setDay(d, v)} />
+          ))}
+        </div>
+      ))}
+      {canEdit && dates.length > 0 && (editing ? (
+        <div className="row" style={{ gap: 6 }}>
+          <button type="button" className="btn gold grow" disabled={busy} onClick={saveAll} data-testid="call-save">Save the times</button>
+          <button type="button" className="btn ghost sm" onClick={() => { setEditing(false); setForm(formFrom(rows, dates)); }}>Cancel</button>
+        </div>
+      ) : (
+        <button type="button" className="btn sm" style={{ alignSelf: 'flex-start' }} onClick={() => setEditing(true)} data-testid="call-fill">{p.filled ? '✏️ Change the times' : '✏️ Fill in what they said'}</button>
       ))}
       <div style={{ borderTop: '1px solid var(--line-soft)', paddingTop: 6 }}>
         <SocialTimes courseId={courseId} row={social} canEdit={canEdit} onSaved={onSaved} />
       </div>
       {gapsMsg && <span className="small err" style={{ margin: 0 }} data-testid="call-gaps">{gapsMsg}</span>}
       {done ? <span className="small" style={{ fontWeight: 700 }}>✅ Call done{p.unknown.length ? ` — not sure about ${p.unknown.map(dayShort).join(', ')}: ask again?` : ''}</span>
-        : job && canEdit && <button type="button" className="btn sm" disabled={busy} onClick={finish} data-testid="call-done">✓ That’s the call done</button>}
+        : job && canEdit && !editing && <button type="button" className="btn sm" disabled={busy} onClick={finish} data-testid="call-done">✓ That’s the call done</button>}
     </div>
   );
 }

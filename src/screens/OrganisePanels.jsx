@@ -22,6 +22,7 @@ import { groupWhen } from '../lib/teegroups.js';
 import { download } from './DeskNav.jsx';
 import { useLateJobs } from '../components/LateJobs.jsx';
 import { lateJobs } from '../lib/latejobs.js';
+import { replies, repliesLine } from '../lib/headcount.js';
 import './desk.css';
 
 /** Plans for the trip switcher. */
@@ -76,7 +77,7 @@ export function OrganiseSide({ pd, onStep }) {
           </select>
         )}
       </div>
-      <PeoplePanel p={panels.people} />
+      <PeoplePanel p={panels.people} r={replies({ players: data.players, rsvps: pd.rsvps })} />
       <VotesPanel p={panels.votes} onStep={onStep} />
       <LatePanel pd={pd} onStep={onStep} />
     </aside>
@@ -98,18 +99,20 @@ function Panel({ id, title, count, children, next, wide }) {
 
 const names = (data, ids) => ids.map((id) => playerName(data.playersById[id])).join(', ');
 
-function PeoplePanel({ p }) {
+// O6 (walkthrough): the one headcount rule (lib/headcount.js) — "9 in · 1 maybe · 1 not replied".
+function PeoplePanel({ p, r }) {
   const data = useData();
   return (
-    <Panel id="people" title="🙋 Who’s in" count={`${p.in.length} in`}>
+    <Panel id="people" title="🙋 Who’s in" count={`${r.in} in`}>
       <div className="desk-stats">
-        <Stat label="In" value={p.in.length} />
-        <Stat label="Maybe" value={p.maybe.length} />
-        <Stat label="Out" value={p.out.length} />
-        <Stat label="No reply" value={p.noReply.length} warn={p.noReply.length > 0} />
+        <Stat label="In" value={r.in} />
+        <Stat label="Maybe" value={r.maybe} />
+        <Stat label="Out" value={r.out} />
+        <Stat label="No reply" value={r.noReply} warn={r.noReply > 0} />
       </div>
-      {p.in.length > 0 && <div className="row" style={{ gap: 8, marginTop: 8 }}><AvatarStack players={p.in.map((id) => data.playersById[id]).filter(Boolean)} size={26} /><span className="small muted ellipsis">{names(data, p.in)}</span></div>}
-      {p.noReply.length > 0 && <div className="small" style={{ marginTop: 6 }}><strong>Haven’t said:</strong> <span className="muted">{names(data, p.noReply)}</span></div>}
+      <div className="small" style={{ marginTop: 6, fontWeight: 700 }} data-testid="headcount-line">{repliesLine(r)}</div>
+      {r.in > 0 && <div className="row" style={{ gap: 8, marginTop: 8 }}><AvatarStack players={r.ids.in.map((id) => data.playersById[id]).filter(Boolean)} size={26} /><span className="small muted ellipsis">{names(data, r.ids.in)}</span></div>}
+      {r.noReply > 0 && <div className="small" style={{ marginTop: 6 }}><strong>Haven’t said:</strong> <span className="muted">{names(data, r.ids.noReply)}</span></div>}
       {p.locked && <div className="small" style={{ marginTop: 6, fontWeight: 700 }}>🔒 The list is locked.</div>}
     </Panel>
   );
@@ -145,7 +148,7 @@ function VotesPanel({ p, onStep }) {
     <Panel id="votes" title="🗳️ Open votes" count={p.open.length ? `${p.open.length} open` : `${p.decided} decided`}>
       {!p.open.length && <div className="small muted">No votes open.</div>}
       {p.open.map((v) => (
-        <button key={v.poll.id} type="button" className="desk-vote org-vote-btn" data-testid="desk-vote" onClick={() => onStep?.(v.poll.purpose === 'stay' ? 'book' : 'vote')}>
+        <button key={v.poll.id} type="button" className="desk-vote org-vote-btn" data-testid="desk-vote" onClick={() => onStep?.(v.poll.purpose === 'stay' ? 'courses' : 'area')}>
           <div style={{ fontWeight: 800 }}>{v.poll.question}</div>
           <table className="desk-table compact">
             <tbody>

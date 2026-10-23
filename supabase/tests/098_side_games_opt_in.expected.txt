@@ -1,0 +1,37 @@
+RESULTS: 1. bo proposes $5 skins (opt-in) → ok opt_in
+2. bo is in automatically → ok 00000000-0000-4000-8000-0000098b0002
+3. one feed post → ok 1 · 🎲 Bo’s put up $5 skins for Saturday. You in? · /games?r=00000000-0000-4000-8000-0000098e0001&g=00000000-0000-4000-8000-0000098f0001
+4. bo adds an everyone game → refused: new row violates row-level security policy for table "round_games"
+5. bo proposes as al → refused: new row violates row-level security policy for table "round_games"
+6. bo changes his stake → refused: You can only take your side game down — put up a new one to change it
+7. bo puts al in → refused: new row violates row-level security policy for table "round_game_players"
+8. bo proposes a birdie pool → ok birdie_pool
+9. bo proposes a pot → ok stableford_pot
+10. bo proposes a 4th → refused: You've already got 3 side games up for that round
+11. bo takes the birdie pool down → ok true
+12. al is in → ok in
+13. al takes bo's game down (rows) → ok 0
+14. al deletes bo's game (rows) → ok 0
+15. al takes bo out (rows) → ok 0
+16. al joins the taken-down pool → refused: That side game has been taken down
+17. guest reads the games → ok 3
+18. guest proposes → refused: new row violates row-level security policy for table "round_games"
+19. guest opts in → refused: new row violates row-level security policy "no guest writes (add)" for table "round_game_players"
+20. other group reads who's in → ok 0
+21. other group proposes on our round → refused: That belongs to another group
+22. other group opts in → refused: That belongs to another group
+23. organiser adds an everyone game → ok everyone
+24. organiser changes its stake → ok 20.00
+25. opt in to an everyone game → refused: Everyone in the round is in that game already
+26. feed posts: one per proposal, none for the everyone game → ok 3
+27. open after the first tee → false
+28. al opts out after the first tee → refused: Opt-in closed at the first tee — the list is fixed (an organiser can still change it)
+29. bo takes his game down after the first tee → refused: That round has started — the side game stays as it is
+30. bo proposes after the first tee → refused: Opt-in has closed for that round — the first tee has gone
+31. organiser takes al out → ok out
+32. organiser puts gus in (no phone) → ok in
+33. who's in now → ok Bo / 2
+34. custom game with no house rules → ok []
+35. custom game with blank house rules → ok []
+36. custom game with 1001 letters → refused: new row for relation "custom_games" violates check constraint "custom_games_rules_text_len"
+37. rules_text checks → custom_games_rules_text_len

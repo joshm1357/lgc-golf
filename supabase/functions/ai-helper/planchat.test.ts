@@ -35,6 +35,19 @@ const reply = (over: Any = {}) => ({
   ...over,
 });
 
+Deno.test('ov23: how many comes back on the draft; comps / the Ryder Cup are never planning extras; the prompt says so', async () => {
+  const v = validatePlanChat(reply({ draft: { ...reply().draft, headcount: 9, extras: [{ label: 'Ryder Cup format (two teams)' }, { label: 'Bus', pp: 40 }, { label: 'Stableford comp' }] } }), tctx);
+  assert(v.ok, v.errors.join(' '));
+  assertEquals(v.value!.draft!.headcount, 9);
+  assertEquals(v.value!.draft!.extras.map((e) => e.label), ['Bus']);
+  const silly = validatePlanChat(reply({ draft: { ...reply().draft, headcount: 'lots' } }), tctx);
+  assertEquals(silly.value!.draft!.headcount, undefined);
+  const { planChatSystem } = await import('./plan.ts');
+  const sys = planChatSystem('2026-10-23', 'L.G.C');
+  assertMatch(sys, /Ryder Cup[\s\S]*NOT part of planning/);
+  assertMatch(sys, /We'll sort comps and teams closer to the trip/);
+});
+
 Deno.test('a chat reply checks out: draft like a plan, extras de-duplicated, questions and quick answers capped', () => {
   const v = validatePlanChat(reply(), tctx);
   assert(v.ok, v.errors.join(' '));
@@ -154,4 +167,36 @@ Deno.test('plan_chat: a bad draft goes back to the model to fix; organisers only
   assert(out.chat);
   const player: Any = await helperRequest({ mode: 'plan_chat', text: 'March please' }, deps(model.fetchFn, { status: { is_member: true, is_admin: false, group_id: 'g1' } }).d);
   assertMatch(player.error, /Only an organiser/);
+});
+
+// ov22 (Josh 23 Oct): "allow the selection of multiple, then click submit" — the helper marks pick-several questions.
+Deno.test('plan_chat: multi passes through validation for pick-several questions; anything but true is left off', () => {
+  const v = validatePlanChat(reply({ questions: [
+    { id: 'where', text: 'Which areas appeal?', quick: ['Hunter Valley', 'South Coast', 'Central West', 'Other…'], multi: true },
+    { id: 'go', text: 'Driving or flying?', quick: ['Driving', 'Flying'] },
+    { id: 'n', text: 'How many are coming?', quick: ['Under 8', '8–12'], multi: 'yes' },
+  ] }), tctx);
+  assert(v.ok, v.errors.join(' '));
+  assertEquals(v.value!.questions[0].multi, true);
+  assertEquals('multi' in v.value!.questions[1], false);
+  assertEquals('multi' in v.value!.questions[2], false);
+});
+
+Deno.test('plan_chat: the reply tool offers multi (default off) and the prompt says when to use it', async () => {
+  const { CHAT_TOOLS, planChatSystem } = await import('./plan.ts');
+  const tool: Any = CHAT_TOOLS.find((t: Any) => t.name === 'reply_with_draft');
+  const q = tool.input_schema.properties.questions.items;
+  assertEquals(q.properties.multi.type, 'boolean');
+  assert(!(q.required || []).includes('multi'));
+  assertMatch(planChatSystem('2026-10-23', 'L.G.C'), /Set multi: true when several answers make sense together \(e\.g\. regions, extras/);
+});
+
+Deno.test('plan_chat: a multi question reaches the phone through the whole request', async () => {
+  const model = fakeModel([
+    () => [use('t1', 'reply_with_draft', reply({ questions: [{ id: 'extras', text: 'Any extras?', quick: ['Bus', 'Shirts', 'Dinner'], multi: true }] }))],
+  ]);
+  const { d } = deps(model.fetchFn);
+  const out: Any = await helperRequest({ mode: 'plan_chat', text: 'Plan it', messages: [] }, d);
+  assertEquals(out.chat.questions[0].multi, true);
+  assertEquals(out.chat.questions[0].quick, ['Bus', 'Shirts', 'Dinner']);
 });

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { useData, useScores, useSession, useSideEntries, useFeature, playerName } from '../lib/store.jsx';
-import { roundBoard, headlines, compBonuses, isNetFormat, isTeamFormat } from '../lib/board.js';
+import { useData, useScores, useSession, useSideEntriesState, useFeature, playerName } from '../lib/store.jsx';
+import { readyBoard, headlines, isNetFormat, isTeamFormat, orderBoard, hasPace, isMine } from '../lib/board.js';
 import { formatToPar, strokesReceived, stablefordPoints, strokeHoleNet } from '../lib/scoring.js';
 import { Header, Seg, AvatarStack, Icon, Sheet, Loading, toast } from '../components/ui.jsx';
 import { supabase, friendlyError } from '../lib/supabase.js';
@@ -23,8 +23,12 @@ import { AskChip } from '../components/AskChip.jsx';
 import { RoundTools } from '../components/RoundTools.jsx';
 import { SaveSpotBanner } from '../components/SaveSpot.jsx';
 import { useRoundAdjustments, PenaltyLines } from '../components/LateJobs.jsx';
+import { useProjectedDrives, DriveTracker, DrivesRoundRule } from '../components/AmbroseDrives.jsx';
+import { PendingPenalties } from '../components/RulePenalty.jsx';
+import { penaltyBadgeWord, penaltyRowWords, projectedStrokes } from '../lib/drives.js';
 
 const DrawSetup = lazyScreen(() => import('../components/DrawSetup.jsx'), 'default', { inline: true });
+const CupsToday = lazyScreen(() => import('../components/CupStandings.jsx'), 'CupsToday', { inline: true }); // ov32: the group's cups today
 
 export function useRoundChoice() {
   const data = useData();
@@ -63,18 +67,21 @@ export default function Leaderboard() {
   const sideCompsOn = useFeature('side_comps');
   const tvOn = useFeature('clubhouse_tv');
   const scores = useScores(round?.id);
-  const sideEntries = useSideEntries(round?.id);
-  const adjustments = useRoundAdjustments(round?.id);
+  const side = useSideEntriesState(round?.id);
+  const savedAdjustments = useRoundAdjustments(round?.id);
+  // 099: drive penalties still to come on a live Ambrose round — shown on the board as "projected", not counted.
+  const projectedDrives = useProjectedDrives(round, scores.index);
+  const adjustments = useMemo(() => (projectedDrives.length ? [...savedAdjustments, ...projectedDrives] : savedAdjustments), [savedAdjustments, projectedDrives]);
 
-  const board = useMemo(() => {
-    if (!round) return null;
-    return roundBoard({
-      round, course: data.coursesById[round.course_id], teams: data.teamsByRound[round.id] || [],
-      roundPlayers: data.roundPlayers[round.id] || [], playersById: data.playersById,
-      scoresIdx: scores.index, quickResults: data.quick_results,
-      bonuses: compBonuses(round, data.teamsByRound[round.id] || [], sideEntries), adjustments,
-    });
-  }, [round, data, scores.index, sideEntries, adjustments]);
+  // Null until everything the total needs is here (side comp bonus strokes included), so it never flickers.
+  const rawBoard = useMemo(() => readyBoard({
+    round, course: round && data.coursesById[round.course_id], teams: (round && data.teamsByRound[round.id]) || [],
+    roundPlayers: (round && data.roundPlayers[round.id]) || [], playersById: data.playersById,
+    scoresIdx: scores.index, quickResults: data.quick_results, adjustments,
+    sideEntries: side.rows, sideLoaded: side.loaded,
+  }), [round, data, scores.index, side, adjustments]);
+  // ov28 (D2): points order by default ("15 points sat above 19"); "On pace" keeps the old against-2-a-hole order.
+  const board = useMemo(() => orderBoard(rawBoard, mode === 'pace' ? 'pace' : 'points'), [rawBoard, mode]);
 
   // "Since you last looked": ranks stored on this phone at the last visit.
   const storeKey = round ? `lgc-ranks-${round.id}` : null;
@@ -121,6 +128,15 @@ export default function Leaderboard() {
     );
   }
 
+  if (!board) {
+    return (
+      <div className="page">
+        <Header logo title={trip?.name || 'Leaderboard'} sub={round.name} />
+        <div data-testid="board-loading"><Loading /></div>
+      </div>
+    );
+  }
+
   const isA = board.format === 'ambrose';
   const isNet = isNetFormat(board.format); // Ambrose and stroke play: net to par, lower better
   const isTeams = isTeamFormat(board.format); // Ambrose teams, 4BBB pairs
@@ -145,13 +161,16 @@ export default function Leaderboard() {
         right={round.status === 'live' ? <span className="pill-live"><span className="dot" />LIVE</span> : round.status === 'locked' ? <span className="pill-live">FINAL</span> : <span className="pill-live">NOT STARTED</span>}
       >
         {round.status !== 'locked' && (
-          <Seg value={mode} onChange={setMode} options={[{ value: 'live', label: 'Live' }, { value: 'proj', label: 'Projected' }]} />
+          <Seg value={mode} onChange={setMode} options={hasPace(round.format)
+            ? [{ value: 'live', label: 'Points' }, { value: 'pace', label: 'On pace' }, { value: 'proj', label: 'Projected' }]
+            : [{ value: 'live', label: 'Live' }, { value: 'proj', label: 'Projected' }]} />
         )}
       </Header>
       <SaveSpotBanner />
-      {trip && !status?.quick && <div className="section" style={{ paddingBottom: 0 }}><Link to="/" className="small" style={{ fontWeight: 700 }} data-testid="back-to-trip">‹ This trip</Link></div>}
+      {trip && !status?.quick && <div className="section" style={{ paddingBottom: 0 }}><Link to={`/trip-now/${trip.id}`} className="small" style={{ fontWeight: 700 }} data-testid="back-to-trip">‹ {trip.name}</Link></div>}
       <RoundChips round={round} onChoose={choose} />
       <CompChips round={round} />
+      {trip && !status?.quick && <LazyArea quiet><CupsToday trip={trip} /></LazyArea>}
       <RulesTodayChip round={round} />
       <TeeGroupsBoard round={round} />
       <AwardCards />
@@ -204,6 +223,7 @@ export default function Leaderboard() {
         <div className="section"><div className="card pad small" style={{ lineHeight: 1.45 }}><strong><RuleTag testId="todays-rules" rule={{ table: 'rounds', id: round.id, field: 'rules', label: 'Today’s rules', value: round.rules, where: { round_id: round.id, trip_id: round.trip_id, path: '/' } }}
           explain={round.rules}>Today's rules:</RuleTag></strong> {round.rules}{status?.legacy && <> <a href="?guide" style={{ fontWeight: 700 }}>How it works</a></>}</div></div>
       )}
+      <DrivesRoundRule round={round} />
 
       {heads.length > 0 && round.status !== 'locked' && (
         <div className="heads">
@@ -232,10 +252,14 @@ export default function Leaderboard() {
                 {drawOn && <button type="button" className="btn gold" onClick={() => setDrawing(true)}>🎲 Random draw — live for everyone</button>}
                 <Link to="/admin" className="btn ghost">Pick the teams myself</Link>
               </div>
-            ) : (drawOn ? 'Teams come out of the draw — keep the app open and it will pop up.' : 'Teams aren’t set yet.')) : isFour ? (status?.is_admin ? <Link to="/admin" className="btn ghost">Pick the pairs in Admin</Link> : 'The pairs aren’t set yet.') : 'No players in this round yet.'}
+            ) : (drawOn ? 'Teams come out of the draw — keep the app open and it will pop up.' : 'Teams aren’t set yet.')) : isFour ? (status?.is_admin ? <Link to="/admin" className="btn ghost">Pick the pairs in Organiser tools</Link> : 'The pairs aren’t set yet.') : 'No players in this round yet.'}
           </div>
         )}
-        {rows.map((r, i) => {
+        {(() => {
+          // ov28 (D2): your row (or your team's) is highlighted, and pinned at the top when you're further down.
+          const at = projected ? -1 : rows.findIndex((r) => isMine(r, me));
+          return at >= 4 ? [{ ...rows[at], pinned: true }, ...rows] : rows;
+        })().map((r, i) => {
           const prev = prevRanks?.[r.id];
           const mv = prev ? prev - r.rank : 0;
           const mainVal = projected ? r.proj?.projected : isNet ? r.netToPar : r.points;
@@ -244,15 +268,21 @@ export default function Leaderboard() {
             : r.thru === 0 ? '–' : isNet ? formatToPar(r.netToPar, r.finished && r.netToPar % 1 ? 1 : 0) : String(r.points);
           const under = isNet && mainVal < 0 && r.thru > 0;
           return (
-            <button key={r.id} type="button" className={'lb-row' + (i === 0 && (r.thru > 0 || projected) ? ' lead' : '')} onClick={() => setOpen(r)}>
+            <button key={`${r.pinned ? 'pin-' : ''}${r.id}`} type="button" data-testid={r.pinned ? 'lb-pinned' : isMine(r, me) ? 'lb-me' : undefined}
+              className={'lb-row' + ((projected ? i === 0 : r.rank === 1 && !r.pinned) && (r.thru > 0 || projected) ? ' lead' : '') + (isMine(r, me) ? ' me' : '') + (r.pinned ? ' lb-pin' : '')} onClick={() => setOpen(r)}>
               <span className="lb-rank">{projected ? i + 1 : r.rankLabel}</span>
               <span className="stack" style={{ gap: 5, minWidth: 0 }}>
                 <span className="lb-name ellipsis">{r.name}</span>
                 <span className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
                   <AvatarStack players={r.players} size={isTeams ? 26 : 22} />
-                  {r.penalty > 0 && (
-                    <span data-testid="lb-penalty" title={(r.penaltyLines || []).filter((l) => !l.waived).map((l) => l.label).join(', ')} style={{ marginLeft: 8, display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 999, background: '#FDF1EF', border: '1px solid var(--under)', color: 'var(--under)', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap' }}>
-                      ⚠️ +{r.penalty} late job
+                  {!!r.penalty && (
+                    <span data-testid="lb-penalty" title={(r.penaltyLines || []).filter((l) => !l.waived).map((l) => l.label).join(', ')} style={{ marginLeft: 8, display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 999, background: r.penalty > 0 ? '#FDF1EF' : 'var(--gold-soft)', border: `1px solid ${r.penalty > 0 ? 'var(--under)' : 'var(--gold)'}`, color: r.penalty > 0 ? 'var(--under)' : 'var(--text)', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap' }}>
+                      {r.penalty > 0 ? '⚠️ +' : '🏆 −'}{Math.abs(r.penalty)} {penaltyBadgeWord(r.penaltyLines)}
+                    </span>
+                  )}
+                  {projectedStrokes(r.penaltyLines) > 0 && (
+                    <span data-testid="lb-projected-penalty" title={(r.penaltyLines || []).filter((l) => l.projected).map((l) => l.label).join(', ')} style={{ marginLeft: 8, display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 999, border: '1px dashed var(--under)', color: 'var(--under)', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap' }}>
+                      ⏳ +{projectedStrokes(r.penaltyLines)} drives
                     </span>
                   )}
                   {(r.bonusWins || []).map((w) => (
@@ -293,9 +323,11 @@ export default function Leaderboard() {
             ? `Net to par for the holes each team has played, so teams on different holes compare fairly.${round.comp_bonus ? ` Gold tags = side comp won (−${round.comp_bonus} strokes, already in the score).` : ''} Arrows show movement since you last looked. Tap a team for its card.`
             : 'Points, and +/− against the expected 2 points a hole, so players on different holes compare fairly. * = typed in from a paper card.'}
       </p>
+      <PendingPenalties round={round} />
       {!status?.quick && <RoundRecap round={round} board={board} course={course} />}
       {scores.pendingCount > 0 && <div className="sync">{scores.pendingCount} score{scores.pendingCount > 1 ? 's' : ''} waiting to sync — they'll send when signal's back.</div>}
 
+      {canScore && <div className="fab-space" aria-hidden="true" />}
       {canScore && (
         <Link to={`/score/${round.id}`} className="btn gold fab">Enter score{myTeam ? ` — ${myTeam.name}` : ''}</Link>
       )}
@@ -326,6 +358,7 @@ export function Scorecard({ row, board, round }) {
       </div>
       {row.bonus ? <div className="card pad small" style={{ background: 'var(--gold-soft)', borderColor: 'var(--gold)' }}><strong>Side comp bonus −{row.bonus}</strong> · {row.bonusWins.join(', ')} (already taken off the score)</div> : null}
       <PenaltyLines lines={row.penaltyLines} round={round} names={(row.players || []).length > 1} />
+      {isA && round?.status === 'live' && <DriveTracker round={round} team={row} holes={holes} scores={row.scores || {}} />}
       {row.quick ? (
         <div className="card pad">Typed in from a paper card: <strong>{row.points} points</strong>.</div>
       ) : (
@@ -354,10 +387,10 @@ export function Scorecard({ row, board, round }) {
                   </tr>
                 );
               })}
-              {row.penalty > 0 && (
+              {!!row.penalty && (
                 <tr data-testid="sc-penalty-row">
-                  <td colSpan={5}><strong>Penalty</strong> <span className="muted">(late job)</span></td>
-                  <td><strong>{isNet ? `+${row.penalty}` : `−${row.penalty}`}</strong></td>
+                  <td colSpan={5}><strong>{row.penalty > 0 ? 'Penalty' : 'Strokes off'}</strong> <span className="muted">({penaltyRowWords(row.penaltyLines)})</span></td>
+                  <td><strong>{(isNet ? row.penalty > 0 : row.penalty < 0) ? '+' : '−'}{Math.abs(row.penalty)}</strong></td>
                 </tr>
               )}
               <tr>

@@ -13,10 +13,12 @@
 //     no golf, then the drive (less is better) and the group's votes (more is better).
 import { km, driveMinutes, fmtDrive, parseTimes, parseClock, yesNo } from './tripfinder.js';
 import { clock, toMin } from './teeWindow.js';
+import { fromBuilder } from './tripsteps.js';
+import { playing } from './headcount.js';
 
 export const MAX_STAYS = 3;
 export const MAX_OPTIONS_PER_DAY = 4;
-export const MAX_WEEKENDS = 3;
+export const MAX_WEEKENDS = 26; // ov23: the shortlist can be any of the weekends in the window (half a year of them)
 export const DEFAULT_STAY_MAX = 40;    // minutes from where we stay, on stay days
 export const DEFAULT_DETOUR_MAX = 25;  // extra minutes off the straight drive, on the way there / home
 export const CONSECUTIVE_GAP = 12;     // tee times this close (minutes) count as "in a row"
@@ -300,13 +302,12 @@ export function rankCandidates(cands, { leg = 'stay', dow = null, votes = {}, fi
 
 // ------------------------------------------------------------------ tee times
 
-/** How many tee times: players ÷ 4, rounded up. People: the override, else those "in", else in + maybe. */
-export function teeTimesNeeded({ rsvps = [], override = null } = {}) {
-  const ins = rsvps.filter((r) => r.status === 'in').length;
-  const keen = rsvps.filter((r) => r.status === 'in' || r.status === 'maybe').length;
-  const people = Number(override) > 0 ? Number(override) : ins || keen;
-  const source = Number(override) > 0 ? 'set' : ins ? 'in' : keen ? 'keen' : 'none';
-  return { people, needed: people ? Math.ceil(people / 4) : 0, source };
+/** How many tee times: players ÷ 4, rounded up. People: the one headcount rule (lib/headcount.js) — the target set,
+ *  else those "in", else in + maybe, else the group (when players are passed). */
+export function teeTimesNeeded({ rsvps = [], override = null, players = [], overrideBy = null } = {}) {
+  const p = playing({ target: override, targetBy: overrideBy, rsvps, players });
+  const source = p.source === 'target' || p.source === 'ai' ? 'set' : p.source;
+  return { people: p.people, needed: p.needed, source, label: p.label };
 }
 /** '10:20, 10:30 10:40' / '7am 7:10am' → ['07:00', …] sorted, no repeats. Anything unreadable is left out. */
 export function parseTeeTimes(text) {
@@ -356,7 +357,7 @@ const up10 = (m) => Math.ceil(m / 10) * 10;
  * time. → [{ course_id, name, title, body, lines: [{ index, dates, from }] }]
  *   days: [{ index, leg, options: [course_id] }]   weekends: [{ start, end }]   courses: { id: { name, lat, lng } }
  */
-export function callJobs({ days = [], weekends = [], courses = {}, needed = 1, origin = null, stays = [], booking = {} }) {
+export function callJobs({ days = [], weekends = [], courses = {}, needed = 1, origin = null, stays = [], booking = {}, note = null }) {
   const by = new Map();
   for (const d of days) {
     for (const id of d.options || []) {
@@ -381,8 +382,9 @@ export function callJobs({ days = [], weekends = [], courses = {}, needed = 1, o
     return {
       ...j,
       title: `📞 Call ${j.name} — ask for ${n} tee time${n === 1 ? '' : 's'} in a row on ${ask}`.slice(0, 300),
-      body: [`Ask what they have — ${n} tee time${n === 1 ? '' : 's'} in a row (we’re ${n * 4 - 3}–${n * 4}).`, ...how,
-        'Then put the times in on the trip builder (Trip → Build the trip → Tee times). Nothing is booked yet.'].join('\n'),
+      // note (ov23): "Primary: Fri 6 – Sun 8 Mar; Backup: Fri 13 – Sun 15 Mar" — ask about both.
+      body: [...(note ? [note] : []), `Ask what they have — ${n} tee time${n === 1 ? '' : 's'} in a row (we’re ${n * 4 - 3}–${n * 4}).`, ...how,
+        'Then put the times in on the trip (Trip → Plan the trip → Call the courses). Nothing is booked yet.'].join('\n'),
     };
   });
 }
@@ -445,6 +447,41 @@ export function buildConfigurations({ weekends = [], stays = [], days = [], cour
   return out.sort((a, b) => a.gaps - b.gaps || (a.totalDrive - 10 * a.votes) - (b.totalDrive - 10 * b.votes)
     || String(a.weekend.start).localeCompare(String(b.weekend.start)) || a.key.localeCompare(b.key)).slice(0, limit);
 }
+/**
+ * O4 (Josh's walkthrough): Pick & lock in shows the BEST way to do it as one summary card — each day's course and
+ * tee times, a rough cost each, the driving from where we stay — with one "Lock this in". The rest are "other ways".
+ *   configs: buildConfigurations() (best first); tees: trip_tee_options rows (their price each);
+ *   accom: the accommodation ideas (plan_stays: the cheapest total ÷ people); people: the one headcount number.
+ * → null, or { best, rounds: [{ date, day, name, time, price }], golfEach, stayEach, costEach, drive, others,
+ *   alsoWorks: a different weekend that works too (or null) }
+ */
+export function pickSummary(configs = [], { tees = [], accom = [], people = 0 } = {}) {
+  const best = (configs || [])[0];
+  if (!best) return null;
+  const price = new Map((tees || []).map((t) => [`${String(t.play_date).slice(0, 10)}|${t.course_id}`, t.price != null ? Number(t.price) : null]));
+  const rounds = best.rounds.map((r) => {
+    const d = dateOf(r.date);
+    return { date: r.date, day: d ? `${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}` : `Day ${r.index + 1}`, name: r.name || null, time: r.block?.text || null, price: r.course_id ? price.get(`${r.date}|${r.course_id}`) ?? null : null };
+  });
+  const golf = rounds.filter((r) => r.name);
+  const golfEach = golf.length && golf.every((r) => r.price != null) ? golf.reduce((n, r) => n + r.price, 0) : null;
+  const totals = (accom || []).map((a) => Number(a.total_cost)).filter((n) => Number.isFinite(n) && n > 0);
+  const stayEach = totals.length && people > 0 ? Math.round(Math.min(...totals) / people) : null;
+  const costEach = golfEach != null || stayEach != null ? Math.round((golfEach || 0) + (stayEach || 0)) : null;
+  const also = (configs || []).find((c) => c.weekend.start !== best.weekend.start && !c.gaps);
+  return {
+    best, rounds, golfEach, stayEach, costEach, drive: best.totalDrive, others: (configs || []).slice(1),
+    alsoWorks: also ? also.weekend : null,
+  };
+}
+
+/** "about $450 each (golf $230 + stay $220)" / "golf about $230 each" / null. */
+export function costLine(s) {
+  if (!s || s.costEach == null) return null;
+  if (s.golfEach != null && s.stayEach != null) return `about $${s.costEach} each (golf $${Math.round(s.golfEach)} + stay $${s.stayEach})`;
+  return s.golfEach != null ? `golf about $${Math.round(s.golfEach)} each` : `stay about $${s.stayEach} each`;
+}
+
 /** "Stay Nowra · Fri Shoalhaven Heads 10:20–10:40 · Sat Nowra GC 8:00–8:20 · Sun Mollymook 9:10–9:30 on the way home" */
 export function configText(c) {
   const bits = [`Stay ${c.stay.name}`];
@@ -520,7 +557,8 @@ export function dayVotes(points, index) {
  * and — if the card asks "Are you keen?" — hasn't said In / Maybe / Out.
  */
 export function batchNonVoters({ polls = [], votes = [], rsvps = [], keen = false, playerIds = [] } = {}) {
-  const pollIds = polls.map((p) => p.id);
+  // The detail (ov23: an area's courses and places to stay) is optional — skipping it isn't "still to answer".
+  const pollIds = polls.filter((p) => !p.optional).map((p) => p.id);
   return playerIds.filter((pid) => {
     const mine = new Set(votes.filter((v) => v.player_id === pid).map((v) => v.poll_id));
     if (pollIds.some((id) => !mine.has(id))) return true;
@@ -541,13 +579,16 @@ export function builderSteps(state = {}, ctx = {}) {
   const coursesDone = (state.stays || []).length > 0 && (state.days || []).some((d) => (d.options || []).length);
   const callsDone = !!state.callsMade && (ctx.teeCount || 0) > 0;
   const configsDone = !!state.picked;
+  // ov23 (Josh, 23 Oct): decide the area and the weekends (primary and backup) first, THEN call the courses.
   const steps = [
-    { key: 'area', label: 'Area & weekends', done: areaDone && weekendsDone, locked: false, after: null },
-    { key: 'courses', label: 'Stay areas & courses', done: coursesDone, locked: !areaDone, after: 'Area & weekends' },
-    { key: 'calls', label: 'Call the courses', done: callsDone, locked: !(weekendsDone && coursesDone), after: !weekendsDone ? 'Area & weekends' : 'Stay areas & courses' },
-    { key: 'configs', label: 'Pick the trip', done: configsDone, locked: !callsDone, after: 'Call the courses' },
+    { key: 'area', label: 'Areas & weekends', done: areaDone && weekendsDone, locked: false, after: null },
+    { key: 'courses', label: 'Courses & stays', done: coursesDone, locked: !areaDone, after: 'the area is chosen (Areas & weekends)' },
+    { key: 'calls', label: 'Call the courses', done: callsDone, locked: !(areaDone && weekendsDone && coursesDone),
+      after: !areaDone ? 'the area is chosen (Areas & weekends)' : !weekendsDone ? 'the primary and backup weekends are set (Areas & weekends)' : 'Courses & stays' },
+    { key: 'configs', label: 'Pick & lock in', done: configsDone, locked: !callsDone, after: 'Call the courses' },
   ];
-  return steps.map((s, i) => ({ ...s, n: i + 1 }));
+  // The labels and numbers come from the one shared step list (lib/tripsteps.js), so they match Organise exactly.
+  return steps.map((s) => { const t = fromBuilder(s.key); return { ...s, label: t.title, n: t.n, organise: t.key }; });
 }
 
 // ------------------------------------------------------------------ the saved state
@@ -632,38 +673,53 @@ export function areaBallotNote(courseIds = [], courseMap = {}, stayPins = []) {
 
 /**
  * Everything on the table at the start, as the sections "Call the vote" shows (each option ticked = on the ballot).
- * st: the builder state; ctx: { courseMap, accom: plan_stays rows, extras: a ballot section or null }.
- * Sections: which area (2+ areas), which weekend (2+), where to stay (stay pins), courses (per area), accommodation
- * ideas, and "Would you do these?" (extras).
- * → [{ key, kind, question, options: [{ key, label, notes, start_date?, end_date?, stayId? }] }]
+ * st: the builder state; ctx: { courseMap, accom: plan_stays rows, extras: a ballot section or null, depth }.
+ * depth (ov23, Josh): 'areas' = just "Which area?" (+ the weekends shortlist and extras); 'full' (default) = also a
+ * question per area for its courses and its places to stay. With 2+ areas those per-area questions are the DETAIL:
+ * optional for voters (optional: true, area: <name>) — answering the area and the weekends is enough.
+ * Sections: which area (2+ areas), which weekend (2+), places to stay and courses (per area), accommodation ideas, and
+ * "Would you do these?" (extras).
+ * → [{ key, kind, question, options: [{ key, label, notes, start_date?, end_date?, stayId? }], area?, optional? }]
  */
-export function startRange(st = {}, { courseMap = {}, accom = [], extras = null } = {}) {
+export function startRange(st = {}, { courseMap = {}, accom = [], extras = null, depth = 'full', length = null, notes = {} } = {}) {
   const out = [];
   const areas = st.region ? [st.region] : (st.regionOptions || []);
   const areaStays = st.areaStays || {};
   const areaCourses = st.areaCourses || {};
-  if (!st.region && areas.length >= 2) {
+  const multi = !st.region && areas.length >= 2;
+  const detail = depth !== 'areas';
+  if (multi) {
     out.push({ key: 'area', kind: 'location', question: 'Which area?', options: areas.map((r) => ({ key: `area:${r}`, label: r, notes: areaBallotNote(areaCourses[r] || [], courseMap, areaStays[r] || []) || null })) });
   }
   if ((st.weekends || []).length >= 2 && !st.weekendsSettled) {
     out.push({ key: 'weekend', kind: 'dates', question: 'Which weekend?', options: st.weekends.map((w) => ({ key: `weekend:${w.start}`, label: weekendLabel(w), start_date: w.start, end_date: w.end })) });
   }
-  const stayOpts = [];
-  for (const r of areas) {
-    const pins = st.region && st.stays?.length ? st.stays : areaStays[r] || [];
-    for (const s of pins) stayOpts.push({ key: `stay:${s.key || s.name}`, label: areas.length > 1 ? `${s.name} (${r})` : s.name, notes: null, area: r });
+  if (length) out.push(length); // "How long?" (ov23) — a main question, next to the area and the weekends
+  const courseOpts = (r, ids) => ids.map((id) => ({ key: `areacourse:${r}:${id}`, label: courseMap[id]?.name || 'Course', notes: courseMap[id]?.area || null, area: r }));
+  const stayOpts = (r, pins) => pins.map((s) => ({ key: `stay:${s.key || s.name}`, label: s.name, notes: null, area: r }));
+  if (multi && detail) {
+    // The detail, grouped under each area ("Hunter Valley: which courses?", "Hunter Valley: where to stay?").
+    for (const r of areas) {
+      const ids = areaCourses[r] || [];
+      if (ids.length) out.push({ key: `courses:${r}`, kind: 'other', area: r, optional: true, question: `${r}: which courses?`, options: courseOpts(r, ids) });
+      const pins = areaStays[r] || [];
+      if (pins.length) out.push({ key: `stays:${r}`, kind: 'other', area: r, optional: true, question: `${r}: where to stay?`, options: stayOpts(r, pins) });
+    }
+  } else if (detail) {
+    for (const r of areas) {
+      const pins = st.region && st.stays?.length ? st.stays : areaStays[r] || [];
+      if (pins.length) out.push({ key: 'stay', kind: 'other', question: 'Which town to stay in?', options: stayOpts(r, pins) });
+      const ids = areaCourses[r] || [];
+      if (ids.length) out.push({ key: `courses:${r}`, kind: 'other', question: 'Which courses?', options: courseOpts(r, ids) });
+    }
   }
-  if (stayOpts.length) out.push({ key: 'stay', kind: 'other', question: 'Which town to stay in?', options: stayOpts });
-  for (const r of areas) {
-    const ids = areaCourses[r] || [];
-    if (!ids.length) continue;
-    out.push({ key: `courses:${r}`, kind: 'other', question: areas.length > 1 ? `${r}: which courses?` : 'Which courses?', options: ids.map((id) => ({ key: `areacourse:${r}:${id}`, label: courseMap[id]?.name || 'Course', notes: courseMap[id]?.area || null, area: r })) });
-  }
-  const ideas = (accom || []).filter((a) => !a.option_id);
+  const ideas = detail ? (accom || []).filter((a) => !a.option_id) : [];
   if (ideas.length) {
     out.push({ key: 'accom', kind: 'other', question: 'Where should we stay?', options: ideas.map((a) => ({ key: `accom:${a.id}`, label: a.name, notes: [a.area, a.total_cost != null ? `$${Number(a.total_cost)} total` : null, a.sleeps ? `sleeps ${a.sleeps}` : null].filter(Boolean).join(' · ') || null, stayId: a.id, area: a.area || undefined })) });
   }
   if (extras) out.push(extras);
+  // The one-line summary on each option (ov23: course details on the vote card), when the screen worked them out.
+  for (const s of out) for (const o of s.options || []) if (notes[o.key]) o.notes = String(notes[o.key]).slice(0, 480);
   return out;
 }
 

@@ -321,6 +321,6 @@ Deno.serve(async (req) => {
     return json(await helperRequest(body, makeDeps(db, status.group_id, who.user.id, status)));
   } catch (e) {
     console.error('ai-helper failed:', errorKind(e)); // only the kind of error: never values, text or keys
-    return json({ error: 'The AI helper hit a snag — try again in a minute.' });
+    return json({ error: 'The Caddie hit a snag — try again in a minute.' });
   }
 });

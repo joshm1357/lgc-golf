@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase, friendlyError } from '../lib/supabase.js';
-import { useData, useScores, useSession, useSideEntries, playerName } from '../lib/store.jsx';
-import { roundBoard, stablefordTrophyBoard, compBonuses } from '../lib/board.js';
+import { useData, useScores, useSession, useSideEntriesState, playerName } from '../lib/store.jsx';
+import { readyBoard, stablefordTrophyBoard } from '../lib/board.js';
 import { formatToPar } from '../lib/scoring.js';
 import { Seg, Avatar, AvatarStack, Icon, Sheet, toast } from '../components/ui.jsx';
 import { TrophyArt } from '../components/TrophyArt.jsx';
@@ -10,10 +10,13 @@ import { honourOrder } from '../lib/history.js';
 import { StatsLink } from '../components/PlayerStats.jsx';
 import { ReplayChips } from '../components/ReplayChips.jsx';
 import { useTripComps } from '../components/CompsChip.jsx';
+import { CupPhoto } from '../components/CupStandings.jsx'; // ov32: the real cup's photo and who has it
 import { useCompData, CompStandingsView } from './CompsBoard.jsx';
 import { compStandings } from '../lib/comps.js';
 import RuleTag from '../components/RuleTag.jsx';
 import { useRoundAdjustments } from '../components/LateJobs.jsx';
+import { todayISO } from '../lib/plan.js';
+import { tripFinished, tripYear, engraved, previousHolder, handoverLine, compWinner } from '../lib/results.js';
 
 /** Is this trophy's comp the classic kind the Trophy Room always showed (all the trip's Stableford / Ambrose rounds,
  *  or awarded)? Then it's shown exactly as before; any other comp shows its own standings (lib/comps.js). */
@@ -58,15 +61,44 @@ export default function Trophies() {
     playersById: data.playersById, scoresIdx: scores.index, quickResults: data.quick_results, adjustments,
   }) : null), [trip, data, scores.index, adjustments]);
   const aRound = [...tripRounds].reverse().find((r) => r.format === 'ambrose');
-  const aSide = useSideEntries(aRound?.id);
-  const aBoard = useMemo(() => (aRound ? roundBoard({
+  const aSide = useSideEntriesState(aRound?.id);
+  const aBoard = useMemo(() => (aRound ? readyBoard({
     round: aRound, course: data.coursesById[aRound.course_id], teams: data.teamsByRound[aRound.id] || [],
-    playersById: data.playersById, scoresIdx: scores.index,
-    bonuses: compBonuses(aRound, data.teamsByRound[aRound.id] || [], aSide), adjustments,
+    playersById: data.playersById, scoresIdx: scores.index, adjustments,
+    sideEntries: aSide.rows, sideLoaded: aSide.loaded,
   }) : null), [aRound, data, scores.index, aSide, adjustments]);
 
   const plaquesFor = (name) => honourOrder(data.honour_board.filter((h) => h.trophy_name.toLowerCase() === name.toLowerCase()));
+  // ov28 (walkthrough W1: the Trophy Room still said "Held by Bo · Mo leads" after the trip): once the trip's over,
+  // the trophy has a winner — it's handed over here straight away ("Mo wins the BD Trophy 2026, takes it from Bo"),
+  // even before an organiser engraves it on the honour board.
+  const finished = !!trip && tripFinished(trip, data.rounds, todayISO());
+  const decided = (t) => {
+    if (!finished || t.historyOnly) return null;
+    const done = engraved({ trophyName: t.name, tripId: trip.id, honourBoard: data.honour_board });
+    if (done) return { names: done.winner_names, ids: done.player_ids || [], engraved: true };
+    const g = compSt(t);
+    if (g) {
+      if (g.c.kind === 'cup') {
+        const v = g.st.verdict;
+        const side = v?.status === 'won' ? g.st.sides?.[v.winner === 'a' ? 0 : 1] : null;
+        return side ? { names: side.name, ids: data.players.filter((p) => p.cup_side === side.id).map((p) => p.id) } : null;
+      }
+      return compWinner(g.st);
+    }
+    if (t.type === 'stableford_total') return compWinner({ rows: sBoard?.rows || [] });
+    if (t.type === 'ambrose') return compWinner({ rows: aBoard?.rows || [] });
+    return null;
+  };
+  const handover = (t) => {
+    const w = decided(t);
+    if (!w) return null;
+    const previous = previousHolder({ trophyName: t.name, tripId: trip.id, honourBoard: data.honour_board });
+    return { ...w, line: handoverLine({ trophyName: t.name, year: tripYear(trip, data.rounds, todayISO()), winner: w.names, winnerIds: w.ids, previous }) };
+  };
   const leaderLine = (t) => {
+    const h = handover(t);
+    if (h) return `${h.line}${h.engraved ? '' : ' · to be engraved'}`;
     const g = compSt(t);
     if (g) return g.st.leaderText;
     if (t.type === 'stableford_total' && sBoard?.rows[0]?.total > 0) return `${sBoard.rows[0].name} leads · ${sBoard.rows[0].total} pts`;
@@ -90,19 +122,20 @@ export default function Trophies() {
         <div className="hdr-sub">{status?.look?.short_name || status?.group_name}{trip ? ` · ${trip.name}` : ''}</div>
       </header>
 
-      {!trophies.length && <div className="empty" style={{ color: '#C9B48A' }}>The cabinet's empty. {status.is_admin && <><Link to="/admin" style={{ color: '#EBD496' }}>Add trophies in Admin</Link>, or <Link to="/history" style={{ color: '#EBD496' }}>add past winners from before the app</Link>.</>}</div>}
+      {!trophies.length && <div className="empty" style={{ color: '#C9B48A' }}>The cabinet's empty. {status.is_admin && <><Link to="/admin" style={{ color: '#EBD496' }}>Add trophies in Organiser tools</Link>, or <Link to="/history" style={{ color: '#EBD496' }}>add past winners from before the app</Link>.</>}</div>}
 
       <ReplayChips rounds={tripRounds} title="This trip’s replays" style={{ padding: '0 16px 10px' }} />
 
       <div className="cabinet" role="group" aria-label="Trophies">
         {trophies.map((t) => {
-          const holder = plaquesFor(t.name)[0];
+          const h = handover(t);
+          const holderNames = h ? h.names : plaquesFor(t.name)[0]?.winner_names;
           const lead = leaderLine(t);
           return (
-            <button key={t.id} type="button" className="case" aria-pressed={t.id === trophy?.id} onClick={() => setSel(t.id)}>
+            <button key={t.id} type="button" className="case" aria-pressed={t.id === trophy?.id} onClick={() => setSel(t.id)} data-testid="trophy-case">
               <TrophyArt name={t.name} type={t.type} size={104} />
-              <div className="plate"><div className="t">{t.name}</div>{holder && <div className="s">HELD BY {holder.winner_names.toUpperCase()}</div>}</div>
-              {lead && <div className="small" style={{ color: '#EBD496', fontWeight: 600 }}>{lead}</div>}
+              <div className="plate"><div className="t">{t.name}</div>{holderNames && <div className="s" data-testid="trophy-holder">HELD BY {holderNames.toUpperCase()}</div>}</div>
+              {lead && <div className="small" style={{ color: '#EBD496', fontWeight: 600 }} data-testid="trophy-lead">{lead}</div>}
               {/* ov15: the comp that decides it (tap the case for its standings). */}
               {!t.historyOnly && <div className="small" data-testid="decided-by" style={{ color: '#C9B48A' }}>Decided by: {compOf(t)?.name && compOf(t).name !== t.name ? compOf(t).name : ({ stableford_total: 'Stableford points over the trip', ambrose: 'the Ambrose round', manual: 'the group’s pick' }[t.type] || 'the group')}</div>}
             </button>
@@ -123,6 +156,7 @@ export default function Trophies() {
             )}
           </div>
 
+          {compOf(trophy)?.cup_id && <CupPhoto comp={compOf(trophy)} size={120} />}
           {trip && !trophy.historyOnly && <Link to={`/comps-board?trip=${trip.id}${compOf(trophy) ? `&c=${encodeURIComponent(compOf(trophy).id)}` : ''}`} className="small" style={{ color: '#EBD496', fontWeight: 700 }}>The standings, with this trip’s other comps →</Link>}
           {general && (
             <>
@@ -173,7 +207,7 @@ export default function Trophies() {
               </div>
               <p className="note" style={{ margin: 0 }}>{trophy.name}: winning team of {aRound.name}. <Link to={`/?r=${aRound.id}`} style={{ color: '#EBD496' }}>Open the live leaderboard</Link>.</p>
             </>
-          ) : <div className="card pad">No Ambrose round set up yet.</div>)}
+          ) : <div className="card pad">{aRound ? 'Loading the leaderboard…' : 'No Ambrose round set up yet.'}</div>)}
 
           {!general && trophy.type === 'manual' && !plaques.length && (
             <div className="card pad">No winners engraved yet.{status.is_admin && !trophy.historyOnly ? ' Tap “Engrave winner” when it’s decided.' : ''}</div>
@@ -198,7 +232,7 @@ export default function Trophies() {
 
       {awarding && trophy && (
         <Engrave trophy={trophy} trip={trip}
-          suggested={general ? (general.c.kind === 'cup' ? data.players.filter((p) => p.cup_side && p.cup_side === general.st.rows[0]?.id).map((p) => p.id) : (general.st.rows[0]?.players || []).map((p) => p?.id))
+          suggested={handover(trophy)?.ids?.length ? handover(trophy).ids : general ? (general.c.kind === 'cup' ? data.players.filter((p) => p.cup_side && p.cup_side === general.st.rows[0]?.id).map((p) => p.id) : (general.st.rows[0]?.players || []).map((p) => p?.id))
             : trophy.type === 'stableford_total' ? sBoard?.rows[0]?.players.map((p) => p.id) : trophy.type === 'ambrose' ? aBoard?.rows[0]?.players.map((p) => p.id) : []}
           onClose={() => setAwarding(false)} />
       )}

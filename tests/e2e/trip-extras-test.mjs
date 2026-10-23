@@ -97,6 +97,9 @@ async function fake(route) {
   if (method === 'OPTIONS') return json({});
   const p = url.pathname;
   if (p.startsWith('/rest/v1/rpc/my_status')) return json({ is_member: true, is_admin: true, player_id: K, group_name: 'Hunter Crew', group_id: GROUP, role: 'organiser', legacy: false, groups: [{ id: GROUP, name: 'Hunter Crew', slug: 'hunter', role: 'organiser' }] });
+  // ov24 (093): closing an award is settled on the server (settle_dinner_award posts the result; awards-fines-test
+  // checks that). This fake is an older database without it, so the app's own fallback posts the result line.
+  if (p.startsWith('/rest/v1/rpc/settle_dinner_award')) return json({ code: 'PGRST202', message: 'Could not find the function public.settle_dinner_award(p_award) in the schema cache', details: null, hint: null }, 404);
   if (p.startsWith('/rest/v1/rpc/')) return json(null);
   if (p.startsWith('/functions/')) return json({ sent: 0 });
   if (p.startsWith('/rest/v1/')) {
@@ -172,7 +175,7 @@ await ctx.addInitScript(([uid]) => {
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
   if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated' } }));
-  localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-notify-prompt', String(Date.now()));
+  localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */ localStorage.setItem('tgt-notify-prompt', String(Date.now()));
 }, ['99999999-9999-4999-8999-999999999999']);
 const page = await ctx.newPage();
 page.on('pageerror', (e) => fails.push(`page error: ${e}`));
@@ -240,7 +243,7 @@ await page.screenshot({ path: `${SHOTS}/4-repeat-made.png`, fullPage: true });
 // 3b. "Set it up in the app" on the copied trip fills the rounds from last time, then puts the side comps and games back.
 await page.goto(`${BASE}#/plan/${made?.id}?view=organise&step=day`);
 await page.getByRole('button', { name: /Set it up in the app/ }).click();
-const selects = page.getByLabel('Course');
+const selects = page.getByLabel('Course', { exact: true });
 await selects.first().waitFor({ timeout: 10000 });
 const picked = await selects.evaluateAll((els) => els.map((e) => e.value));
 check(picked[0] === C1 && picked[1] === '' && picked[2] === C2, `set-up sheet: Friday Cypress Lakes, Saturday blank, Sunday The Vintage (${picked.join(', ')})`);

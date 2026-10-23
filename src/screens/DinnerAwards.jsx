@@ -15,6 +15,10 @@ import {
   canNominate, canVote, nextStep, myVote, tally, resultLine, sortAwards, closedPost, resultsCard,
 } from '../lib/dinnerawards.js';
 import { lineFor } from '../lib/injokes.js';
+import { termsOf, worthOf, proofNeeds, proofLabel, bestLabel, claimWords, rankClaims } from '../lib/awardsfines.js';
+import { ProposeSheet } from '../components/AwardsFines.jsx';
+import { AutoAwardRuns, FromScoresProposer } from '../components/AutoAwards.jsx';
+import { autoTerms } from '../lib/autoawards.js';
 
 const TABLES = ['dinner_awards', 'dinner_award_nominations', 'dinner_award_votes'];
 
@@ -25,13 +29,17 @@ function useDinner(tripId) {
     const { data: awards, error } = await supabase.from('dinner_awards').select('*').eq('trip_id', tripId).order('created_at');
     if (error) { setD((cur) => cur || { awards: [], nominations: [], votes: [], failed: true }); return; }
     const ids = (awards || []).map((a) => a.id);
-    const [n, v] = ids.length
+    const ruleIds = [...new Set((awards || []).map((a) => a.rule_id).filter(Boolean))];
+    const [n, v, r] = ids.length
       ? await Promise.all([
         supabase.from('dinner_award_nominations').select('*').in('award_id', ids).order('created_at'),
         supabase.from('dinner_award_votes').select('*').in('award_id', ids),
+        ruleIds.length ? supabase.from('rules').select('*').in('id', ruleIds) : Promise.resolve({ data: [] }),
       ])
-      : [{ data: [] }, { data: [] }];
-    setD({ awards: awards || [], nominations: n.data || [], votes: v.data || [] });
+      : [{ data: [] }, { data: [] }, { data: [] }];
+    // 093: an award from the Rulebook takes its rule's reward and proof.
+    const rulesById = Object.fromEntries((r.data || []).map((x) => [x.id, x]));
+    setD({ awards: awards || [], nominations: n.data || [], votes: v.data || [], rulesById });
   }, [tripId]);
   useEffect(() => { load(); }, [load]);
   useRealtime(TABLES, load);
@@ -58,28 +66,37 @@ export default function DinnerAwards() {
   const trip = (tripId && data.trips.find((t) => t.id === tripId)) || (!tripId && data.currentTrip) || null;
   const [d, reload] = useDinner(trip?.id);
   const [nominating, setNominating] = useState(null);
+  const [proposing, setProposing] = useState(false);
   const jokes = useJokeLines();
   const readOnly = !!status.viewing;
   const nameOf = useCallback((id) => playerName(data.playersById[id]) || 'Someone', [data.playersById]);
   const card = useMemo(() => (d ? resultsCard({ tripName: trip?.name, awards: d.awards, nominations: d.nominations, votes: d.votes, nameOf }) : null), [d, trip, nameOf]);
 
-  if (!trip) return <div className="page"><Header back title="Dinner awards" /><div className="empty">No trip yet — dinner awards belong to a trip.</div></div>;
-  if (!d) return <div className="page"><Header back title="Dinner awards" sub={trip.name} /><Loading /></div>;
-  const list = sortAwards(d.awards);
+  if (!trip) return <div className="page"><Header back title="Fines & awards" /><div className="empty">No trip yet — fines &amp; awards belong to a trip.</div></div>;
+  if (!d) return <div className="page"><Header back title="Fines & awards" sub={trip.name} /><Loading /></div>;
+  // 100: a nightly (daily, from-the-scores) award shows as its runs below, not as a card to vote on — unless someone
+  // nominated straight onto it (the old way, still allowed). The nights' copies (parent_id) are inside those runs.
+  const list = sortAwards(d.awards.filter((a) => !a.parent_id
+    && (autoTerms(a, d.rulesById?.[a.rule_id] || null).runs === 'trip' || d.nominations.some((n) => n.award_id === a.id))));
 
   return (
     <div className="page">
-      <Header back title="Fines and dinner awards" sub={trip.name} />
+      <Header back title="Fines & awards" sub={trip.name} />
       <div className="section stack">
         {d.failed && <div className="err">Couldn’t load the awards — check your signal.</div>}
-        {list.length === 0 && <div className="empty">No awards or fines yet. Add the first — the group nominates, then votes at dinner.</div>}
+        {list.length === 0 && d.awards.length === 0 && <div className="empty">No awards or fines yet. Add the first — the group nominates, then votes when you get together (dinner, lunch or at the course).</div>}
+        {/* ov28 (I14): the presentation — winners one by one on the TV or a phone, at dinner, lunch or the course. */}
+        <Link to={`/present/awards/${trip.id}`} className="btn gold block" data-testid="present-awards">🎤 The presentation</Link>
+        <AutoAwardRuns trip={trip} />
+        <FromScoresProposer trip={trip} />
         {list.map((a) => (
           <AwardCard key={a.id} award={a} d={d} nameOf={nameOf} readOnly={readOnly} onNominate={() => setNominating(a)} reload={reload} trip={trip} joke={lineFor(jokes, a.id)} />
         ))}
         {!readOnly && <AddAward trip={trip} onSaved={reload} />}
+        {!readOnly && status.role !== 'guest' && <button type="button" className="btn ghost block" onClick={() => setProposing(true)} data-testid="dinner-propose">📜 Propose one for the Rulebook (every trip, with a reward and proof)</button>}
         {card?.rows.length > 0 && (
           <SharePicture kind="awards" data={card} label="🖼️ Share the results as a picture"
-            text={`🍽️ ${trip.name} — fines and dinner awards`} />
+            text={`🏅 ${trip.name} — fines & awards`} />
         )}
         <p className="note" style={{ margin: 0 }}>
           Roast the golf and the mates — never race, religion, sexuality, disability or anything tragic (the app won’t take it).
@@ -87,6 +104,7 @@ export default function DinnerAwards() {
         </p>
       </div>
       {nominating && <NominateSheet award={nominating} d={d} onClose={() => setNominating(null)} onSaved={reload} />}
+      {proposing && <ProposeSheet trip={trip} onClose={() => setProposing(false)} onSaved={reload} />}
     </div>
   );
 }
@@ -103,18 +121,36 @@ function AwardCard({ award, d, nameOf, readOnly, onNominate, reload, trip, joke 
   const closed = award.status === 'closed';
   const winners = new Set(result.winners.map((w) => w.nomination.id));
   const step = nextStep(award);
+  const terms = termsOf(award, d.rulesById || {});
+  const worth = worthOf(terms, award);
+  const ranked = rankClaims(d.nominations.filter((n) => n.award_id === award.id), terms.best);
+  const rankOf = Object.fromEntries(ranked.map((n) => [n.id, n.rank]));
+  const [tie, setTie] = useState(null); // players to pick from when the vote is level
 
   const vote = (n) => run(async () => {
     await must(supabase.from('dinner_award_votes').upsert({ award_id: award.id, nomination_id: n.id, voter_id: me }, { onConflict: 'award_id,voter_id' }));
     await reload();
   }, 'Vote in');
+  // 093: closing decides it on the server — the winner, the Feed post ("🏆 Latest out — Hamish, 2:47am 📷 · −1 stroke
+  // next round") and any strokes for the next round. Level on votes: the organiser picks. An older database: as before.
+  const settle = async (player = null) => {
+    const { data: r, error } = await supabase.rpc('settle_dinner_award', { p_award: award.id, ...(player ? { p_player: player } : {}) });
+    if (error) {
+      if (/settle_dinner_award|function/i.test(error.message || '') && feedOn) {
+        await supabase.from('posts').insert({ kind: 'user', player_id: me, trip_id: trip.id, link: `/dinner/${trip.id}`, body: closedPost(award, result, nameOf) });
+        return;
+      }
+      throw error;
+    }
+    if (r?.status === 'tie') setTie(r.players || []);
+    else setTie(null);
+  };
   const move = () => run(async () => {
     await must(supabase.from('dinner_awards').update({ status: step.status }).eq('id', award.id));
-    if (step.status === 'closed' && feedOn) {
-      await supabase.from('posts').insert({ kind: 'user', player_id: me, trip_id: trip.id, link: `/dinner/${trip.id}`, body: closedPost(award, result, nameOf) });
-    }
+    if (step.status === 'closed') await settle();
     await reload();
-  }, step.status === 'closed' ? 'Decided — it’s on the Feed' : step.status === 'voting' ? 'Voting’s open' : null);
+  }, step.status === 'closed' ? 'Closed — the result’s on the Feed' : step.status === 'voting' ? 'Voting’s open' : null);
+  const pickWinner = (pid) => run(async () => { await settle(pid); await reload(); }, `${nameOf(pid)} it is — it’s on the Feed`);
   const remove = () => run(async () => {
     await must(supabase.from('dinner_awards').delete().eq('id', award.id));
     await reload();
@@ -128,11 +164,24 @@ function AwardCard({ award, d, nameOf, readOnly, onNominate, reload, trip, joke 
           <div className="grow" style={{ minWidth: 0 }}>
             <div className="small muted" style={{ fontWeight: 700 }}>{KIND_LABEL[award.kind]} · {STATUS_LABEL[award.status]}</div>
             <div style={{ fontSize: 19, fontWeight: 800 }}>{award.title}</div>
-            {award.kind === 'fine' && award.penalty && <div className="small">Fine: {award.penalty}</div>}
+            {worth && <div className="small" data-testid="award-worth-line">{award.kind === 'fine' ? 'Fine' : 'Reward'}: <strong>{worth}</strong>{terms.reward_type === 'strokes' ? ' in the next round' : ''}</div>}
+            {(proofLabel(terms.proof, terms.number_unit) || terms.best) && <div className="small muted">{[proofLabel(terms.proof, terms.number_unit), bestLabel(terms.best)].filter(Boolean).join(' · ')}</div>}
           </div>
           {canRemove && <button type="button" className="btn ghost sm" disabled={busy} aria-label="Remove" onClick={() => window.confirm(`Remove “${award.title}”?`) && remove()}>✕</button>}
         </div>
-        {closed && <div style={{ marginTop: 6, fontWeight: 800 }} data-testid="award-result">🏆 {resultLine(award, result, nameOf)}</div>}
+        {closed && <div style={{ marginTop: 6, fontWeight: 800 }} data-testid="award-result">🏆 {award.winner_id ? `${nameOf(award.winner_id)}${claimWords(d.nominations.find((n) => n.award_id === award.id && n.player_id === award.winner_id), terms) ? `, ${claimWords(d.nominations.find((n) => n.award_id === award.id && n.player_id === award.winner_id), terms)}` : ''}${worth ? ` · ${worth}${terms.reward_type === 'strokes' ? ' next round' : ''}` : ''}` : resultLine(award, result, nameOf)}</div>}
+        {/* ov33: present just this one — nominations, then the winner. */}
+        {closed && (award.winner_id || result.winners.length > 0) && (
+          <Link to={`/present/awards/${trip.id}?only=a-${award.id}`} className="small" style={{ fontWeight: 700, display: 'inline-block', marginTop: 4 }} data-testid="present-one">🎤 Present this one</Link>
+        )}
+        {closed && org && !readOnly && !award.winner_id && (tie || result.tie) && (
+          <div className="stack" style={{ gap: 6, marginTop: 6 }} data-testid="award-tie">
+            <span className="small">Level — you pick who {award.kind === 'fine' ? 'cops it' : 'gets it'}:</span>
+            <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+              {(tie || result.winners.map((w) => w.player_id)).map((pid) => <button key={pid} type="button" className="btn sm ghost" disabled={busy} onClick={() => pickWinner(pid)}>{nameOf(pid)}</button>)}
+            </div>
+          </div>
+        )}
         {closed && joke && result.winners.length > 0 && <div className="small muted" style={{ marginTop: 4, fontStyle: 'italic' }} data-testid="award-joke">🎙️ {joke}</div>}
         {award.status === 'voting' && <div className="small muted" style={{ marginTop: 4 }}>{result.total} vote{result.total === 1 ? '' : 's'} in so far{mine ? ' · yours is in' : ''}</div>}
       </div>
@@ -145,7 +194,8 @@ function AwardCard({ award, d, nameOf, readOnly, onNominate, reload, trip, joke 
           <div key={n.id} className="row" style={{ gap: 10, padding: '10px 14px', borderTop: '1px solid var(--line-soft)', alignItems: 'flex-start', background: closed && winners.has(n.id) ? 'var(--gold-soft)' : undefined }} data-testid="nominee">
             <Avatar player={p} size={36} />
             <div className="grow" style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 700 }}>{nameOf(n.player_id)}{closed && winners.has(n.id) ? ' 🏆' : ''}</div>
+              <div style={{ fontWeight: 700 }}>{rankOf[n.id] ? <span className="small" style={{ marginRight: 6, padding: '1px 7px', borderRadius: 999, background: rankOf[n.id] === 1 ? 'var(--gold)' : 'var(--line-soft)' }} data-testid="claim-rank">#{rankOf[n.id]}</span> : null}{nameOf(n.player_id)}{closed && (award.winner_id ? award.winner_id === n.player_id : winners.has(n.id)) ? ' 🏆' : ''}</div>
+              {claimWords(n, terms) && <div className="small" data-testid="claim-words">⏱ {claimWords(n, terms)}</div>}
               {n.reason && <div className="small">“{n.reason}”</div>}
               <div className="small muted">from {nameOf(n.nominated_by)}{n.post_id ? <> · <Link to="/feed">see the post</Link></> : ''}</div>
               {n.photo_url && <a href={n.photo_url} target="_blank" rel="noopener noreferrer"><img src={n.photo_url} alt="Evidence" loading="lazy" style={{ marginTop: 6, maxWidth: 140, maxHeight: 100, borderRadius: 8, objectFit: 'cover' }} /></a>}
@@ -224,11 +274,19 @@ function NominateSheet({ award, d, onClose, onSaved }) {
     return () => { live = false; };
   }, [feedOn]);
   const err = checkReason(reason);
+  // 093: the proof this one needs (a photo, a time, a number).
+  const terms = termsOf(award, d.rulesById || {});
+  const needs = proofNeeds(terms.proof);
+  const [time, setTime] = useState('');
+  const [num, setNum] = useState('');
+  const pickedPost = posts.find((p) => p.id === postId);
+  const proofOk = (!needs.photo || file || pickedPost?.photo_url) && (!needs.time || time) && (!needs.number || num !== '');
   const save = () => run(async () => {
     const photo = file ? await uploadPhoto(file, 'dinner') : null;
     await must(supabase.from('dinner_award_nominations').insert({
       award_id: award.id, player_id: who, reason: reason.trim() || null, nominated_by: status.player_id,
       photo_url: photo, post_id: postId || null,
+      ...(needs.time ? { claim_at: new Date(time).toISOString() } : {}), ...(needs.number ? { claim_number: Number(num) } : {}),
     }));
     await onSaved();
     onClose();
@@ -245,7 +303,9 @@ function NominateSheet({ award, d, onClose, onSaved }) {
         <label className="field"><span>Why (optional)</span>
           <input className="input" value={reason} maxLength={REASON_MAX + 10} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Three balls in the dam on 7" /></label>
         {err && <span className="err" role="alert">{err}</span>}
-        <span className="label">Evidence (optional)</span>
+        {needs.time && <label className="field"><span>Time (needed)</span><input className="input" type="datetime-local" value={time} onChange={(e) => setTime(e.target.value)} data-testid="nominate-time" /></label>}
+        {needs.number && <label className="field"><span>{terms.number_unit ? `How many (${terms.number_unit})` : 'The number'} (needed)</span><input className="input" inputMode="decimal" value={num} onChange={(e) => setNum(e.target.value.replace(/[^\d.]/g, ''))} data-testid="nominate-number" /></label>}
+        <span className="label">{needs.photo ? 'Photo (needed)' : 'Evidence (optional)'}</span>
         <PhotoButtons onPick={setFile} picked={!!file} />
         {posts.length > 0 && (
           <label className="field"><span>…or a photo from the Feed</span>
@@ -255,7 +315,7 @@ function NominateSheet({ award, d, onClose, onSaved }) {
             </select>
           </label>
         )}
-        <button type="button" className="btn gold block" disabled={busy || !who || !!err} onClick={save}>Nominate</button>
+        <button type="button" className="btn gold block" disabled={busy || !who || !!err || !proofOk} onClick={save}>Nominate</button>
         <span className="small muted">Nominations close when the organiser opens the voting.</span>
       </div>
     </Sheet>

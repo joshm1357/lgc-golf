@@ -123,7 +123,7 @@ await ctx.addInitScript(([uid, group]) => {
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
   if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated' } }));
   localStorage.setItem('lgc-group', group);
-  localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-notify-prompt', String(Date.now()));
+  localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */ localStorage.setItem('tgt-notify-prompt', String(Date.now()));
 }, ['99999999-9999-4999-8999-999999999999', GROUP]);
 const page = await ctx.newPage();
 page.on('pageerror', (e) => fails.push(`page error: ${e}`));
@@ -162,7 +162,7 @@ check(await page.getByRole('group', { name: 'What was wrong' }).count() === 0, '
 
 // 3. Wishes → ✨ AI helper: A vs B with the verdict.
 await page.goto(`${BASE}#/wishes`);
-await page.getByRole('button', { name: '✨ AI helper' }).click();
+await page.getByRole('button', { name: '✨ The Caddie' }).click();
 await page.getByLabel('Model test').waitFor({ timeout: 10000 });
 const verdict = await page.getByLabel('Verdict').innerText();
 check(/B is better \(95% sure\)/.test(verdict), `verdict from the fake data: ${verdict.trim()}`);

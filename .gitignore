@@ -8,3 +8,9 @@ dist
 !.env.example
 .claude/
 dist-flags/
+shots-*/
+shots/
+nav-shots/
+*-shots/
+dist-pw/
+dist-code/

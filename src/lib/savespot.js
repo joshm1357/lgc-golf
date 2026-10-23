@@ -26,6 +26,10 @@ export function signInModes(list = []) {
     // Email + password (Josh, 22 Oct). "email" on its own (staging before 22 Oct) means a 6-digit code every time.
     password: has('password'),
     emailCode: has('email') && !has('password'),
+    // F2 (ov27, walkthrough review option B): joining from a link is ONE step — Google, or an emailed code (no
+    // password) — whenever "email" is listed. "google,password,email": the join screen asks for a code only, while the
+    // front door still takes the passwords people have already set. "google,email": a code everywhere.
+    joinCode: has('email'),
     any: list.length > 0,
   };
 }

@@ -9,6 +9,7 @@ import { useData, useSession, useFeature } from '../lib/store.jsx';
 import { currentGroup } from '../lib/group.js';
 import { useRun, must } from '../lib/run.js';
 import { toast } from './ui.jsx';
+import { fmtRange } from '../lib/plan.js';
 import { useComps } from './CompsChip.jsx';
 import { useRoundGames } from './GamesChip.jsx';
 import { useCustomGames } from './CustomGames.jsx';
@@ -39,10 +40,10 @@ export function useRuleData() {
 export async function askRulesAi(body) {
   try {
     const { data, error } = await supabase.functions.invoke('ai-helper', { body: { ...body, standard: STANDARD_FOR_AI, group_id: currentGroup() || undefined } });
-    if (error) return { error: 'The AI helper didn’t answer — check your signal and try again.' };
+    if (error) return { error: 'The Caddie didn’t answer — check your signal and try again.' };
     return data || { error: 'No answer' };
   } catch {
-    return { error: 'The AI helper didn’t answer — check your signal and try again.' };
+    return { error: 'The Caddie didn’t answer — check your signal and try again.' };
   }
 }
 
@@ -132,7 +133,7 @@ export function RulesFilterBar({ filter, onFilter, round, onRound, search, onSea
       <label className="field" style={{ margin: 0 }}><span className="small">The rules for a round</span>
         <select className="select" value={round || ''} onChange={(e) => onRound(e.target.value || null)} data-testid="round-picker">
           <option value="">— Pick a round —</option>
-          {rounds.map((r) => <option key={r.id} value={r.id}>{r.name}{r.play_date ? ` · ${r.play_date}` : ''}{tripName[r.trip_id] ? ` · ${tripName[r.trip_id]}` : ''}</option>)}
+          {rounds.map((r) => <option key={r.id} value={r.id}>{r.name}{r.play_date ? ` · ${fmtRange(r.play_date)}` : ''}{tripName[r.trip_id] ? ` · ${tripName[r.trip_id]}` : ''}</option>)}
         </select>
       </label>
       {!round && sections.map(([g, label]) => {
@@ -206,7 +207,7 @@ export function RuleScopeFields({ v, set, localRules }) {
     setBusy('');
     if (r.error) return toast(r.error);
     setAiConflicts(r.conflicts || []);
-    if (!(r.conflicts || []).length) toast('The AI found no clashes');
+    if (!(r.conflicts || []).length) toast('The Caddie found no clashes');
   };
   const askTidy = async () => {
     setBusy('tidy');
@@ -234,7 +235,7 @@ export function RuleScopeFields({ v, set, localRules }) {
           {conflicts.map((c) => (
             <label key={c.id} className="row" style={{ gap: 8, alignItems: 'flex-start' }}>
               <input type="checkbox" checked={ticked(c)} onChange={(e) => tick(c, e.target.checked)} style={{ marginTop: 4 }} />
-              <span className="grow small"><strong>⚠️ This changes: {c.title}</strong>{c.scope ? ` (${c.scope})` : ''}<br /><span className="muted">{c.reason}{c.ai ? ' · the AI says' : ''}</span></span>
+              <span className="grow small"><strong>⚠️ This changes: {c.title}</strong>{c.scope ? ` (${c.scope})` : ''}<br /><span className="muted">{c.reason}{c.ai ? ' · the Caddie says' : ''}</span></span>
             </label>
           ))}
           {ownRule && <label className="row small" style={{ gap: 8 }}><input type="checkbox" checked onChange={() => tick({ id: ownRule.id, standard: false }, false)} /> <strong>This changes: {ownRule.title}</strong></label>}
@@ -243,13 +244,13 @@ export function RuleScopeFields({ v, set, localRules }) {
       )}
       {aiOn && (
         <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-          <button type="button" className="btn ghost sm" disabled={!!busy || !(v.title || '').trim()} onClick={checkAi} data-testid="ai-check">{busy === 'check' ? 'Checking…' : '✨ Check for clashes with AI'}</button>
+          <button type="button" className="btn ghost sm" disabled={!!busy || !(v.title || '').trim()} onClick={checkAi} data-testid="ai-check">{busy === 'check' ? 'Checking…' : '✨ Ask the Caddie to check for clashes'}</button>
           <button type="button" className="btn ghost sm" disabled={!!busy || !(v.title || '').trim()} onClick={askTidy} data-testid="ai-tidy">{busy === 'tidy' ? 'Tidying…' : '✨ Tidy the wording'}</button>
         </div>
       )}
       {tidy && (
         <div className="card pad stack" style={{ gap: 6 }} data-testid="tidy-suggestion">
-          <span className="small muted">The AI suggests (check it says the same thing):</span>
+          <span className="small muted">The Caddie suggests (check it says the same thing):</span>
           <strong>{tidy.title}</strong>
           {tidy.detail && <div className="small">{tidy.detail}</div>}
           {tidy.value && <div className="small">Worth: {tidy.value}</div>}
@@ -334,7 +335,7 @@ export function VerdictToRulebook({ c }) {
   }, [show, c?.id, aiOn]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!show) return null;
   if (c.kind === 'scrap_rule') return <div className="small muted" data-testid="verdict-rulebook">📘 The verdict retires the rule{c.apply_state === 'applied' ? '' : ' when the change starts'} — nothing more to write.</div>;
-  if (!d) return <div className="card pad small muted" data-testid="verdict-rulebook">{aiState === 'working' ? '✨ The AI is drafting the rule change from the verdict…' : 'Getting the rule ready…'}</div>;
+  if (!d) return <div className="card pad small muted" data-testid="verdict-rulebook">{aiState === 'working' ? '✨ The Caddie is drafting the rule change from the verdict…' : 'Getting the rule ready…'}</div>;
   const f = (k) => ({ value: d[k] ?? '', onChange: (e) => setD({ ...d, [k]: e.target.value }) });
   const confirm = () => run(async () => {
     const draft = { action: d.action, rule_id: d.rule_id, title: d.title.trim(), detail: (d.detail || '').trim(), value: (d.value || '').trim(), category: d.category,
@@ -347,7 +348,7 @@ export function VerdictToRulebook({ c }) {
   return (
     <div className="card pad stack" style={{ gap: 8, borderColor: 'var(--navy)' }} data-testid="verdict-rulebook">
       <strong>📘 Into the Rulebook</strong>
-      <div className="small" data-testid="draft-source" style={{ fontWeight: 700 }}>{d.ai ? '✨ AI drafted this from the verdict — check it' : aiState === 'failed' ? 'The AI couldn’t draft it — here’s the case’s own wording to start from.' : 'Here’s the case’s own wording to start from — check it.'}</div>
+      <div className="small" data-testid="draft-source" style={{ fontWeight: 700 }}>{d.ai ? '✨ The Caddie drafted this from the verdict — check it' : aiState === 'failed' ? 'The Caddie couldn’t draft it — here’s the case’s own wording to start from.' : 'Here’s the case’s own wording to start from — check it.'}</div>
       {d.note && <div className="small muted">{d.note}</div>}
       {c.kind === 'ruling' && (
         <div className="seg light" role="group">

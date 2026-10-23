@@ -27,7 +27,8 @@ const research = [
       good_for_groups: '5 - rooms on site, public 7 days', group_bookings_how: 'Golf shop for 12+ (golf@thevintage.example)', twilight_or_group_rates: 'Groups of 12+: ask for the group rate' } },
   { library_id: COURSES['zzq-listing-links'].id, name: 'Bermagui Country Club', town: 'Bermagui', state: 'NSW', fee_weekday: 55, fee_weekend: 55, access_type: 'public',
     group_enquiry_url: 'https://www.bermaguicountryclub.com/golf', phone: '02 6493 4340 (club); pro shop 02 6493 4657', last_checked: '2026-10-01', sources: ['https://www.golfnsw.org.au/x'],
-    details: { style: 'coastal', members_times: 'Comp days Tue, Wed, Thu, Sat (mornings)', visitor_times: 'Visitors welcome 7 days' } },
+    details: { style: 'coastal', members_times: 'Comp days Tue, Wed, Thu, Sat (mornings)', visitor_times: 'Visitors welcome 7 days',
+      twilight_or_group_rates: '9 holes 105 Mon-Thu / 131 Fri-Sun' } }, // v8: the live text that was missing its $
 ];
 
 let reads = 0;
@@ -58,7 +59,7 @@ async function open(width, signedIn) {
   await ctx.route('https://*.supabase.co/**', fake);
   await ctx.route('https://server.arcgisonline.com/**', (r) => r.fulfill({ status: 204, body: '' }));
   await ctx.addInitScript(([uid, on]) => {
-    localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-notify-prompt', String(Date.now()));
+    localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */ localStorage.setItem('tgt-notify-prompt', String(Date.now()));
     if (!on) return;
     const exp = Math.floor(Date.now() / 1000) + 86400;
     const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
@@ -108,6 +109,7 @@ async function open(width, signedIn) {
   await about.waitFor({ timeout: 15000 });
   const t = await about.innerText();
   check(t.includes('Fees: $55 (18 holes)') && t.includes('Members have: Comp days Tue, Wed, Thu, Sat (mornings)'), 'listing: fees and member times');
+  check(t.includes('9 holes $105 Mon-Thu / $131 Fri-Sun') && !t.includes('$$') && !t.includes('$9 holes'), 'v8: bare fee amounts get a $ (not the 9 in “9 holes”, never $$)');
   check(await page.getByText('No scorecard yet').count() === 1, 'listing: still says no scorecard yet');
   check(await about.getByRole('link', { name: 'Book online ↗' }).count() === 0, 'no booking link when there isn’t one (nothing made up)');
   await page.screenshot({ path: `${SHOTS}/course-page-listing-375.png`, fullPage: true });

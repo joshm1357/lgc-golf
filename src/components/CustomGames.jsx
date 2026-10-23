@@ -1,6 +1,6 @@
-// Custom games (migration 073): a standard game plus the group's own house rules, saved under its own name. Every
-// standard option (carry-overs, validated skins, Nassau values and presses…) stays part of the standard game — this
-// is only for a twist on top. The Games screen's "Your own games" card and the hook the round pickers use.
+// Custom games (migration 073): the group's own saved version of a standard game — its own name, stake and options,
+// plus house rules if they like (optional since 098). Every standard option (carry-overs, validated skins, Nassau
+// values and presses…) can also be picked on any round without saving a game. The Games screen's "Your own games" card and the hook the round pickers use.
 // The rules for what's allowed are in lib/customgames.js.
 import React, { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
@@ -8,7 +8,7 @@ import { useRealtime, useFeature, useSession } from '../lib/store.jsx';
 import { useRun, must } from '../lib/run.js';
 import { Sheet } from './ui.jsx';
 import { GAME_KINDS, GAME_INFO, STANDARD_OPTIONS } from '../lib/games.js';
-import { copyFrom, customProblems, customRow, customSummary, cleanCustomSettings, RULES_MAX, NAME_MAX } from '../lib/customgames.js';
+import { copyFrom, customProblems, customRow, customSummary, cleanCustomSettings, houseRules, RULES_MAX, NAME_MAX } from '../lib/customgames.js';
 
 /** The group's custom games (put-away ones too — screens filter), live. An older database has none. */
 export function useCustomGames() {
@@ -70,11 +70,11 @@ function moneyToNumbers(kind, s) {
   return out;
 }
 
-/** Copy and change: name, the standard options, the stake and the house rules. */
+/** Copy and change: name, the standard options, the stake and (optional) house rules. */
 export function CustomGameSheet({ start, existing, onClose, onSaved }) {
   const { status } = useSession();
   const [busy, run] = useRun();
-  const [v, setV] = useState(() => existing ? { ...existing, settings: cleanCustomSettings(existing.base_type, existing.settings) } : start);
+  const [v, setV] = useState(() => existing ? { ...existing, rules_text: existing.rules_text ?? '', settings: cleanCustomSettings(existing.base_type, existing.settings) } : start);
   const draft = { ...v, settings: moneyToNumbers(v.base_type, v.settings) };
   const problems = customProblems(draft);
   const save = () => run(async () => {
@@ -87,17 +87,17 @@ export function CustomGameSheet({ start, existing, onClose, onSaved }) {
   return (
     <Sheet title={existing ? `Change ${existing.name}` : `Your own ${GAME_INFO[v.base_type]?.name}`} onClose={onClose}>
       <div className="stack" style={{ gap: 10 }}>
-        <span className="small muted">All the usual {GAME_INFO[v.base_type]?.name} options are standard — you can pick them on any round. Make it your own game only for a house rule on top.</span>
+        <span className="small muted">Save it as the group’s own {GAME_INFO[v.base_type]?.name} — its name, stake and options — to pick for any round in one tap. Add house rules if you’ve got a twist of your own.</span>
         <label className="field"><span>Name</span><input className="input" value={v.name} maxLength={NAME_MAX} onChange={(e) => setV({ ...v, name: e.target.value })} /></label>
         <OptionControls kind={v.base_type} value={v.settings} onChange={(s) => setV({ ...v, settings: { ...s, stake: v.settings.stake } })} />
         <label className="field"><span>Stake ($, {GAME_INFO[v.base_type]?.per})</span>
           <input className="input" inputMode="decimal" style={{ maxWidth: 140 }} value={v.settings.stake ?? ''} onChange={(e) => setV({ ...v, settings: { ...v.settings, stake: e.target.value } })} />
         </label>
-        <label className="field"><span>Your house rules</span>
-          <textarea className="textarea" rows={4} style={{ padding: 12 }} maxLength={RULES_MAX} value={v.rules_text} onChange={(e) => setV({ ...v, rules_text: e.target.value })}
+        <label className="field"><span>House rules (optional)</span>
+          <textarea className="textarea" rows={4} style={{ padding: 12 }} maxLength={RULES_MAX} value={v.rules_text} onChange={(e) => setV({ ...v, rules_text: e.target.value })} data-testid="custom-house-rules"
             placeholder="e.g. A skin won with a birdie is worth double. Loser of the last skin shouts the first round." />
         </label>
-        <span className="small muted">The app works out the money with the options above; your house rules are shown with the game for everyone to see.</span>
+        <span className="small muted">The app works out the money with the options above. Any house rules are shown with the game for everyone to see — leave it blank if there aren’t any.</span>
         {problems.length > 0 && <span className="small err" style={{ margin: 0 }}>{problems[0]}</span>}
         <button type="button" className="btn gold block" disabled={busy || problems.length > 0} onClick={save}>Save {existing ? 'changes' : 'our game'}</button>
       </div>
@@ -119,7 +119,7 @@ export function CustomGamesCard() {
   return (
     <div className="card pad stack" style={{ gap: 10 }} data-testid="custom-games">
       <strong style={{ fontSize: 18 }}>🎲 Your own games</strong>
-      {live.length === 0 && <div className="small muted">Every standard option (carry-overs, validated skins, Nassau presses…) can be picked on any round. Copy a game here only to add a house rule of your own.</div>}
+      {live.length === 0 && <div className="small muted">Every standard option (carry-overs, validated skins, Nassau presses…) can be picked on any round. Copy a game here to save your group’s own version — its name, stake and options, plus house rules if you like.</div>}
       {live.map((c) => (
         <div key={c.id} className="stack" style={{ gap: 4, borderTop: '1px solid var(--line-soft)', paddingTop: 8 }} data-testid="custom-game">
           <div className="row between" style={{ gap: 8 }}>
@@ -132,7 +132,7 @@ export function CustomGamesCard() {
             )}
           </div>
           <div className="small muted">{customSummary(c)}</div>
-          <div className="small" style={{ whiteSpace: 'pre-wrap' }}><strong>House rules:</strong> {c.rules_text}</div>
+          {houseRules(c) && <div className="small" style={{ whiteSpace: 'pre-wrap' }} data-testid="custom-game-rules"><strong>House rules:</strong> {houseRules(c)}</div>}
         </div>
       ))}
       {organiser && (

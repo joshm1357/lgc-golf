@@ -153,7 +153,7 @@ await ctx.addInitScript(([uid]) => {
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
   if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated' } }));
   localStorage.setItem('tgt-notify-prompt', String(Date.now()));
-  localStorage.setItem('tgt-whats-new', 'beta-1');
+  localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */
 }, ['99999999-9999-4999-8999-999999999999']);
 const page = await ctx.newPage();
 page.on('pageerror', (e) => fails.push(`page error: ${e}`));
@@ -294,7 +294,7 @@ await page.getByText('Set up your trip').first().waitFor({ timeout: 15000 });
 await page.waitForTimeout(400);
 check(!(await page.getByLabel('Bring your history').isVisible().catch(() => false)), 'switched off: no card in the guided setup');
 await page.goto(`${BASE}#/import`);
-await page.getByText('The AI helper is switched off for this group.').waitFor({ timeout: 10000 });
+await page.getByText('The Caddie is switched off for this group.').waitFor({ timeout: 10000 });
 check(true, 'switched off: /import says so');
 check(calls.length === before, 'switched off: the function isn’t called');
 

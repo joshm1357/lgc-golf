@@ -95,7 +95,7 @@ export default function SetupGuide() {
             {open === s.key && <div style={{ padding: '0 14px 14px' }} className="stack">{body[s.key]}</div>}
           </div>
         ))}
-        <p className="note" style={{ margin: '4px' }}>Everything here can be changed later. For the finer details (teams for Ambrose, playing handicaps, trophies) use <Link to="/admin">Admin</Link>.</p>
+        <p className="note" style={{ margin: '4px' }}>Everything here can be changed later. For the finer details (teams for Ambrose, playing handicaps, trophies) use <Link to="/admin">Organiser tools</Link>.</p>
       </div>
     </div>
   );
@@ -112,7 +112,7 @@ function NextUp({ next, onStep }) {
       {next.kind === 'players' && (
         <>
           <span className="small">{next.round.format === 'ambrose' ? 'Make the teams' : next.round.format === 'fourball' ? 'Make the pairs' : 'Add who’s playing'} in Admin → Rounds &amp; teams.</span>
-          <Link to="/admin" className="btn gold sm" style={{ alignSelf: 'flex-start' }}>Go to Admin</Link>
+          <Link to="/admin" className="btn gold sm" style={{ alignSelf: 'flex-start' }}>Go to Organiser tools</Link>
         </>
       )}
       {next.kind === 'start' && (
@@ -174,7 +174,7 @@ function CoursesStep({ onDone }) {
         </div>
       )}
       <span className="label">Add a course</span>
-      <FindCourse hint="add it in Admin → Courses" />
+      <FindCourse hint="add it in Organiser tools → Courses" />
     </>
   );
 }
@@ -206,7 +206,7 @@ function RoundsStep({ trip, onDone }) {
         <div className="small muted">Also on this trip: {others.map((r) => `${r.name}${r.play_date ? ` (${dayLabel(r.play_date)})` : ' (no date)'}`).join(', ')} — change dates in Admin.</div>
       )}
       {rounds.length > 0 && <button type="button" className="btn sm" onClick={onDone}>Next: players →</button>}
-      <p className="note" style={{ margin: 0 }}>Ambrose teams, 4BBB pairs, and who’s playing a Stableford or stroke round, are set in Admin → Rounds &amp; teams (or with The Draw).</p>
+      <p className="note" style={{ margin: 0 }}>Ambrose teams, 4BBB pairs, and who’s playing a Stableford or stroke round, are set in Organiser tools → Rounds &amp; teams (or with The Draw).</p>
     </>
   );
 }
@@ -268,7 +268,7 @@ function PlayersStep({ cupOn }) {
           </details>
         </>
       )}
-      <span className="small muted">Someone without a phone? Add their name in <Link to="/admin">Admin → Players</Link>.</span>
+      <span className="small muted">Someone without a phone? Add their name in <Link to="/admin">Organiser tools → Players</Link>.</span>
     </>
   );
 }

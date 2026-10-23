@@ -33,7 +33,7 @@ export function cardContent(kind, d = {}) {
   if (kind === 'awards') {
     // Fines and dinner awards (lib/dinnerawards.js resultsCard): a label, the winner and the votes, per award.
     const rows = (d.rows || []).slice(0, 6).map((r) => ({ label: String(r.label || '').slice(0, 44), name: String(r.name || '').slice(0, 34), line: String(r.line || '').slice(0, 50) }));
-    return { eyebrow: '🍽️ FINES AND DINNER AWARDS', title: d.title || 'Dinner awards', sub: d.sub || '', rows };
+    return { eyebrow: '🍽️ FINES & AWARDS', title: d.title || 'Fines & awards', sub: d.sub || '', rows };
   }
   // Any Tribunal case (Stage 11b): the verdict only, never the discussion.
   if (kind === 'case') return verdictCard(d.case || {}, d.subject || '', d.tally || '');

@@ -77,7 +77,10 @@ export function callProblem({ sections = [], keen = false, closes = null, today 
 /** The rows the database needs: a poll per section, its options. (The screen inserts them in order.) */
 export function pollRows(sections, { planId, batchId = null, closes = null }) {
   return sections.map((s) => ({
-    poll: { plan_id: planId, kind: s.kind, question: String(s.question).slice(0, 200), closes_on: closes || null, ...(batchId ? { vote_batch: batchId } : {}) },
+    // ov23 (092): the detail under an area is optional for voters. Only sent when it's set, so a ballot without any
+    // detail still works on a database from before 092.
+    poll: { plan_id: planId, kind: s.kind, question: String(s.question).slice(0, 200), closes_on: closes || null, ...(batchId ? { vote_batch: batchId } : {}),
+      ...(s.optional ? { optional: true, area: String(s.area || '').slice(0, 80) || null } : {}) },
     options: s.options.map((o) => ({
       label: String(o.label || '').slice(0, 120), notes: o.notes ? String(o.notes).slice(0, 480) : null,
       start_date: o.start_date || null, end_date: o.end_date || null,
@@ -179,8 +182,76 @@ export function organiserView({ isAdmin = false, me = null, plan = null, asVoter
 /** Has this person answered every section (and "are you keen?" if asked)? */
 export function hasAnsweredAll({ polls = [], votes = [], me, keen = false, rsvps = [] }) {
   if (!me) return false;
-  if (polls.some((p) => !votes.some((v) => v.poll_id === p.id && v.player_id === me))) return false;
+  // The detail under an area (ov23) is optional: answering the areas and the weekends counts as answered.
+  const required = polls.filter((p) => !p.optional);
+  if (required.some((p) => !votes.some((v) => v.poll_id === p.id && v.player_id === me))) return false;
+  // O5 (walkthrough): a card with only optional questions left open — someone who hasn't answered any of them
+  // (a late joiner) hasn't voted, so never "You've voted ✓".
+  if (!required.length && polls.length && !keen && !polls.some((p) => votes.some((v) => v.poll_id === p.id && v.player_id === me))) return false;
   return !keen || rsvps.some((r) => r.player_id === me);
+}
+
+// ------------------------------------------------------------------ walkthrough fixes (23 Oct): V3, V4, I3
+
+/**
+ * V4: is the detail (courses and places inside an area) worth going by? Under a third of the people who voted on the
+ * main questions went into it: no — it's shown "for info" and the organiser chooses.
+ * → { enough, line, forInfo }
+ */
+export function detailVerdict(detail = 0, voters = 0) {
+  const d = Number(detail) || 0; const v = Number(voters) || 0;
+  if (!v) return { enough: false, forInfo: true, line: 'Nobody’s voted yet.' };
+  if (d * 3 >= v && d > 0) return { enough: true, forInfo: false, line: `${d} of ${v} went into the detail` };
+  return { enough: false, forInfo: true, line: `Only ${d} of ${v} picked courses and places — not enough to go by. You choose.` };
+}
+
+/** How many people answered at least one of these (main) questions. */
+export function votersOf(polls = [], votes = []) {
+  const ids = new Set((polls || []).map((p) => p.id));
+  return new Set((votes || []).filter((v) => ids.has(v.poll_id)).map((v) => v.player_id)).size;
+}
+
+/** "Lou, Mo and Pete" */
+export function namesList(names = []) {
+  const n = (names || []).filter(Boolean);
+  if (n.length <= 1) return n[0] || '';
+  return `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}`;
+}
+
+/**
+ * I3: on the last day of a vote (closes today, or tomorrow), "Waiting on Lou, Mo and Pete" with a cheeky message to
+ * paste in the group chat. → { line, message } or null (not the last day, or nobody to wait on).
+ */
+export function lastDayNudge({ closes = null, today = null, waiting = [], planName = 'the trip', title = 'the vote', link = '' } = {}) {
+  const c = parse(closes); const t = parse(today);
+  if (!c || !t || !(waiting || []).length) return null;
+  const days = Math.round((c - t) / 86400000);
+  if (days < 0 || days > 1) return null;
+  const who = namesList(waiting.slice(0, 6)) + (waiting.length > 6 ? ` and ${waiting.length - 6} more` : '');
+  const when = days === 0 ? 'today' : 'tomorrow';
+  const message = `🗳️ ${planName}: “${String(title).replace(/[?.!]+$/, '')}” closes ${when} and we’re still waiting on ${who}. Ten seconds, lads — or you get what you’re given 😂${link ? `\n${link}` : ''}`;
+  return { line: `Waiting on ${who}`, message };
+}
+
+/**
+ * V3: the line at the top of the ballot — "South Coast NSW · about $450 each · 2 hr drive · 9 in so far".
+ * areas: [{ area, costEach, drive }] (saved with the vote when it was called); ins: how many have said they're in.
+ */
+export function ballotHeader({ areas = [], ins = 0 } = {}) {
+  const list = (areas || []).filter((a) => a && a.area);
+  const bits = [];
+  if (list.length === 1) {
+    const a = list[0];
+    bits.push(a.area);
+    if (a.costEach) bits.push(`about $${Math.round(a.costEach)} each`);
+    if (a.drive) bits.push(`${a.drive} drive`);
+  } else if (list.length > 1) {
+    bits.push(list.map((a) => a.area).join(' or '));
+    const costs = list.map((a) => Number(a.costEach)).filter((n) => n > 0);
+    if (costs.length) bits.push(Math.min(...costs) === Math.max(...costs) ? `about $${Math.round(costs[0])} each` : `about $${Math.round(Math.min(...costs))}–${Math.round(Math.max(...costs))} each`);
+  }
+  bits.push(`${ins} in so far`);
+  return bits.join(' · ');
 }
 
 /** "Closes in 2 days" / "Closes today" / "Closed". */
@@ -192,4 +263,52 @@ export function timeLeft(closes, today) {
   if (n === 0) return 'Closes today';
   if (n === 1) return 'Closes tomorrow';
   return `Closes in ${n} days`;
+}
+
+// ------------------------------------------------------------------ the main questions and the detail (ov23)
+// Josh: "the people voting can also just choose to vote area and weekends, or also go into the detail."
+
+/** The area a detail question belongs to: its `area`, else the "Hunter Valley: which courses?" prefix. */
+export function pollArea(p) {
+  if (!p?.optional) return null;
+  if (p.area) return p.area;
+  const m = /^(.+?):\s/.exec(String(p.question || ''));
+  return m ? m[1] : null;
+}
+
+/**
+ * A ballot's questions split into the main ones (areas, weekends, extras…) and the optional detail, grouped by area
+ * in the order the areas first appear. Works on polls or ballot sections ({ optional, area, question }).
+ * → { main: [poll], areas: [{ area, polls: [poll] }] }
+ */
+export function groupBallot(polls = []) {
+  const main = [];
+  const areas = [];
+  for (const p of polls || []) {
+    const a = pollArea(p);
+    if (!a) { main.push(p); continue; }
+    let g = areas.find((x) => x.area === a);
+    if (!g) { g = { area: a, polls: [] }; areas.push(g); }
+    g.polls.push(p);
+  }
+  return { main, areas };
+}
+
+/** How many people went into the detail for each area (answered at least one of its optional questions). → { area: n } */
+export function detailCounts(polls = [], votes = []) {
+  const out = {};
+  for (const { area, polls: ps } of groupBallot(polls).areas) {
+    const ids = new Set(ps.map((p) => p.id));
+    out[area] = new Set((votes || []).filter((v) => ids.has(v.poll_id)).map((v) => v.player_id)).size;
+  }
+  return out;
+}
+
+/** The question without its area prefix, for showing under the area's heading: "which courses?" → "Which courses?". */
+export function detailQuestion(p) {
+  const a = pollArea(p);
+  const q = String(p?.question || '');
+  if (!a || !q.startsWith(`${a}:`)) return q;
+  const rest = q.slice(a.length + 1).trim();
+  return rest.charAt(0).toUpperCase() + rest.slice(1);
 }

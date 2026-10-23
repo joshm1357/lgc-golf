@@ -177,7 +177,7 @@ await ctx.addInitScript(([uid]) => {
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
   if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated', is_anonymous: true } }));
-  try { localStorage.setItem('tgt-notify-prompt', String(Date.now())); localStorage.setItem('tgt-whats-new', 'beta-1'); } catch {}
+  try { localStorage.setItem('tgt-notify-prompt', String(Date.now())); localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */ } catch {}
 }, [U1]);
 const page = await ctx.newPage();
 page.on('dialog', (d) => d.accept());
@@ -242,6 +242,7 @@ check((await line.innerText()).includes('📧 1 person answered by email'), 'vot
 await page.getByText(/getting this by email/).first().waitFor({ timeout: 5000 }).catch(() => {});
 { const t = await line.innerText(); check(/2 people are getting this by email/.test(t) && !/Mike|Hamish/.test(t), `organiser sees how many get it by email, not who (${t.replace(/\n/g, ' / ')})`); }
 await page.locator('.card').filter({ hasText: 'Shirt colour?' }).first().screenshot({ path: `${SHOTS}/ev3-vote-card.png` });
+await page.getByTestId('other-ways').locator('summary').click(); // ov26 (O2): under "Other ways to do this"
 await page.getByRole('button', { name: '🗳️ Call a vote' }).click();
 await page.getByRole('button', { name: 'Anything else' }).click();
 await page.getByLabel('Question').fill('Friday dinner?');
@@ -265,15 +266,15 @@ check(JSON.stringify(again.push) === JSON.stringify([U3]), 'app notification onl
 // 4. Mike taps "⭐ Prefer" for Navy (not a date: Prefer / Option / Don't like, 080) in his email → the answer page → Save → recorded as him, by email.
 await page.goto(`${BASE}#/v/${TOKEN}?o=${O2}&r=yes`);
 await page.getByTestId('vote-confirm').waitFor({ timeout: 15000 });
-check((await page.getByTestId('vote-confirm').innerText()).includes('⭐ Prefer for Navy'), 'answer page asks to save "⭐ Prefer for Navy"');
+check((await page.getByTestId('vote-confirm').innerText()).includes('⭐ Keen for Navy'), 'answer page asks to save "⭐ Prefer for Navy"');
 check(!db.plan_votes.some((v) => v.player_id === P2), 'nothing is recorded just by opening the link');
 await page.screenshot({ path: `${SHOTS}/ev4-confirm.png`, fullPage: true });
-await page.getByRole('button', { name: /Save: ⭐ Prefer for Navy/ }).click();
+await page.getByRole('button', { name: /Save: ⭐ Keen for Navy/ }).click();
 await page.getByTestId('vote-thanks').waitFor({ timeout: 5000 });
-check((await page.getByTestId('vote-thanks').innerText()).includes('Thanks Mike — ⭐ Prefer for Navy.'), 'thanks page: "Thanks Mike — ⭐ Prefer for Navy."');
+check((await page.getByTestId('vote-thanks').innerText()).includes('Thanks Mike — ⭐ Keen for Navy.'), 'thanks page: "Thanks Mike — ⭐ Prefer for Navy."');
 check(db.plan_votes.some((v) => v.player_id === P2 && v.option_id === O2 && v.response === 'yes' && v.via === 'email'), 'vote recorded as Mike, by email');
 // Change it: tap 👎 Don't like on Pink.
-await page.locator('.card').filter({ hasText: 'Pink' }).last().getByRole('button', { name: '👎 Don’t like' }).first().click();
+await page.locator('.card').filter({ hasText: 'Pink' }).last().getByRole('button', { name: '👎 Not keen' }).first().click();
 await page.waitForTimeout(400);
 check(db.plan_votes.some((v) => v.player_id === P2 && v.option_id === O1 && v.response === 'no'), 'another tap changes / adds an answer');
 await page.screenshot({ path: `${SHOTS}/ev5-thanks.png`, fullPage: true });

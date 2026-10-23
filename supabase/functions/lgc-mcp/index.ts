@@ -290,7 +290,7 @@ const TOOLS: Tool[] = [
     },
     async run(a, c) {
       const round = await currentRound(c, a.round_id);
-      if (round.status === 'locked') fail(`"${round.name}" is locked. Reopen it in Admin first.`);
+      if (round.status === 'locked') fail(`"${round.name}" is locked. Reopen it in Organiser tools first.`);
       const all = await players(c);
       const subject = findSubject(await subjectsOf(round, all), a.who);
       const rows = (a.scores || []).map((x: Record<string, any>) => {
@@ -328,7 +328,7 @@ const TOOLS: Tool[] = [
   },
   {
     name: 'post_to_feed',
-    description: 'Post a message to the group feed (as the admin).',
+    description: 'Post a message to the group feed (as the organiser).',
     inputSchema: { type: 'object', required: ['text'], properties: { text: str('The message') } },
     async run(a, c) {
       if (!String(a.text || '').trim()) fail('Nothing to post.');
@@ -418,7 +418,7 @@ const TOOLS: Tool[] = [
       const opts = (a.options || []).map((o: Record<string, any>) => ({ poll_id: poll.id, label: o.label || (o.start_date ? `${o.start_date}${o.end_date && o.end_date !== o.start_date ? ` – ${o.end_date}` : ''}` : 'Option'), start_date: o.start_date || null, end_date: o.end_date || o.start_date || null, notes: o.notes || null, cost_pp: o.cost_pp ?? null, created_by: c.author }));
       if (opts.length) await must(db.from('plan_options').insert(opts));
       await post(c, `🗳️ New vote: ${a.question} — have your say in Trips.`);
-      return `Vote "${a.question}" is up with ${opts.length} options (id=${poll.id}) and posted to the feed. Push notifications go out when the admin opens votes from the app.`;
+      return `Vote "${a.question}" is up with ${opts.length} options (id=${poll.id}) and posted to the feed. Push notifications go out when an organiser opens votes from the app.`;
     },
   },
   // ---------- Trip finder (Stage 16): the organiser's own assistant researches for free; facts it finds stay pending ----------

@@ -131,7 +131,7 @@ STATUS.v = ORG;
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
 await ctx.route('https://luogyzvrbedmicjejilr.supabase.co/**', fakeSupabase);
-await ctx.addInitScript(([uid]) => {
+await ctx.addInitScript(([uid]) => { try { localStorage.setItem('tgt-caddie-hello', '1'); } catch { /* ov22 */ }
   const exp = Math.floor(Date.now() / 1000) + 3600 * 24;
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
@@ -155,7 +155,11 @@ await page.getByAltText(/QR code for the invite link/).waitFor({ timeout: 10000 
 check((await page.locator('code').first().innerText()).endsWith('#/join/ABCDEFGH2345'), 'invite link shown');
 check(await page.getByAltText(/QR code for the guest link/).isVisible(), 'guest link has its own QR code');
 check(await page.getByText('Your groups').isVisible(), 'group switcher shows with two groups');
-check(await page.getByText('Hasn’t picked a name yet').isVisible(), 'members list shows someone without a name');
+// ov18: sign-ins without a name fold into one 'old sign-ins without a name' line; open it to see them.
+const nameless = page.getByTestId('nameless-sign-ins');
+check(/old sign-ins? without a name/.test(await nameless.locator('summary').innerText()), 'members list folds sign-ins without a name');
+await nameless.locator('summary').click();
+check(await page.getByText('Hasn’t picked a name yet').first().isVisible(), 'members list shows someone without a name');
 await page.screenshot({ path: `${SHOTS}/g1-group.png`, fullPage: true });
 await noSideScroll('Group screen');
 

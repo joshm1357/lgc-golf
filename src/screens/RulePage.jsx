@@ -10,6 +10,10 @@ import { challengeBlock, sydneyDate, applyWords, canRaise, KIND } from '../lib/g
 import { RuleSheet, Chips } from './Rulebook.jsx';
 import { RuleScopeLine } from '../components/RuleLayers.jsx';
 import { LateRuleNumbers } from '../components/LateJobs.jsx';
+import { RuleBreachNumbers } from '../components/RulePenalty.jsx';
+import RuleTag from '../components/RuleTag.jsx';
+import { OpinionBox } from '../components/AwardsFines.jsx';
+import { proofLabel, bestLabel, LEFTOVER_KEY } from '../lib/awardsfines.js';
 
 const EVENT = { recorded: 'In the Rulebook', proposed: 'Proposed', added: 'Added', adopted: 'Adopted', rejected: 'Rejected', changed: 'Changed', retired: 'Retired', restored: 'Brought back' };
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
@@ -62,6 +66,18 @@ export default function RulePage() {
           <Chips rule={rule} />
           <RuleScopeLine rule={rule} />
           {rule.system_key === 'late_job' && <LateRuleNumbers rule={rule} />}
+          {rule.system_key !== 'late_job' && <RuleBreachNumbers rule={rule} />}
+          {(rule.award_kind || rule.system_key === LEFTOVER_KEY) && rule.value && (
+            <div className="small" data-testid="award-worth">
+              {rule.award_kind === 'fine' ? '🏷 Fine: ' : rule.award_kind ? '🏅 Reward: ' : '💰 '}
+              <strong>{rule.status === 'active'
+                ? <RuleTag testId="award-value-tag" rule={{ table: 'rules', id: rule.id, field: 'value', label: rule.title, value: rule.value, rule_id: rule.id }}
+                    explain={rule.award_kind ? 'What this award or fine is worth. Think it’s wrong? Dispute it and the Tribunal decides.' : 'What happens to the leftover kitty.'}>{rule.value}</RuleTag>
+                : rule.value}</strong>
+              {rule.award_kind && proofLabel(rule.proof, rule.number_unit) && <span className="muted"> · {proofLabel(rule.proof, rule.number_unit)}{rule.best ? ` · ${bestLabel(rule.best)}` : ''}</span>}
+              {rule.for_trip && <span className="muted"> · just {data.trips.find((t) => t.id === rule.for_trip)?.name || 'one trip'}</span>}
+            </div>
+          )}
           {rule.detail && <div style={{ fontSize: 16, lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>{rule.detail}</div>}
           <div className="small muted">
             {origin ? `${EVENT[origin.event] || 'In the Rulebook'} ${fmtDate(rule.decided_at || origin.created_at)}` : `Since ${fmtDate(rule.decided_at || rule.created_at)}`}
@@ -69,6 +85,8 @@ export default function RulePage() {
             {intro?.votes_for != null ? ` · vote ${intro.votes_for}–${intro.votes_against}` : rule.decision_note ? ` · ${rule.decision_note}` : ''}
           </div>
         </div>
+
+        {(rule.award_kind || rule.system_key === LEFTOVER_KEY) && <OpinionBox rule={rule} />}
 
         {waiting && (
           <Link to={`/tribunal/case/${waiting.id}`} className="card pad court-card" style={{ color: 'inherit', textDecoration: 'none' }} data-testid="pending-change">

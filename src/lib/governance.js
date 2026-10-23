@@ -21,7 +21,7 @@ export const KINDS = [
   { key: 'other', label: 'Anything else', example: 'That shirt on day 2', effect: 'Verdict, plus a penalty in words if you like', feature: 'other_cases' },
   { key: 'trip_decision', label: 'Trip decisions', example: 'Pick the winning dates or place', effect: 'Who picks the winner of a trip vote', feature: 'tribunal', settingsOnly: true },
   { key: 'election', label: 'Committee election', example: 'Fill a seat on the Handicap Committee', effect: 'Seat filled for a term', feature: 'committees' },
-  { key: 'governance', label: 'Governance change', example: 'Rule changes now need two-thirds', effect: 'Changes the decision rules', feature: 'tribunal' },
+  { key: 'governance', label: 'Group rules change', example: 'Rule changes now need two-thirds', effect: 'Changes the decision rules', feature: 'tribunal' },
 ];
 export const KIND = Object.fromEntries(KINDS.map((k) => [k.key, k]));
 /** Kinds whose verdict changes the rules or the decision rules: these wait for the next trip unless approved. */
@@ -268,16 +268,159 @@ export function tripsSince(trips = [], sinceIso, today) {
   return trips.filter((t) => t.start_date && t.start_date > since && t.start_date <= today).length;
 }
 /** A seat's term. term_trips / term_years: either, both ("whichever comes first") or neither (until replaced).
- *  Returns { ended, by: 'trips'|'years'|null, soon, tripsDone, endsOn (YYYY-MM-DD by years, or null) }. */
-export function termStatus({ started_at, term_trips = null, term_years = null }, { trips = [], now = new Date(), today = sydneyDate(now) } = {}) {
-  if (!started_at) return { ended: false, by: null, soon: false, tripsDone: 0, endsOn: null };
+ *  half_term (090, staggered committees): this term is half length (at least 1 trip / 1 month).
+ *  Same as private.seat_term_ended in the database.
+ *  Returns { ended, by: 'trips'|'years'|null, soon, tripsDone, tripsLeft, endsOn (YYYY-MM-DD by years, or null) }. */
+export function termStatus({ started_at, term_trips = null, term_years = null, half_term = false }, { trips = [], now = new Date(), today = sydneyDate(now) } = {}) {
+  const tt = term_trips ? (half_term ? Math.max(1, Math.ceil(Number(term_trips) / 2)) : Number(term_trips)) : null;
+  const months = term_years ? (half_term ? Math.max(1, Math.round(Number(term_years) * 6)) : Math.round(Number(term_years) * 12)) : null;
+  if (!started_at) return { ended: false, by: null, soon: false, tripsDone: 0, tripsLeft: tt, endsOn: null };
   const tripsDone = tripsSince(trips, started_at, today);
-  const end = term_years ? addMonths(started_at, Math.round(Number(term_years) * 12)) : null;
-  const byTrips = !!term_trips && tripsDone >= Number(term_trips);
+  const end = months ? addMonths(started_at, months) : null;
+  const byTrips = !!tt && tripsDone >= tt;
   const byYears = !!end && now >= end;
   const ended = byTrips || byYears;
-  const soon = !ended && ((!!term_trips && tripsDone === Number(term_trips) - 1) || (!!end && end - now <= 14 * 86400000));
-  return { ended, by: byTrips ? 'trips' : byYears ? 'years' : null, soon, tripsDone, endsOn: end ? end.toISOString().slice(0, 10) : null };
+  const soon = !ended && ((!!tt && tripsDone === tt - 1) || (!!end && end - now <= 14 * 86400000));
+  return { ended, by: byTrips ? 'trips' : byYears ? 'years' : null, soon, tripsDone, tripsLeft: tt ? Math.max(0, tt - tripsDone) : null, endsOn: end ? end.toISOString().slice(0, 10) : null };
+}
+
+/** "Term ends 12 Mar 2027", "Term ends after 1 more trip", "Term ends after 2 more trips or on 12 Mar 2027, whichever
+ *  comes first", "Term is up — election due", "No end date (until replaced)". */
+export function termEndsWords(seat, committee, opts = {}) {
+  if (!seat?.player_id) return '';
+  const t = termStatus({ ...committee, started_at: seat.started_at, half_term: seat.half_term }, opts);
+  if (t.ended) return committee.fill === 'appointment' ? 'Term is up — due for re-appointment' : 'Term is up — election due';
+  const trips = t.tripsLeft != null ? `after ${t.tripsLeft} more trip${t.tripsLeft === 1 ? '' : 's'}` : null;
+  const date = t.endsOn ? `on ${fmtDay(t.endsOn)}` : null;
+  if (trips && date) return `Term ends ${trips} or ${date}, whichever comes first`;
+  if (trips || date) return `Term ends ${trips || date}`;
+  return 'No end date (until replaced)';
+}
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function fmtDay(iso) {
+  const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number);
+  return `${d} ${MONTHS[m - 1]} ${y}`;
+}
+
+/** "No more than 2 terms in a row" / "No term limit". */
+export function termLimitWords(committee) {
+  const n = Number(committee?.term_limit);
+  if (!n) return 'No term limit';
+  return n === 1 ? 'One term at a time — then sit one out' : `No more than ${n} terms in a row`;
+}
+
+/** Can this player stand for (or be appointed to) this seat? Same rules as private.stand_problem. Returns why not, or null.
+ *  seats: the committee's seats [{ seat_no, player_id, term_no }]; members: [{ player_id, role }]. */
+export function standProblem({ committee, seats = [], seatNo, playerId, members = [], name = 'They' }) {
+  const m = members.find((x) => x.player_id === playerId);
+  if (!m || m.role === 'guest') return 'Pick a player in the group (not a guest)';
+  if (seats.some((s) => s.seat_no !== seatNo && s.player_id === playerId && s.seat_no <= committee.seats)) {
+    return `${name} already holds a seat on the ${committee.name}`;
+  }
+  const seat = seats.find((s) => s.seat_no === seatNo);
+  const lim = Number(committee.term_limit);
+  if (lim && seat?.player_id === playerId && Number(seat.term_no || 0) >= lim) {
+    return `${name} has served ${lim} term${lim === 1 ? '' : 's'} in a row on this seat — they can stand again after sitting one out`;
+  }
+  return null;
+}
+
+/** Staggered seats: which seats get a half-length first term (even-numbered). */
+export function staggeredHalfSeats(seats) {
+  return Array.from({ length: Number(seats) || 0 }, (_, i) => i + 1).filter((n) => n % 2 === 0);
+}
+
+// ------------------------------------------------------------------ elections (090)
+/** Is this case an election with nominations (not the old yes/no one)? */
+export const isContest = (c) => c?.kind === 'election' && c?.proposal?.mode === 'contest';
+
+/** Where an election is: 'nominating' | 'voting' | 'casting' (a tie) | 'organiser' (an organiser picks) | 'done'. */
+export function electionStage(c) {
+  if (!c || c.status !== 'open') return 'done';
+  if (c.stage === 'casting') return 'casting';
+  if (c.stage === 'organiser') return 'organiser';
+  return c.election_phase === 'nominating' ? 'nominating' : 'voting';
+}
+
+/** The count, the same way the database does it: most votes wins; a tie for most → an organiser picks.
+ *  nominees: accepted player ids; ballots: [{ voter_id, nominee_id }]; voters: who has a vote.
+ *  Returns { results: [{ player_id, votes }] most first, cast, remaining, settled, winner, tied: [ids] }. */
+export function electionCount({ nominees = [], ballots = [], voters = [], closed = false }) {
+  const ok = new Set(voters);
+  const counts = new Map(nominees.map((p) => [p, 0]));
+  let cast = 0;
+  for (const b of ballots) {
+    if (!ok.has(b.voter_id) || !counts.has(b.nominee_id)) continue;
+    counts.set(b.nominee_id, counts.get(b.nominee_id) + 1);
+    cast += 1;
+  }
+  const results = [...counts.entries()].map(([player_id, votes]) => ({ player_id, votes }))
+    .sort((a, b) => b.votes - a.votes || nominees.indexOf(a.player_id) - nominees.indexOf(b.player_id));
+  const remaining = Math.max(0, voters.length - cast);
+  const top = results[0]?.votes || 0;
+  const second = results[1]?.votes || 0;
+  const settled = closed || remaining === 0 || top - second > remaining;
+  if (!settled) return { results, cast, remaining, settled, winner: null, tied: [] };
+  if (cast === 0) return { results, cast, remaining, settled, winner: null, tied: [] };
+  const tied = results.filter((r) => r.votes === top).map((r) => r.player_id);
+  return { results, cast, remaining, settled, winner: tied.length === 1 ? tied[0] : null, tied: tied.length > 1 ? tied : [] };
+}
+
+/** After nominations close: 'none' (nobody stood), 'unopposed' (one), 'organiser' (an organiser picks) or 'vote'. */
+export function afterNominations(acceptedCount, settings = {}) {
+  if (!acceptedCount) return 'none';
+  if (acceptedCount === 1) return 'unopposed';
+  return ['organiser', 'trip_organiser'].includes(settings.decides) ? 'organiser' : 'vote';
+}
+
+/** Can this organiser pick the winner? Never someone in the tie, never themselves. */
+export function canPickWinner({ role, playerId, stage, tied = [] }) {
+  if (role !== 'organiser' || !playerId) return false;
+  if (stage === 'casting') return !tied.includes(playerId);
+  return stage === 'organiser';
+}
+
+// ------------------------------------------------------------------ the summary at the top of Governance
+const THINGS = {
+  new_rule: 'new rules', change_rule: 'rule changes', scrap_rule: 'scrapping rules', ruling: 'rule challenges',
+  handicap: 'handicaps', other: '“anything else” cases', election: 'committee elections', governance: 'changes to how we decide',
+};
+function whoPhrase(s, committees) {
+  switch (s.decides) {
+    case 'organiser': case 'trip_organiser': return 'organisers decide';
+    case 'organisers_majority': return 'the organisers vote on';
+    case 'organisers_all': return 'all organisers must agree on';
+    case 'committee': return `the ${committees.find((c) => c.id === s.committee_id)?.name || 'committee'} decides`;
+    case 'players_two_thirds': return 'two-thirds of the group must agree on';
+    default: return 'the group votes on';
+  }
+}
+const andList = (a) => (a.length <= 1 ? a.join('') : `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}`);
+/** "How we decide things" in plain words, e.g. ["Organisers decide new rules", "the group votes on handicaps", …].
+ *  isOn(kind): whether that kind of case is switched on for the group (default: all). */
+export function howWeDecide(settings = {}, committees = [], isOn = () => true) {
+  const groups = new Map();
+  for (const k of Object.keys(THINGS)) {
+    if (!settings[k] || !isOn(k)) continue;
+    const who = whoPhrase(settings[k], committees);
+    if (!groups.has(who)) groups.set(who, []);
+    groups.get(who).push(THINGS[k]);
+  }
+  return [...groups.entries()].map(([who, things]) => `${who} ${andList(things)}`);
+}
+/** The same as one sentence: "Organisers decide new rules; the group votes on handicaps." */
+export function howWeDecideLine(settings, committees, isOn) {
+  const lines = howWeDecide(settings, committees, isOn);
+  if (!lines.length) return '';
+  const s = lines.join('; ');
+  return `${s.charAt(0).toUpperCase()}${s.slice(1)}.`;
+}
+/** What a committee actually decides (from the decision rules), in words: "Decides handicaps and rule changes". */
+export function committeeJob(committee, settings = {}) {
+  const kinds = Object.keys(THINGS).filter((k) => settings[k]?.decides === 'committee' && settings[k]?.committee_id === committee.id);
+  if (kinds.length) return `Decides ${andList(kinds.map((k) => THINGS[k]))}`;
+  const meant = (committee.kinds || []).filter((k) => THINGS[k]);
+  return meant.length ? `Set up for ${andList(meant.map((k) => THINGS[k]))} — not handling any cases yet (see How we decide)` : 'Not handling any cases yet';
 }
 export function termLabel({ term_trips, term_years }) {
   const t = term_trips ? `${term_trips} trip${Number(term_trips) === 1 ? '' : 's'}` : null;

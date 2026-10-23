@@ -60,7 +60,7 @@ export function ImportCard() {
     </Link>
   );
 }
-export function ImportLink({ label = '✨ Import with AI', about, trip }) {
+export function ImportLink({ label = '✨ Import with the Caddie', about, trip }) {
   const on = useFeature('ai_helper');
   const { status } = useSession();
   if (!on || !status?.is_admin) return null;

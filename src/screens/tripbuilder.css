@@ -1,6 +1,8 @@
 /* Trip builder (077). Phone first: the steps, a map, then the step you're on. Desktop: steps beside a tall map. */
 .tb-map { height: 300px; margin: 0; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); }
-.tb-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.tb-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; } /* ov23: the six shared steps (lib/tripsteps.js) */
+@media (min-width: 700px) { .tb-steps { grid-template-columns: repeat(6, 1fr); } }
+.tb-step-out { display: flex; align-items: center; justify-content: center; text-decoration: none; border-style: dashed; }
 .tb-step { text-align: center; padding: 6px 2px; border-radius: 8px; font-weight: 700; font-size: 12px; line-height: 1.2; border: 1px solid var(--line); background: #fff; color: var(--muted); min-height: 44px; }
 .tb-step[aria-current="step"] { background: var(--navy); color: #fff; border-color: var(--navy); }
 .tb-step.done { background: var(--gold-soft); color: var(--navy); border-color: var(--navy); }

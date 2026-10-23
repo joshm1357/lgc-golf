@@ -31,7 +31,7 @@ export default function TripExtras({ pd, viewer = false, noRepeat = false }) {
       {stage !== 'cancelled' && stage !== 'done' && <TripWeather plan={plan} rounds={data.rounds} coursesById={data.coursesById} shapeCourseIds={shapeCourseIds} />}
       {!noRepeat && plan.repeat_shape && stage !== 'done' && stage !== 'cancelled' && <RepeatInfo pd={pd} />}
       {dinnerOn && trip && ['locked', 'on', 'done'].includes(stage) && (
-        <Link to={`/dinner/${trip.id}`} className="small" style={{ fontWeight: 700 }} data-testid="dinner-link">🍽️ Fines and dinner awards →</Link>
+        <Link to={`/dinner/${trip.id}`} className="small" style={{ fontWeight: 700 }} data-testid="dinner-link">🍽️ Fines &amp; awards →</Link>
       )}
       {!viewer && status.is_admin && !status.viewing && stage === 'done' && plan.start_date && <SameAsLastTime pd={pd} />}
     </>

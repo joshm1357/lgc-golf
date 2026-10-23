@@ -9,6 +9,7 @@ import { isCommentaryPost } from '../lib/commentary.js';
 import { usePostChips, PostChips, FineSheet } from '../components/AwardsFines.jsx';
 import { BringAsk } from '../components/BringAsk.jsx';
 import { bringAskPlan } from '../lib/runup.js';
+import { SideGameAsk, sideGameFromLink } from '../components/GamesChip.jsx'; // ov29 (098)
 
 const REACTIONS = ['🔥', '😂', '👏', '🤦', '🍺'];
 
@@ -132,6 +133,7 @@ function Post({ post, me, comments, reactions, onReact, onChanged, isAdmin, chip
         {!auto && post.body && <div style={{ fontSize: 16, lineHeight: 1.4 }}>{post.body}</div>}
         <PostChips chips={chips} onChanged={onChips} />
         {bringAskPlan(post.link) && <BringAsk planId={bringAskPlan(post.link)} />}
+        {sideGameFromLink(post.link) && <SideGameAsk gameId={sideGameFromLink(post.link)} />}
         <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
           {counts.map((c) => (
             <button key={c.e} type="button" className="react" aria-pressed={c.mine} onClick={() => onReact(c.e)} aria-label={`React ${c.e}`}>

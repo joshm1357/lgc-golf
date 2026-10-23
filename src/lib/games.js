@@ -229,6 +229,18 @@ export function optInState(round, teeGroups = [], now = new Date()) {
   return { open, closesAt, words };
 }
 
+/** Rounds a side game can be put up for: opt-in still open, and today or later (or no date yet). Soonest first. */
+export function proposableRounds(rounds = [], teeGroups = [], now = new Date()) {
+  const today = sydneyClock(now).slice(0, 10);
+  return rounds.filter((r) => optInState(r, teeGroups, now).open && (!r.play_date || String(r.play_date).slice(0, 10) >= today))
+    .sort((a, b) => String(a.play_date || '9999').localeCompare(String(b.play_date || '9999')) || String(a.name).localeCompare(String(b.name)));
+}
+
+/** The round_games row for a proposed (opt-in) side game: a standard game, its default options, my stake. */
+export function proposedRow({ id, roundId, kind, stake, me }) {
+  return { id, round_id: roundId, kind, stake: Math.round(toCents(stake)) / 100, options: cleanOptions(kind, {}), who_in: 'opt_in', created_by: me };
+}
+
 /** "$5 skins" — a game in a few words (a custom game keeps its own name). */
 const SHORT = { skins: 'skins', nassau: 'Nassau', stableford_pot: 'Stableford pot', birdie_pool: 'birdie pool', eclectic: 'eclectic' };
 export function gameShort(game) {

@@ -26,6 +26,7 @@ import { matchState, matchText, cupTotals, pts } from '../lib/cup.js';
 import { todayISO } from '../lib/plan.js';
 import { tripFinished } from '../lib/results.js';
 import { useTripComps, useCompData } from './CompsChip.jsx';
+import { SideGamesToday } from './GamesChip.jsx'; // ov29 (098)
 import { AvatarStack, Avatar, timeAgo } from './ui.jsx';
 import YourRound, { useRoundSetup } from './YourRound.jsx';
 import FinesTicker from './FinesTicker.jsx';
@@ -322,6 +323,7 @@ export default function TripStatus({ trip, overview = false, moneyLine = null })
       {onNow && <FinesTicker trip={trip} />}
       {showBoard && <RoundBoardMini round={focus.round} when={focus.when} hideUnused={cupDay} />}
       {focus && <SideCompsToday round={focus.round} />}
+      {focus && <SideGamesToday round={focus.round} />}
       <CompsSection trip={trip} rounds={rounds} />
       {!overview && feedOn && <TripFeed trip={trip} />}
       <RoundsList rounds={rounds} />

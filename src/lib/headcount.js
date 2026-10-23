@@ -38,6 +38,18 @@ export function replies({ players = [], rsvps = [] } = {}) {
   return { in: ids.in.length, maybe: ids.maybe.length, out: ids.out.length, noReply: ids.noReply.length, total: people.length, ids };
 }
 
+/**
+ * One person's reply, by the same rule as replies(): (player id) → 'in' | 'maybe' | 'out' | null (not replied).
+ * Anything that isn't in / maybe / out counts as not replied. (lib/yourround.js peopleStatus uses this.)
+ */
+export function replyOf({ rsvps = [] } = {}) {
+  const status = new Map((rsvps || []).filter((r) => r?.player_id).map((r) => [r.player_id, r.status]));
+  return (pid) => {
+    const s = status.get(pid);
+    return s === 'in' || s === 'maybe' || s === 'out' ? s : null;
+  };
+}
+
 /** "9 in · 1 maybe · 1 not replied" (out only when someone's out; nothing when there's nobody). */
 export function repliesLine(r) {
   if (!r || !r.total) return 'Nobody yet';

@@ -52,7 +52,7 @@ export function useRoundSetup(roundIds) {
 /**
  * Who's a maybe, out, hasn't replied or hasn't paid on this trip (its plan's who's-in and deposits). No plan, or the
  * planner off: nobody is flagged. Returns { statusOf(pid) → { flag }, plan }.
- * (W1's src/lib/headcount.js will be the one headcount rule; lib/yourround.js peopleStatus should call it once it's in.)
+ * (Who's in / maybe / out comes from src/lib/headcount.js, the one headcount rule, via peopleStatus.)
  */
 export function usePeopleStatus(trip) {
   const plannerOn = useFeature('planner');

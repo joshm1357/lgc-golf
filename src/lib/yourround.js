@@ -2,6 +2,8 @@
 // supabase/functions/_shared/yourround.js (shared with the notify function's draw-out and night-before buzzes);
 // this file re-exports them and adds what only the app needs: who's still a maybe or hasn't paid (for the team and
 // group pickers), the tee time the courses gave (to prefill tee groups), and which rounds still need groups.
+import { replyOf } from './headcount.js';
+
 export { yourRound, teeWhen, offLine, matchLine, dayAndTime, drawOutMessage, teeTomorrowMessage, teeClock, andList } from '../../supabase/functions/_shared/yourround.js';
 
 /**
@@ -9,17 +11,17 @@ export { yourRound, teeWhen, offLine, matchLine, dayAndTime, drawOutMessage, tee
  * pickers, and the player gets a nudge ("You're in Kurt's draw for Team Blue. Are you coming?").
  * Same test as the run-up's reminders (notify → runUpFor): paid = what they've sent the organiser (to_id empty)
  * covers the deposit, less 50c.
- * NOTE (ov28): W1 is writing src/lib/headcount.js as the ONE headcount rule. When it lands, this should call it.
+ * Who's in / maybe / out / not replied comes from src/lib/headcount.js (replyOf) — the ONE headcount rule (O6).
  *   plan: { deposit_pp }; rsvps: [{ player_id, status: 'in' | 'maybe' | 'out' }]; transfers: [{ from_id, to_id, amount }]
  * Returns (player id) → { rsvp, paid, flag } — flag: 'out' | 'maybe' | 'no reply' | 'not paid' | null (all good).
  * No plan (a trip without the planner): nobody is flagged.
  */
 export function peopleStatus({ plan = null, rsvps = [], transfers = [] } = {}) {
   const deposit = Number(plan?.deposit_pp) || 0;
-  const rs = new Map((rsvps || []).map((r) => [r.player_id, r.status]));
+  const replyFor = replyOf({ rsvps });
   return (pid) => {
     if (!plan || !pid) return { rsvp: null, paid: null, flag: null };
-    const rsvp = rs.get(pid) || null;
+    const rsvp = replyFor(pid);
     const sent = (transfers || []).filter((t) => t.from_id === pid && !t.to_id).reduce((s, t) => s + (Number(t.amount) || 0), 0);
     const paid = deposit > 0 ? sent >= deposit - 0.5 : null;
     const flag = rsvp === 'out' ? 'out' : rsvp === 'maybe' ? 'maybe' : !rsvp ? 'no reply' : paid === false ? 'not paid' : null;

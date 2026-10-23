@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { tripPeople, replies, repliesLine, playing, teeTimesFor, playersLine } from './headcount.js';
+import { tripPeople, replies, repliesLine, playing, teeTimesFor, playersLine, replyOf } from './headcount.js';
+import { peopleStatus } from './yourround.js';
 import { tripHeadcount } from './weekends.js';
 import { teeTimesNeeded } from './tripbuilder.js';
 import { callScript, callChecklist } from './teegrid.js';
@@ -44,5 +45,13 @@ describe('one headcount rule (O6)', () => {
     expect(s).toMatch(/3 tee times in a row — 10 players/);
     expect(s).not.toMatch(/12 players/);
     expect(callChecklist(['2027-01-22'], { need: 3, people: 10 })[1]).toBe('3 tee times in a row (10 players) — what times?');
+  });
+});
+
+describe('one person\'s reply (O6: ov28\'s pickers use the same rule)', () => {
+  it('in / maybe / out, anything else is not replied', () => {
+    const r = replyOf({ rsvps: [...rsvps, { player_id: 'odd', status: 'keen' }] });
+    expect([r('p0'), r('p9'), r('p10'), r('odd')]).toEqual(['in', 'maybe', null, null]);
+    expect(peopleStatus({ plan: {}, rsvps: [{ player_id: 'odd', status: 'keen' }] })('odd').flag).toBe('no reply');
   });
 });

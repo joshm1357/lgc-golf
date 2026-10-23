@@ -74,9 +74,10 @@ export default function DinnerAwards() {
 
   if (!trip) return <div className="page"><Header back title="Awards and fines" /><div className="empty">No trip yet — awards and fines belong to a trip.</div></div>;
   if (!d) return <div className="page"><Header back title="Awards and fines" sub={trip.name} /><Loading /></div>;
-  // 100: a nightly (daily, from-the-scores) award shows as its runs below, not as a card to vote on; the nights'
-  // copies (parent_id) are inside those runs.
-  const list = sortAwards(d.awards.filter((a) => !a.parent_id && autoTerms(a, d.rulesById?.[a.rule_id] || null).runs === 'trip'));
+  // 100: a nightly (daily, from-the-scores) award shows as its runs below, not as a card to vote on — unless someone
+  // nominated straight onto it (the old way, still allowed). The nights' copies (parent_id) are inside those runs.
+  const list = sortAwards(d.awards.filter((a) => !a.parent_id
+    && (autoTerms(a, d.rulesById?.[a.rule_id] || null).runs === 'trip' || d.nominations.some((n) => n.award_id === a.id))));
 
   return (
     <div className="page">

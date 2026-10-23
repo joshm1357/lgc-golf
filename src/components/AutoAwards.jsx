@@ -163,8 +163,8 @@ export function AwardRunCard({ runId, compact = false }) {
   };
   return (
     <div className="card pad stack" style={{ gap: 8, background: r.status === 'confirmed' ? 'var(--gold-soft)' : undefined }} data-testid="award-run" data-status={r.status}>
-      <div className="row between" style={{ gap: 8, alignItems: 'flex-start' }}>
-        <strong>{r.kind === 'night' ? '🌙 ' : r.kind === 'day' ? '☀️ ' : '📊 '}{runLabel(r, title, roundName)}</strong>
+      <div className="row between" style={{ gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <strong style={{ flex: '1 1 160px' }}>{r.kind === 'night' ? '🌙 ' : r.kind === 'day' ? '☀️ ' : '📊 '}{runLabel(r, title, roundName)}</strong>
         <span className="small" style={{ fontWeight: 800, whiteSpace: 'nowrap' }} data-testid="run-status">{RUN_STATUS[r.status] || r.status}</span>
       </div>
       {r.status === 'open' && <span className="small muted">Claims open {clockAt(r.opens_at)}–{clockAt(r.closes_at)} — post a photo and tap “Claim”. Proposed {clockAt(r.propose_at)}.</span>}

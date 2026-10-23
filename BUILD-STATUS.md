@@ -1457,3 +1457,32 @@ general (not Cup-only), any meal (not "dinner"), don't flood.
   trip-overview (updated for the results page), trips, jokes, stroke, links, nav, phone, history, own-comps,
   commentary, desktop pass. `quick` and `signin-first` fail the same way on v10-int (not touched here).
 - **Deploy when convenient:** the notify function (new kinds). Apply 097 on staging, then live.
+
+## ov31 — Automatic awards: claims from posts, the morning's proposed winner, cup points (23 Oct 2026, branch `ov31-auto-awards`, migration 100, not applied anywhere)
+- **When it runs.** An award or fine runs once a trip (as before), each day or each night (`runs`, with a claim
+  window `window_from`/`window_to` and `propose_time`). A time proof decided by latest / earliest runs each night by
+  default ("Latest out": 9pm–6am Sydney, proposed 7am). Each night gets its own copy of the award (`parent_id`), so
+  older apps just see "Latest out · Fri night" with its claims.
+- **Claim from a post.** A Feed photo posted in a window gets "🌙 Claim Latest out?" (one tap, for whoever posted
+  it) or "👤 Someone else". The time is the post's server time (`posts.server_at`, set by the database). Guests can't.
+- **Morning proposal.** The 5-minute job (`private.auto_awards_job`) ranks the night's claims at 7am (or an hour
+  before the first tee, if earlier) and posts once: "🌙 Proposed — Latest out, last night: Hamish 2:47am 📷 (+2),
+  Bo 1:15am 📷 (+1) · −1 stroke. Confirm or dispute by the first tee (8am)." No claims, no post. New notify kinds
+  `award_proposed` / `award_confirmed` / `award_overturned` (own block in notify: `autoawards.ts`).
+- **Confirm, change or dispute.** The proposal card (in the Feed and at `/award-run/:id`): organiser Confirm, Pick
+  another, No winner; anyone (not guests) Dispute → a Tribunal case, and it waits. A dispute on one person's points
+  line holds just that line. Nobody disputes → it confirms itself at the first tee (noon with no round).
+- **Rewards land.** Strokes → `score_adjustments` kind 'award' ("Latest out (−1)", rule_id set) on the winner's next
+  round (or when one goes live). Money / drink / title: on the run (`award_runs.worth`) and the results page
+  (`AutoAwardResults` / `useAutoAwardResults` in components/AutoAwards.jsx, mounted in TripResults).
+- **From the scores.** An award can be a side-comp library 'auto' key (`from_scores`). When a round is locked the
+  app works out the standings (sidecomplib) and calls `award_propose_from_scores` (once per award per round).
+- **Points to cups.** `comp_id` on rules / dinner_awards; `points` setting: winner / per unit (threshold, whole or
+  part, cut-off, cap) / placings; fines take off. New table `cup_points` (confirmed, non-waived rows count;
+  source_type award, fine, activity, manual, penalty, kudos) for ov32.
+- **Files:** supabase/migrations/100_auto_awards.sql, supabase/tests/100_auto_awards.sql (+ expected),
+  src/lib/autoawards.js (+ test), src/components/AutoAwards.jsx, supabase/functions/notify/autoawards.ts (+ test),
+  tests/e2e/auto-awards-test.mjs. Small mounts in Feed.jsx, DinnerAwards.jsx, AwardsFines.jsx (ProposeSheet settings),
+  TripResults.jsx, App.jsx (route), notify/index.ts (one block).
+- **Tests:** Vitest 1531 pass (28 new). Deno notify 10 pass, index type-checks. SQL test 100 run in PGlite on every
+  migration (with ov30's real 099 too). Browser: auto-awards, awards-fines, awards, results pass.

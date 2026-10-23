@@ -20,6 +20,7 @@ import {
   starterSteps, showStarter, starterState, setStarterState, inviteMessage, joinedWords, showWelcome, welcomeHidden, hideWelcome,
   nextTripWords,
 } from '../lib/firstopen.js';
+import { gate } from '../lib/savedgate.js';
 
 const first = (p) => String(playerName(p) || '').split(' ')[0];
 
@@ -133,7 +134,7 @@ function OrganiserStart({ steps, joined, gid, push, setPush, onSuggest, onState 
             {s.key === 'suggest' && !s.done && (
               <>
                 <span className="small muted">Put a weekend and a place or two up for a vote — everyone says if they’re in.</span>
-                <button type="button" className="btn ghost sm" data-testid="starter-suggest" style={{ alignSelf: 'flex-start' }} onClick={onSuggest}>💡 Suggest the next trip</button>
+                <button {...gate('propose_trip')} type="button" className="btn ghost sm" data-testid="starter-suggest" style={{ alignSelf: 'flex-start' }} onClick={onSuggest}>💡 Suggest the next trip</button>
               </>
             )}
             {s.key === 'notify' && !s.done && push !== 'unsupported' && (

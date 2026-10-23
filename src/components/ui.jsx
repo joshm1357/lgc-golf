@@ -4,6 +4,7 @@ import { GroupCrest } from './Logo.jsx';
 import { useFeature, useSession } from '../lib/store.jsx';
 import { SIGN_IN } from '../lib/auth.js';
 import { updateNow, watchTyping } from '../lib/unsaved.js';
+import { isSaveSpotError } from '../lib/savedgate.js';
 
 // ---------- Icons (simple stroke icons) ----------
 const P = { fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' };
@@ -163,6 +164,8 @@ export function Toaster() {
 }
 export function toast(m) {
   toastSet?.(m);
+  // v10.2: the database's "Save your spot first …" (102) opens the Save your spot sheet (components/SavedGate.jsx).
+  if (isSaveSpotError(m) && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('tgt-save-needed', { detail: {} }));
 }
 
 // ---------- In-app "are you sure?" (ov21, 23 Oct 2026) ----------

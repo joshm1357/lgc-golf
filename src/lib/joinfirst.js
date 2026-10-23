@@ -4,7 +4,7 @@
 // Plain words:
 //   - Opening any join link (invite, team, organiser) on a phone or laptop that isn't signed in shows ONE screen first:
 //     "Join <group> — sign in so it's you on any phone or laptop". Continue with Google, Email + password, or a small
-//     "Just this phone for now" (the old phone-only way; Save your spot stays for those people).
+//     "Just this phone: scoring and voting only" (the old phone-only way; Save your spot stays for those people).
 //   - After signing in, the link is used by the SIGNED-IN account, then pick your name → notifications → the page.
 //   - Already in that group with a name: straight to the page ("Welcome back, Josh"). In it with no name: pick one.
 //

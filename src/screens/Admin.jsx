@@ -15,6 +15,7 @@ import { RoundCompsCard, useScrollToRound } from './CompsBoard.jsx';
 import { CommentarySettings } from '../components/Commentary.jsx';
 import { isYearOnly, tripWhen } from '../lib/trips.js';
 import { drivesRule, drivesRoundLine } from '../lib/drives.js';
+import { OrganiserSaveCard } from '../components/SavedGate.jsx';
 
 async function run(fn, okMsg) {
   try {
@@ -69,6 +70,7 @@ export default function Admin() {
   return (
     <div className="page">
       <Header back title="Organiser tools" sub="Set up trips, courses, players and rounds" />
+      <OrganiserSaveCard />
       <div className="section stack" style={{ paddingBottom: 20 }}>
         <Link to="/setup" className="card pad row" style={{ gap: 10, textDecoration: 'none', color: 'inherit', borderColor: 'var(--navy)' }}>
           <span aria-hidden="true">🧭</span><span className="grow"><strong>Set up your trip</strong> <span className="small muted">— the step-by-step guide</span></span><span className="muted">›</span>

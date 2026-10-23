@@ -10,6 +10,7 @@ import { useRun, must, feedPost, everyone, shareNudge } from './Planner.jsx';
 import { LeftoverKitty, useRolledIn } from '../components/AwardsFines.jsx'; // 093: the leftover kitty rule
 import { MoneyLine } from '../components/MoneyLine.jsx'; // M1: one money line per person
 import { collectorOf, youLabel, theyLabel } from '../lib/money.js';
+import { gate } from '../lib/savedgate.js';
 
 const canEdit = (item, me, isAdmin) => isAdmin || item.created_by === me || item.owner_id === me;
 
@@ -311,7 +312,7 @@ export function KittyTab({ pd, table = false }) {
     <>
       <MoneyLine pd={pd} />
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-        <button type="button" className="btn ghost sm" data-testid="add-cost" onClick={() => setCostFor({})}>+ Add a cost {status.is_admin ? '' : 'I paid'}</button>
+        <button {...gate('money')} type="button" className="btn ghost sm" data-testid="add-cost" onClick={() => setCostFor({})}>+ Add a cost {status.is_admin ? '' : 'I paid'}</button>
       </div>
       <MyPayDetails />
       {/* Near the end of the trip (the last night on), what's left goes where the group's rule says. */}

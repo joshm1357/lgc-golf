@@ -34,7 +34,7 @@
 34. no: makes his personal link → refused: Save your spot first (Google or email) to do this
 35. no: changes Tom's profile → refused: Save your spot first (Google or email) to do this
 36. no: starts a new group → refused: Save your spot first (Google or email) to do this
-37. organiser (phone-only): every gated function → ok 80 of 80 refused
+37. organiser (phone-only): every gated function → ok 81 of 81 refused
 38. organiser (phone-only): adds a trip → refused: Save your spot first (Google or email) to do this
 39. organiser (phone-only): changes the round → refused: Save your spot first (Google or email) to do this
 40. organiser (phone-only): closes the poll → refused: Save your spot first (Google or email) to do this
@@ -57,11 +57,12 @@
 57. saved organiser: starts a new group → ok true
 58. nobody (phone-only): starts a group → refused: Save your spot first (Google or email) to do this
 59. nobody (phone-only): starts a quick round → refused: Save your spot first (Google or email) to do this
-60. nobody (phone-only): a club claims a course page → refused: Save your spot first (Google or email) to do this
-61. quick group (phone-only): my_saved_status → ok {"saved": false, "limited": false}
-62. saved organiser switches the limit off → ok 
-63. switched off: Hamish suggests a trip → ok added
-64. switched off: Hamish "I've paid" → ok paid
-65. switched off: still can't start a new group → refused: Save your spot first (Google or email) to do this
-66. tables with all three saved-only policies → 45
-67. phone_only_limited default → true
+60. nobody (phone-only): asks a club about a group booking → refused: Save your spot first (Google or email) to do this
+61. nobody (phone-only): a club claims a course page → refused: Save your spot first (Google or email) to do this
+62. quick group (phone-only): my_saved_status → ok {"saved": false, "limited": false}
+63. saved organiser switches the limit off → ok 
+64. switched off: Hamish suggests a trip → ok added
+65. switched off: Hamish "I've paid" → ok paid
+66. switched off: still can't start a new group → refused: Save your spot first (Google or email) to do this
+67. tables with all three saved-only policies → 45
+68. phone_only_limited default → true

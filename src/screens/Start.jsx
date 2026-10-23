@@ -3,7 +3,6 @@ import { useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
 import { useSession } from '../lib/store.jsx';
 import { setCurrentGroup } from '../lib/group.js';
-import { SIGN_IN } from '../lib/auth.js';
 import { STARTERS } from '../lib/starters.js';
 import { FEATURES, PRESETS, PRESET_BY_KEY, featureOn, withFollowers } from '../lib/features.js';
 import { useRun, must } from '../lib/run.js';
@@ -12,7 +11,8 @@ import { Toaster, toast } from '../components/ui.jsx';
 import { readHandicap } from '../lib/history.js';
 import { sourceFrom, rememberSource, rememberedSource, forgetSource, countScan } from '../lib/quick.js';
 import { paintLook, savedLook, DEFAULT_LOOK } from '../lib/theme.js';
-import { SignInCard, InviteCard, LookCard } from './Group.jsx';
+import { InviteCard, LookCard } from './Group.jsx';
+import { SignInToContinue, useSavedAccount } from '../components/SavedGate.jsx';
 
 // Stage 7: the public start page and the start-a-group wizard (#/start, #/start/new).
 // The group is made at step 2 (it needs a name); every step after that saves straight away, so leaving half-way and
@@ -38,14 +38,6 @@ export const STEPS = [
   { key: 'players', title: 'Players', mins: 2 },
   { key: 'invite', title: 'Invite your group', mins: 1 },
 ];
-
-async function ensureSignedIn() {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) {
-    const { error } = await supabase.auth.signInAnonymously();
-    if (error) throw error;
-  }
-}
 
 export default function Start() {
   const loc = useLocation();
@@ -126,6 +118,7 @@ function Intro() {
 
 function Wizard() {
   const { status, refresh, user } = useSession() || {};
+  const saved = useSavedAccount();
   const [ready, setReady] = useState(false);
   const [progress, setProgressState] = useState(() => {
     const p = loadProgress(user?.id);
@@ -133,12 +126,12 @@ function Wizard() {
   });
   const setProgress = (p) => { saveProgress(p); setProgressState(p); };
 
-  // A session first (a phone-only one if not signed in), and back into a half-made group if there is one.
+  // v10.2: no phone-only session here any more — whoever starts a group is its organiser, and organisers sign in
+  // (step 1). Back into a half-made group if there is one.
   useEffect(() => {
     let live = true;
     (async () => {
       try {
-        await ensureSignedIn();
         if (progress.gid) setCurrentGroup(progress.gid);
         await refresh?.();
       } catch (e) { toast(e.message || 'No signal — try again'); }
@@ -162,7 +155,8 @@ function Wizard() {
   }, [ready, status, progress.gid]); // eslint-disable-line react-hooks/exhaustive-deps
   const inNewGroup = !progress.gid || status?.group_id === progress.gid;
 
-  const step = STEPS[progress.step] || STEPS[0];
+  // Not signed in with Google or email (signed out, or phone-only): the sign-in step, whatever step was saved.
+  const step = saved ? STEPS[progress.step] || STEPS[0] : STEPS[0];
   // Making a quick group official: the group already exists, so after signing in go straight to its name and crest.
   const next = () => setProgress({ ...progress, step: progress.official && progress.gid && progress.step < 2 ? 2 : Math.min(progress.step + 1, STEPS.length - 1) });
   const back = () => setProgress({ ...progress, step: Math.max(progress.gid ? 2 : 0, progress.step - 1) });
@@ -188,7 +182,7 @@ function Wizard() {
           </div>
         ) : (
           <>
-            {step.key === 'signin' && <SignInStep status={status} onNext={next} />}
+            {step.key === 'signin' && <SignInStep onNext={next} />}
             {step.key === 'name' && <NameStep refresh={refresh} uid={user?.id}
               made={{ step: progress.step + 1, uid: user?.id, prevGroup: status?.is_member ? status.group_id : null }}
               onMade={(gid) => setProgress({ ...loadProgress(user?.id), gid })} />}
@@ -205,8 +199,9 @@ function Wizard() {
   );
 }
 
-function SignInStep({ status, onNext }) {
-  if (status?.signed_in) {
+function SignInStep({ onNext }) {
+  const saved = useSavedAccount();
+  if (saved) {
     return (
       <>
         <div className="card pad">✅ You’re signed in — the group will be safe on any phone you sign in on.</div>
@@ -216,11 +211,9 @@ function SignInStep({ status, onNext }) {
   }
   return (
     <>
-      <p style={{ margin: 0 }}>You’ll be the group’s organiser. Signing in means you keep it if you lose or change your phone.</p>
-      {SIGN_IN.length > 0 && status ? <SignInCard returnHash="#/start/new" /> : (
-        <div className="card pad small">Signing in with Google or email isn’t switched on yet. You can carry on — add a sign-in later in <strong>More → Group &amp; invites</strong>.</div>
-      )}
-      <button type="button" className="btn gold block" onClick={onNext}>{SIGN_IN.length > 0 ? 'Carry on without signing in' : 'Next'}</button>
+      {/* v10.2 (Josh): organisers always have a saved account — no phone-only way to start a group. */}
+      <p style={{ margin: 0 }}>You’ll be the group’s organiser, so sign in with Google or email first. You keep the group if you lose or change your phone.</p>
+      <SignInToContinue returnHash="#/start/new" title="Sign in to start your group" />
     </>
   );
 }

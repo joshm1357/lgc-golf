@@ -17,6 +17,7 @@ import { notify, shareText, appLink } from '../lib/push.js';
 import { money } from '../lib/plan.js';
 import { myMoney, moneyWords, whoOwes, collectorOf, remindText } from '../lib/money.js';
 import { toast, askConfirm } from './ui.jsx';
+import { gate } from '../lib/savedgate.js';
 
 /** Copy or share text (PayID, a reminder) — the share sheet on a phone, else the clipboard. */
 async function shareOrCopy(text, copied = 'Copied') {
@@ -93,7 +94,7 @@ export function MoneyLine({ pd: given = null, tripId = null, compact = false, se
           ))}
           {m.state === 'owe' && !details.length && <span className="small muted">{payeesToPay[0]?.name || collector.name} hasn’t added payment details yet — ask in the group chat.</span>}
           {m.state === 'owe' && (
-            <button type="button" className="btn gold sm" disabled={busy} data-testid="ive-paid" style={{ alignSelf: 'flex-start' }} onClick={paid}>I’ve paid {money(m.toPay)}</button>
+            <button {...gate('money')} type="button" className="btn gold sm" disabled={busy} data-testid="ive-paid" style={{ alignSelf: 'flex-start' }} onClick={paid}>I’ve paid {money(m.toPay)}</button>
           )}
           {m.state === 'waiting' && <span className="small muted" data-testid="money-waiting">⏳ You’ve said you paid — nothing more to do until it’s ticked off.</span>}
         </div>

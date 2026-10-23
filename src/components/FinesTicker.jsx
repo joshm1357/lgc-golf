@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase.js';
 import { useData, useSession, useFeature, useRealtime, playerName } from '../lib/store.jsx';
 import { FineSheet, useAwardsData } from './AwardsFines.jsx';
 import { finesTally, finesLine } from '../lib/results.js';
+import { gate } from '../lib/savedgate.js';
 
 /** The trip's awards and fines with their nominations (who's been fined), live. { awards, nominations, votes, ready }. */
 export function useTripFines(tripId) {
@@ -38,7 +39,7 @@ export function FineSomeone({ tripId, className = 'btn ghost sm', label = '🏷 
   if (!on || !tripId || status?.viewing || status?.role === 'guest' || !status?.player_id) return null;
   return (
     <>
-      <button type="button" className={className} onClick={() => setOpen(true)} data-testid="fine-someone">{label}</button>
+      <button {...gate('fine')} type="button" className={className} onClick={() => setOpen(true)} data-testid="fine-someone">{label}</button>
       {open && <FineSheet post={{ id: null, trip_id: tripId, player_id: who || '', created_at: new Date().toISOString() }} who={who || ''}
         onClose={() => setOpen(false)} onSaved={onSaved} />}
     </>

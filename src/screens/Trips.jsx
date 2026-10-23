@@ -23,6 +23,7 @@ import { openPlanner } from '../components/Caddie.jsx';
 import { SaveSpotBanner } from '../components/SaveSpot.jsx';
 import { FirstOpen } from '../components/FirstOpen.jsx';
 import Memories from '../components/Memories.jsx';
+import { gate } from '../lib/savedgate.js';
 
 const TABLES = ['plans', 'plan_rsvps', 'plan_polls', 'plan_options'];
 
@@ -91,7 +92,7 @@ export default function Trips() {
   const starterOn = starting || firstCard === 'starter';
   const suggestButton = (
     <>
-      <button type="button" className="btn gold block" style={{ minHeight: 56 }} onClick={() => setSuggesting(true)}>💡 Suggest a trip or round</button>
+      <button {...gate('propose_trip')} type="button" className="btn gold block" style={{ minHeight: 56 }} onClick={() => setSuggesting(true)}>💡 Suggest a trip or round</button>
       <span className="small muted" style={{ textAlign: 'center' }}>{votesOn ? 'Everyone votes on when and where; ' : 'Everyone says if they’re in; '}{status.is_admin ? 'you lock it in' : 'an organiser locks it in'}.</span>
     </>
   );

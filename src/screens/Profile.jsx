@@ -22,6 +22,7 @@ import { CapTipButton } from '../components/CupStandings.jsx'; // ov32: give thi
 /** Everything we know about a player: Stableford rounds, Ambrose results, trophies, comps, Tribunal, handicap. */
 export function usePlayerHistory(playerId) {
   const data = useData();
+import { gate } from '../lib/savedgate.js';
   const roundIds = data.rounds.map((r) => r.id);
   const scores = useScores(roundIds);
   const [extra, setExtra] = useState({ hist: [], cases: [], side: [] });
@@ -249,7 +250,7 @@ function MyLinkCard() {
     <div className="card pad stack" style={{ gap: 6 }} data-testid="my-link">
       <strong>📱 Open the app on another device</strong>
       <span className="small muted">Your own link: open it on the other phone or computer and you’re straight in as you. It works once and lasts 14 days — don’t share it.</span>
-      <button type="button" className="btn ghost" disabled={busy} onClick={copy}>{busy ? 'Making your link…' : '🔗 Copy my link'}</button>
+      <button {...gate('invite')} type="button" className="btn ghost" disabled={busy} onClick={copy}>{busy ? 'Making your link…' : '🔗 Copy my link'}</button>
     </div>
   );
 }

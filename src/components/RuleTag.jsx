@@ -11,6 +11,7 @@ import { useSession, useFeature, useData, playerName } from '../lib/store.jsx';
 import { currentGroup } from '../lib/group.js';
 import { Sheet } from './ui.jsx';
 import { disputeState, openCasesFor, isDisputable, SOURCE, valueWords, ruleForSetting } from '../lib/disputes.js';
+import { gate } from '../lib/savedgate.js';
 
 // ------------------------------------------------------------------ open disputes, shared by every chip on screen
 // One small query and one realtime channel however many chips there are.
@@ -152,7 +153,7 @@ function RuleSheet({ rule, explain, setBy, setAt, onClose }) {
             </Link>
           )}
           {st.canDispute && (
-            <button type="button" className="btn gold block" data-testid="dispute-this" onClick={() => setRaising(true)}>⚖️ Dispute this</button>
+            <button {...gate('dispute')} type="button" className="btn gold block" data-testid="dispute-this" onClick={() => setRaising(true)}>⚖️ Dispute this</button>
           )}
           {!st.canDispute && !seen && st.why && <div className="small muted">{st.why}</div>}
           <div className="small muted">A dispute never changes anything by itself. If the verdict says change it, an organiser makes the change.</div>

@@ -27,6 +27,8 @@ import CompsOnTheDay from '../components/CompsOnTheDay.jsx'; // ov23
 import OtherWays from '../components/OtherWays.jsx'; // O2
 import { VoteTab, PeopleTab, ChatTab, PollSheet, CloseSheet, ProposalBanner, LockInCard, Checklist, CalledOffBanner } from './Planner.jsx';
 import './organise.css';
+import { gate } from '../lib/savedgate.js';
+import { OrganiserSaveCard } from '../components/SavedGate.jsx';
 
 // Laptop-only parts (what was the Trip desk), loaded only on a laptop so phones download nothing new.
 const OrganiseSide = lazyScreen(() => import('./OrganisePanels.jsx'), 'OrganiseSide', { inline: true });
@@ -203,6 +205,7 @@ export function OrganiseView({ pd, stage, trip, wide, desk, onEdit }) {
 
   return (
     <>
+      {isOrg && <OrganiserSaveCard />}
       <div className="section org-strip-wrap">{strip}</div>
       {desk ? (
         <div className="org-desk">
@@ -239,7 +242,7 @@ function StepBody({ k, pd, ex, stage, trip, isOrg, on, desk, wide, moneyTab, onM
             {plan.status === 'planning' && (
               <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
                 <button type="button" className="btn ghost sm" onClick={onEdit}>✏️ Set dates and place by hand</button>
-                {on.planner_tasks && <button type="button" className="btn ghost sm" onClick={onPoll}>🗳️ Call a vote yourself</button>}
+                {on.planner_tasks && <button {...gate('call_vote')} type="button" className="btn ghost sm" onClick={onPoll}>🗳️ Call a vote yourself</button>}
               </div>
             )}
           </OtherWays>

@@ -68,8 +68,9 @@
 --     team_invite, share_join_code
 --   only sometimes: award_claim_post (only when claiming for someone else)
 --   always, whatever the switch (private.saved_account_ok): create_group (both), start_quick_round,
---     request_club_claim — starting a group or a quick round, or a club claiming its course page. Phone-only accounts
---     now only come from joining an existing group through its invite link.
+--     request_club_claim, send_booking_enquiry — starting a group or a quick round, a club claiming its course page,
+--     and a group-booking enquiry (it sends your details to a club). The app no longer makes a phone-only account
+--     anywhere but joining an existing group from its link (or a personal link); this makes sure of it.
 --   NOT gated on purpose: finalise_case (cast_vote calls it when the last vote is in), award_for_trip (claiming
 --     "Latest out" for yourself calls it), award_propose_from_scores (the app runs it after a round), cast_vote,
 --     vote_case, vote_election, answer_nomination, set_defence, add_case_post, report_case, set_cup_hole,
@@ -253,7 +254,7 @@ begin
       -- only sometimes
       'award_claim_post',
       -- always a saved account (no group yet)
-      'create_group', 'start_quick_round', 'request_club_claim'])
+      'create_group', 'start_quick_round', 'request_club_claim', 'send_booking_enquiry'])
     order by p.proname, p.oid
   loop
     v_def := pg_get_functiondef(r.oid);
@@ -264,6 +265,7 @@ begin
       when 'create_group' then 'private.saved_account_ok()'
       when 'start_quick_round' then 'private.saved_account_ok()'
       when 'request_club_claim' then 'private.saved_account_ok()'
+      when 'send_booking_enquiry' then 'private.saved_account_ok()'
       when 'set_cap_tip_name' then 'private.saved_ok(p_group)'
       when 'set_vote_channel' then 'private.saved_ok(p_group)'
       when 'set_vote_decider' then 'private.saved_ok(p_group)'

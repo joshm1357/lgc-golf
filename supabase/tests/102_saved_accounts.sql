@@ -234,6 +234,7 @@ select pg_temp.as_user('00000000-0000-4000-8000-0000002a0a05', true);
 set local role authenticated;
 select pg_temp.try('nobody (phone-only): starts a group', $q$select public.create_group('Randoms', '{}'::jsonb)::text$q$);
 select pg_temp.try('nobody (phone-only): starts a quick round', $q$select public.start_quick_round('some-course', 'Me', 18, 'stableford', null, null, null)::text$q$);
+select pg_temp.try('nobody (phone-only): asks a club about a group booking', $q$select public.send_booking_enquiry('some-course', 'Me', 'me@example.com', null, null, null, null, null, null)::text$q$);
 select pg_temp.try('nobody (phone-only): a club claims a course page', $q$select public.request_club_claim(null, 'Club', 'Me', 'me@example.com', null, null, null)::text$q$);
 reset role;
 

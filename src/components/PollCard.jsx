@@ -25,6 +25,7 @@ import { extraWins, extrasFromOptions } from '../lib/extras.js';
 import { closedAtLockIn, decidedLine } from '../lib/lockin.js';
 import { OptionSheet, CloseSheet, optionTitle, everyone, shareNudge } from '../screens/Planner.jsx';
 import './planux.css';
+import { gate } from '../lib/savedgate.js';
 
 const TONE = { yes: 'var(--navy)', maybe: '#7A5A00', no: 'var(--under)' };
 
@@ -227,7 +228,7 @@ export function PollCard({ poll, pd, inCard = false, asVoter = false, details = 
                   </span>
                 ))}
               <button type="button" className="btn ghost sm" onClick={() => setSuggesting(true)}>+ Add an option</button>
-              {decider && <button type="button" className="btn sm" onClick={() => setClosing(true)} data-testid="close-pick">Close now & pick the winner</button>}
+              {decider && <button {...gate('call_vote')} type="button" className="btn sm" onClick={() => setClosing(true)} data-testid="close-pick">Close now & pick the winner</button>}
             </div>
           )}
           {kind === 'extra' && decider && results.rows.some((r) => extraWins(r)) && (

@@ -20,6 +20,7 @@ import { useCustomGames, CustomGamesCard, OptionControls, CustomGameSheet } from
 import { RulesLink } from '../components/RulesLinks.jsx';
 import RuleTag from '../components/RuleTag.jsx';
 import GameHelp from '../components/GameHelp.jsx';
+import { gate } from '../lib/savedgate.js';
 
 const byId = (list) => Object.fromEntries(list.map((c) => [c.id, c]));
 
@@ -79,7 +80,7 @@ export default function Games() {
       )}
       {canPropose && (
         <div className="section">
-          <button type="button" className="btn gold block" data-testid="propose-game" onClick={() => setProposing(true)}>🎲 Put up a side game</button>
+          <button {...gate('propose_award')} type="button" className="btn gold block" data-testid="propose-game" onClick={() => setProposing(true)}>🎲 Put up a side game</button>
         </div>
       )}
       {proposing && <ProposeGameSheet onClose={() => setProposing(false)} onDone={async (r) => { await Promise.all([reloadGames(), reloadOptIns()]); setParams({ r }, { replace: true }); }} />}

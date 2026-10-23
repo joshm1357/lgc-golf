@@ -23,6 +23,8 @@ import { GroupVoteEmailCard } from '../components/VoteEmail.jsx';
 import { Link, useLocation } from 'react-router-dom';
 import { GroupTabs } from './DeskNav.jsx';
 import PlayersList from '../components/PlayersList.jsx';
+import { gate } from '../lib/savedgate.js';
+import { OrganiserSaveCard } from '../components/SavedGate.jsx';
 
 export default function Group() {
   const { status } = useSession();
@@ -33,6 +35,7 @@ export default function Group() {
     <div className="page">
       <GroupTabs deskOnly />
       <Header back title="Players & group" sub={status.group_name} />
+      <OrganiserSaveCard />
       <div className="section stack">
         <PlayersList />
         {admin && <span className="label" style={{ marginTop: 8 }}>Invite people</span>}
@@ -127,7 +130,7 @@ export function InviteCard({ role }) {
           {qr && <img src={qr} alt={`QR code for the ${guest ? 'guest' : 'invite'} link`} style={{ width: 180, height: 180, alignSelf: 'center', borderRadius: 8 }} />}
           <code style={{ fontSize: 13, wordBreak: 'break-all', background: 'var(--bg, #F4F5F7)', padding: 8, borderRadius: 8 }}>{link}</code>
           <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-            <button type="button" className="btn gold sm" onClick={async () => {
+            <button {...gate('invite')} type="button" className="btn gold sm" onClick={async () => {
               const r = await shareText(`Join us on the golf app: ${link}`);
               if (r === 'copied') toast('Link copied — paste it in the group chat');
               else if (r === 'failed') toast('Couldn’t share from this phone');

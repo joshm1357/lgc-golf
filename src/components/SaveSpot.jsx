@@ -17,6 +17,7 @@ import { GoogleSignIn } from '../screens/Join.jsx';
 import { SaveSpotEmail } from './SignInForms.jsx';
 import { Sheet } from './ui.jsx';
 import { popupFree, takePopup } from '../lib/firstopen.js';
+import { PHONE_ONLY_LABEL } from '../lib/savedgate.js';
 
 const modes = () => signInModes(SIGN_IN);
 
@@ -68,6 +69,8 @@ function SaveSpotSheet({ onClose, onDone, done }) {
       {done ? <DoneNote onClose={onClose} /> : (
         <div className="stack" style={{ gap: 14 }}>
           <div className="small muted" style={{ margin: 0 }}>Connect Google or email so you can sign in on your laptop (or a new phone). Same account, same name, same scores.</div>
+          {/* v10.2: what phone-only can and can't do, in the option's own words. */}
+          <div className="small muted" style={{ margin: 0 }} data-testid="save-spot-limits">Right now you’re on “{PHONE_ONLY_LABEL}”. Saving also lets you organise, pay and propose things.</div>
           <SaveSpotPanel onDone={onDone} />
           <button type="button" className="btn ghost block" onClick={onClose}>Not now</button>
         </div>

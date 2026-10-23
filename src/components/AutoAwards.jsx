@@ -17,6 +17,7 @@ import {
   RUNS, POINT_MODES, autoTerms, runsWords, clock, clockAt, checkPoints, pointsWords, claimableFor, RUN_STATUS, runLabel,
   resultLines, pointsTally, signedPoints,
 } from '../lib/autoawards.js';
+import { useSavedGate } from './SavedGate.jsx';
 
 const rowsOr = async (q) => { const { data, error } = await q; return error ? [] : data || []; };
 
@@ -137,6 +138,7 @@ export function AwardRunCard({ runId, compact = false }) {
   const [d, reload] = useRun1(runId);
   const [busy, run] = useRun();
   const [picking, setPicking] = useState(false);
+  const ask = useSavedGate(); // v10.2: disputes need a saved account
   if (!d || d.missing || !d.run) return null;
   const r = d.run;
   const terms = autoTerms(d.src || {}, d.rule);
@@ -151,16 +153,16 @@ export function AwardRunCard({ runId, compact = false }) {
   const act = (fn, ok) => run(async () => { await fn(); await reload(); }, ok);
   const confirm = (pick) => act(() => must(supabase.rpc('award_run_confirm', { p_run: r.id, ...(pick || {}) })), 'Confirmed — it’s on the Feed');
   const noWinner = () => window.confirm(`No winner for ${title}?`) && act(() => must(supabase.rpc('award_run_no_winner', { p_run: r.id })), 'No winner — nothing lands');
-  const dispute = () => {
+  const dispute = () => ask('dispute', () => {
     const why = window.prompt(`Dispute ${title}: ${nameOf(r.player_id)}? Say why (optional) — the Tribunal decides.`, '');
     if (why === null) return;
     act(() => must(supabase.rpc('award_run_dispute', { p_run: r.id, p_reason: why || null })), 'Disputed — it’s with the Tribunal');
-  };
-  const disputeLine = (cp) => {
+  });
+  const disputeLine = (cp) => ask('dispute', () => {
     const why = window.prompt(`Dispute ${nameOf(cp.player_id)}’s ${signedPoints(cp.points)}? Say why (optional).`, '');
     if (why === null) return;
     act(() => must(supabase.rpc('cup_points_dispute', { p_line: cp.id, p_reason: why || null })), 'Disputed — that line waits for the Tribunal');
-  };
+  });
   return (
     <div className="card pad stack" style={{ gap: 8, background: r.status === 'confirmed' ? 'var(--gold-soft)' : undefined }} data-testid="award-run" data-status={r.status}>
       <div className="row between" style={{ gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>

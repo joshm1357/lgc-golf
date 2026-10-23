@@ -36,6 +36,7 @@ import { PollCard, DecidedLine } from '../components/PollCard.jsx';
 import { HowItGoesOut } from '../components/CallVote.jsx';
 import { defaultCloses } from '../lib/callvote.js';
 import { useDesktop } from '../components/Sidebar.jsx';
+import { gate } from '../lib/savedgate.js';
 
 export { NotifyCard };
 
@@ -290,7 +291,7 @@ export function VoteTab({ pd, showCall = true }) {
       {pd.polls.length === 0 && <div className="empty">No votes yet.{status.is_admin ? ' Put one up — dates, place, or anything else.' : ' An organiser will put one up.'}</div>}
       <VoteBatches pd={pd} />
       {open.map((p) => <PollCard key={p.id} poll={p} pd={pd} />)}
-      {status.is_admin && showCall && <button type="button" className="btn ghost block" onClick={() => setCreating(true)} data-testid="call-a-vote">🗳️ Call a vote</button>}
+      {status.is_admin && showCall && <button {...gate('call_vote')} type="button" className="btn ghost block" onClick={() => setCreating(true)} data-testid="call-a-vote">🗳️ Call a vote</button>}
       {(closed.length > 0 || atLockIn.length > 0) && <span className="label">Decided</span>}
       {atLockIn.length > 0 && <DecidedLine plan={pd.plan} titles={atLockIn.map((p) => p.question)} />}
       {closed.map((p) => <PollCard key={p.id} poll={p} pd={pd} />)}

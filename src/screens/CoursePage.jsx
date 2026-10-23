@@ -13,6 +13,7 @@ import { GolfTripCrest } from '../components/Logo.jsx';
 import { Toaster, toast, Sheet } from '../components/ui.jsx';
 import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
 import { AboutForGroups } from '../components/CourseResearch.jsx';
+import { SignInToContinue, useSavedAccount } from '../components/SavedGate.jsx';
 
 // Stage 7b: the public course page (#/c/<course>) — works without signing in — and the quick round.
 // Scan or tap → "Start a round with your mates" → your name, the format, the side comps → playing in under 2 minutes.
@@ -20,13 +21,10 @@ import { AboutForGroups } from '../components/CourseResearch.jsx';
 const CourseMap = lazyScreen(() => import('../components/CourseMap.jsx'), 'default', { inline: true });
 const QUICK_KEY = 'lgc-quick'; // the round this phone just started: { gid, round, invite }
 
-async function ensureSignedIn() {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) {
-    const { error } = await supabase.auth.signInAnonymously();
-    if (error) throw error;
-  }
-}
+// v10.2 (Josh): no phone-only session made on these pages any more. A phone-only account only comes from joining a
+// group by its link. Looking at a course page needs no account; searching the course library needs a session (the
+// database keeps it from being scraped), so signed out it's a sign-in card; starting a quick round (it makes a group)
+// and a group-booking enquiry (it sends your details to a club) need a saved account.
 
 export default function CoursePage() {
   const { slug } = useParams();
@@ -60,13 +58,15 @@ function Top({ title, sub }) {
 // ---------------------------------------------------------------- No course in the link: find one
 
 function FindACourse() {
+  const { user, loading } = useSession() || {};
   const [q, setQ] = useState('');
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState('');
   useEffect(() => {
     const t = setTimeout(async () => {
       try {
-        await ensureSignedIn();
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) { setRows(null); return; }
         let { data, error } = await supabase.rpc('find_courses', { p_query: q, p_lat: null, p_lng: null, p_limit: 20 });
         if (error && /PGRST202|Could not find the function/i.test(`${error.code} ${error.message}`)) ({ data, error } = await supabase.rpc('search_courses', { p_query: q, p_lat: null, p_lng: null, p_limit: 20 }));
         if (error) throw error;
@@ -75,11 +75,12 @@ function FindACourse() {
       } catch (e) { setErr(friendlyError(e)); setRows([]); }
     }, 300);
     return () => clearTimeout(t);
-  }, [q]);
+  }, [q, user?.id]);
   return (
     <>
       <Top title="Play a round" sub="Pick your course — live scores for your group, no app store." />
       <div className="stack" style={{ maxWidth: 520, margin: '0 auto', padding: 16, gap: 10 }}>
+        {!loading && !user && <SignInToContinue returnHash="#/c" title="Sign in to search courses" why="Starting a round makes a group you run, so it needs Google or email. Got a course’s link or QR code? It opens without signing in." />}
         <input className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by course or town" aria-label="Search courses" autoFocus />
         {err && <div className="err" style={{ margin: 0 }}>{err}</div>}
         {rows?.map((r) => (
@@ -208,8 +209,8 @@ function Enquiry({ course, club, onClose }) {
   const [sent, setSent] = useState(null);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const ok = f.name.trim().length >= 2 && (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.trim()) || f.phone.trim().length >= 6);
+  const saved = useSavedAccount();
   const send = () => run(async () => {
-    await ensureSignedIn();
     const r = await must(supabase.rpc('send_booking_enquiry', {
       p_course_slug: course.slug, p_name: f.name.trim(), p_email: f.email.trim() || null, p_phone: f.phone.trim() || null,
       p_start: f.start || null, p_end: f.end || null, p_size: f.size ? parseInt(f.size, 10) || null : null, p_rounds: f.rounds ? parseInt(f.rounds, 10) || null : null, p_note: f.note.trim() || null,
@@ -227,6 +228,8 @@ function Enquiry({ course, club, onClose }) {
           <span className="small muted">{sent.club} also sees your enquiry on its page in The Golf Trip.</span>
           <button type="button" className="btn ghost block" onClick={onClose}>Done</button>
         </div>
+      ) : !saved ? (
+        <SignInToContinue returnHash={`#/c/${course.slug}?enquire=1`} why="An enquiry goes to the club with your details, so it needs Google or email." />
       ) : (
         <div className="stack" style={{ gap: 8 }}>
           <span className="small muted">Goes to the club with your contact details so they can reply. Nothing to pay here.</span>
@@ -296,8 +299,8 @@ function QuickStart({ course, onCancel }) {
   const h = hcp.trim() === '' ? 18 : readHandicap(hcp);
   const ok = name.trim().length >= 1 && h != null;
   const toggle = (list, set, n) => set(list.includes(n) ? list.filter((x) => x !== n) : [...list, n].sort((a, b) => a - b));
+  const saved = useSavedAccount();
   const start = () => run(async () => {
-    await ensureSignedIn();
     const r = await must(supabase.rpc('start_quick_round', {
       p_slug: course.slug, p_my_name: name.trim(), p_handicap: h, p_format: format, p_ctp: ctp, p_ld: ld,
       p_source: sourceFrom(loc.search) || rememberedSource() || {},
@@ -308,6 +311,15 @@ function QuickStart({ course, onCancel }) {
     await refresh?.();
     window.location.hash = '#/round-ready';
   });
+  // A quick round makes a group you run: Google or email first (v10.2 — no phone-only way to start one).
+  if (!saved) {
+    return (
+      <>
+        <SignInToContinue returnHash={`#/c/${course.slug}`} title="Sign in to start the round" why="You’ll run the round (it makes a little group for it), so it needs Google or email. Your mates join from your link." />
+        <button type="button" className="btn ghost block" onClick={onCancel}>Back</button>
+      </>
+    );
+  }
   return (
     <>
       <div className="card pad stack" style={{ gap: 10 }}>

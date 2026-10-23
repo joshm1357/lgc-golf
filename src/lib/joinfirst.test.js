@@ -15,7 +15,7 @@ describe('joinDoor: what a join link shows first', () => {
   it('already signed in: straight to joining (as that account)', () => {
     expect(joinDoor({ signInOn: true, signedIn: true })).toBe('join');
   });
-  it('"Just this phone for now": the old phone-only join', () => {
+  it('"Just this phone: scoring and voting only": the old phone-only join', () => {
     expect(joinDoor({ signInOn: true, signedIn: false, phoneOnly: true })).toBe('join');
   });
   it('sign-in off in this build (live L.G.C before sign-in): unchanged', () => {

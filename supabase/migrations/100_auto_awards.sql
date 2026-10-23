@@ -20,7 +20,7 @@
 --     ordinary nomination on that night's copy of the award, so 093's proof checks apply (photo, time).
 --   * Proposed winner in the morning. At 7am Sydney (propose_time), or an hour before that day's first tee if that's
 --     earlier, the server ranks the night's claims by "best" and posts ONCE to the Feed, notifying the group:
---     "🌙 Proposed — Latest out, Fri night: Hamish 2:47am 📷. Confirm or dispute by the first tee (8:00am)."
+--     "🌙 Proposed — Latest out, last night: Hamish 2:47am 📷 (+2), Bo 1:15am 📷 (+1) · −1 stroke. Confirm or dispute by the first tee (8am)."
 --     No claims: no post. Running the job twice posts once (the run's status moves on under a row lock).
 --   * Confirm or not. An organiser taps Confirm (or picks a different claim, or "No winner"); otherwise it confirms
 --     itself at that day's first tee (noon when there's no round that day) if nobody has disputed. Anyone (not guests)
@@ -151,6 +151,7 @@ returns table (source_id uuid, group_id uuid, trip_id uuid, kind text, title tex
   reward_note text, proof text, best text, number_unit text, rule_id uuid, runs text, window_from text, window_to text,
   propose_time text, from_scores text, points jsonb, comp_id uuid)
 language plpgsql stable security definer set search_path = '' as $$
+#variable_conflict use_column
 declare a public.dinner_awards; r public.rules; s record;
 begin
   select * into a from public.dinner_awards where id = p_award;
@@ -254,7 +255,7 @@ begin
   units := case when coalesce(p->>'round', 'whole') = 'part' then round(units, 2) else floor(units) end;
   pts := round(units * coalesce((p->>'per')::numeric, 1), 2);
   if nullif(p->>'max', '') is not null then pts := least(pts, (p->>'max')::numeric); end if;
-  return pts;
+  return trim_scale(pts);
 end $$;
 
 -- "1 pt an hour after 12am, to 5am" — the points setting in words. Same as pointsWords() in src/lib/autoawards.js.
@@ -528,7 +529,7 @@ revoke all on function private.aa_run_for(uuid, date, uuid) from public, anon, a
 create or replace function public.award_claim_post(p_post uuid, p_award uuid default null, p_rule uuid default null, p_player uuid default null)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare p public.posts; v_g uuid; v_me uuid; v_trip uuid; v_src uuid; t record; d date; run public.award_runs; v_who uuid;
-        n public.dinner_award_nominations; v_better boolean;
+        n public.dinner_award_nominations; v_better boolean; v_run uuid;
 begin
   select * into p from public.posts where id = p_post;
   if p.id is null or not (p.group_id = any (private.my_group_ids())) then raise exception 'Post not found'; end if;
@@ -558,9 +559,9 @@ begin
   v_who := coalesce(p_player, p.player_id, v_me);
   if not exists (select 1 from public.players where id = v_who and group_id = v_g) then raise exception 'Pick someone in the group'; end if;
 
-  select * into run from public.award_runs where id = private.aa_run_for(v_src, d) for update;
+  v_run := private.aa_run_for(v_src, d);   -- first (a function in the WHERE would only run if a row was there)
+  select * into run from public.award_runs where id = v_run for update;
   if run.status <> 'open' then raise exception 'Too late — % has been proposed', t.title; end if;
-  if now() >= run.confirm_by then raise exception 'Too late to claim that one'; end if;
 
   select * into n from public.dinner_award_nominations where award_id = run.award_id and player_id = v_who;
   if n.id is null then
@@ -660,8 +661,8 @@ begin
   select * into run from public.award_runs where id = p_run;
   select * into t from private.auto_terms(run.source_id);
   v_per := coalesce(t.points->>'mode', '') in ('per_unit', 'placings');
-  v_when := case run.kind when 'night' then trim(to_char(run.window_date, 'Dy')) || ' night'
-                          when 'day' then trim(to_char(run.window_date, 'Dy FMDD'))
+  -- Posted the morning after: "last night" / "yesterday".
+  v_when := case run.kind when 'night' then 'last night' when 'day' then 'yesterday'
                           else coalesce((select name from public.rounds where id = run.round_id), 'the round') end;
   select string_agg(private.aa_name((x->>'player_id')::uuid) || coalesce(' ' || nullif(x->>'display', ''), '')
            || case when (x->>'photo')::boolean then ' 📷' else '' end
@@ -908,7 +909,7 @@ end $$;
 -- call returns 'already'), and the same confirm / dispute applies.
 create or replace function public.award_propose_from_scores(p_round uuid, p_award uuid default null, p_rule uuid default null, p_results jsonb default '[]'::jsonb)
 returns jsonb language plpgsql security definer set search_path = '' as $$
-declare rd public.rounds; v_src uuid; t record; run public.award_runs; v_res jsonb := '[]'::jsonb; x jsonb; i int := 0; v_status text;
+declare rd public.rounds; v_src uuid; t record; run public.award_runs; v_res jsonb := '[]'::jsonb; x jsonb; i int := 0; v_status text; v_run uuid;
 begin
   select * into rd from public.rounds where id = p_round;
   if rd.id is null or not (rd.group_id = any (private.my_group_ids())) then raise exception 'Round not found'; end if;
@@ -923,7 +924,8 @@ begin
   if v_src is null then raise exception 'Award not found'; end if;
   select * into t from private.auto_terms(v_src);
   if t.runs <> 'round' then raise exception '% isn''t worked out from the scores', t.title; end if;
-  select * into run from public.award_runs where id = private.aa_run_for(v_src, coalesce(rd.play_date, (now() at time zone 'Australia/Sydney')::date), rd.id) for update;
+  v_run := private.aa_run_for(v_src, coalesce(rd.play_date, (now() at time zone 'Australia/Sydney')::date), rd.id);
+  select * into run from public.award_runs where id = v_run for update;
   if run.status <> 'open' then return jsonb_build_object('status', 'already', 'run', run.id); end if;
   if jsonb_typeof(p_results) <> 'array' or jsonb_array_length(p_results) > 40 then raise exception 'Results: a list'; end if;
   for x in select * from jsonb_array_elements(p_results) loop

@@ -1,7 +1,7 @@
 // Links, not PINs (083), 22 Oct 2026. Fake database and a fake phone — nothing real is touched.
 //   A. A fresh browser opens the plain app: the link-first screen, no PIN box anywhere.
 //   B. A fresh browser opens a shared recap link (#/join/CODE?to=/?r=<round>) with NO notifications set up yet:
-//      Join → pick your name → the notifications prompt → the recap.
+//      Join → pick your name → the recap (ov27 F1: no notifications pop-up on the first visit; it asks on the second).
 //   C. A fresh browser opens an OLD recap link with no join code (#/?r=<round>): link-first screen; pastes the
 //      group's invite link → joins → lands on the recap it first opened.
 //   D. A member's own "Share the recap" carries the join code.
@@ -179,8 +179,9 @@ const notifySheet = (page) => page.getByRole('dialog', { name: /Turn on notifica
   await page.screenshot({ path: `${SHOTS}/03-pick-name.png`, fullPage: true });
   await page.getByText('Mike Morris').click();
   await page.getByRole('button', { name: /Yes, I'm Mike/ }).click();
-  const prompted = await notifySheet(page).waitFor({ timeout: 10000 }).then(() => true, () => false);
-  check(prompted, 'after picking a name: the notifications prompt');
+  // ov27 (F1): one pop-up at a time, and the notifications ask waits for the second visit.
+  const prompted = await notifySheet(page).waitFor({ timeout: 5000 }).then(() => true, () => false);
+  check(!prompted, 'after picking a name: no notifications pop-up on the first visit (ov27 F1)');
   await page.screenshot({ path: `${SHOTS}/04-notify-prompt.png`, fullPage: false });
   if (prompted) await notifySheet(page).getByRole('button', { name: 'Not now' }).click();
   await page.getByTestId('round-recap').waitFor({ timeout: 10000 }).catch(() => {});

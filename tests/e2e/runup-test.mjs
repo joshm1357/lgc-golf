@@ -105,6 +105,12 @@ async function open(width = 375) {
   return { ctx, page };
 }
 const as = (who) => Object.assign(me, who === K ? { id: K, admin: true } : { id: who, admin: false });
+// ov27 (R1): everything after Your weekend and Your to-dos is folded under "More about this trip".
+const openMore = async (page) => {
+  const more = page.getByTestId('runup-more');
+  if (!(await more.evaluate((d) => d.open))) await more.locator('summary').click();
+  await page.waitForTimeout(400);
+};
 const noSideScroll = async (page, label) => {
   const w = await page.evaluate(() => document.scrollingElement.scrollWidth);
   check(w <= 375, `${label}: no sideways scroll (${w}px)`);
@@ -148,13 +154,18 @@ const noSideScroll = async (page, label) => {
   await page.goto(`${BASE}#/plan/${PC}`);
   await page.getByTestId('runup').waitFor({ timeout: 20000 });
   await page.waitForTimeout(800);
+  // ov27 (R1): Your weekend first — dates + countdown, where we're staying, each day's course with my tee time and group.
   const head = await page.getByTestId('runup-countdown').innerText();
-  check(/^\d+ days to go · Hunter Valley · /.test(head), `countdown header (${head})`);
+  check(/\d+ days to go/.test(head) && /📅/.test(head), `Your weekend: dates and countdown (${head.replace(/\n/g, ' ')})`);
+  check(/Hunter Valley/.test(await page.getByTestId('yw-address').innerText()), 'Your weekend: where we’re staying (tap for maps)');
+  check(/Cypress Lakes/.test(await page.getByTestId('yw-day').first().innerText()) && /9:12am with Bo/.test(await page.getByTestId('yw-tee').first().innerText()), 'Your weekend: the course, my tee time and my group');
   const todos = await page.getByTestId('runup-todos').innerText();
-  check(/Pay your \$300 deposit/.test(todos) && /Check your handicap \(11\)/.test(todos) && /Pick your winner/.test(todos), `your to-dos: deposit, handicap, tip (${todos.replace(/\n/g, ' / ')})`);
+  check(/Pay Josh your \$300 deposit/.test(todos) && /Check your handicap \(11\)/.test(todos) && /Pick your winner/.test(todos), `your to-dos: deposit (pay Josh), handicap, tip (${todos.replace(/\n/g, ' / ')})`);
   check(/Call Nowra Golf Club/.test(todos), 'your to-dos: your job');
+  check(!(await page.getByTestId('runup-cars').isVisible().catch(() => false)), 'the rest is folded under More about this trip');
+  await openMore(page);
   for (const id of ['runup-cars', 'runup-votes', 'runup-grabs', 'runup-rules', 'runup-activities', 'runup-bring', 'runup-form', 'runup-tipping', 'runup-chat']) {
-    check(await page.getByTestId(id).isVisible(), `section shows: ${id.replace('runup-', '')}`);
+    check(await page.getByTestId(id).count() === 1 && await page.getByTestId(id).isVisible(), `More about this trip: ${id.replace('runup-', '')} (once)`);
   }
   // Handicap: looks right.
   await page.getByTestId('handicap-ok').click();
@@ -178,7 +189,7 @@ const noSideScroll = async (page, label) => {
   await page.getByTestId('bring-add').click();
   await page.waitForTimeout(800);
   const sp = page.getByTestId('bring-item').filter({ hasText: 'Speaker' });
-  check(/Nobody yet/.test(await sp.innerText()), 'what to bring: Speaker — Nobody yet');
+  check(!/Nobody yet/.test(await sp.innerText()) && await sp.getByTestId('bring-claim').isVisible(), 'what to bring: Speaker — just "I’ll bring it" (no "Nobody yet" beside it)');
   check(db.plan_items.some((i) => i.title === 'Speaker' && i.bring_shared) && !db.posts.some((p) => /Speaker/.test(p.body || '')), 'adding an idea posts nothing by itself');
   // Tipping: Al tips Josh.
   await page.getByTestId('tip-grid').getByRole('button', { name: /Josh/ }).click();
@@ -196,6 +207,7 @@ const noSideScroll = async (page, label) => {
   await page.goto(`${BASE}#/plan/${PC}?view=overview`);
   await page.getByTestId('runup').waitFor({ timeout: 20000 });
   await page.waitForTimeout(800);
+  await openMore(page);
   await page.getByTestId('offer-seats').click();
   await page.getByTestId('offer-seat-count').fill('2');
   await page.getByLabel('Pick-up point').fill('Leichhardt');
@@ -208,9 +220,11 @@ const noSideScroll = async (page, label) => {
   await page.getByTestId('runup-car').getByRole('button', { name: '+ Al' }).click();
   await page.waitForTimeout(800);
   check(/1 seat free/.test(await page.getByTestId('car-seats').innerText()) && /Al/.test(await page.getByTestId('runup-car').innerText()), 'the driver puts Al in: 1 seat free');
+  check(await page.getByTestId('activity-in').getAttribute('aria-pressed') === 'false', 'not in yet: "I’m in"');
   await page.getByTestId('activity-in').click();
   await page.waitForTimeout(900);
   check(/\$40 each · 2 in · \$80 into the kitty/.test(await page.getByTestId('activity-money').innerText()), 'I’m in: $40 each · 2 in · $80 into the kitty');
+  check(await page.getByTestId('activity-in').getAttribute('aria-pressed') === 'true' && /You’re in/.test(await page.getByTestId('activity-in').innerText()), 'in: the button looks different ("✓ You’re in")');
   const line = db.plan_costs.find((c) => c.title === '🎯 Go-karts');
   check(!!line && line.per_head && line.amount === 40 && line.split_between.length === 2 && line.paid_by === AL, 'the kitty has a Go-karts line, $40 each between the two, fronted by Al');
   await page.getByTestId('bring-ask').click();
@@ -235,13 +249,15 @@ const noSideScroll = async (page, label) => {
   await page.goto(`${BASE}#/plan/${PC}?view=overview`);
   await page.getByTestId('runup').waitFor({ timeout: 20000 });
   await page.waitForTimeout(800);
-  const daybefore = await page.getByTestId('runup-daybefore').innerText();
-  check(daybefore === 'Your car: Josh’s, pick-up Leichhardt 6:30am Fri · Room 3 with Bo · tee time 9:12 · You’re bringing: speaker', `day-before line (${daybefore})`);
+  const car = await page.getByTestId('yw-car').innerText();
+  check(/Josh’s car · pick-up Leichhardt 6:30am Fri/.test(car), `Your weekend: your car (${car})`);
   check(/You’re bringing: Speaker/.test(await page.getByTestId('runup-todos').innerText()), 'your to-dos: what you’re bringing');
+  await openMore(page);
   check(/Your tip: Josh/.test(await page.getByTestId('runup-tipping').innerText()), 'tipping: your tip shows, changeable until the first tee');
   // The first round gets under way → tipping locks.
   db.rounds[0].status = 'live';
   await page.reload();
+  await page.getByTestId('runup-more').waitFor({ timeout: 20000 }).then(() => openMore(page)).catch(() => {});
   await page.getByTestId('runup-tipping').waitFor({ timeout: 20000 }).catch(() => {});
   await page.waitForTimeout(800);
   const stillRunUp = await page.getByTestId('runup-tipping').isVisible().catch(() => false);

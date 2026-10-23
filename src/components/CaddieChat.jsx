@@ -14,6 +14,7 @@ import { featureOn as featureOnIn } from '../lib/features.js';
 import { useData, useSession, cacheGet, cacheSet } from '../lib/store.jsx';
 import { readReply, canSend, remainingLabel, MAX_TEXT } from '../lib/aihelper.js';
 import { pickDeskPlan } from '../lib/desk.js';
+import { todayISO } from '../lib/plan.js';
 import {
   caddieContext, caddieSuggestions, caddieMode, fallbackIntro, sessionFlag, caddieIds, searchDestinations, goButton,
   HELLO_TEXT, isPlanATrip,
@@ -86,7 +87,10 @@ export default function CaddieChat({ onGo, ask: askNow }) {
   const ctx = useMemo(() => caddieContext(loc.pathname, loc.search, { round: data.defaultRound?.id }), [loc.pathname, loc.search, data.defaultRound?.id]);
   const isAdmin = !!status?.is_admin && !status?.viewing;
   const roundName = ctx.round_id ? data.rounds?.find((r) => r.id === ctx.round_id)?.name : '';
-  const suggestions = caddieSuggestions(ctx, { isAdmin, roundName });
+  // Walkthrough small fix (ov27): no "Who's leading today?" when nothing's being played.
+  const playDay = todayISO();
+  const playing = !!ctx.round_id || (data.rounds || []).some((r) => r.status === 'live' || (r.play_date && String(r.play_date).slice(0, 10) === playDay));
+  const suggestions = caddieSuggestions(ctx, { isAdmin, roundName, playing });
   const mode = caddieMode({
     viewing: !!status?.viewing, guest: status?.role === 'guest', quick: !!status?.quick, featureOn: isOn('ai_helper'),
     notSetUp: flag === 'not_set_up', capped: flag === 'capped', offline: !online || !!data.offline,

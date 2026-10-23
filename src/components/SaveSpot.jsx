@@ -16,6 +16,7 @@ import {
 import { GoogleSignIn } from '../screens/Join.jsx';
 import { SaveSpotEmail } from './SignInForms.jsx';
 import { Sheet } from './ui.jsx';
+import { popupFree, takePopup } from '../lib/firstopen.js';
 
 const modes = () => signInModes(SIGN_IN);
 
@@ -102,8 +103,11 @@ export function SaveSpotPrompt() {
     // After the notifications pop-up has had its chance (it waits 1.8 seconds).
     const t = setTimeout(() => {
       if (decided.current || !ask()) return;
+      // F1 (ov27): one pop-up a visit — if something else has popped up this visit, ask next time.
+      if (!popupFree('save-spot')) { decided.current = true; return; }
       if (document.querySelector('.sheet-bg, [role="dialog"]')) { setTick((n) => n + 1); return; } // another sheet open
       decided.current = true;
+      takePopup('save-spot');
       writeSaveState(asked(readSaveState()));
       setOpen(true);
     }, tick ? 2000 : 3500);

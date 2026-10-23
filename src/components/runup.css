@@ -89,3 +89,48 @@
 .side-subitem.side-organising { font-style: italic; }
 .side-subitem.side-previous { opacity: .75; }
 .side-subitem.side-all { font-size: 13px; opacity: .8; }
+
+/* ---------------------------------------------------------------- ov27: Your weekend (R1), More about this trip, the money line (M1) */
+.yw { padding: 0; overflow: hidden; border: 2px solid var(--navy); }
+.yw-head { background: var(--navy); color: #fff; padding: 12px 16px 14px; display: flex; flex-direction: column; gap: 6px; }
+.yw-tag { font-size: 12px; font-weight: 800; letter-spacing: .06em; color: var(--gold); }
+.yw-guest { font-family: var(--display); font-size: 20px; font-weight: 700; line-height: 1.2; }
+.yw-when { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 17px; font-weight: 700; }
+.yw-togo { font-size: 13px; font-weight: 800; padding: 3px 10px; border-radius: 999px; background: var(--gold); color: var(--navy); white-space: nowrap; }
+.yw-where { display: flex; align-items: center; gap: 6px; min-height: 44px; color: #fff; text-decoration: none; font-weight: 600; overflow-wrap: anywhere; }
+.yw-where .yw-maps { margin-left: auto; font-size: 13px; font-weight: 800; color: var(--gold); white-space: nowrap; padding-left: 8px; }
+.yw-body { padding: 10px 16px 14px; display: flex; flex-direction: column; gap: 10px; }
+.yw-day { display: flex; flex-direction: column; gap: 4px; padding-bottom: 8px; border-bottom: 1px solid var(--line-soft); }
+.yw-day-label { font-size: 12px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.yw-round { display: flex; flex-direction: column; gap: 2px; }
+.yw-course { line-height: 1.25; }
+.yw-row { display: flex; align-items: center; gap: 10px; min-height: 40px; }
+.yw .linkish { background: none; border: 0; padding: 0 4px; color: var(--navy-2); text-decoration: underline; font: inherit; font-weight: 700; cursor: pointer; min-height: 40px; }
+
+.money-line { display: flex; flex-direction: column; gap: 8px; }
+.money-line .money-words { font-weight: 700; line-height: 1.35; }
+.money-line.compact { padding: 10px 12px; border-radius: 12px; background: var(--ground); border-left: 4px solid var(--line); }
+.money-line.owe { border-left-color: var(--under); }
+.money-line.card.owe { border-color: var(--under); background: #FFF6F4; }
+.money-line.waiting { border-left-color: var(--gold); }
+.money-line.square { border-left-color: #1F7A4D; }
+
+.ru-more { border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+.ru-more-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; min-height: 56px; cursor: pointer; list-style: none; }
+.ru-more-head::-webkit-details-marker { display: none; }
+.ru-more-head strong { display: block; font-size: 17px; }
+.ru-more-list { display: block; }
+.ru-more-chev { font-size: 18px; color: var(--muted); transition: transform .15s; }
+.ru-more[open] .ru-more-chev { transform: rotate(180deg); }
+.ru-more-body { padding: 0 10px 12px; gap: 12px; }
+
+/* F1: first open — the organiser's three-step start and the welcome card */
+.fo-card { border: 2px solid var(--gold); background: var(--gold-soft); }
+.fo-step { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-top: 1px solid rgba(0,0,0,.06); }
+.fo-num { flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; background: var(--navy); color: #fff; }
+.fo-step.done .fo-num { background: #1F7A4D; }
+.fo-step.done .fo-title { text-decoration: line-through; opacity: .7; }
+.fo-title { font-weight: 800; }
+
+/* Side activities: "You're in" looks clearly different from "I'm in" (walkthrough small fix). */
+.ru-in-on { background: #1F7A4D; border-color: #1F7A4D; color: #fff; font-weight: 800; }

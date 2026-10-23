@@ -2,6 +2,8 @@
 // ⛳ On now · 🔒 Upcoming · 🧭 Being organised · 💡 Proposed · 🏁 Previous · ✖️ Called off (folded away).
 // A trip moves idea → deciding → locked in → on → done (see lib/trips.js); the looks are in lib/runup.js and
 // components/runup.css. Tapping one opens it (Planner.jsx) — an Upcoming trip opens on The run-up.
+// ov27 (F1, walkthrough review option A): first open — the organiser of a new group gets a three-step start (invite
+// your mates, suggest the next trip, notifications) and a new player or guest a welcome card (components/FirstOpen.jsx).
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
@@ -19,6 +21,7 @@ import { ReplayChips } from '../components/ReplayChips.jsx';
 import { tripsMenu, tripNowPath, tripPath, tripDayWords } from '../lib/activetrip.js';
 import { openPlanner } from '../components/Caddie.jsx';
 import { SaveSpotBanner } from '../components/SaveSpot.jsx';
+import { FirstOpen } from '../components/FirstOpen.jsx';
 
 const TABLES = ['plans', 'plan_rsvps', 'plan_polls', 'plan_options'];
 
@@ -37,6 +40,8 @@ export default function Trips() {
       place: (q.get('place') || '').slice(0, 80) || null, share: q.get('share') === '1' };
   });
   const notifyOn = useFeature('notifications');
+  const aiOn = useFeature('ai_helper');
+  const [firstCard, setFirstCard] = useState(null); // 'starter' | 'welcome' | null (F1)
   const votesOn = useFeature('planner_tasks');
   const trophiesOn = useFeature('trophies');
   const load = useCallback(async () => {
@@ -79,6 +84,10 @@ export default function Trips() {
   const rsvpsOf = (id) => rows.rsvps.filter((r) => r.plan_id === id);
   const has = (stage) => sections.some((s) => s.stage === stage);
   const offList = sections.find((s) => s.stage === 'cancelled')?.items || [];
+  // The next trip for the welcome card: the first one on now, upcoming, being organised or proposed.
+  const nextUp = sections.filter((s) => ['on', 'locked', 'deciding', 'idea'].includes(s.stage)).flatMap((s) => s.items)[0]?.plan || null;
+  const starting = firstCard === 'starter-suggest' || firstCard === 'checking'; // one way to start a trip: the start's step 2
+  const starterOn = starting || firstCard === 'starter';
   const suggestButton = (
     <>
       <button type="button" className="btn gold block" style={{ minHeight: 56 }} onClick={() => setSuggesting(true)}>💡 Suggest a trip or round</button>
@@ -97,11 +106,14 @@ export default function Trips() {
       {/* ov21 made Trips the Home screen when no trip's on; the phone-only "Save your spot" reminder belongs on Home. */}
       <SaveSpotBanner />
       <div className="section stack trips-stage">
-        {notifyOn && <NotifyCard compact />}
+        <FirstOpen plans={rows.plans} next={nextUp} onShowing={setFirstCard}
+          onSuggest={() => (aiOn && status.is_admin ? openPlanner() : setSuggesting(true))} />
+        {/* The organiser's start has notifications as its third step: one card, not two. */}
+        {notifyOn && !starterOn && <NotifyCard compact />}
         {rows.offline && <div className="small muted">No signal — showing the list from last time.</div>}
         {rows.failed && <div className="err">Couldn’t load the trips — check your signal and open Trips again.</div>}
 
-        {!has('on') && !has('locked') && (
+        {!has('on') && !has('locked') && !starting && (
           <button type="button" className="card pad row" data-testid="trips-plan-it" onClick={openPlanner}
             style={{ gap: 12, textAlign: 'left', width: '100%', borderColor: 'var(--gold)', background: 'var(--gold-soft)', color: 'inherit' }}>
             <span style={{ fontSize: 28 }} aria-hidden="true">✨</span>
@@ -124,7 +136,7 @@ export default function Trips() {
             {suggestButton}
           </div>
         )}
-        <TripsAi />
+        {!starting && <TripsAi />}
 
         {offList.length > 0 && (
           <details className="card" data-testid="called-off" style={{ padding: '10px 14px' }}>

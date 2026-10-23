@@ -2,11 +2,14 @@
 // Josh: "the lead-up component of the trip — tasks etc., but also the fun stuff like awards, new rules, side
 // activities, organising cars…"
 //
-//   16 days to go · Hunter Valley · Fri 6 – Sun 8 Mar
-//   1 Your to-dos       2 Getting there (cars, rooms)   3 Up for a vote      4 What's up for grabs (ov23 / ov24 slots)
-//   5 Rules for this trip  6 Side activities (→ kitty)   7 What to bring      8 Form guide
-//   9 Tipping (optional)   10 Trip chat
-// The thinking is in lib/runup.js; the database side (cars, activities, tipping, claims) is migration 094.
+// ov27 (R1, walkthrough review option A): quiet players give it one scroll, so that scroll is theirs —
+//   1 Your weekend (components/YourWeekend.jsx): dates, where we're staying (maps), each day's course, tee time and
+//     your group, your car, paid and owed
+//   2 Your to-dos (each one with a button)
+//   3 More about this trip (folded, each section once): getting there, up for a vote, what's up for grabs, rules,
+//     side activities, what to bring, form guide, tipping, trip chat, then the plan by day (from TripOverview).
+// A guest (R2) gets "You're Josh's guest…", no votes, no group rules, no tipping and no to-do without a button.
+// The thinking is in lib/runup.js and lib/yourweekend.js; the database side (cars, activities, tipping, claims) is 094.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
@@ -14,15 +17,18 @@ import { useData, useFeature, useRealtime, useSession, useScores, playerName } f
 import { Avatar, AvatarStack, Sheet, askConfirm, timeAgo } from './ui.jsx';
 import { useRun, must } from '../lib/run.js';
 import { RSVP_LABEL } from '../lib/plan.js';
+import { guestTodos } from '../lib/yourweekend.js';
+import { collectorOf } from '../lib/money.js';
+import { YourWeekend } from './YourWeekend.jsx';
 import { buildHistory } from '../lib/stats.js';
 import { useLateJobs } from './LateJobs.jsx';
 import { OverviewVotes } from './OverviewVotes.jsx';
 import { voteWords } from '../lib/governance.js';
 import { RUNUP_SLOTS } from './runupSlots.jsx';
 import {
-  countdownHeader, runUpSections, myTodos, carsView, joinProblem, roomsView, activityMoney, activityWhen, cleanActivity,
+  runUpSections, myTodos, carsView, joinProblem, roomsView, activityMoney, activityWhen, cleanActivity,
   bringView, bringEmoji, bringAskText, bringAskLink, claimPostText, tippingState, tipResult, tipTally, formGuide, formLine,
-  trendWords, mainTrophy, myDayBefore, stageLook,
+  trendWords, mainTrophy,
 } from '../lib/runup.js';
 import './runup.css';
 
@@ -78,7 +84,8 @@ function Part({ id, icon, title, count, children, right }) {
 
 const firstName = (p) => String(playerName(p) || '').split(' ')[0];
 
-export function RunUp({ pd, trip = null, onOrganise = null, slots = {} }) {
+/** more: the trip's other bits from TripOverview (the plan by day), shown at the end of "More about this trip". */
+export function RunUp({ pd, trip = null, onOrganise = null, slots = {}, more = null }) {
   const data = useData();
   const { status } = useSession();
   const feature = { planner_rooms: useFeature('planner_rooms'), planner_tasks: useFeature('planner_tasks'), stats: useFeature('stats'),
@@ -96,28 +103,36 @@ export function RunUp({ pd, trip = null, onOrganise = null, slots = {} }) {
   const mine = ru.people.find((p) => p.player_id === me) || null;
   const cars = carsView({ groups: pd.groups, members: pd.members, people: ru.people, rsvps: pd.rsvps, me });
   const rooms = roomsView({ groups: pd.groups, members: pd.members, me });
-  const todos = myTodos({ me, plan, rsvps: pd.rsvps, items: pd.items, transfers: pd.transfers, mine, player: data.playersById[me],
-    lateRuleV: late.rule, late: { penalties: late.penalties, adjustments: late.adjustments }, tipping, myTip });
-  const sections = runUpSections({ feature: (k) => feature[k] !== false, tippingOff: !!plan.tipping_off, hasRounds: true });
+  const collector = collectorOf(plan, data.playersById);
+  const allTodos = myTodos({ me, plan, rsvps: pd.rsvps, items: pd.items, transfers: pd.transfers, mine, player: data.playersById[me],
+    lateRuleV: late.rule, late: { penalties: late.penalties, adjustments: late.adjustments }, tipping, myTip, payTo: collector.name });
+  const todos = guest ? guestTodos(allTodos) : allTodos;
+  const sections = runUpSections({ feature: (k) => feature[k] !== false, tippingOff: !!plan.tipping_off, hasRounds: true, guest });
   const S = { ...RUNUP_SLOTS, ...slots };
-  const firstTee = useMemo(() => {
-    const r = [...rounds].filter((x) => x.play_date).sort((a, b) => a.play_date.localeCompare(b.play_date))[0];
-    const mineT = ru.tees.filter((t) => t.round_id === r?.id && (t.player_ids || []).includes(me)).map((t) => t.tee_time).filter(Boolean).sort()[0];
-    return mineT || null;
-  }, [rounds, ru.tees, me]);
-  const dayBefore = myDayBefore({ me, carView: cars, rooms, teeTime: firstTee, items: pd.items, playersById: data.playersById });
+  // "More about this trip": folded; a to-do or the Your weekend card can open it at a section.
+  const [moreOpen, setMoreOpen] = useState(false);
+  const openMore = (id) => {
+    setMoreOpen(true);
+    setTimeout(() => document.querySelector(`[data-testid="runup-${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+  };
+  const organise = guest ? null : onOrganise; // guests have no Organise view
+  const moreList = ['Getting there', !guest && 'votes', 'what’s up for grabs', !guest && 'rules', 'what to bring', 'chat'].filter(Boolean).join(', ');
 
   return (
     <div className="runup stack" data-testid="runup">
-      <div className="ru-hero">
-        <div className="ru-hero-tag">{stageLook('locked').icon} THE RUN-UP</div>
-        <div className="ru-hero-line" data-testid="runup-countdown">{countdownHeader(plan)}</div>
-        {dayBefore && <div className="ru-hero-sub" data-testid="runup-daybefore">{dayBefore}</div>}
-      </div>
+      <YourWeekend pd={pd} trip={trip} rounds={rounds} tees={ru.tees} cars={cars} me={me} guest={guest} onMore={openMore} />
       {ru.missing && <div className="small muted">Some of the run-up (cars, side activities, tipping) needs a database update — it’ll appear once that’s done.</div>}
 
-      {sections.includes('todos') && <Todos todos={todos} pd={pd} me={me} mine={mine} onOrganise={onOrganise} reload={ru.reload} guest={guest} />}
-      {sections.includes('getting_there') && <GettingThere pd={pd} ru={ru} cars={cars} rooms={rooms} me={me} isOrg={isOrg} guest={guest} onOrganise={onOrganise} />}
+      {sections.includes('todos') && (!guest || todos.length > 0) && <Todos todos={todos} pd={pd} me={me} mine={mine} onOrganise={organise} onMore={openMore} reload={ru.reload} guest={guest} />}
+
+      <details className="ru-more" data-testid="runup-more" open={moreOpen} onToggle={(e) => setMoreOpen(e.currentTarget.open)}>
+        <summary className="ru-more-head">
+          <span className="grow"><strong>More about this trip</strong><span className="small muted ru-more-list">{moreList[0].toUpperCase() + moreList.slice(1)}…</span></span>
+          <span aria-hidden="true" className="ru-more-chev">▾</span>
+        </summary>
+        {moreOpen && (
+        <div className="stack ru-more-body">
+      {sections.includes('getting_there') && <GettingThere pd={pd} ru={ru} cars={cars} rooms={rooms} me={me} isOrg={isOrg} guest={guest} onOrganise={organise} />}
       {sections.includes('votes') && (
         <Part id="votes" icon="🗳️" title="Up for a vote">
           <OverviewVotes pd={pd} />
@@ -140,14 +155,18 @@ export function RunUp({ pd, trip = null, onOrganise = null, slots = {} }) {
       {sections.includes('form') && <FormGuide pd={pd} rounds={rounds} />}
       {sections.includes('tipping') && <Tipping pd={pd} ru={ru} tipping={tipping} myTip={myTip} me={me} isOrg={isOrg} guest={guest} tripId={tripId} />}
       {!sections.includes('tipping') && isOrg && <TippingSwitch plan={plan} pd={pd} />}
-      {sections.includes('chat') && <ChatBits pd={pd} onOrganise={onOrganise} />}
+      {sections.includes('chat') && <ChatBits pd={pd} onOrganise={organise} />}
+      {more}
+        </div>
+        )}
+      </details>
     </div>
   );
 }
 
 // ---------------------------------------------------------------- 1 Your to-dos
 
-function Todos({ todos, pd, me, mine, onOrganise, reload, guest }) {
+function Todos({ todos, pd, me, mine, onOrganise, onMore, reload, guest }) {
   const data = useData();
   const [busy, run] = useRun();
   const plan = pd.plan;
@@ -174,8 +193,9 @@ function Todos({ todos, pd, me, mine, onOrganise, reload, guest }) {
               <button type="button" className="btn ghost sm" disabled={busy} onClick={() => reply('out')}>Out</button>
             </span>
           )}
-          {t.action === 'deposit' && <button type="button" className="btn ghost sm" onClick={() => { const el = document.querySelector('[data-testid="next-step"]'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); else go('kitty'); }}>Pay</button>}
-          {t.action === 'job' && <button type="button" className="btn ghost sm" onClick={() => go('jobs')}>Open</button>}
+          {t.action === 'deposit' && <button type="button" className="btn gold sm" data-testid="todo-pay" onClick={() => { const el = document.querySelector('[data-testid="money-line"]'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); else go('kitty'); }}>Pay</button>}
+          {t.action === 'job' && onOrganise && <button type="button" className="btn ghost sm" onClick={() => go('jobs')}>Open</button>}
+          {t.action === 'bring' && onMore && <button type="button" className="btn ghost sm" onClick={() => onMore('bring')}>See</button>}
           {t.action === 'handicap' && !guest && (
             <span className="row" style={{ gap: 6 }}>
               <button type="button" className="btn gold sm" disabled={busy} data-testid="handicap-ok" onClick={handicapOk}>Looks right</button>
@@ -394,7 +414,8 @@ function Activities({ pd, ru, me, isOrg, guest, costsOn }) {
                 <div className="small" data-testid="activity-money">{m.line}</div>
               </div>
               {!guest && me && (
-                <button type="button" className={iAm ? 'btn ghost sm' : 'btn gold sm'} disabled={busy} data-testid="activity-in" onClick={() => toggle(a, !iAm)}>{iAm ? '✓ I’m in' : 'I’m in'}</button>
+                <button type="button" className={iAm ? 'btn sm ru-in-on' : 'btn gold sm'} aria-pressed={iAm} disabled={busy} data-testid="activity-in"
+                  aria-label={iAm ? `You’re in for ${a.title} — tap to drop out` : `I’m in for ${a.title}`} onClick={() => toggle(a, !iAm)}>{iAm ? '✓ You’re in' : 'I’m in'}</button>
               )}
             </div>
             {m.count > 0 && <div className="row" style={{ gap: 6, marginTop: 4 }}><AvatarStack players={m.ids.map((id) => data.playersById[id]).filter(Boolean)} size={22} /></div>}
@@ -463,7 +484,7 @@ function Bring({ pd, me, isOrg, guest, feedOn, onOrganise }) {
     if (!title) return;
     await must(supabase.from('plan_items').insert({ plan_id: pd.plan.id, kind: 'bring', title, bring_shared: true, sort: 500 + v.shared.length }));
     setText(''); pd.reload();
-  }, 'Added — nobody’s on it yet');
+  }, 'Added — anyone can say they’ll bring it');
   const claim = (it, on) => run(async () => {
     await claimBring(it, on);
     if (on && tell && feedOn) await supabase.from('posts').insert({ kind: 'user', player_id: me, body: claimPostText(data.playersById[me], it), link: `/plan/${pd.plan.id}?view=overview` });
@@ -482,7 +503,7 @@ function Bring({ pd, me, isOrg, guest, feedOn, onOrganise }) {
           <div key={it.id} className="ru-bring" data-testid="bring-item">
             <span aria-hidden="true">{bringEmoji(it.title)}</span>
             <span className="grow" style={{ minWidth: 0 }}><strong>{it.title}</strong>
-              <span className={'small' + (who ? '' : ' muted')} data-testid="bring-who"> · {who ? (it.owner_id === me ? 'You' : firstName(who)) : 'Nobody yet'}</span></span>
+              {(who || guest || !me) && <span className={'small' + (who ? '' : ' muted')} data-testid="bring-who"> · {who ? (it.owner_id === me ? 'You' : firstName(who)) : 'Nobody yet'}</span>}</span>
             {!guest && me && !who && <button type="button" className="btn gold sm" disabled={busy} data-testid="bring-claim" onClick={() => claim(it, true)}>I’ll bring it</button>}
             {!guest && it.owner_id === me && <button type="button" className="btn ghost sm" disabled={busy} onClick={() => claim(it, false)}>Can’t now</button>}
             {isOrg && <button type="button" className="linkish small" aria-label={`Remove ${it.title}`} onClick={() => remove(it)}>✕</button>}

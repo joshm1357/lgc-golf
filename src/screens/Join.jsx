@@ -280,11 +280,14 @@ function JoinSignIn({ code, returnHash, onPhone }) {
           {err && <div className="err" role="alert" style={{ color: '#FFB4AB' }}>{err}</div>}
         </div>
       )}
+      {/* F2 (ov27, walkthrough review option B): a proper button, with one line on what it means. */}
       {info && (
-        <button type="button" onClick={onPhone} data-testid="just-this-phone"
-          style={{ background: 'none', border: 0, color: '#fff', textDecoration: 'underline', minHeight: 44, padding: '8px 12px', font: 'inherit', fontSize: 14, cursor: 'pointer' }}>
-          Just this phone for now
-        </button>
+        <div className="stack" style={{ width: '100%', maxWidth: 340, gap: 6, borderTop: '1px solid rgba(255,255,255,.2)', paddingTop: 12 }}>
+          <button type="button" className="btn ghost block" onClick={onPhone} data-testid="just-this-phone" style={ON_NAVY_GHOST}>
+            📱 Just this phone for now
+          </button>
+          <span className="small" data-testid="just-this-phone-help" style={muted}>In straight away, but only on this phone — your name and scores won’t follow you to a laptop or new phone until you sign in.</span>
+        </div>
       )}
     </div>
   );

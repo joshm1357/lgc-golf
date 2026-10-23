@@ -174,7 +174,10 @@ await go(`/plan/${PC}?view=organise&step=day`, 'award-line');
 const runup = await page.getByTestId('awards-runup').innerText();
 check(runup.includes('Wrong-ball fine') && runup.includes('$5') && runup.includes('Latest out') && runup.includes('−1 stroke') && runup.includes('Needs 📷 photo + ⏱ time'), 'run-up lists both with worth and proof');
 await shot('3-runup-375');
-await go(`/plan/${PC}?view=overview`, 'awards-runup');
+// ov27 (R1): the run-up folds everything after Your weekend and Your to-dos under "More about this trip".
+await go(`/plan/${PC}?view=overview`, 'runup-more');
+await page.getByTestId('runup-more').locator('summary').click();
+await page.getByTestId('awards-runup').first().waitFor({ timeout: 15000 });
 // v10 merge: a locked-in trip's Overview shows the run-up, and the awards sit in its "What's up for grabs" part (once).
 check(await page.getByTestId('awards-runup').count() === 1, 'Overview: the awards card shows once');
 const ov = await page.getByTestId('runup-grabs').innerText();
@@ -284,7 +287,8 @@ await shot('11-kitty-split-375');
 await page.setViewportSize({ width: 1440, height: 900 });
 Object.assign(plan, { start_date: plusDays(6), end_date: plusDays(8) });
 db.trips[0].start_date = plusDays(6); db.trips[0].end_date = plusDays(8);
-await go(`/plan/${PC}?view=overview`, 'awards-runup'); await shot('12-overview-1440');
+await go(`/plan/${PC}?view=overview`, 'runup-more'); await page.getByTestId('runup-more').locator('summary').click(); // ov27: folded
+await page.getByTestId('awards-runup').first().waitFor({ timeout: 15000 }); await wait(); await shot('12-overview-1440');
 await go('/feed', 'post-chip'); await shot('13-feed-1440');
 await go(`/dinner/${T}`, 'award-card'); await shot('14-dinner-1440');
 await go(`/plan/${PC}?view=organise&step=day`, 'awards-runup'); await shot('15-runup-1440');

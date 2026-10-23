@@ -4,7 +4,7 @@
 //  - Done: the honours, each day's round with its winner and ▶ replay, photos, and links to dinner awards and stats.
 // Used on the plan page (Overview | Organise) and on its own at /trip/:tripId for trips that have no plan (history).
 // The maths is in lib/tripsummary.js.
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { cloneElement, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
 import { useData, useSession, useScores, useFeature } from '../lib/store.jsx';
@@ -62,6 +62,10 @@ function RoundLine({ round, course, board, upcoming }) {
 
 // votes: the open votes (OverviewVotes), shown straight after the trip at a glance.
 // runUp (ov25): The run-up on an Upcoming trip (components/RunUp.jsx) — it carries the votes and your bits itself.
+// ov27 (R1, walkthrough review option A): on a locked-in trip the page is the run-up: "Your weekend" at the top, then
+// "Your to-dos", then everything else folded under "More about this trip" — each section once. So with a run-up this
+// screen adds nothing above it: the dates, place and who's in are in Your weekend, and the plan by day goes at the end
+// of More (the `more` slot), not in a second card.
 export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage = null, onOrganise = null, votes = null, runUp = null }) {
   const data = useData();
   const { status } = useSession();
@@ -90,6 +94,27 @@ export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage 
   const myJobs = items.filter((j) => j.kind === 'job' && j.owner_id === me && !j.done);
   const bring = items.filter((j) => j.kind === 'bring');
 
+  const daysCard = days.length > 0 ? (
+    <div className="card pad" style={{ paddingTop: 10 }} data-testid="overview-days">
+      <strong>{done ? '⛳ The rounds' : '🗓️ The plan'}</strong>
+      {days.map((d) => (
+        <div key={d.date || 'tbc'} style={{ marginTop: 8 }}>
+          <span className="label">{d.label}</span>
+          {d.rounds.map(({ round, course }) => <RoundLine key={round.id} round={round} course={course} board={boards[round.id]} upcoming={!done} />)}
+        </div>
+      ))}
+    </div>
+  ) : null;
+
+  // Locked in (the run-up): Your weekend → Your to-dos → More about this trip (the plan by day at its end).
+  if (runUp) {
+    return (
+      <div className="stack" style={{ gap: 14 }}>
+        {cloneElement(runUp, { more: <>{daysCard}{tripId && <TripHistory tripId={tripId} />}</> })}
+      </div>
+    );
+  }
+
   return (
     <div className="stack" style={{ gap: 14 }}>
       {/* What and when */}
@@ -117,8 +142,8 @@ export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage 
         )}
       </div>
 
-      {runUp}
-      {votes}
+      {/* R2 (ov27): guests don't vote on the group's trips. */}
+      {status?.role !== 'guest' && votes}
       {/* ov15: the trip's status — live board, what we're playing for (with leaders), and each round's leaderboard. */}
       {tripId && <TripStatus trip={trip || data.trips.find((t) => t.id === tripId)} overview />}
 
@@ -136,26 +161,16 @@ export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage 
       )}
 
       {/* The days */}
-      {days.length > 0 ? (
-        <div className="card pad" style={{ paddingTop: 10 }}>
-          <strong>{done ? '⛳ The rounds' : '🗓️ The plan'}</strong>
-          {days.map((d) => (
-            <div key={d.date || 'tbc'} style={{ marginTop: 8 }}>
-              <span className="label">{d.label}</span>
-              {d.rounds.map(({ round, course }) => <RoundLine key={round.id} round={round} course={course} board={boards[round.id]} upcoming={!done} />)}
-            </div>
-          ))}
-        </div>
-      ) : (stage === 'idea' || stage === 'deciding') ? null : (
+      {daysCard || ((stage === 'idea' || stage === 'deciding') ? null : (
         <div className="card pad small muted">No rounds set up yet.</div>
-      )}
+      ))}
 
 
       {/* Your bits (coming up) */}
       {!done && plan && !runUp && (myJobs.length > 0 || bring.length > 0) && (
         <div className="card pad stack" style={{ gap: 6 }}>
           <strong>🙋 Your bits</strong>
-          {myJobs.map((j) => <div key={j.id} className="small">📋 {j.title}{j.due ? <span className="muted"> · by {j.due}</span> : null}</div>)}
+          {myJobs.map((j) => <div key={j.id} className="small">📋 {j.title}{j.due ? <span className="muted"> · by {fmtRange(j.due).replace(/ \d{4}$/, '')}</span> : null}</div>)}
           {bring.length > 0 && <div className="small">🎒 Bring list: {bring.length} thing{bring.length === 1 ? '' : 's'}</div>}
           {onOrganise && <button type="button" className="btn sm ghost" style={{ alignSelf: 'flex-start' }} onClick={() => onOrganise(myJobs.length ? 'jobs' : 'details')}>See it all →</button>}
         </div>

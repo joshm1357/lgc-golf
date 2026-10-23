@@ -5,8 +5,9 @@
 //   * Laptop (1024 px and up) and the desk: a panel docked down the right, which folds away to a slim tab.
 //   * Never greyed out (Josh, 22 Oct): when the AI can't answer, it still takes you to the right page
 //     (components/CaddieChat.jsx, lib/caddie.js). Hidden only on full-screen views (TV, print, replay, score entry…).
-// ov22 (Josh 23 Oct): the first time someone's in the app on a device, Caddie says hello — a small speech bubble from
-// the button (phone) or beside the docked tab (laptop), once, after any other pop-up (e.g. notifications) is done.
+// ov22 (Josh 23 Oct): Caddie says hello once on a device — a small speech bubble from the button (phone) or beside the
+// docked tab (laptop). ov27 (F1, walkthrough review): it waits for the second visit, and for a visit no other pop-up
+// has had (one pop-up at a time — lib/firstopen.js).
 // The chat itself is loaded when first opened, so the leaderboard stays quick to load.
 // Two modes (ov16, 22 Oct): Ask (CaddieChat) and ✨ Plan a trip (CaddiePlan) — "Plan it with AI" IS the Caddie: the
 // planning chat sits beside the trip screen (laptop) or in a sheet that folds down to show it (phone), and the trip
@@ -18,6 +19,7 @@ import { useSession, useFeature } from '../lib/store.jsx';
 import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
 import { caddieHidden, usesPanel, HELLO_TEXT, helloSeen, markHelloSeen, shouldSayHello } from '../lib/caddie.js';
 import { previewOf } from '../lib/preview.js';
+import { noteVisit, popupThisVisit, helloReady, takePopup } from '../lib/firstopen.js';
 import './caddie.css';
 
 const CaddieChat = lazyScreen(() => import('./CaddieChat.jsx'), 'default', { inline: true });
@@ -130,13 +132,16 @@ export function Caddie() {
   // Say hello once the first screen has settled and nothing else has popped up (checks again every 2 s until then).
   useEffect(() => {
     if (hello || hidden || helloSeen()) return undefined;
+    // F1: not on the first visit, and not on a visit that has already had its one pop-up.
+    if (!helloReady({ visits: noteVisit(), had: popupThisVisit() })) return undefined;
     let live = true;
     let t = 0;
     const later = (ms) => {
       t = setTimeout(() => {
         if (!live || helloSeen()) return;
+        if (!helloReady({ visits: noteVisit(), had: popupThisVisit() })) return; // something else popped up first
         const otherPopUp = !!document.querySelector('.sheet-bg, [role="dialog"]');
-        if (shouldSayHello({ seen: false, hidden, viewing, caddieOpen: open || (panel && panelOpen), otherPopUp })) setHello(true);
+        if (shouldSayHello({ seen: false, hidden, viewing, caddieOpen: open || (panel && panelOpen), otherPopUp })) { takePopup('caddie-hello'); setHello(true); }
         else later(2000);
       }, ms);
     };

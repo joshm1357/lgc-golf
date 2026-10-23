@@ -100,7 +100,7 @@ function PickOrAdd() {
     <div className="app">
       <header className="hdr">
         <div className="hdr-title">{mode === 'pick' ? 'Who are you?' : 'Add yourself'}</div>
-        <div className="hdr-sub">{mode === 'pick' ? 'Tap your name. Your photo becomes your icon on every leaderboard, post and map pin.' : "Not on the list? Add yourself — the admin will approve you."}</div>
+        <div className="hdr-sub">{mode === 'pick' ? 'Tap your name. Your photo becomes your icon on every leaderboard, post and map pin.' : "Not on the list? Add yourself — the organiser will approve you."}</div>
       </header>
       <div className="section stack" style={{ paddingBottom: 24 }}>
         {mode === 'pick' ? (
@@ -128,7 +128,7 @@ function PickOrAdd() {
               <span>Starting handicap</span>
               <input className="input" inputMode="decimal" value={hcp} onChange={(e) => setHcp(e.target.value)} placeholder="e.g. 14" required />
             </label>
-            <div className="sync" style={{ margin: 0 }}>The admin needs to approve new people before you can join in.</div>
+            <div className="sync" style={{ margin: 0 }}>The organiser approves new people before you can join in.</div>
             {err && <div className="err">{err}</div>}
             <div className="row">
               {status?.role !== 'guest' && <button type="button" className="btn ghost grow" onClick={() => setMode('pick')}>Back to the list</button>}
@@ -165,11 +165,11 @@ export function AwaitingApproval({ player }) {
   if (pickInstead) return <ProfileSetup />;
   return (
     <div className="app" style={{ minHeight: '100vh' }}>
-      <header className="hdr"><div className="hdr-title">Nearly there</div><div className="hdr-sub">Waiting for the admin to approve you</div></header>
+      <header className="hdr"><div className="hdr-title">Nearly there</div><div className="hdr-sub">Waiting for the organiser to approve you</div></header>
       <div className="section stack" style={{ alignItems: 'center', textAlign: 'center', paddingTop: 30 }}>
         <Avatar player={player} size={96} />
         <div style={{ fontSize: 20, fontWeight: 700 }}>{player.name}</div>
-        <p className="muted" style={{ lineHeight: 1.5, maxWidth: 320 }}>The admin has been told you're here. This screen opens up by itself once you're approved.</p>
+        <p className="muted" style={{ lineHeight: 1.5, maxWidth: 320 }}>The organiser has been told you're here. This screen opens up by itself once you're approved.</p>
         <button type="button" className="btn ghost" onClick={async () => { await data.reload(); await refresh(); }}>Check again</button>
         <button type="button" className="btn ghost" onClick={() => setPickInstead(true)}>Actually, I'm on the list</button>
       </div>

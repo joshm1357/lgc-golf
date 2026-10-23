@@ -31,7 +31,7 @@ export const WHATS_NEW = [
   { title: 'Every trip, start to finish', body: 'Every trip goes from idea to votes to locked in to the record, with past trips kept. Called a trip off? It’s kept, and an organiser can bring it back.' },
   { title: 'Sign in once, any phone', body: 'Sign in with Google or an emailed code. Your scores and history follow you to a new phone.' },
   { title: 'On your laptop', body: 'Open the app on a computer for a bigger layout, and install it from Chrome or Edge.' },
-  { title: 'Tell Josh', body: 'It’s a beta. Anything broken, annoying or missing: More → Tell Josh.' },
+  { title: 'Send feedback', body: 'It’s a beta. Anything broken, annoying or missing: More → Send feedback.' },
 ];
 const SEEN_KEY = 'tgt-whats-new';
 

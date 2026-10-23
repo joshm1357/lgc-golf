@@ -17,9 +17,9 @@ import { daysUntil, fmtRange, todayISO } from './plan.js';
 import { depositStatus } from './tripbudget.js';
 import { lateInfo } from './latejobs.js';
 import { playerCards } from './stats.js';
-import { teeWords, dayBeforeLine, dayBeforeMessage, weekOutMessage, waitingLines } from '../../supabase/functions/_shared/runup.js';
+import { teeWords, dayBeforeLine, dayBeforeMessage, weekOutMessage, waitingLines, countdownPush } from '../../supabase/functions/_shared/runup.js';
 
-export { teeWords, dayBeforeLine, dayBeforeMessage, weekOutMessage, waitingLines };
+export { teeWords, dayBeforeLine, dayBeforeMessage, weekOutMessage, waitingLines, countdownPush };
 
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const shortDay = (iso) => fmtRange(iso).replace(/ \d{4}$/, ''); // "Fri 30 Oct"
@@ -175,13 +175,17 @@ export function countdownHeader(plan, today = todayISO()) {
  * Which run-up sections show, in order. feature: (key) → on?; tippingOff: plans.tipping_off.
  * 'todos' 'getting_there' 'votes' 'up_for_grabs' 'rules' 'activities' 'bring' 'form' 'tipping' 'chat'
  */
-export function runUpSections({ feature = () => true, tippingOff = false, hasRounds = true } = {}) {
+export function runUpSections({ feature = () => true, tippingOff = false, hasRounds = true, guest = false } = {}) {
   const out = ['todos'];
   if (feature('planner_rooms')) out.push('getting_there');
-  out.push('votes', 'up_for_grabs', 'rules', 'activities');
+  // R2 (ov27): a guest gets no votes, no group rules and no tipping (they can't vote or tip).
+  if (!guest) out.push('votes');
+  out.push('up_for_grabs');
+  if (!guest) out.push('rules');
+  out.push('activities');
   if (feature('planner_tasks')) out.push('bring');
   if (feature('stats') && hasRounds) out.push('form');
-  if (!tippingOff) out.push('tipping');
+  if (!tippingOff && !guest) out.push('tipping');
   out.push('chat');
   return out;
 }
@@ -195,7 +199,7 @@ export function runUpSections({ feature = () => true, tippingOff = false, hasRou
  * → [{ key, icon, title, detail?, late?, action }]  action: 'rsvp' | 'deposit' | 'job' | 'bring' | 'handicap' | 'tip'
  */
 export function myTodos({ me, plan, rsvps = [], items = [], transfers = [], mine = null, player = null, lateRuleV = null,
-  late = {}, tipping = null, myTip = null, today = todayISO() } = {}) {
+  late = {}, tipping = null, myTip = null, today = todayISO(), payTo = null } = {}) {
   if (!me || !plan) return [];
   const out = [];
   const rsvp = rsvps.find((r) => r.player_id === me);
@@ -204,8 +208,10 @@ export function myTodos({ me, plan, rsvps = [], items = [], transfers = [], mine
   }
   if (Number(plan.deposit_pp) > 0 && rsvp && rsvp.status !== 'out') {
     const d = depositStatus({ deposit: plan.deposit_pp, rsvps, transfers }).people.find((p) => p.player_id === me);
-    if (d && d.state !== 'paid') {
-      out.push({ key: 'deposit', icon: '💳', title: d.state === 'pending' ? 'Deposit sent — waiting for a tick' : `Pay your $${Number(plan.deposit_pp)} deposit`, action: 'deposit', late: false });
+    // Sent but not ticked off yet: nothing to do (the money line says "waiting for Josh to confirm"), so no to-do and
+    // never a Pay button next to "waiting" (ov27, M1).
+    if (d && d.state === 'unpaid') {
+      out.push({ key: 'deposit', icon: '💳', title: `Pay ${payTo ? `${payTo} ` : ''}your $${Number(plan.deposit_pp)} deposit`, action: 'deposit', late: false });
     }
   }
   for (const j of items.filter((i) => i.kind === 'job' && i.owner_id === me && !(i.done || i.stage === 'done'))) {

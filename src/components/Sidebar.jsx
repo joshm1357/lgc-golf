@@ -68,7 +68,7 @@ function SidebarNav() {
         ))}
       </div>
       <button type="button" className="side-link side-feedback" onClick={() => openFeedback('idea')}>
-        {Icon.feed(20)}<span>Tell Josh</span>
+        {Icon.feed(20)}<span>Send feedback</span>
       </button>
     </nav>
   );

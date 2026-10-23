@@ -161,17 +161,23 @@ await page.getByRole('tab', { name: '⛳ Overview' }).click();
 await page.getByText('🏆 Honours').waitFor({ timeout: 5000 });
 check(true, 'and back to the overview');
 
-// 3. A coming trip: countdown, who's in, the plan by day, your bits.
+// 3. A coming trip (ov27, R1): "Your weekend" at the top — dates and countdown, where, each day's course; who's in;
+//    then Your to-dos; everything else (the plan by day too) once, under "More about this trip".
 await page.goto(`${BASE}#/plan/${NEXT}`);
-await page.getByText('🗓️ The plan').waitFor({ timeout: 15000 });
+await page.getByTestId('your-weekend').waitFor({ timeout: 15000 });
 await page.waitForTimeout(600);
-check(await page.getByText(/^In \d+ days$/).isVisible(), 'coming trip: countdown');
-check(await page.getByText('3 in').isVisible(), 'coming trip: who’s in');
-check(await page.getByText('Fri 15 Jan', { exact: true }).isVisible() && await page.getByText('Sat 16 Jan', { exact: true }).isVisible(), 'coming trip: the plan by day');
-check(await page.getByText('Port Macquarie GC', { exact: true }).first().isVisible() && await page.getByText('Ambrose').first().isVisible(), 'coming trip: course and format per day');
-// ov25: an Upcoming trip shows The run-up — your to-dos replace "Your bits".
-check(await page.getByTestId('runup').isVisible() && /days to go · Port Macquarie · Fri 15 – Sun 17 Jan/.test(await page.getByTestId('runup-countdown').innerText()), 'coming trip: The run-up with its countdown');
+const when = await page.getByTestId('runup-countdown').innerText();
+check(/\d+ days to go/.test(when) && /Fri 15 – Sun 17 Jan 2027/.test(when), `coming trip: dates and countdown (${when.replace(/\n/g, ' ')})`);
+check(/Port Macquarie/.test(await page.getByTestId('yw-address').innerText()), 'coming trip: where (tap for maps)');
+check(/3 in/.test(await page.getByTestId('yw-seats').innerText()), 'coming trip: who’s in');
+const days = await page.getByTestId('yw-day').allInnerTexts();
+check(days.length === 2 && /Fri 15 Jan/i.test(days[0]) && /Sat 16 Jan/i.test(days[1]), `coming trip: the plan by day (${days.join(' | ').replace(/\n/g, ' ')})`);
+check(/Port Macquarie GC/.test(days[0]) && /Ambrose/.test(days[1]), 'coming trip: course and format per day');
 check(/Book the minibus/.test(await page.getByTestId('runup-todos').innerText()), 'coming trip: your job is in your to-dos');
+check(!(await page.getByText('🗓️ The plan').isVisible().catch(() => false)), 'the full plan by day is folded away (not a second copy on screen)');
+await page.getByTestId('runup-more').locator('summary').click();
+await page.getByTestId('overview-days').waitFor({ timeout: 5000 });
+check(await page.getByTestId('overview-days').count() === 1, 'More about this trip: the plan by day, once');
 check(/your own list \(1: balls\)/i.test(await page.getByTestId('runup-bring').innerText()), 'coming trip: your own bring list is mentioned');
 await page.screenshot({ path: `${SHOTS}/2-next.png`, fullPage: true });
 await noSideScroll('coming overview');

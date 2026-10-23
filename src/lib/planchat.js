@@ -312,3 +312,96 @@ export function chatSize(chat) { return (chat?.turns || []).length; }
 
 /** Questions still on their way, by group: { promise, before, mine } — lives as long as the app is open. */
 export const pending = new Map();
+
+// ------------------------------------------------------------------ one chat per trip (ov35, Josh 23 Oct)
+// "Organise more than one at once, i.e. retrieve later": each draft trip keeps its own planning chat on this device
+// (key …:<group>:plan:<plan id>, kept 90 days), and the chat that hasn't made a trip yet is the group's "new plan"
+// chat (the old key, kept a week). Starting a new plan never loses another trip's chat. The old one-chat-per-group
+// copy is moved to its trip the first time (migrateGroupChat).
+const PLAN_KEEP = 90 * 24 * 3600 * 1000;
+const planPrefix = (groupId) => `${STORE_PREFIX}${groupId}:plan:`;
+/** The storage key for a trip's chat (planId) or the new-plan chat (null). */
+export function chatKey(groupId, planId = null) {
+  return planId ? `${planPrefix(groupId)}${planId}` : STORE_PREFIX + groupId;
+}
+/** A trip's chat (or the new-plan chat when planId is null): { turns, draft, savedAt, planId } or null. */
+export function loadPlanChat(groupId, planId, s, now = Date.now()) {
+  if (!planId) return loadChat(groupId, s, now);
+  const st = store(s);
+  if (!st || !groupId) return null;
+  try {
+    const v = JSON.parse(st.getItem(chatKey(groupId, planId)) || 'null');
+    if (!v || !Array.isArray(v.turns)) return null;
+    if (v.savedAt != null && now - v.savedAt > PLAN_KEEP) return null;
+    return { turns: v.turns.slice(-30), draft: v.draft || null, savedAt: v.savedAt || null, planId };
+  } catch { return null; }
+}
+export function savePlanChat(groupId, planId, chat, s, now = Date.now()) {
+  if (!planId) { saveChat(groupId, chat, s, now); return; }
+  const st = store(s);
+  if (!st || !groupId) return;
+  const turns = (chat?.turns || []).slice(-30);
+  try {
+    if (!turns.length && !chat?.draft) { st.removeItem(chatKey(groupId, planId)); return; }
+    st.setItem(chatKey(groupId, planId), JSON.stringify({ turns, draft: chat?.draft || null, savedAt: now, planId }));
+  } catch { /* fine */ }
+}
+export function clearPlanChat(groupId, planId, s) {
+  const st = store(s);
+  try { st?.removeItem(chatKey(groupId, planId)); } catch { /* fine */ }
+}
+/** Every trip chat saved for this group on this device, newest first: [{ planId, size, savedAt }]. */
+export function listPlanChats(groupId, s, now = Date.now()) {
+  const st = store(s);
+  if (!st || !groupId) return [];
+  const out = [];
+  try {
+    const pre = planPrefix(groupId);
+    const keys = [];
+    for (let i = 0; i < (st.length || 0); i++) { const k = st.key(i); if (k && k.startsWith(pre)) keys.push(k); }
+    for (const k of keys) {
+      const c = loadPlanChat(groupId, k.slice(pre.length), st, now);
+      if (c && chatSize(c)) out.push({ planId: c.planId, size: chatSize(c), savedAt: c.savedAt });
+    }
+  } catch { /* fine */ }
+  return out.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+}
+/**
+ * The old one-chat-per-group copy (before ov35): if it was filling in a trip, move it to that trip's chat (unless the
+ * trip already has one) and leave the new-plan chat empty. → the trip's id, or null when nothing moved.
+ */
+export function migrateGroupChat(groupId, s, now = Date.now()) {
+  const old = loadChat(groupId, s, now);
+  if (!old?.planId) return null;
+  if (!loadPlanChat(groupId, old.planId, s, now)) savePlanChat(groupId, old.planId, old, s, old.savedAt || now);
+  clearChat(groupId, s);
+  return old.planId;
+}
+/** Which chat the Caddie's ✨ Plan a trip shows: a trip's id, or null for a new plan. */
+export function activeChat(groupId, s) {
+  const st = store(s);
+  try { const v = st?.getItem(`${STORE_PREFIX}${groupId}:active`); return v || null; } catch { return null; }
+}
+export function setActiveChat(groupId, planId, s) {
+  const st = store(s);
+  try { if (planId) st?.setItem(`${STORE_PREFIX}${groupId}:active`, planId); else st?.removeItem(`${STORE_PREFIX}${groupId}:active`); } catch { /* fine */ }
+}
+/** "Carry on …" words: one chat → "Carry on your plan (12 messages)"; several → "Carry on a plan (3 on the go)". */
+export function carryOnWords(chats = [], newSize = 0) {
+  const n = (chats || []).length + (newSize ? 1 : 0);
+  if (!n) return null;
+  if (n === 1) return `Carry on your plan (${(chats[0]?.size || newSize)} messages)`;
+  return `Carry on a plan (${n} on the go)`;
+}
+/** "changed today" / "changed yesterday" / "changed 5 days ago" / "changed 3 weeks ago". */
+export function changedWords(at, now = Date.now()) {
+  const t = at ? new Date(at).getTime() : NaN;
+  if (!Number.isFinite(t)) return '';
+  const days = Math.floor((now - t) / 86400000);
+  if (days <= 0) return 'changed today';
+  if (days === 1) return 'changed yesterday';
+  if (days < 14) return `changed ${days} days ago`;
+  return `changed ${Math.round(days / 7)} weeks ago`;
+}
+/** What openPlanner asked for (a trip's id, or null for a new plan); undefined = nothing asked. */
+export const chatWanted = { planId: undefined };

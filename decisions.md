@@ -71,3 +71,15 @@
 - Feature `phone_only_limited`, on by default (every preset), so a group can switch it off. Quick rounds never ask.
 - Phone-only accounts only come from joining an existing group by its link (or a personal link). Starting a group, a quick round, a club claiming its course page and a group-booking enquiry need Google or email first; the database refuses them for phone-only whatever the switch. No anonymous sign-in left on Start, Club or course pages.
 - Searching the course library (#/c) needs a session (search_courses refuses signed-out callers, which stops scraping), so signed out it's a sign-in card; a course's own page still opens for anyone.
+## ov35 — two votes, co-organisers, several drafts (23 Oct 2026, Josh's picks)
+- The start vote is two cards, 📅 When? (weekends, How long?) and 📍 Where? (areas, and optionally their courses / places to stay). Call either first, or "Call both" (one batch, one message, title "Where and when?"); each card's polls close on their own. Which card a poll belongs to is worked out from its kind / option keys (lib/votecards.js), so a shared batch splits cleanly.
+- Choosing the area never settles the weekend, and settling the weekend never chooses the area. Course calls unlock once both are decided (or skipped), as before.
+- Any button that closes a vote says so: "Close the vote and go with …", with "This closes the … vote now and posts the result in the Feed" under it. Choosing an area from the area page while the Where? vote is out asks first ("That closes the Where? vote now and posts the result").
+- One Feed post per card ("📅 … the weekend's decided … Still to decide: where." / "📍 … we're going to … Next: ringing the courses"), once per vote; no post when there was no vote.
+- Old trips with the combined vote (state.votes.v1 and no when/where) keep the old screen untouched.
+- The Where? card's "went into the detail" count is out of the people who answered Where? (no longer everyone who answered anything).
+- Co-organisers: 1–3 players per trip, named by a group organiser or the trip's own organiser. On that trip they can do everything an organiser can (builder, votes, jobs, money, rooms & cars, lock in, call off); not who organises it or its link to the app's trip. A co-organiser can step down. Guests can't be one. Enforced in the database (104); the app gives them the organiser's view of that trip only (PlanRole).
+- "Suggestions from anyone" (optional) not built.
+- The Caddie's ✨ planning chat stays organisers-only (the AI helper only plans for organisers); a co-organiser plans on the trip screen.
+- Planning chats are kept per trip on the phone for 90 days (the not-yet-a-trip chat a week). The Caddie's Plan tab has a "Planning:" picker; "Start a new plan" keeps the trip's chat.
+- AI-made drafts were never hidden: they're planning trips (proposed = false) and show under "Being organised". "My draft trips" lists every planning trip an organiser can change (all non-proposed ones + their own proposals), or the ones a player co-organises.

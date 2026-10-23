@@ -1976,3 +1976,30 @@ for themselves. Organising, money and proposing need a saved account (Google or 
 **Next:** Josh's OK, then apply 102 on staging (after 101) and run supabase/tests/102_saved_accounts.sql there. Before
 live: any L.G.C organiser still on a phone-only account needs to Save their spot first (or the group switches
 `phone_only_limited` off) — 102 stops their organiser changes until they do.
+
+## ov35 — When? / Where? votes, co-organisers, several draft trips (23 Oct 2026, branch `ov35-votes-coorg`, from `v10-5-caddie-plan-link`, migration 104, not applied anywhere)
+**Built**
+- **Two votes, either order** (`lib/votecards.js`, `components/WhenWhere.jsx`, `screens/TripBuilder.jsx`): 📅 When? and 📍 Where? cards in
+  step 1, each with its own Call / status / results / close; "Call both" = one message. Status reads "Not called yet" /
+  "Out now — 3 of 12 voted, closes Mon" / "Closed — Hunter Valley won 2–1" / "Decided — … (no vote)". Buttons say "Close the
+  vote and go with …" and that it posts. Choosing the area no longer settles the weekend. Old combined-vote trips keep the old screen.
+- **Co-organisers** (migration 104, `components/CoOrganisers.jsx`, `lib/coorganisers.js`): "👥 Co-organisers" on the trip
+  (Plan the trip view and the map screen): add 1–3, "📤 Help me plan this" (the trip link + `role=co`), remove / step down;
+  they're told (notify `coorganiser_added`). PlanRole gives a co-organiser the organiser's view of that one trip.
+- **Several drafts** (`components/DraftTrips.jsx`, `lib/planchat.js`, `components/CaddiePlan.jsx`): "🧭 My draft trips" on
+  Trips (last changed, Open, ✨ Chat); the planning chat is kept per trip; the Caddie's Plan tab has a "Planning:" picker;
+  the old per-group chat moves to its trip; "Carry on a plan (2 on the go)".
+**Migration 104** (`supabase/migrations/104_coorganisers.sql`): new table plan_coorganisers (RLS: members read, organisers
+add, organisers or themselves remove, same group, feature planner; max 3, not a guest, same group, not on a finished trip);
+extra permissive "co-organisers add/change/remove" policies on plan_polls, vote_batches, plan_rsvps, plan_items, plan_costs,
+plan_payments, plan_transfers, plan_groups, plan_stays, plan_budget_items, trip_builds, trip_tee_options, trip_start_points,
+plan_options, plan_group_members, and "co-organisers edit" on plans. can_decide replaced (025 + co-organisers). The organiser
+check inside plan_rows_guard, plan_items_stage, plan_stays_guard, plan_items_late_guard, plans_repeat_guard, call_off_plan and
+both put_stays_to_vote is patched the 029 way (live body, only the check changed; re-runs cleanly; fails loudly if the check
+moved). Nothing dropped; no existing policy changed.
+**Tests**: vitest 1,743 pass (new: votecards 16, coorganisers 3, planchat-trips 7). SQL `supabase/tests/104_coorganisers.sql`
+(41 checks, + expected) passes on PGlite with every migration 001–104 (104 applied twice). notify: type-checks, 16 deno tests pass.
+e2e on port 4363: new votes-coorg (all pass); trip-builder and weekends-comps adjusted for the two cards (pass); plan-ux,
+calloff, ov26-votes, trips, caddie, ai-helper(-v2), trip-overview/plan/page/extras, organise-tidy, desktop, tripfinder,
+late-job, runup, view-as, email-votes, nav, hello-maps, phone, features pass.
+**Next**: apply 104 on staging and run its SQL test there; deploy notify (new type); Josh to try it.

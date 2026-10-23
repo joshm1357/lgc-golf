@@ -1969,7 +1969,7 @@ for themselves. Organising, money and proposing need a saved account (Google or 
 - Existing tests changed because the rule changed: start-test (step 1 now needs Google or email; no "Carry on"),
   quick-test (a phone-only person tapping "Start a round" gets the sign-in card first; the starter is signed in after),
   stage10-test (a group-booking enquiry asks for Google or email first).
-- Full e2e run: all 76 pass — 66 on the default build; quick / start / stage9 on VITE_NEW_GROUPS=on; signin-first
+- Full e2e run: all 76 pass — 68 on the default build; quick / start / stage9 on VITE_NEW_GROUPS=on; signin-first
   (73, incl. the google,password,email build), save-spot (89), signin-home (79) and saved-gate (28) on the sign-in
   builds at 127.0.0.1; beta (46).
 

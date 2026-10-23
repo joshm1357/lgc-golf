@@ -1,17 +1,19 @@
 // Games and side bets (migration 055, feature 'games'): the Games screen (live standings, the money tally and who
 // pays who), the organiser's Games card on each round (Admin and the guided setup).
+// 098 (ov29): who's in each game (everyone, or opt-in), and anyone (not guests) can put up a side game for an opt-in.
 // The leaderboard link is components/GamesChip.jsx. All the maths is in lib/games.js.
 import React, { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
 import { useData, useScores, useSession, useFeature, playerName } from '../lib/store.jsx';
-import { useRoundGames } from '../components/GamesChip.jsx';
-import { Header } from '../components/ui.jsx';
+import { useRoundGames, useGamePlayers, useTeeTimes, WhosIn } from '../components/GamesChip.jsx';
+import { Header, Sheet } from '../components/ui.jsx';
+import { notify } from '../lib/push.js';
 import { useRun, must } from '../lib/run.js';
 import { formatToPar } from '../lib/scoring.js';
 import {
   GAME_INFO, PRESETS, PICKUP_RULES, AMBROSE_NOTE, cleanOptions, gameLabel, gameSuits, playGame, moneyTally,
-  formatMoney, toCents, gameOptions, splitOptions, STANDARD_OPTIONS,
+  formatMoney, toCents, gameOptions, splitOptions, STANDARD_OPTIONS, WHO_IN, isOptIn, proposableRounds, proposedRow, gameShort,
 } from '../lib/games.js';
 import { withCustom, roundGameFromCustom, copyFrom } from '../lib/customgames.js';
 import { useCustomGames, CustomGamesCard, OptionControls, CustomGameSheet } from '../components/CustomGames.jsx';
@@ -22,12 +24,12 @@ import GameHelp from '../components/GameHelp.jsx';
 const byId = (list) => Object.fromEntries(list.map((c) => [c.id, c]));
 
 /** Everything playGame needs for one round. */
-function gameCtx(data, round, scoresIdx) {
+function gameCtx(data, round, scoresIdx, optIns = []) {
   const tripRounds = data.rounds.filter((r) => (round.trip_id ? r.trip_id === round.trip_id : r.id === round.id));
   return {
     round, course: data.coursesById[round.course_id], teams: data.teamsByRound[round.id] || [],
     roundPlayers: data.roundPlayers[round.id] || [], playersById: data.playersById, scoresIdx, quickResults: data.quick_results || [],
-    tripRounds, teamsByRound: data.teamsByRound, roundPlayersByRound: data.roundPlayers, coursesById: data.coursesById,
+    tripRounds, teamsByRound: data.teamsByRound, roundPlayersByRound: data.roundPlayers, coursesById: data.coursesById, optIns,
   };
 }
 
@@ -35,7 +37,7 @@ function gameCtx(data, round, scoresIdx) {
 export default function Games() {
   const data = useData();
   const [params, setParams] = useSearchParams();
-  const [rawGames] = useRoundGames();
+  const [rawGames, reloadGames] = useRoundGames();
   const [customs] = useCustomGames();
   const games = useMemo(() => rawGames.map((g) => withCustom(g, byId(customs))), [rawGames, customs]);
   const [view, setView] = useState('round');
@@ -44,16 +46,21 @@ export default function Games() {
   const round = asked || (withGames.find((r) => r.id === data.defaultRound?.id)) || withGames[withGames.length - 1] || null;
   const tripRounds = useMemo(() => (round ? data.rounds.filter((r) => (round.trip_id ? r.trip_id === round.trip_id : r.id === round.id)) : []), [round, data.rounds]);
   const scores = useScores(tripRounds.map((r) => r.id));
+  const [optIns, reloadOptIns] = useGamePlayers();
+  const tees = useTeeTimes(tripRounds.map((r) => r.id));
+  const [proposing, setProposing] = useState(false);
+  const { status } = useSession();
+  const canPropose = !!status.player_id && status.role !== 'guest' && !status.viewing;
 
   const played = useMemo(() => {
     if (!round) return [];
-    return games.filter((g) => g.round_id === round.id).map((g) => playGame(g, gameCtx(data, round, scores.index)));
-  }, [games, round, data, scores.index]);
+    return games.filter((g) => g.round_id === round.id).map((g) => playGame(g, gameCtx(data, round, scores.index, optIns)));
+  }, [games, round, data, scores.index, optIns]);
   const tripPlayed = useMemo(() => {
     const out = [];
-    for (const r of tripRounds) for (const g of games.filter((x) => x.round_id === r.id)) out.push(playGame(g, gameCtx(data, r, scores.index)));
+    for (const r of tripRounds) for (const g of games.filter((x) => x.round_id === r.id)) out.push(playGame(g, gameCtx(data, r, scores.index, optIns)));
     return out;
-  }, [games, tripRounds, data, scores.index]);
+  }, [games, tripRounds, data, scores.index, optIns]);
 
   const roundTally = useMemo(() => moneyTally(played.filter((p) => p.kind !== 'eclectic')), [played]);
   const tripTally = useMemo(() => moneyTally(tripPlayed), [tripPlayed]);
@@ -70,15 +77,21 @@ export default function Games() {
           ))}
         </div>
       )}
+      {canPropose && (
+        <div className="section">
+          <button type="button" className="btn gold block" data-testid="propose-game" onClick={() => setProposing(true)}>🎲 Put up a side game</button>
+        </div>
+      )}
+      {proposing && <ProposeGameSheet onClose={() => setProposing(false)} onDone={async (r) => { await Promise.all([reloadGames(), reloadOptIns()]); setParams({ r }, { replace: true }); }} />}
       {!round || !played.length ? (
         <div className="empty">
           No games on {round ? 'this round' : 'any round'} yet.
-          <div className="small" style={{ marginTop: 6 }}>An organiser adds them in Admin → Rounds (or Set up your trip → Extras): one tap for skins, Nassau, a Stableford pot, a birdie pool or an eclectic.</div>
+          <div className="small" style={{ marginTop: 6 }}>An organiser adds them in Admin → Rounds (or Set up your trip → Extras): one tap for skins, Nassau, a Stableford pot, a birdie pool or an eclectic. Anyone can put one up for the others to opt in to.</div>
           <div className="section" style={{ textAlign: 'left' }}><CustomGamesCard /></div>
         </div>
       ) : (
         <div className="section stack">
-          {played.map((p) => <GameCard key={p.game.id} played={p} round={round} />)}
+          {played.map((p) => <GameCard key={p.game.id} played={p} round={round} optIns={optIns} teeGroups={tees} reload={async () => { await Promise.all([reloadGames(), reloadOptIns()]); }} />)}
           <div className="card pad stack" style={{ gap: 8 }}>
             <div className="row between" style={{ gap: 8, flexWrap: 'wrap' }}>
               <strong style={{ fontSize: 18 }}>💵 The money</strong>
@@ -139,17 +152,19 @@ function Tally({ tally, hasEclectic }) {
   );
 }
 
-function GameCard({ played, round }) {
+function GameCard({ played, round, optIns, teeGroups, reload }) {
   const { game, kind, result, subjects, final, skipped } = played;
   const info = GAME_INFO[kind] || {};
   return (
     <div className="card pad stack" style={{ gap: 8 }} data-testid={`game-${kind}`}>
       <div className="row between" style={{ gap: 8 }}>
-        <span className="row" style={{ gap: 6, flexWrap: 'wrap' }}><strong style={{ fontSize: 17 }}>{info.emoji} {gameLabel(game)}</strong><GameHelp kind={kind} houseRules={game.house_rules || ''} /></span>
+        <span className="row" style={{ gap: 6, flexWrap: 'wrap' }}><strong style={{ fontSize: 17 }}>{info.emoji} {gameLabel(game)}</strong><GameHelp kind={kind} houseRules={game.house_rules || ''} optIn={isOptIn(game)} /></span>
         <span className="small" style={{ fontWeight: 700, color: skipped ? 'var(--muted)' : final ? 'var(--up)' : 'var(--gold)' }}>{skipped ? 'Not on' : final ? 'Final ✓' : round.status === 'live' ? 'Live' : 'Not started'}</span>
       </div>
       <div className="small muted">{info.blurb} <RuleTag testId="game-stake" rule={{ table: 'round_games', id: game.id, field: 'stake', label: stakeWords(game).replace(/\.$/, ''), value: Number(game.stake), where: { round_id: round.id, trip_id: round.trip_id, path: `/games?r=${round.id}` } }}
-        explain={`${info.name || 'This game'}: ${stakeWords(game)} Set by the organiser for this round.`}>{stakeWords(game)}</RuleTag></div>
+        explain={`${info.name || 'This game'}: ${stakeWords(game)} ${isOptIn(game) ? 'Only those who are in pay or win.' : 'Set by the organiser for this round.'}`}>{stakeWords(game)}</RuleTag></div>
+      <WhosIn game={game} round={round} optIns={optIns} teeGroups={teeGroups} reload={reload} />
+      {played.optIn?.teamNote && <div className="small muted" data-testid="ambrose-opt-in">{played.optIn.teamNote}</div>}
       {game.house_rules && <div className="small" style={{ whiteSpace: 'pre-wrap' }} data-testid="house-rules"><strong>House rules ({game.base_name}, our way):</strong> {game.house_rules}</div>}
       {played.note && <div className="small muted">{played.note}</div>}
       <div><RulesLink value={game.custom_game_id ? `custom_game:${game.custom_game_id}` : `game:${kind}`} /></div>
@@ -298,8 +313,9 @@ export function RoundGames({ round }) {
       {mine.map((g) => (
         <div key={g.id} className="card pad stack" style={{ gap: 6 }}>
           <div className="row" style={{ gap: 8 }}>
-            <div className="grow"><strong>{GAME_INFO[g.kind]?.emoji} {gameLabel(g)}</strong><div className="small muted">{g.house_rules ? `House rules: ${g.house_rules}` : GAME_INFO[g.kind]?.blurb}</div></div>
-            <GameHelp kind={g.kind} houseRules={g.house_rules || ''} label="How" />
+            <div className="grow"><strong>{GAME_INFO[g.kind]?.emoji} {gameLabel(g)}</strong><div className="small muted">{g.house_rules ? `House rules: ${g.house_rules}` : GAME_INFO[g.kind]?.blurb}</div>
+              {isOptIn(g) && <div className="small" data-testid="admin-opt-in">Opt-in{g.created_by && g.created_by !== status.player_id ? ` · put up by ${playerName(data.playersById[g.created_by])}` : ''}</div>}</div>
+            <GameHelp kind={g.kind} houseRules={g.house_rules || ''} optIn={isOptIn(g)} label="How" />
             <button type="button" className="btn ghost sm" onClick={() => setEditing(editing === g.id ? null : g.id)}>{editing === g.id ? 'Close' : 'Change'}</button>
           </div>
           {!gameSuits(g.kind, round.format) && <div className="small muted">Not played in Ambrose rounds.</div>}
@@ -345,10 +361,11 @@ function GameEditor({ game, busy, run, onSaved, onRemove, onCopy }) {
   const cents = toCents(stake);
   const bad = !/^\$?\s*\d+(\.\d{1,2})?$/.test(stake.trim()) || cents > 100000;
   const moneyBad = (STANDARD_OPTIONS[game.kind] || []).some((s) => s.type === 'money' && opts[s.key] != null && !/^\$?\s*\d+(\.\d{1,2})?$/.test(String(opts[s.key]).trim()));
+  const [whoIn, setWhoIn] = useState(isOptIn(game) ? 'opt_in' : 'everyone');
   const save = () => run(async () => {
     const { options, settings } = splitOptions(game.kind, opts);
     const hasSettings = (STANDARD_OPTIONS[game.kind] || []).some((s) => s.col === 'settings');
-    await must(supabase.from('round_games').update({ stake: cents / 100, options, ...(hasSettings ? { settings } : {}) }).eq('id', game.id));
+    await must(supabase.from('round_games').update({ stake: cents / 100, options, ...(hasSettings ? { settings } : {}), ...(whoIn !== (isOptIn(game) ? 'opt_in' : 'everyone') ? { who_in: whoIn } : {}) }).eq('id', game.id));
     await onSaved();
   }, 'Game saved');
   return (
@@ -358,6 +375,13 @@ function GameEditor({ game, busy, run, onSaved, onRemove, onCopy }) {
       </label>
       {stake.trim() !== '' && bad && <span className="small err" style={{ margin: 0 }}>Dollars and cents, up to $1000 — e.g. 5 or 2.50</span>}
       <OptionControls kind={game.kind} value={opts} onChange={setOpts} />
+      <div className="stack" style={{ gap: 2 }}>
+        <span className="small"><strong>Who’s in</strong></span>
+        <div className="seg" role="group" aria-label="Who’s in">
+          {Object.entries(WHO_IN).map(([k, w]) => <button key={k} type="button" aria-pressed={whoIn === k} onClick={() => setWhoIn(k)}>{w.label}</button>)}
+        </div>
+        {whoIn === 'opt_in' && <span className="small muted">Only players who tap “I’m in” play for the money. Opt-in closes at the first tee.</span>}
+      </div>
       {moneyBad && <span className="small err" style={{ margin: 0 }}>Bet values are dollars and cents, up to $1000 — or blank for the stake</span>}
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
         <button type="button" className="btn sm gold" disabled={busy || bad || moneyBad} onClick={save}>Save</button>
@@ -384,5 +408,59 @@ export function SetupGames({ rounds }) {
         ))}
       </div>
     </details>
+  );
+}
+
+// ------------------------------------------------------------------ anyone: put up a side game (098)
+/** "Bo's put up $5 skins for Saturday. You in?" — pick a round (still open), a game and a stake. It's opt-in; you're in. */
+function ProposeGameSheet({ onClose, onDone }) {
+  const data = useData();
+  const { status } = useSession();
+  const [busy, run] = useRun();
+  const tees = useTeeTimes(data.rounds.map((r) => r.id));
+  const rounds = proposableRounds(data.rounds, tees);
+  const [roundId, setRoundId] = useState('');
+  const round = rounds.find((r) => r.id === roundId) || rounds[0] || null;
+  const kinds = PRESETS.filter((p) => round && gameSuits(p.kind, round.format));
+  const [kind, setKind] = useState('skins');
+  const preset = kinds.find((p) => p.kind === kind) || kinds[0] || null;
+  const [stake, setStake] = useState('5');
+  const bad = !/^\$?\s*\d+(\.\d{1,2})?$/.test(stake.trim()) || toCents(stake) > 100000 || toCents(stake) <= 0;
+  const go = () => run(async () => {
+    const id = crypto.randomUUID();
+    await must(supabase.from('round_games').insert(proposedRow({ id, roundId: round.id, kind: preset.kind, stake, me: status.player_id })));
+    await notify('game_proposed', { game_id: id });
+    onDone?.(round.id);
+    onClose();
+  }, 'Side game put up — you’re in');
+  return (
+    <Sheet title="Put up a side game" onClose={onClose}>
+      <div className="stack" style={{ gap: 10 }} data-testid="propose-sheet">
+        <span className="small muted">It goes in the Feed and to everyone’s phone. Only those who tap “I’m in” play for the money — you’re in. Opt-in closes at the first tee.</span>
+        {!rounds.length ? <div className="small">No rounds coming up that are still open for opt-ins.</div> : (
+          <>
+            <label className="field"><span>Round</span>
+              <select className="input" value={round?.id || ''} onChange={(e) => setRoundId(e.target.value)} data-testid="propose-round">
+                {rounds.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </select>
+            </label>
+            <div className="row" style={{ gap: 6, flexWrap: 'wrap' }} role="group" aria-label="Game">
+              {kinds.map((p) => (
+                <button key={p.kind} type="button" className="chip" aria-pressed={preset?.kind === p.kind} onClick={() => { setKind(p.kind); setStake(String(p.stake)); }}>
+                  {GAME_INFO[p.kind].emoji} {GAME_INFO[p.kind].name}
+                </button>
+              ))}
+            </div>
+            {preset && <div className="small muted">{GAME_INFO[preset.kind].blurb}</div>}
+            <label className="field"><span>Stake — {preset ? GAME_INFO[preset.kind].per : ''} ($)</span>
+              <input className="input" inputMode="decimal" value={stake} onChange={(e) => setStake(e.target.value)} style={{ maxWidth: 140 }} data-testid="propose-stake" />
+            </label>
+            {bad && <span className="small err" style={{ margin: 0 }}>Dollars and cents, up to $1000 — e.g. 5 or 2.50</span>}
+            {preset && !bad && <div className="small"><strong>{gameShort({ kind: preset.kind, stake: toCents(stake) / 100 })}</strong> for {round.name}, opt-in.</div>}
+            <button type="button" className="btn gold block" disabled={busy || bad || !preset || !round} onClick={go} data-testid="propose-go">Put it up</button>
+          </>
+        )}
+      </div>
+    </Sheet>
   );
 }

@@ -20,6 +20,8 @@ import { batchNonVoters, reminderGroups, batchMessage } from './batch.ts';
 import { weekOutMessage, dayBeforeMessage } from '../_shared/runup.js';
 // ov28: "your round" — the draw is out (I8), your tee time tomorrow (I11), swing alerts (I13).
 import { roundBits, drawOutFor, teeTomorrowFor, swingGap, matchSwing, pointsSwing } from './yourround.ts';
+// ov29: side games put out for an opt-in (098) — "Bo's put up $5 skins for Saturday. You in?"
+import { proposedBits, proposeProblem, gameProposedMessage } from './sidegames.ts';
 
 // The app's web address for links in notifications. Set APP_URL in the function's secrets when the app moves
 // (e.g. https://app.thegolftrip.club/); until then it's the GitHub Pages address.
@@ -712,6 +714,24 @@ Deno.serve(async (req) => {
       case 'draw_open':
         sent = await send(g, 'all', { title: '🎲 The draw room is open', body: 'Open the app to watch it live.', url: APP }, from, 'draw_open');
         break;
+      // ---------------------------------------------------------------- ov29 side games (098) — own block for merging
+      case 'game_proposed': {
+        // Whoever put the game up (or an organiser), once per game, at most 3 a day from one person; only while the
+        // round hasn't started and the games feature is on. Everyone in the group but the proposer.
+        const bits = await proposedBits(db, g, body.game_id);
+        if (!bits) throw new NotYours();
+        const why = proposeProblem(bits.game, from, me.is_admin);
+        if (why) return json({ error: why }, 403);
+        if (['live', 'locked'].includes(bits.round.status) || !(await featureOn(g, 'games'))) break;
+        if (!(await once(`game-proposed:${bits.game.id}`))) break;
+        let room = false;
+        for (let i = 1; i <= 3 && !room; i++) room = await once(`game-proposed-by:${g}:${from}:${sydneyDate(0)}:${i}`);
+        if (!room) break;
+        const msg = gameProposedMessage(bits);
+        sent = await send(g, 'all', { ...msg, url: `${APP}#/games?r=${bits.round.id}&g=${bits.game.id}`, tag: `game-${bits.game.id}` }, from, 'game_proposed');
+        break;
+      }
+      // ---------------------------------------------------------------- end ov29
       default:
         return json({ error: 'Unknown notification' }, 400);
     }

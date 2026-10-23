@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   toCents, formatMoney, splitCents, settleUp, sumMoney, toPlayers, cleanOptions, gameLabel, gameSuits,
   gameSubjects, skins, nassau, stablefordPot, birdiePool, eclectic, playGame, moneyTally, GAME_KINDS, PRESETS,
+  optInIds, isOptIn, subjectsIn, optInState, proposeWords, offerLine, gameShort, proposedRow, proposableRounds,
 } from './games.js';
 
 // 18 par 4s, stroke index = hole number (hole 1 hardest).
@@ -346,5 +347,121 @@ describe('paper-card players (review fix)', () => {
     const sk = playGame({ kind: 'skins', stake: 5, options: {} }, ctx);
     expect(sk.subjects.map((x) => x.id)).toEqual(['a']);
     expect(sk.note).toContain('Quinn');
+  });
+});
+
+// ------------------------------------------------------------------ who's in (098): opt-in games
+describe('opt-in side games: only the players who are in count', () => {
+  const holes18 = Array.from({ length: 18 }, (_, i) => ({ n: i + 1, par: 4, si: i + 1 }));
+  const course = { id: 'c1', holes: holes18 };
+  const playersById = Object.fromEntries(['p1', 'p2', 'p3', 'p4', 'p5', 'p6'].map((id) => [id, { id, name: id.toUpperCase() }]));
+  const round = { id: 'r1', course_id: 'c1', format: 'stableford', status: 'locked' };
+  const roundPlayers = ['p1', 'p2', 'p3', 'p4'].map((id) => ({ player_id: id, playing_handicap: 0 }));
+  // p1 birdies hole 1, p4 birdies hole 2, everyone else makes par everywhere. p4 hasn't opted in.
+  const a = fours(); a[0] = 3;
+  const d = fours(); d[1] = 3;
+  const scoresIdx = { r1: { p1: card(a), p2: card(fours()), p3: card(fours()), p4: card(d) } };
+  const optIns = ['p1', 'p2', 'p3'].map((player_id) => ({ game_id: 'g', player_id }));
+  const ctx = { round, course, roundPlayers, playersById, scoresIdx, optIns, tripRounds: [round], roundPlayersByRound: { r1: roundPlayers }, teamsByRound: {}, coursesById: { c1: course } };
+  const opt = (kind, stake, options = {}) => playGame({ id: 'g', kind, stake, options, who_in: 'opt_in' }, ctx);
+  const all = (kind, stake, options = {}) => playGame({ id: 'g', kind, stake, options }, ctx);
+
+  it('skins: p4’s birdie doesn’t count and p4 pays nothing', () => {
+    const p = opt('skins', 5, { net: true, carry: true });
+    expect(p.subjects.map((s) => s.id)).toEqual(['p1', 'p2', 'p3']);
+    expect(p.result.won).toEqual({ p1: 1 });
+    expect(p.result.pot).toBe(17);
+    expect(p.money).toEqual({ p1: 1000, p2: -500, p3: -500 });
+    expect(p.optIn.ids).toEqual(['p1', 'p2', 'p3']);
+    // Everyone in (the default): p4 wins hole 2 and everyone pays.
+    expect(all('skins', 5, { net: true, carry: true }).result.won).toEqual({ p1: 1, p4: 1 });
+  });
+  it('Nassau: three in, so $30 a bet', () => {
+    const p = opt('nassau', 10, { net: true, scoring: 'stroke' });
+    expect(p.money).toEqual({ p1: 4000, p2: -2000, p3: -2000 });
+    expect(zero(p.money)).toBe(0);
+  });
+  it('Stableford pot: three in, p1 takes $30', () => {
+    expect(opt('stableford_pot', 10).money).toEqual({ p1: 2000, p2: -1000, p3: -1000 });
+    expect(all('stableford_pot', 10).result.leaders).toEqual(['p1', 'p4']);
+  });
+  it('birdie pool: $6 in the pool, p1’s birdie takes it', () => {
+    const p = opt('birdie_pool', 2);
+    expect(p.result.pool).toBe(600);
+    expect(p.money).toEqual({ p1: 400, p2: -200, p3: -200 });
+  });
+  it('eclectic: only those in are on the card', () => {
+    const p = opt('eclectic', 20, { net: true });
+    expect(p.result.rows.map((r) => r.id).sort()).toEqual(['p1', 'p2', 'p3']);
+    expect(p.money).toEqual({ p1: 4000, p2: -2000, p3: -2000 });
+  });
+  it('nobody in yet: nothing won or lost, and the tally settles to nothing', () => {
+    const p = playGame({ id: 'g', kind: 'skins', stake: 5, options: {}, who_in: 'opt_in' }, { ...ctx, optIns: [] });
+    expect(p.subjects).toEqual([]);
+    expect(p.money).toEqual({});
+    expect(moneyTally([p]).settle).toEqual([]);
+  });
+  it('an everyone game ignores stray opt-in rows', () => {
+    expect(playGame({ id: 'g', kind: 'skins', stake: 5, options: {}, who_in: 'everyone' }, ctx).subjects).toHaveLength(4);
+  });
+  it('Ambrose: a team is in if any of its players is in; the team splits it', () => {
+    const r = { id: 'r2', course_id: 'c1', format: 'ambrose', status: 'live' };
+    const teams = [
+      { id: 't1', name: 'A', handicap: 0, players: [playersById.p1, playersById.p2] },
+      { id: 't2', name: 'B', handicap: 0, players: [playersById.p3, playersById.p4] },
+      { id: 't3', name: 'C', handicap: 0, players: [playersById.p5, playersById.p6] },
+    ];
+    // t3 birdies 1 (but isn't in); t1 birdies 2.
+    const sc = { r2: { t1: card([4, 3]), t2: card([4, 4]), t3: card([3, 4]) } };
+    const ins = [{ game_id: 'g', player_id: 'p1' }, { game_id: 'g', player_id: 'p3' }];
+    const p = playGame({ id: 'g', kind: 'skins', stake: 5, options: { net: false, carry: true }, who_in: 'opt_in' }, { round: r, course, teams, scoresIdx: sc, playersById, optIns: ins });
+    expect(p.subjects.map((s) => s.id)).toEqual(['t1', 't2']);
+    expect(p.result.holes[1].value).toBe(2);
+    expect(p.money).toEqual({ p1: 500, p2: 500, p3: -500, p4: -500 });
+    expect(p.optIn.teamNote).toMatch(/team is in if any of its players is in/);
+  });
+});
+
+describe('opt-in helpers', () => {
+  it('who’s in from the rows; teams in if any member is', () => {
+    expect(optInIds({ id: 'g' }, [{ game_id: 'g', player_id: 'a' }])).toBeNull();
+    expect([...optInIds({ id: 'g', who_in: 'opt_in' }, [{ game_id: 'g', player_id: 'a' }, { game_id: 'x', player_id: 'b' }])]).toEqual(['a']);
+    expect(isOptIn({ who_in: 'opt_in' })).toBe(true);
+    expect(isOptIn({})).toBe(false);
+    const subs = [sub('a'), sub('t', 0, ['b', 'c']), sub('d')];
+    expect(subjectsIn(subs, new Set(['c'])).map((s) => s.id)).toEqual(['t']);
+    expect(subjectsIn(subs, null)).toBe(subs);
+  });
+  it('opt-in closes when the round starts, or at its first tee time (Sydney)', () => {
+    const r = { id: 'r', play_date: '2026-10-24', status: 'setup' };
+    const tees = [{ round_id: 'r', tee_time: '09:00' }, { round_id: 'r', tee_time: '08:10' }, { round_id: 'x', tee_time: '06:00' }, { round_id: 'r', tee_time: 'soon' }];
+    const before = optInState(r, tees, new Date('2026-10-23T21:00:00Z')); // 8:00am Sat in Sydney (AEDT)
+    expect(before).toMatchObject({ open: true, closesAt: '2026-10-24 08:10' });
+    expect(before.words).toBe('Opt-in closes at the first tee (8:10am Sat)');
+    const after = optInState(r, tees, new Date('2026-10-23T21:15:00Z'));
+    expect(after.open).toBe(false);
+    expect(after.words).toMatch(/closed .* the list is fixed/);
+    expect(optInState({ ...r, status: 'live' }, [], new Date('2020-01-01T00:00:00Z')).open).toBe(false);
+    expect(optInState(r, [], new Date('2030-01-01T00:00:00Z'))).toMatchObject({ open: true, closesAt: null, words: 'Opt-in closes at the first tee' });
+  });
+  it('words for the Feed, the run-up and the proposal row', () => {
+    const r = { id: 'r', name: 'Sat at Kiama', play_date: '2026-10-24' };
+    expect(proposeWords({ who: 'Bo', game: { kind: 'skins', stake: 5 }, round: r })).toBe('Bo’s put up $5 skins for Saturday. You in?');
+    expect(proposeWords({ who: 'Al', game: { kind: 'nassau', stake: 2.5 }, round: { name: 'Day 2' } })).toBe('Al’s put up $2.50 Nassau for Day 2. You in?');
+    expect(offerLine({ kind: 'skins', stake: 5 }, r, 6)).toBe('$5 skins Sat (6 in)');
+    expect(gameShort({ kind: 'skins', stake: 5, name: 'Beer skins' })).toBe('$5 Beer skins');
+    expect(proposedRow({ id: 'g', roundId: 'r', kind: 'skins', stake: '2.50', me: 'bo' }))
+      .toEqual({ id: 'g', round_id: 'r', kind: 'skins', stake: 2.5, options: { net: true, carry: true }, who_in: 'opt_in', created_by: 'bo' });
+  });
+  it('rounds you can put a game up for: open, today or later, soonest first', () => {
+    const now = new Date('2026-10-23T02:00:00Z'); // Fri 1pm Sydney
+    const rounds = [
+      { id: 'sun', name: 'Sun', play_date: '2026-10-25', status: 'setup' },
+      { id: 'sat', name: 'Sat', play_date: '2026-10-24', status: 'setup' },
+      { id: 'live', name: 'Fri', play_date: '2026-10-23', status: 'live' },
+      { id: 'old', name: 'Last month', play_date: '2026-09-20', status: 'setup' },
+      { id: 'tbc', name: 'Some day', play_date: null, status: 'setup' },
+    ];
+    expect(proposableRounds(rounds, [], now).map((r) => r.id)).toEqual(['sat', 'sun', 'tbc']);
   });
 });

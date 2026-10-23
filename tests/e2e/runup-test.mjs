@@ -32,6 +32,11 @@ const ROOM = 'ffffffff-2500-4000-8000-000000000001';
 db.plan_groups.push({ id: ROOM, plan_id: PC, group_id: GROUP, kind: 'room', name: 'Room 3', capacity: 2, sort: 0, created_at: now });
 db.plan_group_members.push({ group_id: ROOM, player_id: AL }, { group_id: ROOM, player_id: BO });
 db.group_features.push({ group_id: GROUP, feature_key: 'stats', enabled: true });
+// ov29 (098): an opt-in $5 skins for Friday that Al has put up — the run-up's "Side games on offer" line.
+const SG = 'eeeeeeee-2500-4000-8000-0000000000a9';
+db.group_features.push({ group_id: GROUP, feature_key: 'games', enabled: true });
+db.round_games = [{ id: SG, group_id: GROUP, round_id: ROUND, kind: 'skins', stake: 5, options: { net: true, carry: true }, who_in: 'opt_in', created_by: AL, retired: false, created_at: now }];
+db.round_game_players = [{ game_id: SG, player_id: AL, group_id: GROUP, created_at: now }];
 // More stages for the Trips list: an idea, a previous trip with a winner, one called off.
 const IDEA = 'eeeeeeee-2500-4000-8000-0000000000d1';
 const OLD = 'eeeeeeee-2500-4000-8000-0000000000d2';
@@ -156,6 +161,9 @@ const noSideScroll = async (page, label) => {
   for (const id of ['runup-cars', 'runup-votes', 'runup-grabs', 'runup-rules', 'runup-activities', 'runup-bring', 'runup-form', 'runup-tipping', 'runup-chat']) {
     check(await page.getByTestId(id).isVisible(), `section shows: ${id.replace('runup-', '')}`);
   }
+  // ov29: side games on offer — "$5 skins Fri (1 in)"; Al put it up so he's in, and his button says I'm out.
+  const offer = await page.getByTestId('side-game-offer').first().innerText().catch(() => '');
+  check(/\$5 skins .*\(1 in\)/.test(offer) && /I’m out/.test(offer), `side games on offer: $5 skins (1 in) [I’m out] (${offer.replace(/\n/g, ' ')})`);
   // Handicap: looks right.
   await page.getByTestId('handicap-ok').click();
   await page.waitForTimeout(600);

@@ -1,8 +1,8 @@
 // Custom games (migration 073, feature 'games'). Every standard option of a game (skins with or without carry-overs,
 // validated skins, Nassau bet values and auto-presses…) is part of the standard game — see STANDARD_OPTIONS in
-// games.js. A custom game is only for a house twist on top: "Copy and change" on a standard game saves it under the
-// group's own name with its house rules (free text, required — that's what makes it custom) and its chosen standard
-// options. It's picked for a round like a standard game: the round_games row gets the base kind, the options and a
+// games.js. A custom game is the group's own saved version of a game: "Copy and change" on a standard game saves it
+// under the group's own name with its chosen standard options, a stake and, if they like, house rules (free text,
+// optional since 098 — Josh, 23 Oct: "it should not be a compulsory field"). It's picked for a round like a standard game: the round_games row gets the base kind, the options and a
 // link back (custom_game_id). The maths is the base game's (games.js); the house rules are shown, not worked out.
 // Pure functions, no screen code.
 import { GAME_KINDS, GAME_INFO, PRESETS, STANDARD_OPTIONS, fullOptions, splitOptions, gameOptions } from './games.js';
@@ -35,8 +35,9 @@ export function customProblems(c = {}) {
   const name = String(c.name || '').trim();
   if (name.length < 2 || name.length > NAME_MAX) out.push(`Give it a name (2 to ${NAME_MAX} letters)`);
   if (!GAME_KINDS.includes(c.base_type)) out.push('Pick the game it’s based on');
+  // House rules are optional (098, Josh 23 Oct): with none, it's the group's saved version of a standard game — its
+  // own name, stake and options.
   const rules = String(c.rules_text || '').trim();
-  if (rules.length < 3) out.push('Add your house rule — that’s what makes it your own game (otherwise just use the standard one)');
   if (rules.length > RULES_MAX) out.push(`House rules: up to ${RULES_MAX} letters`);
   const s = c.settings;
   if (!s || typeof s !== 'object' || Array.isArray(s)) out.push('Settings must be a set of options');
@@ -56,7 +57,7 @@ export function customProblems(c = {}) {
 
 /** The custom_games row to save. */
 export function customRow(c) {
-  return { name: String(c.name).trim(), base_type: c.base_type, settings: cleanCustomSettings(c.base_type, c.settings), rules_text: String(c.rules_text).trim() };
+  return { name: String(c.name).trim(), base_type: c.base_type, settings: cleanCustomSettings(c.base_type, c.settings), rules_text: houseRules(c) };
 }
 
 /** The round_games row for picking a custom game for a round. */
@@ -65,10 +66,15 @@ export function roundGameFromCustom(custom, roundId) {
   return { round_id: roundId, kind: custom.base_type, stake: cleanCustomSettings(custom.base_type, custom.settings).stake, options, settings, custom_game_id: custom.id };
 }
 
-/** A round's game with its custom game's name and house rules attached (if it's one). */
+/** A custom game's house rules, trimmed — '' when there are none (show nothing then, never an empty line). */
+export function houseRules(c) {
+  return String(c?.rules_text ?? '').trim();
+}
+
+/** A round's game with its custom game's name and house rules attached (if it's one). house_rules is '' when none. */
 export function withCustom(game, customById = {}) {
   const c = game?.custom_game_id ? customById[game.custom_game_id] : null;
-  return c ? { ...game, name: c.name, house_rules: c.rules_text, base_name: GAME_INFO[game.kind]?.name } : game;
+  return c ? { ...game, name: c.name, house_rules: houseRules(c), base_name: GAME_INFO[game.kind]?.name } : game;
 }
 
 /** "Skins: no carry-overs, validated · $5 a skin" — a custom game's settings in words. */

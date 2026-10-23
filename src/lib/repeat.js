@@ -66,7 +66,8 @@ export function buildRepeat({ plan, rounds = [], games = [], items = [], rsvps =
     ctp_holes: clean(r.ctp_holes),
     ld_holes: clean(r.ld_holes),
     own_comps: Array.isArray(r.own_comps) ? r.own_comps.filter((c) => c && c.comp).map((c) => ({ comp: c.comp, holes: clean(c.holes) })) : [],
-    games: games.filter((g) => g.round_id === r.id && !g.retired).map((g) => ({ kind: g.kind, stake: Number(g.stake) || 0, options: g.options || {} })),
+    // 098: an opt-in side game was someone's offer for that trip, so it isn't copied.
+    games: games.filter((g) => g.round_id === r.id && !g.retired && g.who_in !== 'opt_in').map((g) => ({ kind: g.kind, stake: Number(g.stake) || 0, options: g.options || {} })),
   })).filter((r) => r.day >= 0 && r.day < 10);
   const invited = [...new Set(rsvps.filter((r) => r.status === 'in').map((r) => r.player_id))];
   const shape = {

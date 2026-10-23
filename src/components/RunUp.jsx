@@ -19,6 +19,7 @@ import { useLateJobs } from './LateJobs.jsx';
 import { OverviewVotes } from './OverviewVotes.jsx';
 import { voteWords } from '../lib/governance.js';
 import { RUNUP_SLOTS } from './runupSlots.jsx';
+import SideGamesOnOffer from './SideGamesOnOffer.jsx'; // ov29 (098)
 import {
   countdownHeader, runUpSections, myTodos, carsView, joinProblem, roomsView, activityMoney, activityWhen, cleanActivity,
   bringView, bringEmoji, bringAskText, bringAskLink, claimPostText, tippingState, tipResult, tipTally, formGuide, formLine,
@@ -115,6 +116,7 @@ export function RunUp({ pd, trip = null, onOrganise = null, slots = {} }) {
         {dayBefore && <div className="ru-hero-sub" data-testid="runup-daybefore">{dayBefore}</div>}
       </div>
       {ru.missing && <div className="small muted">Some of the run-up (cars, side activities, tipping) needs a database update — it’ll appear once that’s done.</div>}
+      <SideGamesOnOffer tripId={tripId} />
 
       {sections.includes('todos') && <Todos todos={todos} pd={pd} me={me} mine={mine} onOrganise={onOrganise} reload={ru.reload} guest={guest} />}
       {sections.includes('getting_there') && <GettingThere pd={pd} ru={ru} cars={cars} rooms={rooms} me={me} isOrg={isOrg} guest={guest} onOrganise={onOrganise} />}

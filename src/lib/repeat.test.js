@@ -13,6 +13,8 @@ const GAMES = [
   { id: 'g2', round_id: 'r1', kind: 'nassau', stake: 10, options: {}, retired: true },
   { id: 'g3', round_id: 'r3', kind: 'skins', stake: 2, options: {}, retired: false },
   { id: 'g4', round_id: 'r3', kind: 'birdie_pool', stake: 2, options: {}, retired: false },
+  // ov29 (098): someone's opt-in offer for that trip — not copied (day 0 below has only the skins).
+  { id: 'g5', round_id: 'r1', kind: 'birdie_pool', stake: 3, options: {}, retired: false, who_in: 'opt_in' },
 ];
 const ITEMS = [
   { id: 'i1', kind: 'job', title: 'Book the house', owner_id: 'pA', done: true, due: '2026-01-10', sort: 0 },

@@ -1,0 +1,108 @@
+/* The presentation (ov33): phone portrait (big type, one thing per screen, thumb zones) and laptop/TV landscape
+   (readable from across the room). Builds on desk.css's .present. Reduced motion: no animation, reveals still work. */
+.pz { padding: max(12px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom)); gap: 10px; overflow: hidden; }
+.pz .present-top { gap: 10px; }
+.pz-now { font-weight: 800; font-size: clamp(15px, 1.6vw, 26px); }
+.pz-progress { height: 6px; border-radius: 999px; background: rgba(255, 255, 255, .12); overflow: hidden; flex: none; }
+.pz-progress > span { display: block; height: 100%; background: var(--gold); transition: width .3s ease; }
+
+/* The stage: tap left third = back, the rest = forward. */
+.pz-stage { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2vh; text-align: center; cursor: pointer; position: relative; overflow-y: auto; -webkit-tap-highlight-color: transparent; user-select: none; }
+.pz-card { display: flex; flex-direction: column; align-items: center; gap: 2.2vh; width: 100%; max-width: 1400px; }
+.pz-icon { font-size: clamp(64px, 14vmin, 180px); line-height: 1; }
+.pz-art { display: flex; justify-content: center; }
+.pz-trophy-photo { width: min(60vw, 40vh); aspect-ratio: 1; object-fit: cover; border-radius: 20px; box-shadow: 0 10px 40px rgba(0, 0, 0, .4); }
+.pz-title { font-family: var(--display); font-weight: 800; font-size: clamp(40px, 11vw, 128px); line-height: 1.02; overflow-wrap: anywhere; }
+.pz-about { font-size: clamp(18px, 4.6vw, 40px); color: #B9C6D6; }
+.pz-kicker { font-size: clamp(16px, 4vw, 32px); letter-spacing: .14em; text-transform: uppercase; color: var(--gold); font-weight: 800; }
+.pz-beat { font-size: clamp(22px, 6.4vw, 56px); color: #B9C6D6; font-style: italic; }
+.pz-reveal { display: flex; flex-direction: column; align-items: center; gap: 1.6vh; }
+.pz-place { font-size: clamp(22px, 6vw, 52px); font-weight: 800; color: var(--gold); }
+.pz-who { display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap; }
+.pz-people { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.pz-people .av { border: 3px solid rgba(255, 255, 255, .85); }
+.pz-photo { width: min(70vw, 34vh); aspect-ratio: 1; object-fit: cover; border-radius: 18px; box-shadow: 0 10px 40px rgba(0, 0, 0, .4); }
+.pz-name { font-family: var(--display); font-weight: 800; font-size: clamp(40px, 12vw, 140px); line-height: 1.02; overflow-wrap: anywhere; }
+.pz-reveal-card.first .pz-name { color: var(--gold); }
+.pz-score { font-size: clamp(22px, 6vw, 56px); font-weight: 800; }
+.pz-worth { font-size: clamp(18px, 4.8vw, 40px); padding: .2em .8em; border-radius: 999px; background: rgba(255, 255, 255, .1); }
+.pz-handover { font-size: clamp(18px, 4.8vw, 42px); color: #fff; font-weight: 700; max-width: 26ch; }
+.pz-mentions { display: grid; gap: 14px; width: 100%; max-width: 1200px; }
+.pz-mention { display: flex; align-items: center; gap: 14px; text-align: left; background: rgba(255, 255, 255, .07); border-radius: 16px; padding: 12px 14px; }
+.pz-mention-photo { width: 64px; height: 64px; object-fit: cover; border-radius: 12px; flex: none; }
+.pz-mention-text { display: flex; flex-direction: column; min-width: 0; }
+.pz-mention-text strong { font-size: clamp(22px, 6vw, 40px); }
+.pz-mention-text span { font-size: clamp(16px, 4.2vw, 28px); color: #B9C6D6; }
+.pz-lines { display: grid; gap: 1.2vh; font-size: clamp(20px, 5.4vw, 44px); font-weight: 700; }
+.pz-photos { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; width: 100%; max-width: 1100px; }
+.pz-photos img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 12px; }
+.pz-share { min-height: 52px; padding: 0 22px; border-radius: 999px; border: 0; background: var(--gold); color: #111; font-weight: 800; font-size: 17px; cursor: pointer; }
+.pz-share:disabled { background: rgba(255, 255, 255, .16); color: #fff; cursor: default; }
+
+/* Thumb-friendly footer. */
+.pz-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex: none; }
+.pz-nav { min-height: 60px; min-width: 96px; padding: 0 20px; border-radius: 18px; border: 1px solid rgba(255, 255, 255, .3); background: rgba(255, 255, 255, .08); color: #fff; font-weight: 800; font-size: 18px; cursor: pointer; }
+.pz-nav.fwd { flex: 1; max-width: 360px; background: var(--gold); color: #111; border-color: var(--gold); }
+.pz-nav:disabled { opacity: .35; cursor: default; }
+.pz-count { white-space: nowrap; margin: 0; }
+.pz-skipbtn span { display: none; }
+.pz-desk { display: none; }
+
+/* Animation (off for reduced motion). */
+.pz-in { animation: pz-fade .45s ease-out both; }
+.pz-reveal { animation: pz-pop .6s cubic-bezier(.2, .9, .3, 1.2) both; }
+@keyframes pz-fade { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes pz-pop { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: none; } }
+.pz-stage.still .pz-in, .pz-stage.still .pz-reveal { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .pz-in, .pz-reveal { animation: none; }
+  .pz-progress > span { transition: none; }
+}
+
+/* The running order. */
+.pz-setup { display: flex; flex-direction: column; gap: 12px; min-height: 0; flex: 1; }
+.pz-help { margin: 0; color: #B9C6D6; font-size: 15px; }
+.pz-order { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; overflow-y: auto; flex: 1; min-height: 0; }
+.pz-row { display: flex; align-items: center; gap: 10px; background: rgba(255, 255, 255, .07); border-radius: 14px; padding: 8px 10px; border: 1px solid transparent; }
+.pz-row.off { opacity: .5; }
+.pz-row.dragging { border-color: var(--gold); }
+.pz-grip { color: #8FA2B8; cursor: grab; font-weight: 800; letter-spacing: -2px; }
+.pz-pick { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; cursor: pointer; min-height: 48px; }
+.pz-pick input { width: 22px; height: 22px; flex: none; accent-color: var(--gold); }
+.pz-row-text { display: flex; flex-direction: column; min-width: 0; }
+.pz-row-text strong { font-size: 16px; overflow-wrap: anywhere; }
+.pz-row-sub { font-size: 13px; color: #B9C6D6; }
+.pz-move { display: flex; gap: 4px; flex: none; }
+.pz-move .present-btn { min-width: 44px; justify-content: center; padding: 0; }
+.pz-move .present-btn:disabled { opacity: .3; }
+.pz-setup-foot { display: flex; gap: 10px; justify-content: space-between; align-items: center; flex-wrap: wrap; flex: none; }
+.pz-go { min-height: 56px; padding: 0 28px; border-radius: 999px; border: 0; background: var(--gold); color: #111; font-weight: 800; font-size: 18px; cursor: pointer; flex: 1; max-width: 360px; }
+.pz-go:disabled { opacity: .4; }
+
+/* Laptop on a TV: landscape, readable from across the room. */
+@media (min-width: 900px) and (orientation: landscape) {
+  .pz { padding: 3vh 4vw; }
+  .pz-skipbtn span, .pz-desk { display: inline; }
+  .pz-desk { display: inline-flex; }
+  .pz-title { font-size: clamp(56px, 7.5vw, 150px); }
+  .pz-about { font-size: clamp(22px, 2.4vw, 44px); }
+  .pz-kicker { font-size: clamp(20px, 1.9vw, 36px); }
+  .pz-beat { font-size: clamp(28px, 3.2vw, 64px); }
+  .pz-place { font-size: clamp(28px, 3vw, 60px); }
+  .pz-name { font-size: clamp(64px, 8vw, 170px); }
+  .pz-score { font-size: clamp(28px, 3.2vw, 64px); }
+  .pz-worth, .pz-handover { font-size: clamp(22px, 2.4vw, 46px); }
+  .pz-handover { max-width: 40ch; }
+  .pz-titlecard { flex-direction: row; justify-content: center; gap: 5vw; text-align: left; }
+  .pz-mentions { grid-template-columns: repeat(2, 1fr); }
+  .pz-mention-photo { width: 96px; height: 96px; }
+  .pz-mention-text strong { font-size: clamp(26px, 2.6vw, 48px); }
+  .pz-mention-text span { font-size: clamp(18px, 1.8vw, 32px); }
+  .pz-lines { font-size: clamp(24px, 2.6vw, 52px); }
+  .pz-photos { grid-template-columns: repeat(3, 1fr); }
+  .pz-photo { width: min(28vw, 36vh); }
+  .pz-foot { justify-content: space-between; }
+  .pz-nav { min-height: 52px; font-size: 18px; }
+  .pz-nav.fwd { flex: none; min-width: 180px; }
+  .pz-setup { max-width: 900px; width: 100%; margin: 0 auto; }
+}

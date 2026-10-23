@@ -1603,3 +1603,34 @@ Josh: "not taking 6 drives from each player is 2 strokes per drive under the req
   TripResults.jsx, App.jsx (route), notify/index.ts (one block).
 - **Tests:** Vitest 1531 pass (28 new). Deno notify 10 pass, index type-checks. SQL test 100 run in PGlite on every
   migration (with ov30's real 099 too). Browser: auto-awards, awards-fines, awards, results pass.
+## ov33 — The presentation: click-through 3, 2, 1 for any award, comp, trophy or cup (23 Oct 2026, branch `ov33-presentation`)
+Josh: "For any of the awards, need a click-through presentation screen. Honourable mentions, then 3, 2, 1. Both phone
+and desktop sized." Built on ov28's `#/present/awards/<trip>` (same route, same screen file). No database change.
+- **The list and the steps** (`src/lib/presentation.js`, pure): `presentationItems(trip, data)` turns the trip's results
+  into items — side comp holes, awards and fines, the fines tally, who tipped right, best photos, each round's podium,
+  other trophies, cups, and the main trophy. Podium items: title → honourable mentions (4th and beyond, only with a
+  story) → 3rd → 2nd → 1st. One-winner items (awards like "Latest out", fines, side comps, the match play Cup):
+  title → nominations that missed out (reason, claim or photo) → winner. Ties share a place ("Joint 2nd" shows both;
+  no 3rd after it).
+- **Running order:** side comps → fines → awards → extras → the rounds → other trophies → cups → main trophy last.
+  The organiser unticks, drags (laptop) or ↑↓ (phone); kept on that device per trip (localStorage). `?only=<item>`
+  presents one item (each decided award has "🎤 Present this one").
+- **Controls:** tap (left third = back), space / → / Enter forward, ← back, W skip to winner, F full screen (laptop,
+  where the browser allows), Esc. Progress bar, "Next: Longest drive · 7", "Skip to winner", a short build-up beat
+  ("In second place…") before each reveal; tapping during the beat reveals straight away.
+- **Two sizes** (`src/screens/presentation.css`): phone portrait — big type, one thing per screen, 60 px thumb buttons;
+  laptop/TV landscape (≥ 900 px wide) — names up to 170 px, title card side by side with the trophy.
+- **Reduced motion:** no animation and no beat delay; every reveal still works.
+- **Share to the Feed** after each item: one tap, through the outbox (`sendOrQueue`), with a post id made from the trip
+  and the item (`postIdFor`), so it's one post per item even from two phones; the screen checks the Feed for it.
+- **Kept working:** the live leaderboard "Present" (`screens/Present.jsx`) — it now also links to the presentation once
+  the round is locked. The results page button is "🎤 The presentation" (shown even with awards and fines off).
+- **useTripResults** (additive): podiums carry `rows` to 7th, sides carry their `round`, and `sideEntries`.
+- **⚠️ ov32 extension point:** `cupStandingsItem({ cup, standings })` in `lib/presentation.js`, fed by
+  `data.cups = [{ cup, standings }]`; `useCupsForPresentation()` in `screens/AwardsShow.jsx` returns `[]` until ov32's
+  `cupStandings(cup, data)` lands — then map the trip's cups through it. Breakdowns ("Cap tips 🧢 12 · Vibe points 8")
+  become the mentions' story. A unit test already covers the shape.
+- **Tests:** Vitest 1523 pass (new `presentation.test.js`, 20: running order, mentions, ties, one-winner awards, cups,
+  share). Browser: new `presentation-test.mjs` (375 phone taps with the beat, 1440 laptop keyboard + reduced motion,
+  share twice → one post, live Present still works); `results-test` updated for the new screen; `desktop`,
+  `awards-fines` pass. Screenshots: phone and desktop in the scratchpad `presentation-shots/`.

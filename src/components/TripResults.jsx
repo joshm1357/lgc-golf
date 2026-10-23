@@ -95,10 +95,10 @@ export function useTripResults(trip) {
     const podiums = rounds.map((r) => {
       const board = roundBoard({ round: r, course: data.coursesById[r.course_id], teams: data.teamsByRound[r.id] || [], roundPlayers: data.roundPlayers[r.id] || [],
         playersById: data.playersById, scoresIdx: scores.index, quickResults: data.quick_results });
-      return { round: r, podium: roundPodium(board) };
+      return { round: r, podium: roundPodium(board), rows: roundPodium(board, { max: 3 + 4 }) };
     }).filter((p) => p.podium.length);
     // Side comps.
-    const sides = sideResults(rounds, cd).filter((s) => s.winner).map((s) => ({ label: s.label, name: nameOf(s.winner), id: s.winner }));
+    const sides = sideResults(rounds, cd).filter((s) => s.winner).map((s) => ({ label: s.label, name: nameOf(s.winner), id: s.winner, round: s.round }));
     // Fines.
     const tally = finesTally(fines);
     // Who tipped right: the main trophy (run-up, 094), the Cup, each match and each round (097).
@@ -123,7 +123,8 @@ export function useTripResults(trip) {
       ...podiums.map((p) => `⛳ ${p.round.name}: ${p.podium.filter((x) => x.place === 1).map((x) => `${x.name} ${x.score}`).join(', ')}`),
       tally.length ? `🏷 Fines: ${tally.slice(0, 3).map((t) => `${nameOf(t.player_id)} ${t.count}`).join(' · ')}` : null,
     ]);
-    return { trip, year, trophies, hero, cup, podiums, sides, tally, tipped, photos, text, awards: fines, nameOf };
+    // ov33: the presentation also wants the side comp entries (the shots behind the winner) — see lib/presentation.js.
+    return { trip, year, trophies, hero, cup, podiums, sides, tally, tipped, photos, text, awards: fines, nameOf, sideEntries: cd.sideEntries || [] };
   }, [trip, data, comps, cd, rounds, scores.index, fines, tips, extra]);
 }
 
@@ -266,7 +267,7 @@ export default function TripResults({ trip, moneyLine = null }) {
 
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
         <button type="button" className="btn ghost sm" onClick={share} data-testid="share-results">Share the results</button>
-        {awardsOn && <Link to={`/present/awards/${trip.id}`} className="btn ghost sm" data-testid="present-awards">🎤 Present the awards</Link>}
+        <Link to={`/present/awards/${trip.id}`} className="btn ghost sm" data-testid="present-awards">🎤 The presentation</Link>
       </div>
       {/* Only after all of that: the next trip. */}
       {plannerOn && <Link to="/plan" className="btn gold block" data-testid="plan-next">Plan the next trip</Link>}

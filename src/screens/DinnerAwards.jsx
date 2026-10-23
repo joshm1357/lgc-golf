@@ -86,7 +86,7 @@ export default function DinnerAwards() {
         {d.failed && <div className="err">Couldn’t load the awards — check your signal.</div>}
         {list.length === 0 && d.awards.length === 0 && <div className="empty">No awards or fines yet. Add the first — the group nominates, then votes when you get together (dinner, lunch or at the course).</div>}
         {/* ov28 (I14): the presentation — winners one by one on the TV or a phone, at dinner, lunch or the course. */}
-        <Link to={`/present/awards/${trip.id}`} className="btn gold block" data-testid="present-awards">🎤 Present the awards</Link>
+        <Link to={`/present/awards/${trip.id}`} className="btn gold block" data-testid="present-awards">🎤 The presentation</Link>
         <AutoAwardRuns trip={trip} />
         <FromScoresProposer trip={trip} />
         {list.map((a) => (
@@ -170,6 +170,10 @@ function AwardCard({ award, d, nameOf, readOnly, onNominate, reload, trip, joke 
           {canRemove && <button type="button" className="btn ghost sm" disabled={busy} aria-label="Remove" onClick={() => window.confirm(`Remove “${award.title}”?`) && remove()}>✕</button>}
         </div>
         {closed && <div style={{ marginTop: 6, fontWeight: 800 }} data-testid="award-result">🏆 {award.winner_id ? `${nameOf(award.winner_id)}${claimWords(d.nominations.find((n) => n.award_id === award.id && n.player_id === award.winner_id), terms) ? `, ${claimWords(d.nominations.find((n) => n.award_id === award.id && n.player_id === award.winner_id), terms)}` : ''}${worth ? ` · ${worth}${terms.reward_type === 'strokes' ? ' next round' : ''}` : ''}` : resultLine(award, result, nameOf)}</div>}
+        {/* ov33: present just this one — nominations, then the winner. */}
+        {closed && (award.winner_id || result.winners.length > 0) && (
+          <Link to={`/present/awards/${trip.id}?only=a-${award.id}`} className="small" style={{ fontWeight: 700, display: 'inline-block', marginTop: 4 }} data-testid="present-one">🎤 Present this one</Link>
+        )}
         {closed && org && !readOnly && !award.winner_id && (tie || result.tie) && (
           <div className="stack" style={{ gap: 6, marginTop: 6 }} data-testid="award-tie">
             <span className="small">Level — you pick who {award.kind === 'fine' ? 'cops it' : 'gets it'}:</span>

@@ -152,9 +152,11 @@ export default function TripBuilder() {
 
   // Courses around the region (organisers; players see the saved options).
   useEffect(() => {
-    if (!org || !st?.region || !regionTowns.length) return;
-    const box = TB.boxAround([...regionTowns, ...pins, ...(origin ? [origin] : [])], 30);
-    const mid = TB.boxAround(regionTowns, 0);
+    // ov36: an area saved from the map ("Custom: around …") has no towns — its own pins stand in for them.
+    const anchors = regionTowns.length ? regionTowns : pins.filter((p) => p.area === st?.region);
+    if (!org || !st?.region || !anchors.length) return;
+    const box = TB.boxAround([...anchors, ...pins, ...(origin ? [origin] : [])], 30);
+    const mid = TB.boxAround(anchors, 0);
     supabase.rpc('trip_finder_courses', { p_south: box.south, p_west: box.west, p_north: box.north, p_east: box.east, p_lat: mid.lat, p_lng: mid.lng, p_limit: 400 })
       .then(({ data: rows, error }) => { if (error) { toast(error.message || 'Couldn’t load courses'); setLib([]); } else setLib(Array.isArray(rows) ? rows : []); }, () => setLib([]));
   }, [org, st?.region, regionTowns.length, pins.length, origin?.lat]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -477,7 +479,7 @@ export default function TripBuilder() {
       <AreaBar st={st} save={save} org={org} areas={areas} tab={tabNow} onTab={setAreaTab} guides={guides} />
       {areaOptions.length > 0 && (
         <AreaStart plan={plan} st={st} save={save} org={org} areas={areas} history={history} accom={accom}
-          people={head.people} origin={origin} tees={tees} tab={tabNow} onTab={setAreaTab} onChoose={(r) => chooseArea(r)}
+          people={head.people} origin={origin} starts={starts} tees={tees} tab={tabNow} onTab={setAreaTab} onChoose={(r) => chooseArea(r)}
           onCallVote={org && votesOn && !v1 ? () => vote1('full') : null} />
       )}
       {v1 && !st.region && <AreaVoteResults st={st} points={points} detail={detail} courseMap={courseMap} org={org} onChoose={chooseArea} onSettle={settleWeekends} voters={voters} lengthNote={lengthNote?.line || null} checkNames={(lengthNote?.check || []).map(nameOf)} />}

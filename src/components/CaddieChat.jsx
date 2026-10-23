@@ -21,6 +21,8 @@ import {
 } from '../lib/caddie.js';
 import { Rate } from '../screens/AiHelper.jsx';
 import Thinking from './Thinking.jsx';
+import { calloutIntent } from '../lib/callout.js'; // ov34: "ask the guys for a hit fri arvo"
+import { openCallout } from '../lib/calloutopen.js';
 
 const FLAG_KEY = 'tgt-caddie-flag'; // 'not_set_up' | 'capped', remembered for this visit
 const readFlag = () => { try { return sessionStorage.getItem(FLAG_KEY); } catch { return null; } };
@@ -104,6 +106,8 @@ export default function CaddieChat({ onGo, ask: askNow }) {
     setText('');
     // "plan a trip" (the hello says to): over to ✨ Plan a trip.
     if (isPlanATrip(q)) { window.dispatchEvent(new CustomEvent('caddie:open', { detail: { plan: true } })); return; }
+    // ov34: "ask the guys for a hit fri arvo" → ⛳ Put a round out, filled in from the words (no AI needed).
+    if (calloutIntent(q) && isOn('planner') && !status?.quick && status?.role !== 'guest') { openCallout({ text: q }); return; }
     if (!mode.ai) {
       setThread((t) => [{ q, local: true, intro: fallbackIntro(mode), matches: find(q) }, ...t].slice(0, 10));
       return;

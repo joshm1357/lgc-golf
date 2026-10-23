@@ -15,6 +15,7 @@ import { Shortcuts } from './components/Shortcuts.jsx';
 import { NotifyPrompt } from './components/NotifyPrompt.jsx';
 import { SaveSpotPrompt } from './components/SaveSpot.jsx';
 import { SavedGate } from './components/SavedGate.jsx';
+import { CalloutHost } from './components/CalloutHost.jsx'; // ov34: ⛳ Put a round out, from anywhere
 import { Caddie } from './components/Caddie.jsx';
 import { NEW_GROUPS } from './lib/beta.js';
 import { supabase } from './lib/supabase.js';
@@ -361,6 +362,7 @@ function Inside() {
       <NotifyPrompt />
       <SaveSpotPrompt />
       <SavedGate />
+      <CalloutHost />
       <Caddie />
       <Toaster />
       <ConfirmHost />

@@ -24,6 +24,8 @@ import { roundBits, drawOutFor, teeTomorrowFor, swingGap, matchSwing, pointsSwin
 import { proposedBits, proposeProblem, gameProposedMessage } from './sidegames.ts';
 // ov31: automatic awards — the proposed winner in the morning, confirmed, a dispute upheld.
 import { AUTO_AWARD_KINDS, AUTO_AWARD_IMPORTANT, autoAwardSends } from './autoawards.ts';
+// ov34: round call-outs (103) — the database writes the buzzes; this sends them.
+import { CALLOUT_KINDS, CALLOUT_IMPORTANT, calloutSends, absUrl } from './callout.ts';
 
 // The app's web address for links in notifications. Set APP_URL in the function's secrets when the app moves
 // (e.g. https://app.thegolftrip.club/); until then it's the GitHub Pages address.
@@ -186,7 +188,7 @@ async function digest() {
     const shown = items.slice(0, 3).map((i) => i.title).join(' · ');
     const more = items.length > 3 ? ` · +${items.length - 3} more` : '';
     const msg = items.length === 1
-      ? { title: items[0].title, body: gname, url: items[0].url || APP }
+      ? { title: items[0].title, body: gname, url: absUrl(items[0].url, APP) } // ov34: '#/plan/…' from the database
       // Only winners in it (054 awards): open the leaderboard, not the planner.
       : { title: `📬 ${gname}: ${items.length} things since your last update`, body: shown + more, url: items.every((i) => i.kind === 'award' || i.kind === 'award_minor' || i.kind === 'commentary') ? `${APP}#/` : `${APP}#/plan`, tag: `digest-${g}` };
     if (items.length) sent += await pushTo([user], msg);
@@ -233,6 +235,31 @@ async function autoAwardsNow() {
   const { send, done } = autoAwardSends(waiting.filter((w) => on.get(w.group_id)), prefs || []);
   let sent = 0;
   for (const s of send) sent += await pushTo([s.user_id], { ...s.msg, url: `${APP}#/feed` });
+  const off = waiting.filter((w) => !on.get(w.group_id)).map((w) => w.id);
+  if (done.length || off.length) await db.from('notify_queue').update({ sent_at: new Date().toISOString() }).in('id', [...done, ...off]);
+  return sent;
+}
+
+// ------------------------------------------------------------------ ov34: round call-outs (migration 103)
+// The database queues every call-out buzz (callout_* kinds) with its words; its 10-minute job calls this with the cron
+// secret ({"type":"callout"}), and the app pokes it after putting one out, locking in or pulling out
+// ({"type":"callout_send"} — only that person's group, and only what the database already queued, so nobody can make
+// up a message). "Straight away" people get them now; digest people at their hour (the hourly send); "only important"
+// people get where they stand. They belong to the Trips planner.
+for (const k of CALLOUT_KINDS) KIND_FEATURE[k] = 'planner';
+for (const k of CALLOUT_IMPORTANT) IMPORTANT.add(k);
+async function calloutNow(onlyGroup?: string) {
+  let q = db.from('notify_queue').select('id,group_id,user_id,kind,title,body,url,created_at').in('kind', CALLOUT_KINDS).is('sent_at', null).order('created_at').limit(2000);
+  if (onlyGroup) q = q.eq('group_id', onlyGroup);
+  const { data: waiting } = await q;
+  if (!waiting?.length) return 0;
+  const groups = [...new Set(waiting.map((w) => w.group_id))];
+  const { data: prefs } = await db.from('notify_prefs').select('group_id,user_id,mode').in('group_id', groups);
+  const on = new Map<string, boolean>();
+  for (const g of groups) on.set(g, (await featureOn(g, 'notifications')) && (await featureOn(g, 'planner')));
+  const { send, done } = calloutSends(waiting.filter((w) => on.get(w.group_id)), prefs || [], APP);
+  let sent = 0;
+  for (const s of send) sent += await pushTo([s.user_id], s.msg);
   const off = waiting.filter((w) => !on.get(w.group_id)).map((w) => w.id);
   if (done.length || off.length) await db.from('notify_queue').update({ sent_at: new Date().toISOString() }).in('id', [...done, ...off]);
   return sent;
@@ -440,7 +467,8 @@ async function dailyFor(g: string) {
   const month = sydneyDate(30);
   for (const [day, label] of [[month, 'is a month away'], [week, 'is a week away'], [tomorrow, 'is tomorrow']] as const) {
     const { data: soon } = await db.from('plans').select('*').eq('group_id', g).eq('start_date', day).neq('status', 'cancelled').eq('proposed', false);
-    for (const pl of plannerOn ? soon || [] : []) {
+    // ov34: a round call-out has its own evening-before buzz (103's job), not the trip countdown.
+    for (const pl of plannerOn ? (soon || []).filter((x) => !x.callout) : []) {
       if (!(await once(`countdown:${pl.id}:${day}:${label}`))) continue;
       const { data: rs } = await db.from('plan_rsvps').select('player_id').eq('plan_id', pl.id).eq('status', 'in');
       const ins = (rs || []).map((r) => r.player_id);
@@ -513,9 +541,9 @@ Deno.serve(async (req) => {
     await loadKeys();
     const body = await req.json().catch(() => ({}));
 
-    if (body.type === 'daily' || body.type === 'digest' || body.type === 'commentary' || body.type === 'evening' || body.type === 'auto_awards') {
+    if (body.type === 'daily' || body.type === 'digest' || body.type === 'commentary' || body.type === 'evening' || body.type === 'auto_awards' || body.type === 'callout') {
       if (!cronSecret || req.headers.get('x-cron-secret') !== cronSecret) return json({ error: 'Not allowed' }, 401);
-      return json({ sent: body.type === 'daily' ? await daily() : body.type === 'commentary' ? await commentaryNow() : body.type === 'evening' ? await evening() : body.type === 'auto_awards' ? await autoAwardsNow() : await digest() });
+      return json({ sent: body.type === 'daily' ? await daily() : body.type === 'commentary' ? await commentaryNow() : body.type === 'evening' ? await evening() : body.type === 'auto_awards' ? await autoAwardsNow() : body.type === 'callout' ? await calloutNow() : await digest() });
     }
 
     // Everyone else must be a signed-in member of the group.
@@ -804,6 +832,12 @@ Deno.serve(async (req) => {
         break;
       }
       // ---------------------------------------------------------------- end ov29
+      // ---------------------------------------------------------------- ov34 round call-outs (103) — own block for merging
+      case 'callout_send':
+        // Send what the database has queued for this group's call-outs, now (it decided who gets what).
+        sent = await calloutNow(g);
+        break;
+      // ---------------------------------------------------------------- end ov34
       default:
         return json({ error: 'Unknown notification' }, 400);
     }

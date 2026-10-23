@@ -2029,3 +2029,42 @@ rows carry `mine_avg` / `others_avg` / `played`; course type and rankings only e
   show more, search wider ×2, on the way; laptop: pan to Port Stephens, search this part, filter, save as "Custom:
   around Nelson Bay"). hello-maps 83, plan-ux 84, trip-builder 71, tripfinder 30, weekends-comps 75 all pass.
 **Next:** Josh to try it on the preview; "on the way up" vs "back" as separate options (by day) if he wants them.
+## ov34 — "Who's up for a hit?": put a round out to the guys (23 Oct 2026, branch `ov34-round-callout`, migration 103, not applied anywhere)
+Built on the trip-planning engine, not beside it: a call-out is a plan (`kind 'round'`, new `callout = true`); a set
+time is In / Maybe / Can't (`plan_rsvps`), several times are a `dates` vote (`plan_polls` / `plan_options` /
+`plan_votes`); locking it in uses 025's guard (makes the trip) and 095 (closes the votes) and then makes ONE round on
+that trip (`rounds` + `round_players`), so scoring, history, handicaps and side games work as normal.
+- **⛳ Put a round out** sheet (`components/CalloutSheet.jsx`, opened from anywhere by `lib/calloutopen.js`, host in
+  App.jsx): course (the group's, the course library, or Course TBC) → when (a set tee time, or chips Thu/Fri/Sat/Sun
+  [+Mon–Wed] × Morning/Midday/Arvo/Twilight/exact time × Next 7 days / Week after / Next 2 weeks / Next 4 weeks, or a
+  type-it box understood on the phone) → remove any option (max 8) → spots (4 / 8 / 12 / other with a reserve list, or
+  no cap) → who's asked (whole group ticked, untick anyone) → replies close (default 24 h before the earliest) → note →
+  "➕ Add to this round" (collapsed). Anyone in the group with a saved account; phone-only gets "Save your spot".
+- **The round screen** (`screens/RoundCallout.jsx`, PlanDetail shows it for a call-out; `?full=1` still opens the
+  trip planner): where it's at, your reply (✓ ? ✗ per time, or I'm in / Maybe / Can't; after lock "I can't make it
+  now"), who's in with Spot 1…N and Reserve #1…, maybe / can't / not replied (headcount.js), details, extras, weather
+  (existing Open-Meteo `TripWeather`, after lock), and Lock it in / Change / Call it off for whoever put it out (or
+  an organiser).
+- **Cards with reply buttons** (`components/CalloutCard.jsx`): "⛳ Rounds going out" on Trips and Home's coming-up
+  area, and on the Feed post (link `/plan/<id>?c=1`).
+- **Lock it in**: the app suggests the most ✓ (then ?), the creator confirms, sets the tee time, picks the course if
+  TBC (the course vote's leader first), "Who's booking?" (a job + buzz), Stableford or Ambrose. Preview of who's in
+  and the reserve order. Everyone asked is told where they stand.
+- **Pull-outs**: the round's players follow the In list by themselves (database), the first reserve moves up and is
+  told; whoever put it out is told.
+- **Buzzes**: written by the database into `notify_queue` (kinds `callout_*`), sent by the notify function
+  (`callout.ts`; app poke `callout_send`; 10-minute job `lgc-round-callouts` → `{"type":"callout"}`). Replies closed →
+  "lock it in" nudge with the suggestion; the evening before (from 5pm Sydney) → "⛳ Tomorrow: 1:20pm at Moore Park —
+  With Bo, Sam and Al". Call-outs are left out of the trip countdown.
+- **Caddie**: "ask the guys for a hit fri arvo" (any "ask/anyone/keen … hit/round/game") opens the sheet filled in by
+  the same local parser (and the course if it's named).
+- **Old "⛳ One-day round"** in Suggest, and "Same time next year?" after a quick round, open the new sheet.
+- **Extension point (not built)**: repeating call-outs ("every Saturday 7:30") — `REPEAT_LATER` in lib/callout.js and
+  the note at the end of 103. "every sat" puts out the next four for now.
+
+Tests: `src/lib/callout.test.js` (47: builder, parser, closes, spots/reserves, lock preview, extras); whole vitest
+1759 pass. `supabase/tests/103_round_callout.sql` (82 checks, run on local Postgres 16 with 001–103; expected file).
+Deno `notify/callout.test.ts` (5) + autoawards/sidegames still pass; `deno check` on notify/index.ts clean.
+e2e `tests/e2e/round-callout-test.mjs` (phone + laptop, 25 checks) passes; trips, calloff, plan-ux, caddie, nav,
+side-games, trip-plan, trip-builder, desktop, phone, wishes, runup, your-round, trip-overview, trip-page, tripfinder,
+games, awards-fines pass; saved-gate passes on the email-code build.

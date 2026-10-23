@@ -9,18 +9,15 @@
 // used on the trip page, the Kitty tab and the results page's Settle up) and screens/PlanTabs.jsx (Details).
 // The maths underneath is lib/plan.js kitty() — unchanged; this file only turns it into one line per person.
 import { kitty, money } from './plan.js';
+import { replies } from './headcount.js';
 
 const cents = (x) => Math.round(Number(x || 0) * 100) / 100;
 const firstName = (p) => String(p?.nickname || p?.name || '').trim().split(/\s+/)[0] || '';
 const nameList = (names) => (names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`);
 
-/**
- * Who's in for a trip: the player ids who said In.
- * LOCAL HELPER (ov27), MARKED FOR SWITCHING: ov26 (branch ov26-votes-organising, not yet in v10-int) makes
- * src/lib/headcount.js the ONE headcount rule. Once it's merged, switch to `replies({ players, rsvps }).ids.in`.
- */
+/** Who's in for a trip: the player ids who said In — by the ONE headcount rule (lib/headcount.js). */
 export function peopleIn(rsvps = []) {
-  return [...new Set((rsvps || []).filter((r) => r.status === 'in').map((r) => r.player_id))];
+  return replies({ rsvps }).ids.in.filter((id) => !String(id).startsWith('reply:'));
 }
 
 /** Who collects the money paid in (what used to be "the kitty"): the trip's organiser. → { id, name } */

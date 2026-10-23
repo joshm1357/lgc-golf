@@ -9,6 +9,7 @@
 // "Make sure the links have the right number of people in the search": the trip's head count is the number the
 // organiser (or the plan chat) set, else the people who've said they're in, else everyone in the group.
 import { addDays, dateOf, isoOf, publicHolidays, weekendLabel } from './tripbuilder.js';
+import { playing } from './headcount.js';
 
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONTH = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -212,13 +213,11 @@ export function customWeekend(start, end, { today = new Date() } = {}) {
  * Never a made-up default. → { people, source: 'set' | 'ai' | 'in' | 'group' | 'none', words }
  */
 export function tripHeadcount({ set = null, setBy = null, rsvps = [], players = [] } = {}) {
-  const n = Math.round(Number(set));
-  if (n > 0) return { people: n, source: setBy === 'ai' ? 'ai' : 'set', words: setBy === 'ai' ? 'from the plan chat' : 'expected' };
-  const ins = (rsvps || []).filter((r) => r.status === 'in').length;
-  if (ins) return { people: ins, source: 'in', words: 'said they’re in' };
-  const all = (players || []).filter((p) => p && p.approved !== false && p.role !== 'guest').length;
-  if (all) return { people: all, source: 'group', words: 'everyone in the group' };
-  return { people: 0, source: 'none', words: 'not known yet' };
+  // O6: the one rule lives in lib/headcount.js (target → in → in or maybe → the group); this keeps the old shape.
+  const p = playing({ target: set, targetBy: setBy, rsvps, players });
+  const source = { target: 'set', ai: 'ai' }[p.source] || p.source;
+  const words = { set: 'target', ai: 'from the plan chat', in: 'said they’re in', keen: 'in or maybe', group: 'everyone in the group', none: 'not known yet' }[source];
+  return { people: p.people, source, words, label: p.label };
 }
 
 /** "for 9 people · 5+ bedrooms" */
@@ -281,6 +280,64 @@ export function openUpWeekend(st = {}, points = {}) {
   if (!next) return { weekends: st.weekends || [], added: null };
   const w = resizeWeekend(noPoints(next), st.nights ?? 2, st.extraNight ?? null);
   return { weekends: [...(st.weekends || []), w], added: w };
+}
+
+// ------------------------------------------------------------------ V2: weekends voted next to "How long?"
+// Josh's walkthrough (23 Oct): with "How long?" on the same ballot, the weekends showed 2-night dates, then 3 nights
+// won and every weekend quietly became Fri–Mon. Now each weekend says what it would be at each length, and after the
+// vote the organiser is told who only said yes to the shorter trip.
+
+const dayWord = (iso) => { const d = dateOf(iso); return d ? `${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]} ${d.getDate()}` : ''; };
+
+/**
+ * The weekends as ballot options when the length is voted on too: each at the SHORTEST length on the ballot, with
+ * a note for the longer ones — "Plus Mon 25 if we go 3 nights". Without a length vote: as they are.
+ * weekends: the shortlist; lengthVote: { on, options }; side: where a third night goes ('thu' | 'mon').
+ * → [{ key: 'weekend:<shortlist start>', label, start_date, end_date, notes }]
+ */
+export function weekendBallotOptions(weekends = [], lengthVote = null, side = null) {
+  const opts = [...new Set((lengthVote?.options || []).map(Number).filter((n) => LENGTHS.includes(n)))].sort((a, b) => a - b);
+  const voted = !!lengthVote?.on && opts.length >= 2;
+  return (weekends || []).map((w) => {
+    const key = `weekend:${w.start}`;
+    if (!voted || w.custom) return { key, label: weekendLabel(w), start_date: w.start, end_date: w.end, notes: null };
+    const base = resizeWeekend(w, opts[0], side);
+    const longer = opts.slice(1).map((n) => {
+      const s = resizeWeekend(w, n, side);
+      const extra = [];
+      for (let d = s.start; d && d <= s.end; d = addDays(d, 1)) if (d < base.start || d > base.end) extra.push(dayWord(d));
+      return extra.length ? `${extra.join(' and ')} if we go ${lengthLabel(n).toLowerCase()}` : null;
+    }).filter(Boolean);
+    return {
+      key, label: weekendLabel({ start: base.start, end: base.end }), start_date: base.start, end_date: base.end,
+      notes: longer.length ? `Plus ${longer.join('; plus ')}` : null,
+    };
+  });
+}
+
+/**
+ * After the vote (V2): "3 nights won, so it's Fri 22 – Mon 25 Jan. 2 people only said yes to a shorter trip — check
+ * with them." Who: people who said yes or maybe to the primary weekend but didn't say yes or maybe to the winning
+ * length (and did answer "How long?").
+ * polls: the vote card's polls; options + votes: the planner's; optionKeys: { option_id: key } (the builder's);
+ * nights: the winning length; primary: the primary weekend { start, end } (at the winning length);
+ * primaryKey: its shortlist key ('weekend:<start>').
+ * → { won: '3 nights', line, check: [player ids] } or null when the length wasn't voted on.
+ */
+export function lengthCheck({ polls = [], options = [], votes = [], optionKeys = {}, nights = null, primary = null, primaryKey = null } = {}) {
+  const keyOf = (o) => optionKeys[o.id] || null;
+  const lengthPoll = (polls || []).find((p) => (options || []).some((o) => o.poll_id === p.id && /^nights:/.test(keyOf(o) || '')));
+  if (!lengthPoll || nights == null) return null;
+  const won = (options || []).find((o) => o.poll_id === lengthPoll.id && keyOf(o) === `nights:${nights}`);
+  const wk = primaryKey ? (options || []).find((o) => keyOf(o) === primaryKey) : null;
+  const ok = (v) => v.response === 'yes' || v.response === 'maybe';
+  const answeredLength = new Set((votes || []).filter((v) => v.poll_id === lengthPoll.id).map((v) => v.player_id));
+  const okLength = new Set((votes || []).filter((v) => won && v.option_id === won.id && ok(v)).map((v) => v.player_id));
+  const okWeekend = wk ? [...new Set((votes || []).filter((v) => v.option_id === wk.id && ok(v)).map((v) => v.player_id))] : [];
+  const check = okWeekend.filter((id) => answeredLength.has(id) && !okLength.has(id));
+  const when = primary?.start ? weekendLabel({ start: primary.start, end: primary.end }) : null;
+  const line = `${lengthLabel(nights)} won${when ? `, so it’s ${when}` : ''}.${check.length ? ` ${check.length} ${check.length === 1 ? 'person' : 'people'} only said yes to a shorter trip — check with them.` : ''}`;
+  return { won: lengthLabel(nights), line, check };
 }
 
 /** "Mar" — the short month of a weekend (for the month heading on a phone). */

@@ -11,6 +11,7 @@ import { useRun, must, feedPost } from './Planner.jsx';
 import { formatName } from '../lib/board.js';
 import { setupRoundsFromShape } from '../lib/repeat.js';
 import { applyRepeatExtras } from './TripExtras.jsx';
+import { closePlanningVotes } from '../lib/lockin.js';
 
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const DOW = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -78,6 +79,11 @@ function TripSetupSheet({ plan, onClose, onDone }) {
     } else {
       trip = await must(supabase.from('trips').insert({ name: name.trim(), start_date: plan.start_date, end_date: plan.end_date || plan.start_date, status: current ? 'active' : 'locked' }).select().single());
       await must(supabase.from('plans').update({ trip_id: trip.id, status: plan.status === 'planning' ? 'confirmed' : plan.status }).eq('id', plan.id));
+    }
+    // V1: setting it up locks it in, so the open votes on where and when close (the database does it too, from 095).
+    if (plan.status === 'planning') {
+      const { data: open } = await supabase.from('plan_polls').select('*').eq('plan_id', plan.id).eq('status', 'open');
+      await closePlanningVotes(supabase, open || []).catch(() => 0);
     }
     const problems = [];
     if (trophiesOn && copyTrophies && lastTrophies.length) {

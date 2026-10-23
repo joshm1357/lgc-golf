@@ -14,19 +14,20 @@ const PLAN = '11111111-2222-4333-8444-555555555555';
 const mem = () => { const m = {}; return { getItem: (k) => m[k] ?? null, setItem: (k, v) => { m[k] = String(v); }, removeItem: (k) => { delete m[k]; } }; };
 
 describe('answer words by what is being voted on', () => {
-  it('dates keep Can / Maybe / Can’t', () => {
+  it('dates are Yes / Maybe / No (V3)', () => {
     expect(answerKind({ kind: 'dates', question: 'Which weekend?' })).toBe('dates');
     expect(answerKind({ kind: 'other', question: 'Which weekend?' })).toBe('dates');
     expect(answersFor({ kind: 'dates' })).toEqual(ANSWERS);
   });
-  it('places, stays, courses and trips are Prefer / Option / Don’t like', () => {
+  it('places, stays, courses and trips are Keen / Happy with it / Not keen (V3)', () => {
     for (const p of [{ kind: 'location', question: 'Which area?' }, { kind: 'other', question: 'Where should we stay?', purpose: 'stay' },
       { kind: 'other', question: 'Day 2 — stay day (Sat 14 Mar): which course?' }, { kind: 'other', question: 'Which trip?' }]) {
       expect(answersFor(p)).toEqual(PLACE_ANSWERS);
     }
-    expect(PLACE_ANSWERS).toEqual({ yes: '⭐ Prefer', maybe: '👍 Option', no: '👎 Don’t like' });
+    expect(PLACE_ANSWERS).toEqual({ yes: '⭐ Keen', maybe: '👍 Happy with it', no: '👎 Not keen' });
+    expect(ANSWERS).toEqual({ yes: '✓ Yes', maybe: '? Maybe', no: '✗ No' });
   });
-  it('extras are Want it / Happy either way / Skip it', () => {
+  it('extras use the same words as places (V3)', () => {
     expect(answerKind({ kind: 'other', question: 'Would you do these?' })).toBe('extra');
     expect(answersFor({ question: 'Would you do these?' })).toEqual(EXTRA_ANSWERS);
   });
@@ -35,12 +36,12 @@ describe('answer words by what is being voted on', () => {
       { id: 'p1', question: 'Which weekend?', kind: 'dates', options: [{ id: 'o1', label: '13–15 Mar' }] },
       { id: 'p2', question: 'Which area?', kind: 'location', options: [{ id: 'o2', label: 'Hunter' }] },
     ] });
-    expect(m.text).toContain('✓ Can:');
-    expect(m.text).toContain('⭐ Prefer:');
-    expect(m.text).toContain('👎 Don’t like:');
+    expect(m.text).toContain('✓ Yes:');
+    expect(m.text).toContain('⭐ Keen:');
+    expect(m.text).toContain('👎 Not keen:');
   });
   it('the thanks line on the vote page', () => {
-    expect(recordedLine('Jo', { kind: 'vote', response: 'yes', label: 'Hunter' }, { kind: 'location' })).toBe('Thanks Jo — ⭐ Prefer for Hunter.');
+    expect(recordedLine('Jo', { kind: 'vote', response: 'yes', label: 'Hunter' }, { kind: 'location' })).toBe('Thanks Jo — ⭐ Keen for Hunter.');
     expect(recordedLine('Jo', { kind: 'vote', response: 'yes', label: '13 Mar' }, { kind: 'dates' })).toBe('Thanks Jo — you’re a ✓ for 13 Mar.');
   });
 });
@@ -293,7 +294,7 @@ describe('tee times over the whole window', () => {
     expect(f.ok).toBe(true);
     expect(f.nudge).toMatch(/ask again/);
     expect(done.line).toBe('3 of 3 days filled · social times in');
-    expect(TG.callChecklist(dates, { need: 3 })[0]).toBe('Every day: Fri, Sat, Sun — each weekend');
+    expect(TG.callChecklist(dates, { need: 3 })[0]).toBe('Every golf day: Fri, Sat, Sun — each weekend');
     expect(TG.callScript({ course: 'Nowra GC', need: 3, dates: dates.slice(0, 2) })).toMatch(/3 tee times in a row — 12 players/);
   });
   it('the best times per day across courses', () => {

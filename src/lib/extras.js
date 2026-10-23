@@ -2,7 +2,7 @@
 // organiser — that could potentially go to vote as well". Pure functions, tested (extras.test.js).
 //
 //   * Each extra is 'off' (not on the table), 'in' (the organiser's put it in) or 'vote' (the group gets asked
-//     "Would you do these?" — ⭐ Want it · 👍 Happy either way · 👎 Skip it).
+//     "Would you do these?" — ⭐ Keen · 👍 Happy with it · 👎 Not keen).
 //   * Extras that are in, or that win the vote, go into the trip plan budget (078 plan_budget_items) and, where
 //     there's something to book, a job ("Book the bus").
 import { EXTRA_QUESTION } from './emailvotes.js';

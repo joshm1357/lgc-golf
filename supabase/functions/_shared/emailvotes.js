@@ -16,15 +16,16 @@ export const CHANNEL_HELP = {
 };
 /** The notification kinds that are "votes and trip questions". */
 export const VOTE_KINDS = new Set(['poll_open', 'poll_closing', 'nudge_votes']);
-export const ANSWERS = { yes: '✓ Can', maybe: '? Maybe', no: '✗ Can’t' };
-export const RSVP_ANSWERS = { in: 'I’m keen', maybe: 'Maybe', out: 'Out' };
+export const ANSWERS = { yes: '✓ Yes', maybe: '? Maybe', no: '✗ No' };
+// V3 (Josh's walkthrough, 23 Oct): the same three words for every question. "Are you in?" is Yes / Maybe / No too.
+export const RSVP_ANSWERS = { in: '✓ Yes', maybe: '? Maybe', out: '✗ No' };
 // Josh, 22 Oct: the words depend on what's being voted on. The stored answers stay yes / maybe / no (so tallies,
 // emails and older app versions keep working) and score the same: 2 / 1 / 0.
-//   dates and weekends: ✓ Can · ? Maybe · ✗ Can't
-//   places (areas, where to stay, courses, which trip, accommodation, anything else): ⭐ Prefer · 👍 Option · 👎 Don't like
-//   optional extras ("Would you do these?"): ⭐ Want it · 👍 Happy either way · 👎 Skip it
-export const PLACE_ANSWERS = { yes: '⭐ Prefer', maybe: '👍 Option', no: '👎 Don’t like' };
-export const EXTRA_ANSWERS = { yes: '⭐ Want it', maybe: '👍 Happy either way', no: '👎 Skip it' };
+// V3 (walkthrough, 23 Oct): "Option" didn't read as an answer, and the words changed from question to question.
+//   dates, weekends, how long, are you in: ✓ Yes · ? Maybe · ✗ No
+//   places (areas, where to stay, courses, which trip, accommodation, extras, anything else): ⭐ Keen · 👍 Happy with it · 👎 Not keen
+export const PLACE_ANSWERS = { yes: '⭐ Keen', maybe: '👍 Happy with it', no: '👎 Not keen' };
+export const EXTRA_ANSWERS = PLACE_ANSWERS;
 export const EXTRA_QUESTION = 'Would you do these?';
 
 /** 'dates' | 'place' | 'extra' for a poll ({ kind, question, purpose }). */

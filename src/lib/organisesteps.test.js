@@ -133,7 +133,7 @@ describe('organise steps — which step is current', () => {
     const r = stepsFor({ plan, items, rsvps, transfers, stays, costs: [{ amount: 100, per_head: false }] });
     expect(r.state.lockin).toBe('done');
     expect(r.current).toBe('money');
-    expect(r.byKey.money.summary).toBe('4 of 6 jobs done · $100 in the kitty');
+    expect(r.byKey.money.summary).toBe('4 of 5 jobs done · $100 in the kitty'); // O1: the draw is step 6's
     const r2 = stepsFor({ plan, items: items.map((j) => (j.formula_key === 'transport' ? { ...j, stage: 'done', done: true } : j)), rsvps, transfers, stays, roundsSetUp: 2 });
     expect(r2.state.money).toBe('done');
     expect(r2.current).toBe('day');

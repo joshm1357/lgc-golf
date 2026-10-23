@@ -195,7 +195,7 @@ export function ConfirmHost() {
           </label>
         )}
         <button type="button" className="btn block" data-testid="confirm-yes" disabled={!ok} onClick={() => done(true)}
-          style={{ background: 'var(--under)', borderColor: 'var(--under)', color: '#fff' }}>{ask.yes || 'Yes, remove it'}</button>
+          style={ask.tone === 'go' ? { background: 'var(--gold)', borderColor: 'var(--gold)', color: 'var(--navy)' } : { background: 'var(--under)', borderColor: 'var(--under)', color: '#fff' }}>{ask.yes || 'Yes, remove it'}</button>
         <button type="button" className="btn ghost block" data-testid="confirm-no" onClick={() => done(false)}>{ask.no || 'Cancel'}</button>
       </div>
     </Sheet>

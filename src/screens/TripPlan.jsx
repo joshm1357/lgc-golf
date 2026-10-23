@@ -5,13 +5,14 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
 import { useData, useSession, playerName, useFeature, useRealtime } from '../lib/store.jsx';
-import { Avatar, Sheet, Icon, toast } from '../components/ui.jsx';
+import { Avatar, Sheet, Icon, toast, askConfirm } from '../components/ui.jsx';
 import { fmtRange, money, todayISO, tallyPoll } from '../lib/plan.js';
 import { notify, shareText } from '../lib/push.js';
 import { useRun, must } from '../lib/run.js';
 import {
-  nextStep, buildJobs, jobStage, blockedBy, sortJobs, stagePatch, allocateOrder, addDays, JOB_STAGE_LABEL, FORMULA_BY_KEY,
+  nextStep, buildJobs, jobStage, blockedBy, sortJobs, stagePatch, allocateOrder, addDays, JOB_STAGE_LABEL, FORMULA_BY_KEY, redateJobs,
 } from '../lib/tripjobs.js';
+import { lockIn, lockInWords } from '../lib/lockin.js';
 import {
   budgetSummary, suggestedDeposit, defaultBudget, depositStatus, stayLinks, cleanStay, KIND, linesPerPerson,
 } from '../lib/tripbudget.js';
@@ -99,6 +100,27 @@ export async function makeTripJobs(pd, status) {
   return rows.length;
 }
 
+/**
+ * Lock a trip in (V1, every lock-in path in the app uses this): the trip is locked in, its open votes on where and
+ * when close (lib/lockin.js — the database's 095 trigger does it too), one Feed post, everyone's told, and the
+ * to-do list is made.
+ */
+export async function lockInTrip(pd, status) {
+  const plan = pd.plan;
+  await lockIn(supabase, plan, pd.polls);
+  await supabase.from('posts').insert({ kind: 'user', player_id: status.player_id, body: `🔒 ${plan.name} is locked in: ${fmtRange(plan.start_date, plan.end_date)}${plan.location_name ? ` at ${plan.location_name}` : ''}. Say if you’re in.`, link: `/plan/${plan.id}` });
+  await notify('trip_locked', { plan_id: plan.id });
+  await makeTripJobs({ ...pd, plan: { ...plan, status: 'confirmed' } }, status).catch(() => 0);
+}
+
+/** O7: the usual jobs follow the trip's dates. oldStart: the start before a change (null: just fix jobs due after
+ *  the trip). Organisers only; quietly does nothing if it can't. → how many moved */
+export async function redateTripJobs(plan, items, oldStart = null) {
+  const moves = redateJobs(plan, items, { oldStart });
+  for (const m of moves) await supabase.from('plan_items').update({ due: m.due }).eq('id', m.id);
+  return moves.length;
+}
+
 // ---------------------------------------------------------------- The Next step card
 
 /** The Next step (lib/tripjobs.js nextStep) for whoever's signed in. ex: useTripExtras(pd). */
@@ -141,16 +163,11 @@ export function useStepActions(pd, ex, { onTab, onOther } = {}) {
     if (a.type === 'trip_plan') { setSheet({ kind: 'budget' }); return; }
     if (a.type === 'builder' || a.type === 'plan_builder') { nav(`/plan/${plan.id}/build`); return; }
     if (a.type === 'lock') {
-      const openVotes = pd.polls.filter((p) => p.status === 'open').length;
-      if (openVotes && !window.confirm(`${openVotes} vote${openVotes === 1 ? ' is' : 's are'} still open. Lock it in anyway?`)) return;
-      run(async () => {
-        // Same as the Lock it in card: lock, tell the feed and everyone, then make the to-do list.
-        await must(supabase.from('plans').update({ status: 'confirmed' }).eq('id', plan.id));
-        await supabase.from('posts').insert({ kind: 'user', player_id: status.player_id, body: `🔒 ${plan.name} is locked in: ${fmtRange(plan.start_date, plan.end_date)}${plan.location_name ? ` at ${plan.location_name}` : ''}. Say if you’re in.`, link: `/plan/${plan.id}` });
-        await notify('trip_locked', { plan_id: plan.id });
-        await makeTripJobs({ ...pd, plan: { ...plan, status: 'confirmed' } }, status).catch(() => 0);
+      // V1: the same as the Lock it in card — one box, and the open votes on where and when close.
+      askConfirm(lockInWords(plan, pd.polls)).then((yes) => yes && run(async () => {
+        await lockInTrip(pd, status);
         pd.reload();
-      }, 'Locked in — the to-do list is ready');
+      }, 'Locked in — the votes are closed and the to-do list is ready'));
       return;
     }
     if (a.type === 'go') { nav(a.to); return; }

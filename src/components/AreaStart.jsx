@@ -17,6 +17,7 @@ import { useCourseResearch } from './CourseResearch.jsx';
 import { CourseSheet, StaySheet } from './PlaceSheets.jsx';
 import { usePlaceInfo, RowTip } from './PlanMapTools.jsx';
 import { courseTip, stayTip } from '../lib/placeinfo.js';
+import OtherWays from './OtherWays.jsx';
 import './planux.css';
 
 export const slimCourse = (c) => ({ id: c.id, name: c.name, area: c.area || null, lat: c.lat, lng: c.lng, mine_avg: c.mine_avg ?? null, others_avg: c.others_avg ?? null, others_n: c.others_n ?? null });
@@ -213,8 +214,15 @@ export default function AreaStart({ plan, st, save, org, areas, history, accom =
             onCourse={(id) => setSheet(`c:${id}`)} onClose={() => setSheet(null)} />
         );
       })()}
-      {org && !st.region && options.length > 1 && <button type="button" className="btn block" onClick={goingHere} data-testid="going-here">We’re going to {area} (skip the area vote)</button>}
-      {org && !st.region && options.length === 1 && <button type="button" className="btn block" onClick={goingHere} data-testid="going-here">✓ {area} it is</button>}
+      {/* O2 (walkthrough): no big "We're going to X" bar before anyone has voted — the one gold button is the Next
+          step (Call the vote, or Go with the leader once it's in). Picking it yourself is one of the other ways. */}
+      {org && !st.region && (
+        <OtherWays>
+          <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={goingHere} data-testid="going-here">
+            {options.length > 1 ? `We’re going to ${area} (skip the area vote)` : `✓ ${area} it is (skip the vote)`}
+          </button>
+        </OtherWays>
+      )}
     </div>
   );
 }
@@ -235,7 +243,7 @@ function AreaCompare({ st, areas, accom, people, origin, tees, org, onChoose, on
           <tr><th>💰 Stay each</th>{rows.map((r) => <td key={r.area}>{r.costEach != null ? `about $${r.costEach}` : '—'}</td>)}</tr>
           <tr><th>🚗 Drive</th>{rows.map((r) => <td key={r.area}>{r.driveText ? `about ${r.driveText}` : '—'}</td>)}</tr>
           <tr><th>⏱️ Tee times</th>{rows.map((r) => <td key={r.area}>{r.teeDays ? `${r.teeDays} day${r.teeDays === 1 ? '' : 's'} in` : 'not asked yet'}</td>)}</tr>
-          {org && <tr><th />{rows.map((r) => <td key={r.area}><button type="button" className="btn sm" onClick={() => onChoose(r.area)}>Choose this one</button></td>)}</tr>}
+          {org && <tr><th />{rows.map((r) => <td key={r.area}><button type="button" className="btn ghost sm" onClick={() => onChoose(r.area)}>Choose this one</button></td>)}</tr>}
         </tbody>
       </table>
       <div className="tb-compare">
@@ -248,7 +256,7 @@ function AreaCompare({ st, areas, accom, people, origin, tees, org, onChoose, on
             <div className="small"><strong>💰</strong> {r.costEach != null ? `about $${r.costEach} each to stay` : <span className="muted">no accommodation costs yet</span>}</div>
             <div className="small"><strong>🚗</strong> {r.drive != null ? `about ${r.driveText} from ${origin?.label?.split(' ×')[0] || 'home'}` : <span className="muted">drive not known</span>}</div>
             <div className="small"><strong>⏱️</strong> {r.teeDays ? `${r.teeDays} day${r.teeDays === 1 ? '' : 's'} of tee times in` : <span className="muted">no tee times asked yet</span>}</div>
-            {org && <button type="button" className="btn sm" style={{ alignSelf: 'flex-start', marginTop: 4 }} onClick={() => onChoose(r.area)} data-testid="choose-area">Choose this one</button>}
+            {org && <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start', marginTop: 4 }} onClick={() => onChoose(r.area)} data-testid="choose-area">Choose this one</button>}
           </div>
         ))}
       </div>

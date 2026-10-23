@@ -183,8 +183,75 @@ export function organiserView({ isAdmin = false, me = null, plan = null, asVoter
 export function hasAnsweredAll({ polls = [], votes = [], me, keen = false, rsvps = [] }) {
   if (!me) return false;
   // The detail under an area (ov23) is optional: answering the areas and the weekends counts as answered.
-  if (polls.filter((p) => !p.optional).some((p) => !votes.some((v) => v.poll_id === p.id && v.player_id === me))) return false;
+  const required = polls.filter((p) => !p.optional);
+  if (required.some((p) => !votes.some((v) => v.poll_id === p.id && v.player_id === me))) return false;
+  // O5 (walkthrough): a card with only optional questions left open — someone who hasn't answered any of them
+  // (a late joiner) hasn't voted, so never "You've voted ✓".
+  if (!required.length && polls.length && !keen && !polls.some((p) => votes.some((v) => v.poll_id === p.id && v.player_id === me))) return false;
   return !keen || rsvps.some((r) => r.player_id === me);
+}
+
+// ------------------------------------------------------------------ walkthrough fixes (23 Oct): V3, V4, I3
+
+/**
+ * V4: is the detail (courses and places inside an area) worth going by? Under a third of the people who voted on the
+ * main questions went into it: no — it's shown "for info" and the organiser chooses.
+ * → { enough, line, forInfo }
+ */
+export function detailVerdict(detail = 0, voters = 0) {
+  const d = Number(detail) || 0; const v = Number(voters) || 0;
+  if (!v) return { enough: false, forInfo: true, line: 'Nobody’s voted yet.' };
+  if (d * 3 >= v && d > 0) return { enough: true, forInfo: false, line: `${d} of ${v} went into the detail` };
+  return { enough: false, forInfo: true, line: `Only ${d} of ${v} picked courses and places — not enough to go by. You choose.` };
+}
+
+/** How many people answered at least one of these (main) questions. */
+export function votersOf(polls = [], votes = []) {
+  const ids = new Set((polls || []).map((p) => p.id));
+  return new Set((votes || []).filter((v) => ids.has(v.poll_id)).map((v) => v.player_id)).size;
+}
+
+/** "Lou, Mo and Pete" */
+export function namesList(names = []) {
+  const n = (names || []).filter(Boolean);
+  if (n.length <= 1) return n[0] || '';
+  return `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}`;
+}
+
+/**
+ * I3: on the last day of a vote (closes today, or tomorrow), "Waiting on Lou, Mo and Pete" with a cheeky message to
+ * paste in the group chat. → { line, message } or null (not the last day, or nobody to wait on).
+ */
+export function lastDayNudge({ closes = null, today = null, waiting = [], planName = 'the trip', title = 'the vote', link = '' } = {}) {
+  const c = parse(closes); const t = parse(today);
+  if (!c || !t || !(waiting || []).length) return null;
+  const days = Math.round((c - t) / 86400000);
+  if (days < 0 || days > 1) return null;
+  const who = namesList(waiting.slice(0, 6)) + (waiting.length > 6 ? ` and ${waiting.length - 6} more` : '');
+  const when = days === 0 ? 'today' : 'tomorrow';
+  const message = `🗳️ ${planName}: “${String(title).replace(/[?.!]+$/, '')}” closes ${when} and we’re still waiting on ${who}. Ten seconds, lads — or you get what you’re given 😂${link ? `\n${link}` : ''}`;
+  return { line: `Waiting on ${who}`, message };
+}
+
+/**
+ * V3: the line at the top of the ballot — "South Coast NSW · about $450 each · 2 hr drive · 9 in so far".
+ * areas: [{ area, costEach, drive }] (saved with the vote when it was called); ins: how many have said they're in.
+ */
+export function ballotHeader({ areas = [], ins = 0 } = {}) {
+  const list = (areas || []).filter((a) => a && a.area);
+  const bits = [];
+  if (list.length === 1) {
+    const a = list[0];
+    bits.push(a.area);
+    if (a.costEach) bits.push(`about $${Math.round(a.costEach)} each`);
+    if (a.drive) bits.push(`${a.drive} drive`);
+  } else if (list.length > 1) {
+    bits.push(list.map((a) => a.area).join(' or '));
+    const costs = list.map((a) => Number(a.costEach)).filter((n) => n > 0);
+    if (costs.length) bits.push(Math.min(...costs) === Math.max(...costs) ? `about $${Math.round(costs[0])} each` : `about $${Math.round(Math.min(...costs))}–${Math.round(Math.max(...costs))} each`);
+  }
+  bits.push(`${ins} in so far`);
+  return bits.join(' · ');
 }
 
 /** "Closes in 2 days" / "Closes today" / "Closed". */

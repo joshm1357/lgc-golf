@@ -171,10 +171,10 @@ describe('what we know about a course', () => {
 describe('tee times', () => {
   it('needed: 12 in → 3; maybes count if nobody is in yet; override wins', () => {
     const rs = (n, status) => Array.from({ length: n }, (_, i) => ({ player_id: `${status}${i}`, status }));
-    expect(teeTimesNeeded({ rsvps: [...rs(12, 'in'), ...rs(3, 'maybe')] })).toEqual({ people: 12, needed: 3, source: 'in' });
-    expect(teeTimesNeeded({ rsvps: rs(5, 'maybe') })).toEqual({ people: 5, needed: 2, source: 'keen' });
-    expect(teeTimesNeeded({ rsvps: rs(5, 'in'), override: 16 })).toEqual({ people: 16, needed: 4, source: 'set' });
-    expect(teeTimesNeeded({})).toEqual({ people: 0, needed: 0, source: 'none' });
+    expect(teeTimesNeeded({ rsvps: [...rs(12, 'in'), ...rs(3, 'maybe')] })).toMatchObject({ people: 12, needed: 3, source: 'in' });
+    expect(teeTimesNeeded({ rsvps: rs(5, 'maybe') })).toMatchObject({ people: 5, needed: 2, source: 'keen' });
+    expect(teeTimesNeeded({ rsvps: rs(5, 'in'), override: 16 })).toMatchObject({ people: 16, needed: 4, source: 'set' });
+    expect(teeTimesNeeded({})).toMatchObject({ people: 0, needed: 0, source: 'none' });
   });
   it('reads typed times and makes a block', () => {
     expect(parseTeeTimes('10:30, 10:20 10:20 7am 1:10pm junk 3:00')).toEqual(['07:00', '10:20', '10:30', '13:10']);

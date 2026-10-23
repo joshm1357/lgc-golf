@@ -12,11 +12,11 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useData, useSession, useFeature, playerName } from '../lib/store.jsx';
 import { Avatar } from '../components/ui.jsx';
 import { tallyPoll, money } from '../lib/plan.js';
-import { callJobs, jobStage } from '../lib/tripjobs.js';
+import { callJobs, jobStage, redateJobs } from '../lib/tripjobs.js';
 import { organiseSteps, primaryFor, STEP_KEYS, TAB_STEP, MORE_TABS } from '../lib/organisesteps.js';
-import { stepKey } from '../lib/tripsteps.js';
+import { stepKey, upToLine } from '../lib/tripsteps.js';
 import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
-import { useTripExtras, useNextStep, useStepActions, TripPlanCards, TripJobsTab } from './TripPlan.jsx';
+import { useTripExtras, useNextStep, useStepActions, TripPlanCards, TripJobsTab, redateTripJobs } from './TripPlan.jsx';
 import { DetailsTab, KittyTab, GroupsTab, ItemSheet } from './PlanTabs.jsx';
 import { TripSetupCard } from './TripSetup.jsx';
 import TripExtras, { RepeatInfo } from './TripExtras.jsx';
@@ -24,6 +24,7 @@ import { TripBuilderCard } from '../components/TripBuilderCard.jsx';
 import { TripFinderCard } from '../components/TripFinderCard.jsx';
 import { AwardsRunUp } from '../components/AwardsFines.jsx'; // ov24
 import CompsOnTheDay from '../components/CompsOnTheDay.jsx'; // ov23
+import OtherWays from '../components/OtherWays.jsx'; // O2
 import { VoteTab, PeopleTab, ChatTab, PollSheet, CloseSheet, ProposalBanner, LockInCard, Checklist, CalledOffBanner } from './Planner.jsx';
 import './organise.css';
 
@@ -94,6 +95,14 @@ export function OrganiseView({ pd, stage, trip, wide, desk, onEdit }) {
     return () => window.removeEventListener('tgt:new', f);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // O7: jobs due after the trip (its dates moved) get counted back from the trip again — once per date, organisers.
+  const healed = useRef(null);
+  useEffect(() => {
+    if (!isOrg || status.viewing || plan.status !== 'confirmed' || !plan.start_date || healed.current === plan.start_date) return;
+    healed.current = plan.start_date;
+    if (redateJobs(plan, pd.items).length) redateTripJobs(plan, pd.items).then((n) => n && pd.reload()).catch(() => {});
+  }, [isOrg, status.viewing, plan, pd]);
+
   const roundsSetUp = trip ? data.rounds.filter((r) => r.trip_id === trip.id).length : 0;
   const { steps, current } = useMemo(() => organiseSteps({
     plan, stage, items: on.planner_tasks ? pd.items : [], polls: pd.polls, options: pd.options, votes: pd.votes, rsvps: pd.rsvps,
@@ -120,7 +129,7 @@ export function OrganiseView({ pd, stage, trip, wide, desk, onEdit }) {
 
   const body = (k) => (
     <StepBody k={k} pd={pd} ex={ex} stage={stage} trip={trip} isOrg={isOrg} on={on} desk={desk} wide={wide}
-      moneyTab={moneyTab} onMoneyTab={openTab} onPoll={() => setPolling(true)} onEdit={onEdit} newCostAt={newCostAt} act={act} />
+      moneyTab={moneyTab} onMoneyTab={openTab} onPoll={() => setPolling(true)} onEdit={onEdit} newCostAt={newCostAt} act={act} hasPrimary={!!primary?.label} />
   );
   const bigButton = primary?.label ? (
     <div className="org-primary" data-testid="next-step">
@@ -160,13 +169,10 @@ export function OrganiseView({ pd, stage, trip, wide, desk, onEdit }) {
   const main = (
     <div className="section stack org-main-col" data-testid="organise-steps">
       {organiserName && <span className="small muted" data-testid="organiser-line">Organiser: <strong style={{ color: 'var(--text)' }}>{organiserName}</strong>{plan.budget_pp ? ` · rough budget ${money(plan.budget_pp)} each` : ''}</span>}
+      {/* O1: ONE "where we're up to" line, worked out from real progress — the same on a phone and a laptop. */}
+      <div className="small" style={{ fontWeight: 800 }} data-testid="up-to-line">📍 {upToLine(curStep?.key || null)}</div>
       {/* The open step isn't the current one: the Next step still shows, slim, above it — the one big button. */}
-      {open !== current && bigButton && (
-        <div className="org-upnext">
-          <div className="small muted" style={{ fontWeight: 700 }}>You’re looking at step {steps.find((s) => s.key === open)?.n}. The trip is up to step {curStep?.n}: {curStep?.title}.</div>
-          {bigButton}
-        </div>
-      )}
+      {open !== current && bigButton && <div className="org-upnext">{bigButton}</div>}
       {/* The steps, stacked (a phone shows them all; a laptop only the open one, the strip does the rest). */}
       <div className="org-steps">
         {steps.map((s) => {
@@ -213,7 +219,7 @@ export function OrganiseView({ pd, stage, trip, wide, desk, onEdit }) {
 
 // ---------------------------------------------------------------- What's inside each step
 
-function StepBody({ k, pd, ex, stage, trip, isOrg, on, desk, wide, moneyTab, onMoneyTab, onPoll, onEdit, newCostAt, act }) {
+function StepBody({ k, pd, ex, stage, trip, isOrg, on, desk, wide, moneyTab, onMoneyTab, onPoll, onEdit, newCostAt, act, hasPrimary = false }) {
   const { plan } = pd;
   // ov23: one step for where and when — the areas, the weekends, how long, AND the vote (no separate Vote step).
   if (k === 'area') {
@@ -222,15 +228,21 @@ function StepBody({ k, pd, ex, stage, trip, isOrg, on, desk, wide, moneyTab, onM
         {plan.proposed && <ProposalBanner plan={plan} reload={pd.reload} />}
         {/* Organisers get "Build the trip" as the step's big button; players see how it's coming together. */}
         {!isOrg && <TripBuilderCard pd={pd} />}
-        {isOrg && plan.status === 'planning' && on.trip_finder && (
-          <Link to={`/plan/${plan.id}/build`} className="small" data-testid="tb-link" style={{ fontWeight: 700 }}>🗺️ Open the trip builder →</Link>
-        )}
-        <TripFinderCard pd={pd} />
-        {isOrg && plan.status === 'planning' && (
-          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-            <button type="button" className="btn ghost sm" onClick={onEdit}>✏️ Set dates and place by hand</button>
-            {on.planner_tasks && <button type="button" className="btn ghost sm" onClick={onPoll}>🗳️ Call a vote yourself</button>}
-          </div>
+        {!isOrg && <TripFinderCard pd={pd} />}
+        {/* O2: the step's one gold button is the Next step; everything else is folded under "Other ways to do this". */}
+        {isOrg && (
+          <OtherWays open={plan.status !== 'planning' || plan.proposed ? false : !hasPrimary}>
+            {plan.status === 'planning' && on.trip_finder && (
+              <Link to={`/plan/${plan.id}/build`} className="small" data-testid="tb-link" style={{ fontWeight: 700 }}>🗺️ Open the trip builder →</Link>
+            )}
+            <TripFinderCard pd={pd} />
+            {plan.status === 'planning' && (
+              <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+                <button type="button" className="btn ghost sm" onClick={onEdit}>✏️ Set dates and place by hand</button>
+                {on.planner_tasks && <button type="button" className="btn ghost sm" onClick={onPoll}>🗳️ Call a vote yourself</button>}
+              </div>
+            )}
+          </OtherWays>
         )}
         {!isOrg && <div className="small muted">The organiser works out where and when — you’ll get a vote.</div>}
         {on.planner_tasks && <VoteTab pd={pd} showCall={!(isOrg && plan.status === 'planning')} />}

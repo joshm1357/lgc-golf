@@ -390,7 +390,7 @@ await page.reload();
 await page.getByTestId('vote-batch').waitFor({ timeout: 15000 });
 check((await card.getAttribute('data-view')) === 'voter', 'a player gets just the ballot');
 const sections = card.getByTestId('vote-batch-section');
-check((await sections.nth(0).getByRole('button', { name: '⭐ Prefer' }).count()) === 2 && (await sections.nth(1).getByRole('button', { name: '✓ Can' }).count()) === 2, 'places: ⭐ Prefer / 👍 Option / 👎 Don’t like; weekends: ✓ Can');
+check((await sections.nth(0).getByRole('button', { name: '⭐ Keen' }).count()) === 2 && (await sections.nth(1).getByRole('button', { name: '✓ Yes' }).count()) === 2, 'places: ⭐ Keen / 👍 Happy with it / 👎 Not keen; weekends: ✓ Yes');
 check((await card.innerText()).includes('closes'), 'the ballot says when it closes');
 await shot('10-voter-ballot');
 for (let i = 0; i < await sections.count(); i++) {

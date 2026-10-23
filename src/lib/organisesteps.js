@@ -95,7 +95,9 @@ export function organiseSteps(ctx) {
   const askJob = jobs.find((j) => j.formula_key === 'deposit_ask');
   const formulaMade = jobs.some((j) => j.formula_key);
   const openJobs = jobs.filter((j) => jobStage(j) !== 'done');
-  const moneyJobs = jobs.filter((j) => stepOfJob(j, items, builder.callJobIds) === 'money');
+  // O1: step 5 is the to-do list — every job on it except the draw (step 6). The ✓ and the "x of y jobs done" count
+  // the SAME jobs, so a tick never sits next to "3 of 10 jobs done".
+  const listJobs = jobs.filter((j) => j.formula_key !== 'teams_draw');
   const dates = plan.start_date ? fmtRange(plan.start_date, plan.end_date) : null;
   const areas = builder.areas || [];
   const kittyTotal = costs.reduce((s, c) => s + (Number(c.amount) || 0) * (c.per_head ? Math.max(1, ins) : 1), 0);
@@ -107,7 +109,7 @@ export function organiseSteps(ctx) {
     courses: confirmed || round || !!chosen || (!!reserve && jobStage(reserve) === 'done') || !!builder.coursesDone,
     book: openCalls.length === 0 && (confirmed || round || calls.length > 0 || (!!plan.start_date && !builder.started)),
     lockin: confirmed && (round || !costsOn || (formulaMade && (dep ? dep.people.every((p) => p.state === 'paid') : !askJob || jobStage(askJob) === 'done'))),
-    money: confirmed && formulaMade && moneyJobs.every((j) => jobStage(j) === 'done'),
+    money: confirmed && formulaMade && listJobs.every((j) => jobStage(j) === 'done'),
     day: stage === 'done',
   };
   if (round) done.money = confirmed && openJobs.filter((j) => j.formula_key !== 'teams_draw').length === 0;
@@ -124,7 +126,7 @@ export function organiseSteps(ctx) {
     book: calls.length ? `📞 ${calls.length - openCalls.length} of ${plural(calls.length, 'call')} done` : 'No calls yet',
     lockin: [confirmed ? '🔒 Locked in' : 'Not locked in yet', `${ins} in`,
       dep ? `deposits ${dep.people.filter((p) => p.state === 'paid').length} of ${dep.people.length} paid` : null].filter(Boolean).join(' · '),
-    money: [jobs.length ? `${jobs.length - openJobs.length} of ${plural(jobs.length, 'job')} done` : 'No jobs yet',
+    money: [listJobs.length ? `${listJobs.filter((j) => jobStage(j) === 'done').length} of ${plural(listJobs.length, 'job')} done` : 'No jobs yet',
       costs.length ? `${money(kittyTotal)} in the kitty` : null].filter(Boolean).join(' · '),
     day: stage === 'done' ? 'That’s a wrap' : stage === 'on' ? 'It’s on!' : roundsSetUp ? `${plural(roundsSetUp, 'round')} set up` : 'Rounds not set up yet',
   };
@@ -136,9 +138,13 @@ export function organiseSteps(ctx) {
   };
 
   // The current step: where the Next step points. If there's no Next step, the first step that isn't done.
+  // O1: the trip is up to the first step that isn't finished (real progress). The Next step can point at the step it
+  // belongs to, but a locked-in trip never points back at planning (where and when, courses and stays).
+  const firstOpen = STEP_KEYS.find((k) => !done[k]) || null;
   let current = stepOfNext(next, { items, polls, builder });
+  if (confirmed && current === 'area' && /^vote/.test(String(next?.key || ''))) current = firstOpen;
   if (stage === 'on') current = 'day';
-  if (!current) current = STEP_KEYS.find((k) => !done[k]) || null;
+  if (!current) current = firstOpen;
   if (stage === 'done') current = null;
   const at = current ? STEP_KEYS.indexOf(current) : STEP_KEYS.length;
   const steps = ORGANISE_STEPS.map((s, i) => ({

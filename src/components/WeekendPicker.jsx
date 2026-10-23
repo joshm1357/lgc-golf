@@ -25,7 +25,8 @@ export function LengthPicker({ st, save, org, leading = null }) {
   return (
     <div className="stack" style={{ gap: 6 }} data-testid="length-picker">
       <span className="label">How long?</span>
-      <Seg light options={LENGTHS.map((n) => ({ value: n, label: n === 0 ? 'Day trip' : `${n} night${n === 1 ? '' : 's'}` }))} value={st.nights} onChange={setNights} />
+      {/* V2 (walkthrough): while the vote's deciding the length, the switch shows the leader, not the old setting. */}
+      <Seg light options={LENGTHS.map((n) => ({ value: n, label: n === 0 ? 'Day trip' : `${n} night${n === 1 ? '' : 's'}` }))} value={lv.on && leading != null && !st.weekendsSettled ? leading : st.nights} onChange={setNights} />
       {org && (
         <label className="row small" style={{ gap: 8, minHeight: 40 }}>
           <input type="checkbox" checked={!!lv.on} onChange={(e) => setLv({ on: e.target.checked })} style={{ width: 22, height: 22 }} data-testid="length-vote" />
@@ -40,7 +41,7 @@ export function LengthPicker({ st, save, org, leading = null }) {
                 onClick={() => setLv({ options: (lv.options || []).includes(n) ? lv.options.filter((x) => x !== n) : [...(lv.options || []), n].sort() })}>{lengthLabel(n)}</button>
             ))}
           </div>
-          <span className="small muted">“How long?” goes on the vote next to the area and the weekends.{leading != null ? ` Leading: ${lengthLabel(leading)}.` : ''} The weekend dates below are for {lengthLabel(leading ?? st.nights).toLowerCase()}.</span>
+          <span className="small muted">“How long?” goes on the vote next to the area and the weekends. Each weekend on the ballot shows what it would be at each length (e.g. “Plus Mon if we go 3 nights”).{leading != null ? ` Leading: ${lengthLabel(leading)}.` : ''}</span>
           {(lv.options || []).includes(3) && (
             <div className="row small" style={{ gap: 6, flexWrap: 'wrap' }}>
               <span>If it’s 3 nights, add the night:</span>

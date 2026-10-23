@@ -93,6 +93,48 @@ export function buildJobs(plan, items, { today = todayISO(), organiserId = null,
   return out;
 }
 
+/**
+ * O7 (Josh's walkthrough): when the trip's dates change, the usual jobs move with them. The database does this on a
+ * date change from 095 on (a trigger); this is the app's copy, and it also fixes jobs already due AFTER the trip.
+ *   oldStart: the start before the change (the jobs shift by the same number of days, so a due date the organiser
+ *   changed by hand keeps its distance from the trip). Without it, only jobs due after the trip (or with no date)
+ *   get their date counted back from the trip again.
+ * Done jobs are left alone. "Chase deposits" counts from when the deposit was asked for, so it's only kept before the
+ * trip. → [{ id, due }] (only the ones that change)
+ */
+export function redateJobs(plan, items, { oldStart = null, today = todayISO() } = {}) {
+  if (!plan?.start_date || plan.kind === 'round') return [];
+  const start = String(plan.start_date).slice(0, 10);
+  const clamp = (d) => (d > start ? start : d < today ? (today < start ? today : start) : d);
+  const was = oldStart ? String(oldStart).slice(0, 10) : null;
+  const shift = was && was !== start ? Math.round((parseDate(start) - parseDate(was)) / 86400000) : 0;
+  const out = [];
+  for (const j of jobsOf(items)) {
+    if (!j.formula_key || jobStage(j) === 'done') continue;
+    const f = FORMULA_BY_KEY[j.formula_key];
+    if (!f) continue;
+    const had = j.due ? String(j.due).slice(0, 10) : null;
+    let due = had;
+    if (f.dueAfterAsk != null) {
+      if (due && due > start) due = start;
+    } else if (shift && due) {
+      due = clamp(addDays(due, shift));
+    } else if (!due || due > start) {
+      due = dueFor(f, plan, today);
+    }
+    if (due && due !== had) out.push({ id: j.id, due });
+  }
+  return out;
+}
+
+const DOW3 = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MON3 = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** "Fri 30 Oct" — a due date in words (O3: never "2026-10-30" on a screen). */
+export function dueWords(date) {
+  const d = parseDate(date);
+  return d ? `${DOW3[d.getDay()]} ${d.getDate()} ${MON3[d.getMonth()]}` : '';
+}
+
 /** A job's stage, for old rows that only have `done`. */
 /**
  * "One person for all" (080): the call jobs to hand to one person — every call job on the trip that isn't done and

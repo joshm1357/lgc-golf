@@ -17,7 +17,8 @@ import { TripFinderCard } from '../components/TripFinderCard.jsx';
 import { TripBuilderCard } from '../components/TripBuilderCard.jsx';
 import { VoteBatches } from '../components/VoteBatchCard.jsx';
 import { TripOverview } from './TripOverview.jsx';
-import { NextStepCard, makeTripJobs } from './TripPlan.jsx';
+import { NextStepCard, makeTripJobs, lockInTrip, redateTripJobs } from './TripPlan.jsx';
+import { openPlanningPolls, lockInWords, closePlanningVotes, closedAtLockIn } from '../lib/lockin.js';
 import { OrganiseView } from './OrganiseSteps.jsx';
 import { OverviewVotes } from '../components/OverviewVotes.jsx';
 import { defaultView } from '../lib/tripsummary.js';
@@ -31,7 +32,7 @@ const STATUS_LABEL = { planning: 'Planning', confirmed: 'Locked in', done: 'Done
 export { useRun, must } from '../lib/run.js';
 import { useRun, must } from '../lib/run.js';
 import { NotifyCard } from '../components/NotifyCard.jsx';
-import { PollCard } from '../components/PollCard.jsx';
+import { PollCard, DecidedLine } from '../components/PollCard.jsx';
 import { HowItGoesOut } from '../components/CallVote.jsx';
 import { defaultCloses } from '../lib/callvote.js';
 import { useDesktop } from '../components/Sidebar.jsx';
@@ -278,16 +279,19 @@ export function VoteTab({ pd, showCall = true }) {
   const { status } = useSession();
   const [creating, setCreating] = useState(false);
   const open = pd.polls.filter((p) => p.status === 'open' && !p.vote_batch); // combined cards (077) show in VoteBatches
-  const closed = pd.polls.filter((p) => p.status === 'closed' && !p.vote_batch);
+  // V1: votes closed when the trip was locked in show as one line ("Decided: Fri 22 – Mon 25 Jan, Nowra").
+  const atLockIn = pd.polls.filter((p) => !p.vote_batch && closedAtLockIn(p, pd.plan));
+  const closed = pd.polls.filter((p) => p.status === 'closed' && !p.vote_batch && !atLockIn.includes(p));
   return (
     <>
       {pd.polls.length === 0 && <div className="empty">No votes yet.{status.is_admin ? ' Put one up — dates, place, or anything else.' : ' The admin will put one up.'}</div>}
       <VoteBatches pd={pd} />
       {open.map((p) => <PollCard key={p.id} poll={p} pd={pd} />)}
       {status.is_admin && showCall && <button type="button" className="btn ghost block" onClick={() => setCreating(true)} data-testid="call-a-vote">🗳️ Call a vote</button>}
-      {closed.length > 0 && <span className="label">Decided</span>}
+      {(closed.length > 0 || atLockIn.length > 0) && <span className="label">Decided</span>}
+      {atLockIn.length > 0 && <DecidedLine plan={pd.plan} titles={atLockIn.map((p) => p.question)} />}
       {closed.map((p) => <PollCard key={p.id} poll={p} pd={pd} />)}
-      <p className="note" style={{ margin: 0 }}>Dates: ✓ Can · ? Maybe · ✗ Can’t. Places: ⭐ Prefer · 👍 Option · 👎 Don’t like. The first is 2 points, the middle 1. Anyone can add an option. {pd.voteDecider === 'admin_or_organiser' ? 'The admin or the trip’s organiser' : 'The admin'} closes the vote and picks the winner.</p>
+      <p className="note" style={{ margin: 0 }}>Dates: ✓ Yes · ? Maybe · ✗ No. Places: ⭐ Keen · 👍 Happy with it · 👎 Not keen. The first is 2 points, the middle 1. Anyone can add an option. {pd.voteDecider === 'admin_or_organiser' ? 'The admin or the trip’s organiser' : 'The admin'} closes the vote and picks the winner.</p>
       {creating && <PollSheet pd={pd} onClose={() => setCreating(false)} />}
     </>
   );
@@ -522,6 +526,8 @@ export function PeopleTab({ pd }) {
               if (!window.confirm(`Lock in the ${by('in').length} who are in? After this only you can change who’s coming.`)) return;
               run(async () => {
                 await must(supabase.from('plans').update({ rsvp_locked: true, status: plan.status === 'planning' ? 'confirmed' : plan.status }).eq('id', plan.id));
+                // V1: locking the list locks the trip in, so its votes on where and when close too.
+                if (plan.status === 'planning') await closePlanningVotes(supabase, pd.polls);
                 await feedPost(me, plan, `🔒 ${plan.name}: the list is locked — ${by('in').length} in: ${withP(by('in')).map(({ p }) => playerName(p)).join(', ')}.`);
                 await notify('rsvp_locked', { plan_id: plan.id });
                 pd.reload();
@@ -643,6 +649,8 @@ function PlanSheet({ plan, pd, onClose, onSaved }) {
     };
     if (plan) {
       await must(supabase.from('plans').update(row).eq('id', plan.id));
+      // O7: the usual jobs move with the dates (the database does it too from 095).
+      if (pd && row.start_date && plan.start_date && row.start_date !== String(plan.start_date).slice(0, 10)) await redateTripJobs({ ...plan, ...row }, pd.items, plan.start_date).catch(() => 0);
       onSaved?.(plan); onClose();
       return;
     }
@@ -714,21 +722,19 @@ export function LockInCard({ pd }) {
   const [busy, run] = useRun();
   const { plan } = pd;
   if (!status.is_admin || plan.proposed || plan.status !== 'planning') return null;
-  const openVotes = pd.polls.filter((p) => p.status === 'open' && p.kind !== 'other').length;
+  const openVotes = openPlanningPolls(pd.polls).length;
   if (!plan.start_date) {
     return <div className="small muted" style={{ fontWeight: 600 }}>🔒 Once the dates are picked you can lock it in{openVotes ? ' — close the dates vote first' : ' (Edit → dates)'}.</div>;
   }
   return (
-    <button type="button" className="card pad row" disabled={busy} style={{ textAlign: 'left', color: 'inherit', width: '100%', borderColor: 'var(--navy)', gap: 12 }}
-      onClick={() => {
-        if (openVotes && !window.confirm(`${openVotes} vote${openVotes === 1 ? ' is' : 's are'} still open. Lock it in anyway?`)) return;
+    <button type="button" className="card pad row" disabled={busy} style={{ textAlign: 'left', color: 'inherit', width: '100%', borderColor: 'var(--navy)', gap: 12 }} data-testid="lock-in-card"
+      onClick={async () => {
+        // V1: one box; the open votes on where and when close when it's locked in.
+        if (!(await askConfirm(lockInWords(plan, pd.polls)))) return;
         run(async () => {
-          await must(supabase.from('plans').update({ status: 'confirmed' }).eq('id', plan.id));
-          await feedPost(status.player_id, plan, `🔒 ${plan.name} is locked in: ${fmtRange(plan.start_date, plan.end_date)}${plan.location_name ? ` at ${plan.location_name}` : ''}. Say if you’re in.`);
-          await notify('trip_locked', { plan_id: plan.id });
-          await makeTripJobs({ ...pd, plan: { ...plan, status: 'confirmed' } }, status).catch(() => 0);
+          await lockInTrip(pd, status);
           pd.reload();
-        }, 'Locked in — the to-do list is ready');
+        }, 'Locked in — the votes are closed and the to-do list is ready');
       }}>
       <span style={{ fontSize: 26 }}>🔒</span>
       <span className="grow"><strong>Lock it in</strong><div className="small muted">{fmtRange(plan.start_date, plan.end_date)} · {plan.location_name || 'place TBC'} — makes it a trip in the app, ready for rounds.</div></span>

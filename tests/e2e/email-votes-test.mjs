@@ -265,15 +265,15 @@ check(JSON.stringify(again.push) === JSON.stringify([U3]), 'app notification onl
 // 4. Mike taps "⭐ Prefer" for Navy (not a date: Prefer / Option / Don't like, 080) in his email → the answer page → Save → recorded as him, by email.
 await page.goto(`${BASE}#/v/${TOKEN}?o=${O2}&r=yes`);
 await page.getByTestId('vote-confirm').waitFor({ timeout: 15000 });
-check((await page.getByTestId('vote-confirm').innerText()).includes('⭐ Prefer for Navy'), 'answer page asks to save "⭐ Prefer for Navy"');
+check((await page.getByTestId('vote-confirm').innerText()).includes('⭐ Keen for Navy'), 'answer page asks to save "⭐ Prefer for Navy"');
 check(!db.plan_votes.some((v) => v.player_id === P2), 'nothing is recorded just by opening the link');
 await page.screenshot({ path: `${SHOTS}/ev4-confirm.png`, fullPage: true });
-await page.getByRole('button', { name: /Save: ⭐ Prefer for Navy/ }).click();
+await page.getByRole('button', { name: /Save: ⭐ Keen for Navy/ }).click();
 await page.getByTestId('vote-thanks').waitFor({ timeout: 5000 });
-check((await page.getByTestId('vote-thanks').innerText()).includes('Thanks Mike — ⭐ Prefer for Navy.'), 'thanks page: "Thanks Mike — ⭐ Prefer for Navy."');
+check((await page.getByTestId('vote-thanks').innerText()).includes('Thanks Mike — ⭐ Keen for Navy.'), 'thanks page: "Thanks Mike — ⭐ Prefer for Navy."');
 check(db.plan_votes.some((v) => v.player_id === P2 && v.option_id === O2 && v.response === 'yes' && v.via === 'email'), 'vote recorded as Mike, by email');
 // Change it: tap 👎 Don't like on Pink.
-await page.locator('.card').filter({ hasText: 'Pink' }).last().getByRole('button', { name: '👎 Don’t like' }).first().click();
+await page.locator('.card').filter({ hasText: 'Pink' }).last().getByRole('button', { name: '👎 Not keen' }).first().click();
 await page.waitForTimeout(400);
 check(db.plan_votes.some((v) => v.player_id === P2 && v.option_id === O1 && v.response === 'no'), 'another tap changes / adds an answer');
 await page.screenshot({ path: `${SHOTS}/ev5-thanks.png`, fullPage: true });

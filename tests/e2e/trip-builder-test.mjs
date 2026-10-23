@@ -228,8 +228,8 @@ check(await card.locator('[data-testid="vote-batch-section"]').count() === 2 && 
 check(await page.locator('[data-testid="vote-batch"]').count() === 1 && !(await page.getByText('Which area?').count() > 1), 'the sections aren’t shown again as separate votes');
 // The organiser sees the results; "See it as a voter" shows the ballot (areas: Prefer / Option / Don't like).
 await card.getByTestId('see-as-voter').click(); await wait(300);
-await card.locator('[data-testid="vote-batch-section"]').nth(0).getByRole('button', { name: '⭐ Prefer' }).first().click(); await wait(600);
-await card.locator('[data-testid="vote-batch-section"]').nth(1).getByRole('button', { name: '✓ Can' }).first().click(); await wait(600);
+await card.locator('[data-testid="vote-batch-section"]').nth(0).getByRole('button', { name: '⭐ Keen' }).first().click(); await wait(600);
+await card.locator('[data-testid="vote-batch-section"]').nth(1).getByRole('button', { name: '✓ Yes' }).first().click(); await wait(600);
 await card.locator('[data-testid="vote-batch-keen"]').getByRole('button', { name: '✓ In' }).click(); await wait(600);
 check(await card.getByTestId('voter-thanks').isVisible(), 'answered the main questions: "Thanks — here’s how it’s looking" (the detail is optional)');
 await card.getByTestId('vote-detail-area').getByRole('button').first().click(); await wait(300);

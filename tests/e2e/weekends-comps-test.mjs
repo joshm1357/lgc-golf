@@ -330,15 +330,15 @@ check(db.plan_votes.length === before, 'opening details didn’t cast a vote');
 await both('flow-06a-option-details-sheet');
 await page.keyboard.press('Escape'); await wait(400);
 // Answer only the main questions → answered.
-await card.getByTestId('vote-batch-section').nth(0).getByRole('button', { name: '⭐ Prefer' }).nth(1).click(); await wait(500);
+await card.getByTestId('vote-batch-section').nth(0).getByRole('button', { name: '⭐ Keen' }).nth(1).click(); await wait(500);
 const wkSection = card.getByTestId('vote-batch-section').nth(1);
-const wkButtons = await wkSection.getByRole('button', { name: '✓ Can' }).count();
-for (let i = 0; i < wkButtons; i++) { await wkSection.getByRole('button', { name: '✓ Can' }).nth(i).click(); await wait(250); }
-await card.getByTestId('vote-batch-section').nth(2).getByRole('button', { name: '⭐ Prefer' }).nth(2).click(); await wait(500);
+const wkButtons = await wkSection.getByRole('button', { name: '✓ Yes' }).count();
+for (let i = 0; i < wkButtons; i++) { await wkSection.getByRole('button', { name: '✓ Yes' }).nth(i).click(); await wait(250); }
+await card.getByTestId('vote-batch-section').nth(2).getByRole('button', { name: '⭐ Keen' }).nth(2).click(); await wait(500);
 await card.getByTestId('vote-batch-keen').getByRole('button', { name: '✓ In' }).click(); await wait(600);
 check(await card.getByTestId('voter-thanks').isVisible(), 'answering the area, weekends and how long counts as answered — the detail is a bonus');
 // And go into the detail for Hunter Valley.
-await card.getByTestId('vote-detail-section').first().getByRole('button', { name: '⭐ Prefer' }).first().click(); await wait(500);
+await card.getByTestId('vote-detail-section').first().getByRole('button', { name: '⭐ Keen' }).first().click(); await wait(500);
 await both('flow-06b-voter-ballot-main-and-detail');
 await page.setViewportSize({ width: 1440, height: 900 });
 await page.reload(); await page.getByTestId('overview-votes').waitFor({ timeout: 15000 }); await wait(800);

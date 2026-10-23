@@ -27,6 +27,16 @@ export const stepKey = (k) => STEP_ALIAS[k] || k;
 /** The builder's step key → the shared step. */
 export const fromBuilder = (b) => TRIP_STEPS.find((s) => s.builder === b) || null;
 
+/**
+ * O1 (Josh's walkthrough): ONE "where we're up to" line, the same on a phone and a laptop, on Organise, the trip
+ * builder and the Overview's builder card. key: the step the trip is up to (null = every step done).
+ * → "Up to step 4 of 6: Pick & lock in" | "All 6 steps done"
+ */
+export function upToLine(key) {
+  const s = key ? TRIP_STEPS.find((x) => x.key === key || x.builder === key) : null;
+  return s ? `Up to step ${s.n} of ${TRIP_STEPS.length}: ${s.title}` : `All ${TRIP_STEPS.length} steps done`;
+}
+
 /** "Primary Fri 13 – Mon 16 Nov · Backup Fri 20 – Mon 23 Nov" (settled) or "5 weekends on the shortlist". */
 export function weekendsLine(state = {}) {
   const w = state.weekends || [];

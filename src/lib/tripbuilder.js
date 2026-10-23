@@ -14,6 +14,7 @@
 import { km, driveMinutes, fmtDrive, parseTimes, parseClock, yesNo } from './tripfinder.js';
 import { clock, toMin } from './teeWindow.js';
 import { fromBuilder } from './tripsteps.js';
+import { playing } from './headcount.js';
 
 export const MAX_STAYS = 3;
 export const MAX_OPTIONS_PER_DAY = 4;
@@ -301,13 +302,12 @@ export function rankCandidates(cands, { leg = 'stay', dow = null, votes = {}, fi
 
 // ------------------------------------------------------------------ tee times
 
-/** How many tee times: players ÷ 4, rounded up. People: the override, else those "in", else in + maybe. */
-export function teeTimesNeeded({ rsvps = [], override = null } = {}) {
-  const ins = rsvps.filter((r) => r.status === 'in').length;
-  const keen = rsvps.filter((r) => r.status === 'in' || r.status === 'maybe').length;
-  const people = Number(override) > 0 ? Number(override) : ins || keen;
-  const source = Number(override) > 0 ? 'set' : ins ? 'in' : keen ? 'keen' : 'none';
-  return { people, needed: people ? Math.ceil(people / 4) : 0, source };
+/** How many tee times: players ÷ 4, rounded up. People: the one headcount rule (lib/headcount.js) — the target set,
+ *  else those "in", else in + maybe, else the group (when players are passed). */
+export function teeTimesNeeded({ rsvps = [], override = null, players = [], overrideBy = null } = {}) {
+  const p = playing({ target: override, targetBy: overrideBy, rsvps, players });
+  const source = p.source === 'target' || p.source === 'ai' ? 'set' : p.source;
+  return { people: p.people, needed: p.needed, source, label: p.label };
 }
 /** '10:20, 10:30 10:40' / '7am 7:10am' → ['07:00', …] sorted, no repeats. Anything unreadable is left out. */
 export function parseTeeTimes(text) {
@@ -447,6 +447,41 @@ export function buildConfigurations({ weekends = [], stays = [], days = [], cour
   return out.sort((a, b) => a.gaps - b.gaps || (a.totalDrive - 10 * a.votes) - (b.totalDrive - 10 * b.votes)
     || String(a.weekend.start).localeCompare(String(b.weekend.start)) || a.key.localeCompare(b.key)).slice(0, limit);
 }
+/**
+ * O4 (Josh's walkthrough): Pick & lock in shows the BEST way to do it as one summary card — each day's course and
+ * tee times, a rough cost each, the driving from where we stay — with one "Lock this in". The rest are "other ways".
+ *   configs: buildConfigurations() (best first); tees: trip_tee_options rows (their price each);
+ *   accom: the accommodation ideas (plan_stays: the cheapest total ÷ people); people: the one headcount number.
+ * → null, or { best, rounds: [{ date, day, name, time, price }], golfEach, stayEach, costEach, drive, others,
+ *   alsoWorks: a different weekend that works too (or null) }
+ */
+export function pickSummary(configs = [], { tees = [], accom = [], people = 0 } = {}) {
+  const best = (configs || [])[0];
+  if (!best) return null;
+  const price = new Map((tees || []).map((t) => [`${String(t.play_date).slice(0, 10)}|${t.course_id}`, t.price != null ? Number(t.price) : null]));
+  const rounds = best.rounds.map((r) => {
+    const d = dateOf(r.date);
+    return { date: r.date, day: d ? `${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}` : `Day ${r.index + 1}`, name: r.name || null, time: r.block?.text || null, price: r.course_id ? price.get(`${r.date}|${r.course_id}`) ?? null : null };
+  });
+  const golf = rounds.filter((r) => r.name);
+  const golfEach = golf.length && golf.every((r) => r.price != null) ? golf.reduce((n, r) => n + r.price, 0) : null;
+  const totals = (accom || []).map((a) => Number(a.total_cost)).filter((n) => Number.isFinite(n) && n > 0);
+  const stayEach = totals.length && people > 0 ? Math.round(Math.min(...totals) / people) : null;
+  const costEach = golfEach != null || stayEach != null ? Math.round((golfEach || 0) + (stayEach || 0)) : null;
+  const also = (configs || []).find((c) => c.weekend.start !== best.weekend.start && !c.gaps);
+  return {
+    best, rounds, golfEach, stayEach, costEach, drive: best.totalDrive, others: (configs || []).slice(1),
+    alsoWorks: also ? also.weekend : null,
+  };
+}
+
+/** "about $450 each (golf $230 + stay $220)" / "golf about $230 each" / null. */
+export function costLine(s) {
+  if (!s || s.costEach == null) return null;
+  if (s.golfEach != null && s.stayEach != null) return `about $${s.costEach} each (golf $${Math.round(s.golfEach)} + stay $${s.stayEach})`;
+  return s.golfEach != null ? `golf about $${Math.round(s.golfEach)} each` : `stay about $${s.stayEach} each`;
+}
+
 /** "Stay Nowra · Fri Shoalhaven Heads 10:20–10:40 · Sat Nowra GC 8:00–8:20 · Sun Mollymook 9:10–9:30 on the way home" */
 export function configText(c) {
   const bits = [`Stay ${c.stay.name}`];

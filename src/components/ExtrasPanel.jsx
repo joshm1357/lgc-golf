@@ -1,5 +1,5 @@
 // Optional extras at the start (080, Josh): the organiser ticks what's in, and what goes to the group as "Would you do
-// these?" (⭐ Want it · 👍 Happy either way · 👎 Skip it), each with a rough cost each. Extras that are in (or win the
+// these?" (⭐ Keen · 👍 Happy with it · 👎 Not keen), each with a rough cost each. Extras that are in (or win the
 // vote) go into the trip plan budget and, where there's something to book, a job. The list is in lib/extras.js.
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase.js';

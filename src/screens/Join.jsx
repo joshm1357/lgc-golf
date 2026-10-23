@@ -100,7 +100,7 @@ export function InviteJoin({ code, inside = false, onLook }) {
           {info.team && info.my_team && <div className="small" style={{ color: 'var(--on-navy-muted)' }}>You’re already on {info.my_team} — a link never moves you to another team.</div>}
           {info.already_in && !(info.team && !info.my_team)
             ? <button type="button" className="btn gold block" onClick={() => { setCurrentGroup(info.group_id); window.location.hash = after(); window.location.reload(); }}>You’re already in — open it</button>
-            : <button type="button" className="btn gold block" disabled={busy} onClick={join}>{busy ? 'Joining…' : info.already_in && info.team ? `Join ${info.team}` : 'Join'}</button>}
+            : <button type="button" className="btn gold block" disabled={busy} onClick={join}>{busy ? 'Joining…' : info.team ? `Join ${info.team}` : 'Join'}</button>}
         </>
       )}
     </div>
@@ -251,7 +251,8 @@ function JoinSignIn({ code, returnHash, onPhone }) {
       {info === undefined && <div style={muted}>Checking the link…</div>}
       {info && (
         <div style={{ textAlign: 'center', maxWidth: 340 }}>
-          <div style={{ fontFamily: 'var(--display)', fontSize: 30, fontWeight: 700, lineHeight: 1.1 }}>Join {info.group_name}</div>
+          <div style={{ fontFamily: 'var(--display)', fontSize: 30, fontWeight: 700, lineHeight: 1.1 }} data-testid="join-title">Join {info.team || info.group_name}</div>
+          {info.team && <div style={{ ...muted, marginTop: 4 }}>in {info.group_name}</div>}
           <div style={{ ...muted, marginTop: 6 }}>Sign in so it’s you on any phone or laptop.</div>
           {(info.role === 'organiser' || info.team || info.role === 'guest') && (
             <div className="small" style={{ ...muted, marginTop: 6 }}>

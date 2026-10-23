@@ -14,6 +14,37 @@ import {
   roundTeeInputs, pastPartners, makeTeeGroups, buildBlocks, scoringContext, scoreGroups, explain, swapPlayers, rowsToSave,
   teeTimes, timeSettings, groupWhen, myGroupLine, shareTeeText, showTime, pairKey,
 } from '../lib/teegroups.js';
+// ov28 (walkthrough C1, C2, I8): maybes / non-payers marked, the first time prefilled from calling the courses,
+// "the draw is out", and the run-up nudge to set groups a few days out.
+import { usePeopleStatus } from '../components/YourRound.jsx';
+import { flagMark, calledTeeTime, roundsNeedingGroups } from '../lib/yourround.js';
+import { notify } from '../lib/push.js';
+import { todayISO } from '../lib/plan.js';
+
+/** The earliest tee time the courses gave for this round (call the courses, 080), or null. */
+function useCalledTime(round, plan) {
+  const [t, setT] = useState(null);
+  useEffect(() => {
+    if (!plan?.id || !round?.play_date) { setT(null); return; }
+    supabase.from('trip_tee_options').select('play_date,course_id,available,ranges,times').eq('plan_id', plan.id)
+      .then(({ data, error }) => setT(error ? null : calledTeeTime(data || [], round)), () => setT(null));
+  }, [plan?.id, round?.id, round?.play_date]); // eslint-disable-line react-hooks/exhaustive-deps
+  return t;
+}
+
+/** I8: tell everyone the groups are out — a Feed post and each player's own buzz ("You're off Sat 8:16am with …"). */
+export function DrawOutButton({ round, rows, nameOf }) {
+  const { status } = useSession();
+  const [busy, run] = useRun();
+  if (!status?.is_admin || status?.viewing || !rows?.length) return null;
+  return (
+    <button type="button" className="btn gold sm" disabled={busy} data-testid="groups-draw-out" onClick={() => run(async () => {
+      const lines = rows.map((r) => `${groupWhen(r)}: ${r.player_ids.map(nameOf).join(', ')}`);
+      await supabase.from('posts').insert({ kind: 'user', player_id: status.player_id, trip_id: round.trip_id || null, body: `📣 The draw is out — ${round.name}\n${lines.join('\n')}` });
+      await notify('draw_out', { round_id: round.id });
+    }, 'Sent — in the Feed and on everyone’s phone')}>📣 The draw is out — tell everyone</button>
+  );
+}
 
 /** Saved tee groups for these rounds, live: { [round_id]: rows sorted by group_no }. */
 export function useTeeRows(roundIds) {
@@ -96,7 +127,11 @@ function TeeGroupsEditor({ round, byRound, reload }) {
   const [oneMatch, setOneMatch] = useState(false);
   const [rules, setRules] = useState(() => readRules(round.trip_id));
   const [times, setTimes] = useState(null);
-  const t = times || timeSettings(saved);
+  const trip = data.trips.find((x) => x.id === round.trip_id) || null;
+  const people = usePeopleStatus(trip);
+  const called = useCalledTime(round, people.plan);
+  // C2: nothing saved yet → the first group goes at the earliest time the course gave (else 8:00).
+  const t = times || (saved.length ? timeSettings(saved) : { ...timeSettings(saved), first: called || '08:00' });
   const [draft, setDraft] = useState(null); // { groups, seed }
   const [picked, setPicked] = useState(null);
 
@@ -153,8 +188,9 @@ function TeeGroupsEditor({ round, byRound, reload }) {
     <div className="stack" style={{ marginTop: 10, gap: 10 }}>
       {!draft && saved.length > 0 && (
         <>
-          <SavedList rows={saved} nameOf={nameOf} />
+          <SavedList rows={saved} nameOf={nameOf} statusOf={people.statusOf} />
           <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            <DrawOutButton round={round} rows={saved} nameOf={nameOf} />
             <button type="button" className="btn sm" onClick={share}>Share the list</button>
             <button type="button" className="btn ghost sm" onClick={() => { setDraft({ groups: saved.map((r) => r.player_ids), seed: 1 }); setTimes(timeSettings(saved)); }}>Swap players</button>
             <button type="button" className="btn ghost sm" onClick={() => generate(1)}>Make new groups</button>
@@ -163,7 +199,7 @@ function TeeGroupsEditor({ round, byRound, reload }) {
       )}
       {!draft && !saved.length && (
         <>
-          <span className="small muted">{inputs.players.length} playing. Makes groups of four (threes when the numbers need it), with new partners each day and handicaps mixed{inputs.units.length ? `; ${round.format === 'fourball' ? 'pairs' : 'teams'} stay together` : ''}{inputs.matches.length ? '; Cup matches stay together' : ''}.</span>
+          <span className="small muted">{inputs.players.length} playing. Makes groups of four (threes when the numbers need it), with new partners each day and handicaps mixed{inputs.units.length ? `; ${round.format === 'fourball' ? 'pairs' : 'teams'} stay together` : ''}{inputs.matches.length ? '; Cup matches stay together' : ''}.{called ? ` First off ${showTime(called)} — the time the course gave.` : ''}</span>
           <button type="button" className="btn gold" onClick={() => generate(1)}>Make tee groups</button>
         </>
       )}
@@ -205,8 +241,8 @@ function TeeGroupsEditor({ round, byRound, reload }) {
               </div>
               <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
                 {g.map((id) => (
-                  <button key={id} type="button" className="chip" aria-pressed={picked === id} onClick={() => tap(id)}>
-                    {nameOf(id)} <span style={{ opacity: 0.7, fontWeight: 400 }}>{fmtHcp(scoring.ctx.hcp[id])}</span>
+                  <button key={id} type="button" className="chip" aria-pressed={picked === id} onClick={() => tap(id)} data-flag={people.statusOf(id).flag || undefined}>
+                    {nameOf(id)} <span style={{ opacity: 0.7, fontWeight: 400 }}>{fmtHcp(scoring.ctx.hcp[id])}{flagMark(people.statusOf(id).flag)}</span>
                   </button>
                 ))}
               </div>
@@ -225,15 +261,41 @@ function TeeGroupsEditor({ round, byRound, reload }) {
 
 const fmtHcp = (h) => (h == null ? '' : h < 0 ? `+${-h}` : String(h));
 
-function SavedList({ rows, nameOf }) {
+function SavedList({ rows, nameOf, statusOf = null, me = null }) {
   return (
     <div className="stack" style={{ gap: 6 }} data-testid="tee-saved">
-      {rows.map((r) => (
-        <div key={r.group_no} className="row" style={{ gap: 10, alignItems: 'baseline' }}>
-          <strong style={{ minWidth: 64 }}>{groupWhen(r)}</strong>
-          <span className="small grow">{r.player_ids.map(nameOf).join(', ')}</span>
-        </div>
-      ))}
+      {rows.map((r) => {
+        const mine = !!me && r.player_ids.includes(me);
+        return (
+          <div key={r.group_no} className="row" style={{ gap: 10, alignItems: 'baseline', ...(mine ? { background: 'var(--gold-soft)', borderRadius: 8, padding: '2px 6px' } : {}) }} data-testid={mine ? 'tee-my-group' : undefined}>
+            <strong style={{ minWidth: 64 }}>{groupWhen(r)}</strong>
+            <span className="small grow">{r.player_ids.map((id) => `${nameOf(id)}${statusOf ? flagMark(statusOf(id).flag) : ''}`).join(', ')}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * C2 — the run-up nudge for the organiser: rounds in the next few days with no playing groups yet ("Set the groups
+ * for Saturday — the course gave 7:52"), each opening the tee groups card right there. Nothing when tee groups are
+ * switched off, for players, or when every round is sorted. Mounted on the day screen; W2 can mount it in the run-up.
+ */
+export function TeeTimesNudge({ trip, days = 5 }) {
+  const data = useData();
+  const { status } = useSession();
+  const on = useFeature('tee_groups');
+  const rounds = useMemo(() => (trip ? data.rounds.filter((r) => r.trip_id === trip.id) : []), [data.rounds, trip]);
+  const [byRound] = useTeeRows(on ? rounds.map((r) => r.id) : []);
+  if (!on || !trip || !status?.is_admin || status?.viewing) return null;
+  const need = roundsNeedingGroups({ rounds, teeRounds: new Set(Object.keys(byRound)), today: todayISO(), days });
+  if (!need.length) return null;
+  return (
+    <div className="card pad stack" style={{ gap: 8, background: 'var(--gold-soft)', borderColor: 'var(--gold)' }} data-testid="tee-nudge">
+      <strong>⛳ Set the playing groups{need.length === 1 ? ` for ${need[0].name}` : ''}</strong>
+      <span className="small">Everyone’s first question is “what time am I off?”. Set the groups a few days out — each player then sees their time, group and opponents, and gets it the night before.</span>
+      {need.map((r) => <TeeGroupsCard key={r.id} round={r} />)}
     </div>
   );
 }
@@ -326,7 +388,7 @@ function TeeGroupsBoardInner({ round }) {
       <details className="card pad">
         <summary style={{ fontWeight: 700, cursor: 'pointer', minHeight: 28 }}>⛳ All tee groups ({rows.length})</summary>
         <div className="stack" style={{ gap: 8, marginTop: 10 }}>
-          <SavedList rows={rows} nameOf={nameOf} />
+          <SavedList rows={rows} nameOf={nameOf} me={status?.player_id} />
           <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={share}>Share the list</button>
         </div>
       </details>

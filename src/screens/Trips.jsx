@@ -19,6 +19,7 @@ import { ReplayChips } from '../components/ReplayChips.jsx';
 import { tripsMenu, tripNowPath, tripPath, tripDayWords } from '../lib/activetrip.js';
 import { openPlanner } from '../components/Caddie.jsx';
 import { SaveSpotBanner } from '../components/SaveSpot.jsx';
+import Memories from '../components/Memories.jsx';
 
 const TABLES = ['plans', 'plan_rsvps', 'plan_polls', 'plan_options'];
 
@@ -100,6 +101,8 @@ export default function Trips() {
         {notifyOn && <NotifyCard compact />}
         {rows.offline && <div className="small muted">No signal — showing the list from last time.</div>}
         {rows.failed && <div className="err">Couldn’t load the trips — check your signal and open Trips again.</div>}
+        {/* ov28 (I16, ov28 builder): this time last year, and the six-month nudge to suggest the next trip. */}
+        <Memories />
 
         {!has('on') && !has('locked') && (
           <button type="button" className="card pad row" data-testid="trips-plan-it" onClick={openPlanner}

@@ -28,16 +28,23 @@ export function shotsOnHole(match, hole) {
   return n > 0 ? { side, n } : { side: null, n: 0 };
 }
 
-/** Where a match stands. up > 0 means side A is ahead. */
+/**
+ * Where a match stands. up > 0 means side A is ahead.
+ * ov28 (walkthrough: "Won 10&2 can't happen in match play"): holes count in order and the match stops the moment it's
+ * decided — 6 UP with 5 to play is "won 6&5", whatever was typed in for the holes after. `extra` = holes scored after
+ * the match ended (they don't count).
+ */
 export function matchState(match) {
   const holes = match?.holes || {};
-  let a = 0; let b = 0; let played = 0;
+  let a = 0; let b = 0; let played = 0; let extra = 0; let over = false;
   for (let n = 1; n <= HOLES; n++) {
     const r = holes[String(n)];
     if (!r) continue;
+    if (over) { extra++; continue; }
     played++;
     if (r === 'a') a++;
     else if (r === 'b') b++;
+    if (Math.abs(a - b) > HOLES - played) over = true;
   }
   const up = a - b;
   const remaining = HOLES - played;
@@ -46,7 +53,7 @@ export function matchState(match) {
   const decided = lead > remaining || remaining === 0;
   const winner = decided ? (leader || 'h') : null;
   const dormie = !decided && lead > 0 && lead === remaining;
-  return { up, lead, leader, played, remaining, decided, winner, dormie, started: played > 0 };
+  return { up, lead, leader, played, remaining, decided, winner, dormie, started: played > 0, extra };
 }
 
 /** Points each side has from this match: final once decided; `projected` counts it as if it ended now. */
@@ -101,4 +108,37 @@ export function nextHole(match) {
   let last = 0;
   for (let n = 1; n <= HOLES; n++) if (holes[String(n)]) last = n;
   return Math.min(HOLES, last + 1);
+}
+
+/**
+ * The Cup's verdict in words (ov28, walkthrough W1: no "6½ to win" on a finished Cup, and say so when it isn't done).
+ *   matches: every match in the Cup; total: points in the whole Cup (0 = the matches' own points);
+ *   names: { a, b }; finished: the trip (or the Cup's rounds) is over.
+ * Returns { status, text, a, b, played, total, winner }:
+ *   'won'        "Team Blue win 7–5"          (a side has more than half the points)
+ *   'halved'     "All square 6–6"             (every point played, level)
+ *   'unfinished' "Not finished: 6 of 12 points played · Blue 4–2"   (finished trip, points left unplayed)
+ *   'live'       "Blue 4 – 2 Red"             (still going)
+ *   'none'       ""                           (no matches)
+ */
+export function cupVerdict({ matches = [], total = 0, names = { a: 'A', b: 'B' }, finished = false } = {}) {
+  const t = cupTotals(matches);
+  const all = Number(total) || t.total;
+  const a = t.won.a;
+  const b = t.won.b;
+  const played = (matches || []).filter((m) => matchState(m).decided).reduce((s, m) => s + (Number(m.points) || 0), 0);
+  const base = { a, b, played, total: all, winner: null };
+  if (!(matches || []).length) return { ...base, status: 'none', text: '' };
+  const need = toWin(all);
+  if (need && (a >= need || b >= need)) {
+    const w = a >= need ? 'a' : 'b';
+    return { ...base, status: 'won', winner: w, text: `${names[w]} win ${pts(Math.max(a, b))}–${pts(Math.min(a, b))}` };
+  }
+  if (played >= all && all > 0) {
+    if (a === b) return { ...base, status: 'halved', text: `All square ${pts(a)}–${pts(b)}` };
+    const w = a > b ? 'a' : 'b';
+    return { ...base, status: 'won', winner: w, text: `${names[w]} win ${pts(Math.max(a, b))}–${pts(Math.min(a, b))}` };
+  }
+  if (finished) return { ...base, status: 'unfinished', text: `Not finished: ${pts(played)} of ${pts(all)} points played · ${names.a} ${pts(a)}–${pts(b)} ${names.b}` };
+  return { ...base, status: 'live', text: `${names.a} ${pts(a)} – ${pts(b)} ${names.b}` };
 }

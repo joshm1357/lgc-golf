@@ -77,7 +77,7 @@ await shot('v1-02-decided');
 me = { id: AL, admin: false };
 await page.goto(`${BASE}#/plan/${PB}?view=overview`);
 await page.reload();
-await page.getByTestId('overview-glance').waitFor({ timeout: 15000 }); await wait(1200);
+await page.getByTestId('runup').waitFor({ timeout: 15000 }); await wait(1200); // ov25: a locked-in trip's page is the run-up
 const body = await page.locator('body').innerText();
 check(!/Where and when\?/.test(body) || !(await page.getByTestId('vote-now').filter({ hasText: 'Where and when' }).count()), 'a quiet player isn’t asked to vote on where and when after lock-in');
 check(!(await page.getByTestId('vote-batch').count()), 'no open vote card for where and when');

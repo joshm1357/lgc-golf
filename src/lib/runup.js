@@ -199,14 +199,15 @@ export function runUpSections({ feature = () => true, tippingOff = false, hasRou
  * → [{ key, icon, title, detail?, late?, action }]  action: 'rsvp' | 'deposit' | 'job' | 'bring' | 'handicap' | 'tip'
  */
 export function myTodos({ me, plan, rsvps = [], items = [], transfers = [], mine = null, player = null, lateRuleV = null,
-  late = {}, tipping = null, myTip = null, today = todayISO(), payTo = null } = {}) {
+  late = {}, tipping = null, myTip = null, today = todayISO(), payTo = null, collectorId = null } = {}) {
   if (!me || !plan) return [];
   const out = [];
   const rsvp = rsvps.find((r) => r.player_id === me);
   if (!rsvp || rsvp.status === 'maybe') {
     out.push({ key: 'reply', icon: '🙋', title: rsvp ? 'You’re a maybe — in or out?' : 'Say if you’re in', action: 'rsvp' });
   }
-  if (Number(plan.deposit_pp) > 0 && rsvp && rsvp.status !== 'out') {
+  // v10 merge fix: the organiser who collects the deposits already holds their own — never "Pay Josh" to Josh.
+  if (Number(plan.deposit_pp) > 0 && rsvp && rsvp.status !== 'out' && !(collectorId && me === collectorId)) {
     const d = depositStatus({ deposit: plan.deposit_pp, rsvps, transfers }).people.find((p) => p.player_id === me);
     // Sent but not ticked off yet: nothing to do (the money line says "waiting for Josh to confirm"), so no to-do and
     // never a Pay button next to "waiting" (ov27, M1).

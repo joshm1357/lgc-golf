@@ -127,6 +127,11 @@ describe('your to-dos', () => {
       mine: { handicap_checked_at: '2026-02-10' }, tipping: { open: true }, myTip: { pick_id: 'x' } });
     expect(todos.map((t) => t.key)).toEqual(['reply']);
   });
+  it('never asks the organiser who collects the deposits to pay themselves (v10 merge fix)', () => {
+    const rsvps = [{ player_id: 'm', status: 'in' }];
+    expect(myTodos({ ...base, rsvps, mine: { handicap_checked_at: 'x' }, payTo: 'Mo', collectorId: 'm' }).map((t) => t.key)).toEqual([]);
+    expect(myTodos({ ...base, rsvps, mine: { handicap_checked_at: 'x' }, payTo: 'Josh', collectorId: 'j' }).map((t) => t.title)).toEqual(['Pay Josh your $300 deposit']);
+  });
   it('gives the reminder its counts', () => {
     const r = todoForReminder([{ key: 'reply' }, { key: 'job-1', action: 'job', title: 'Bus' }, { key: 'handicap' }]);
     expect(r).toEqual({ reply: true, deposit: null, jobs: ['Bus'], handicap: true, tip: false });

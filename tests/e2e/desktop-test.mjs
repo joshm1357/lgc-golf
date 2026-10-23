@@ -201,7 +201,7 @@ async function flow(width, mobile = false) {
     check(main && side && side.x > main.x + main.width - 1, `${tag}: the status column sits down the right of the steps`);
     await page.screenshot({ path: `${SHOTS}/${tag}-1-organise.png`, fullPage: true });
     // Rounds & tee times and the set-up checklist are on the On the day step; the Tribunal is under More.
-    await page.getByRole('list', { name: 'Organising steps' }).getByRole('button', { name: /on the day/i }).click();
+    await page.getByRole('list', { name: 'Organising steps' }).getByRole('button', { name: /the run-up/i }).click();
     await page.getByTestId('panel-rounds').getByText(/8:00/).first().waitFor({ timeout: 10000 }).catch(() => {});
     check((await page.getByTestId('panel-rounds').innerText()).includes('8:00'), `${tag}: rounds show tee times (On the day)`);
     check(await page.getByTestId('panel-checklist').isVisible(), `${tag}: the set-up checklist is on On the day`);

@@ -20,6 +20,11 @@ describe('myMoney — one line per person (M1)', () => {
     expect(moneyWords(m)).toBe('Your share $535 · still to pay $535 to Josh');
   });
 
+  it('no costs yet: a player owes the deposit to Josh, Josh (who collects it) owes nothing (v10 merge fix)', () => {
+    expect(myMoney({ rsvps, plan, me: GUS, playersById }).toPay).toBe(200);
+    expect(myMoney({ rsvps, plan, me: JOSH, playersById })).toBe(null);
+  });
+
   it('a confirmed $200 deposit counts: paid $200, still to pay $335', () => {
     const transfers = [{ id: 't', from_id: GUS, to_id: null, amount: 200, confirmed: true }];
     const m = myMoney({ costs, rsvps, plan, me: GUS, transfers, playersById });

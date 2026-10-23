@@ -146,6 +146,9 @@ await ctx.addInitScript(([uid, group]) => {
   if (!localStorage.getItem('lgc-auth')) localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated' } }));
   localStorage.setItem('lgc-group', group);
   localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-caddie-hello', '1'); /* ov22: the hello is checked in hello-maps-test */ localStorage.setItem('tgt-notify-prompt', String(Date.now()));
+  // ov27 (F1): a new organiser's three-step start hides Home's other ways to start a trip; this test is about the
+  // Trips tab's own Caddie button, so the start has been put away (it's checked in trip-page-test).
+  localStorage.setItem('tgt-starter', JSON.stringify({ [group]: { hidden: true } }));
 }, ['99999999-9999-4999-8999-999999999999', GROUP]);
 const page = await ctx.newPage();
 page.on('pageerror', (e) => fails.push(`page error: ${e}`));

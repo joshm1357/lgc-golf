@@ -107,7 +107,7 @@ export function RunUp({ pd, trip = null, onOrganise = null, slots = {}, more = n
   const rooms = roomsView({ groups: pd.groups, members: pd.members, me });
   const collector = collectorOf(plan, data.playersById);
   const allTodos = myTodos({ me, plan, rsvps: pd.rsvps, items: pd.items, transfers: pd.transfers, mine, player: data.playersById[me],
-    lateRuleV: late.rule, late: { penalties: late.penalties, adjustments: late.adjustments }, tipping, myTip, payTo: collector.name });
+    lateRuleV: late.rule, late: { penalties: late.penalties, adjustments: late.adjustments }, tipping, myTip, payTo: collector.name, collectorId: collector.id });
   const todos = guest ? guestTodos(allTodos) : allTodos;
   const sections = runUpSections({ feature: (k) => feature[k] !== false, tippingOff: !!plan.tipping_off, hasRounds: true, guest });
   const S = { ...RUNUP_SLOTS, ...slots };

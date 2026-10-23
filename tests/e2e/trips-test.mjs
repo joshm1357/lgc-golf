@@ -236,9 +236,9 @@ check(writes.some((w) => w.method === 'PATCH' && w.table === 'plans' && w.body.s
 // 6. Admin setting.
 await page.goto(`${BASE}#/admin`);
 await page.getByText('7. Trip votes').click();
-await page.getByText('The admin or the trip’s organiser').waitFor();
+await page.getByText('The group’s organisers or the trip’s organiser').waitFor();
 writes.length = 0;
-await page.getByText('The admin or the trip’s organiser').click();
+await page.getByText('The group’s organisers or the trip’s organiser').click();
 await page.waitForTimeout(600);
 check(writes.some((w) => w.method === 'RPC' && w.table === 'set_vote_decider' && w.body.p_value === 'admin_or_organiser'), 'admin can let organisers pick winners');
 await page.screenshot({ path: `${SHOTS}/t6-admin.png` });

@@ -61,7 +61,8 @@ export function myMoney({ costs = [], payments = [], transfers = [], rsvps = [],
 
   // No costs yet: the deposit is what's asked (paid to the organiser, like any money paid in).
   if (!(mine && mine.share > 0)) {
-    if (!deposit || !iAmIn) {
+    // v10 merge fix: the collector holds the deposits, their own included — nothing for them to pay.
+    if (!deposit || !iAmIn || me === collector.id) {
       if (mine && mine.balance < -0.5) return { state: 'owed', share: 0, paid: 0, waiting, toPay: 0, owed: cents(-mine.balance), deposit, payees: [], collector };
       return null;
     }

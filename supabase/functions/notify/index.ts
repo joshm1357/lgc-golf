@@ -460,7 +460,8 @@ async function dailyFor(g: string) {
         if (day === tomorrow) msg = dayBeforeMessage(pl.name, pl.location_name, each.dayBefore(pid));
         else {
           const w = each.waiting(pid);
-          const owes = owing.find((o) => o.pid === pid)?.owes || (w.deposit ? Math.max(0, each.deposit - each.paid(pid)) : 0);
+          // v10 merge fix: the organiser who collects the deposits is never told to pay their own to themselves.
+          const owes = owing.find((o) => o.pid === pid)?.owes || (w.deposit && pid !== org?.id ? Math.max(0, each.deposit - each.paid(pid)) : 0);
           msg = countdownPush(day === month ? 30 : 7, pl.name, {
             owes, payTo: org ? name(org) : null, reply: w.reply, handicap: w.handicap, hcp: each.hcpOf(pid), lift: each.carsOn ? each.lift(pid) : null,
           });

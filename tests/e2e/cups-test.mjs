@@ -98,6 +98,7 @@ const weekend = () => db.comps.find((c) => c.name === 'Weekend Cup' && c.trip_id
   const { ctx, page } = await open();
   await page.goto(`${BASE}#/plan/${PC}`);
   await page.getByTestId('runup').waitFor({ timeout: 20000 });
+  await page.getByTestId('runup-more').locator('summary').click(); // ov27: Trophies & cups sits under "More about this trip"
   const grabs = page.getByTestId('runup-grabs');
   await grabs.getByTestId('cups-grabs').waitFor({ timeout: 10000 });
   await page.waitForTimeout(600);
@@ -166,6 +167,7 @@ const weekend = () => db.comps.find((c) => c.name === 'Weekend Cup' && c.trip_id
   const { ctx, page } = await open();
   await page.goto(`${BASE}#/plan/${PC}`);
   await page.getByTestId('runup').waitFor({ timeout: 20000 });
+  await page.getByTestId('runup-more').locator('summary').click(); // ov27: under "More about this trip"
   const grabs = page.getByTestId('runup-grabs');
   await grabs.getByTestId('cups-row').first().waitFor({ timeout: 10000 });
   check(await grabs.getByTestId('cups-tick').count() === 0 && await grabs.getByTestId('cups-new').count() === 0, 'player: read-only (no ticks, no + New cup)');

@@ -20,6 +20,8 @@ import RuleTag from '../components/RuleTag.jsx';
 import { isDisputable } from '../lib/disputes.js';
 import { pickActiveTrip } from '../lib/activetrip.js';
 import YourRound from '../components/YourRound.jsx';
+import { isCupComp } from '../lib/cups.js';
+import { CupStandingsView } from '../components/CupStandings.jsx'; // ov32: a group cup's points, with the breakdown
 
 // useCompData moved to components/CompsChip.jsx (ov15) so This trip can use it without loading this screen.
 export { useCompData };
@@ -27,9 +29,10 @@ export { useCompData };
 // ------------------------------------------------------------------ pieces
 
 /** A comp's standings, the same look as the leaderboard. room: inside the Trophy Room. */
-export function CompStandingsView({ comp, st, data, limit = 0 }) {
+export function CompStandingsView({ comp, st, data, limit = 0, admin = false }) {
   const [all, setAll] = useState(false);
   if (comp.kind === 'cup') return <CupView st={st} />;
+  if (st.cupKind && st.cupKind !== 'eclectic') return <CupStandingsView comp={comp} st={st} data={data} limit={limit} admin={admin} />;
   if (!st.rows.length) return <div className="card pad small muted">{st.empty || 'Nothing yet.'}</div>;
   const rows = limit && !all ? st.rows.slice(0, limit) : st.rows;
   const cols = st.rows.some((r) => r.byRound) && st.rounds.length > 1 ? st.rounds : [];
@@ -143,14 +146,14 @@ export function CompCard({ comp, data, admin, open: startOpen = false, onEdit, o
         <span aria-hidden="true" style={{ fontSize: 26 }}>{comp.trophy_id ? '🏆' : t?.emoji}</span>
         <span className="grow" style={{ minWidth: 0 }}>
           <strong>{comp.name}</strong>
-          <div className="small muted ellipsis">{t?.name} · {roundDays(comp, data.rounds)}</div>
+          <div className="small muted ellipsis">{isCupComp(comp) ? (comp.settings.cup === 'eclectic' ? 'Group cup · eclectic' : 'Group cup · points') : `${t?.name} · ${roundDays(comp, data.rounds)}`}</div>
           {st.leaderText && <div className="small" style={{ fontWeight: 700, marginTop: 2 }}>{st.leaderText}</div>}
         </span>
         <span className="small" style={{ flex: 'none', fontWeight: 700, color: sum.todo && admin ? 'var(--navy)' : 'var(--muted)' }}>{admin && sum.text ? sum.text : open ? '−' : '+'}</span>
       </button>
       {open && (
         <div className="stack" style={{ padding: '0 14px 14px', gap: 10 }}>
-          <CompStandingsView comp={comp} st={st} data={data} limit={8} />
+          <CompStandingsView comp={comp} st={st} data={data} limit={8} admin={admin} />
           {st.note && <div className="small muted"><RuleTag testId="comp-rules" rule={isDisputable({ table: 'comps', id: comp.id, field: 'settings' })
             ? { table: 'comps', id: comp.id, field: 'settings', label: `${comp.name}: how it’s decided`, value: comp.settings || {}, where: { comp_id: comp.id, trip_id: comp.trip_id, path: `/comps-board?c=${comp.id}` } }
             : { table: 'standard', field: 'rule', key: `comp.${comp.kind}`, label: `${comp.name}: how it’s decided`, value: st.note, where: { path: '/comps-board' } }}

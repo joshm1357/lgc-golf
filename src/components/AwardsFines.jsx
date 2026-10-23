@@ -10,6 +10,8 @@ import { useRun, must } from '../lib/run.js';
 import { uploadPhoto } from '../lib/images.js';
 import { notify } from '../lib/push.js';
 import RuleTag from './RuleTag.jsx';
+import { useTripComps } from './CompsChip.jsx';
+import { tripCupComps } from '../lib/cups.js'; // ov32: "Counts towards: [cup]"
 import {
   REWARD_TYPES, PROOFS, BESTS, OPINIONS, IDEAS, LEFTOVER_KEY, rewardWords, proofNeeds, proofLabel, bestLabel, checkProposal,
   signedAmount, tripAwardList, chipText, claimWords, tallyOpinions, leftoverLine, leftoverWords, termsOf, worthOf,
@@ -125,9 +127,15 @@ export function ProposeSheet({ trip, start = {}, onClose, onSaved }) {
   };
   const err = v.title.trim() ? checkProposal(row) : '';
   const blockedVote = !status.is_admin && !votingOn;
+  // ov32: the cups up for grabs this trip; an award or fine can count towards one (rules.comp_id, 100), worth points.
+  const [tripCompsList] = useTripComps(trip?.id || null);
+  const cupList = trip ? tripCupComps(tripCompsList, trip.id) : [];
+  const cupPart = v.comp_id && cupList.some((c) => c.id === v.comp_id)
+    ? { comp_id: v.comp_id, ...(row.points ? {} : { points: { mode: 'winner', points: Number(v.cup_points) > 0 ? Number(v.cup_points) : 1 } }) }
+    : {};
   const save = () => run(async () => {
     const created = await must(supabase.from('rules').insert({
-      ...row, detail: v.detail.trim() || null, category: 'fines', applies_to: ['trip'], status: 'proposed',
+      ...row, ...cupPart, detail: v.detail.trim() || null, category: 'fines', applies_to: ['trip'], status: 'proposed',
       proposed_by: status.player_id, for_trip: v.thisTrip && trip?.id ? trip.id : null,
     }).select().single());
     await supabase.from('posts').insert({ kind: 'user', player_id: status.player_id, link: `/rules/${created.id}`, trip_id: trip?.id || null, body: `📜 Up for a decision: ${created.award_kind === 'fine' ? 'fine' : 'award'} “${created.title}”${created.value ? ` (${created.value})` : ''}` });
@@ -177,6 +185,18 @@ export function ProposeSheet({ trip, start = {}, onClose, onSaved }) {
             </div>
             {v.best && <span className="small muted">The app ranks the claims; the group’s vote confirms.</span>}
           </div>
+        )}
+        {cupList.length > 0 && (
+          <label className="field"><span>Counts towards</span>
+            <select className="select" value={v.comp_id || ''} onChange={(e) => set({ comp_id: e.target.value })} data-testid="counts-towards">
+              <option value="">No cup</option>
+              {cupList.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </label>
+        )}
+        {cupPart.points && (
+          <label className="field"><span>{v.award_kind === 'fine' ? 'Points off the cup' : 'Points towards the cup'}</span>
+            <input className="input" inputMode="decimal" value={v.cup_points ?? '1'} onChange={(e) => set({ cup_points: e.target.value.replace(/[^\d.]/g, '').slice(0, 5) })} data-testid="counts-towards-points" /></label>
         )}
         {trip && (
           <label className="row" style={{ gap: 8 }}><input type="checkbox" checked={v.thisTrip} onChange={(e) => set({ thisTrip: e.target.checked })} /> <span>Just for {trip.name} (otherwise every trip)</span></label>

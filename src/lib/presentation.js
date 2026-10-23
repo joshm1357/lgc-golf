@@ -271,7 +271,7 @@ export function cupStandingsItem({ cup, standings } = {}) {
   const rows = (rows0.every((r) => r.rank != null) ? rows0 : rankBy(rows0, (r) => Number(r.value) || 0))
     .filter((r) => (Number(r.value) || 0) !== 0 || r.text);
   if (!rows.length) return null;
-  const breakdown = (r) => (r.breakdown || []).filter((b) => b && b.value).map((b) => `${b.label} ${b.value}`).join(' · ');
+  const breakdown = (r) => (typeof r.breakdown === 'string' ? r.breakdown : (r.breakdown || []).filter((b) => b && b.value).map((b) => `${b.label} ${b.value}`).join(' · '));
   const scoreOf = (r) => r.text || `${r.value} pts`;
   const places = podiumPlaces(rows, { scoreOf });
   return {

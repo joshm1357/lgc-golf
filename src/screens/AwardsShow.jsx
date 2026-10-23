@@ -22,6 +22,8 @@ import { Avatar, toast } from '../components/ui.jsx';
 import { GroupCrest } from '../components/Logo.jsx';
 import { TrophyArt } from '../components/TrophyArt.jsx';
 import { useTripResults } from '../components/TripResults.jsx';
+import { useTripComps, useCompData } from '../components/CompsChip.jsx';
+import { cupStandings, tripCupComps, isCupComp } from '../lib/cups.js';
 import {
   presentationItems, applyOrder, moveKey, flatSteps, winnerStep, beatFor, shareText, postIdFor, SECTION_LABEL,
 } from '../lib/presentation.js';
@@ -39,8 +41,20 @@ const writeJSON = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); 
  *   cups.map((cup) => ({ cup, standings: cupStandings(cup, data) }))
  * presentationItems turns each into a podium (with "Cap tips 🧢" and "Vibe points" in the mentions).
  */
-function useCupsForPresentation(/* trip */) {
-  return [];
+function useCupsForPresentation(trip) {
+  // ov32 wired in at the v10 merge: the trip's weekend / combined / eclectic cups and where they stand. Golf cups are
+  // already presented as trophies. Each row's breakdown is one line of where the points came from.
+  const [list] = useTripComps(trip?.id || null);
+  const cd = useCompData(trip?.id || null);
+  return useMemo(() => {
+    if (!trip) return [];
+    return tripCupComps(list, trip.id).filter(isCupComp).map((c) => {
+      let st = null;
+      try { st = cupStandings(c, cd); } catch { st = null; }
+      if (!st) return null;
+            return { cup: { id: c.id, name: c.name, about: st.how || c.settings?.about || null, photo_url: c.settings?.trophy_photo_url || null }, standings: st }; // rows carry breakdown as one line, e.g. "Latest out +2 · 🧢 Cap tips ×1 +1"
+    }).filter(Boolean);
+  }, [trip, list, cd]);
 }
 
 function useReducedMotion() {

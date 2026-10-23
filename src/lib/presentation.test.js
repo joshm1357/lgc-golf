@@ -211,3 +211,12 @@ describe('sharing to the Feed', () => {
     expect(a).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   });
 });
+
+describe('cup standings from ov32 (wired at the v10 merge)', () => {
+  it('takes a one-line breakdown as the honourable mention story', async () => {
+    const { cupStandingsItem } = await import('./presentation.js');
+    const rows = ['A', 'B', 'C', 'D'].map((n, i) => ({ id: n, name: n, value: 10 - i, text: `${10 - i} pts`, rank: i + 1, breakdown: `Latest out +${4 - i} · Vibe +6 (3 photos)` }));
+    const item = cupStandingsItem({ cup: { id: 'c', name: 'Weekend Cup' }, standings: { rows } });
+    expect(item.mentions.map((m) => m.story || m.text || JSON.stringify(m)).join(' ')).toMatch(/Vibe \+6/);
+  });
+});

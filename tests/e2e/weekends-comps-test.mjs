@@ -316,6 +316,12 @@ await page.goto(`${BASE}#/plan/${PLAN}?view=overview`);
 await page.getByTestId('overview-votes').waitFor({ timeout: 15000 });
 const card = page.locator('[data-testid="vote-batch"]').first();
 check(await card.getByTestId('vote-batch-section').count() === 3, 'the main questions: area, weekend, how long');
+// ov26 V3: "Are you in?" first, a header line with how many are in; V2: each weekend says what a longer trip adds.
+const order = await card.locator('[data-testid="vote-batch-keen"], [data-testid="vote-batch-section"]').evaluateAll((els) => els.map((e) => e.dataset.testid));
+check(order[0] === 'vote-batch-keen', `V3: "Are you in?" comes first (${order.join(', ')})`);
+check(/\d+ in so far$/.test(await card.getByTestId('ballot-header').innerText()), `V3: the header line (${await card.getByTestId('ballot-header').innerText()})`);
+const wkNotes = db.plan_options.filter((o) => o.start_date && /^Sat /.test(o.label) && o.poll_id === db.plan_polls.find((p) => p.vote_batch === batch?.id && p.question === 'Which weekend?')?.id).map((o) => o.notes || '');
+check(wkNotes.length > 0 && wkNotes.every((n) => /if we go 3 nights/.test(n)), `V2: each weekend says what 3 nights adds (${wkNotes[0]}); a custom range keeps its own dates`);
 check(await card.getByTestId('vote-detail-area').count() === 2 && await card.getByTestId('vote-detail-section').count() === 0, 'the detail sits under each area, folded away');
 check((await card.getByTestId('vote-detail-area').first().innerText()).includes('Go into the detail →'), '"Go into the detail →"');
 check(await card.getByTestId('option-summary-line').count() >= 2, 'options show their summary line on the card');
@@ -368,9 +374,12 @@ await both('flow-07-organiser-results');
 await hv.getByTestId('choose-voted-area').click(); await wait(800);
 check(state().region === 'Hunter Valley' && state().stays?.map((s) => s.name).join(',') === 'Pokolbin', `chosen: Hunter Valley, Pokolbin ticked for step 2 (${state().stays?.map((s) => s.name)})`);
 check(state().weekendsSettled === true && state().weekends.length === 2 && state().nights === 3, `primary and backup weekends at 3 nights (${JSON.stringify(state().weekends?.map((w) => [w.start, w.end]))})`);
+const posts0 = (db.posts || []).filter((p) => /^🗳️ .*: it’s /.test(p.body || ''));
+check(posts0.length === 1 && /it’s Hunter Valley, \w{3} \d+ – \w{3} \d+ \w{3}\. 3 nights\./.test(posts0[0].body), `I4: one result post in the Feed (${posts0.map((p) => p.body).join(' | ')})`);
 check(state().days.find((d) => d.leg === 'stay')?.options?.length >= 1, 'stay days pre-filled with the area’s courses');
 await step('area').getByRole('button').first().click(); await wait(400);
 check(/Primary:[\s\S]*Backup:/.test(await page.getByTestId('tb-weekends-settled').innerText()), 'step 1 shows "Primary" and "Backup"');
+check(await page.getByTestId('result-card').isVisible() && await page.getByTestId('result-calendar').isVisible(), 'I4: the result card, with Share and Add to calendar');
 await both('flow-08-chosen-primary-backup');
 await step('calls').getByRole('button').first().click(); await wait(500);
 check(!(await step('calls').innerText()).includes('After:') && await page.getByTestId('tb-make-calls').isVisible(), 'Call the courses is unlocked for the winning area');
@@ -403,6 +412,8 @@ await page.getByTestId('confirm-sheet').waitFor({ timeout: 5000 });
 await page.getByTestId('confirm-yes').click(); await wait(1500);
 await page.getByRole('button', { name: 'Close' }).first().click().catch(() => {}); await wait(300); // the fresh vote's sheet
 check(state().region === null && state().areaCourses?.['Hunter Valley']?.length >= 1, 'or re-open the area choice — nothing lost');
+check(/Before you reopened \(1\)/.test(await page.getByTestId('before-reopened').innerText()), 'O5: the old work is kept under “Before you reopened”');
+check((db.posts || []).some((p) => /didn’t work out, so where we go is open again/.test(p.body || '')), 'O5: one Feed post when the area re-opens');
 
 // 8. Organise: the steps in the new order; the run-up in "Comps & on the day".
 await page.goto(`${BASE}#/plan/${PLAN2}?view=organise&step=day`);

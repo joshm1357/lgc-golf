@@ -232,7 +232,7 @@ export function TripPlanCards({ pd, only = null }) {
   const rows = [
     tasksOn && { k: 'stay', icon: '🏠', title: 'Where to stay', sub: chosen ? `${chosen.name}${chosen.total_cost != null ? ` · ${money(chosen.total_cost)}` : ''}` : ex.stays.length ? `${ex.stays.length} on the shortlist` : plan.start_date ? 'Find 2–3 places, then the group votes' : 'Once the dates are known' },
     costsOn && { k: 'budget', icon: '🧾', title: 'Trip plan', sub: ex.budget.length ? `${money(sum.total)} · ${money(sum.perPerson)} each${sum.basis === 'keen' ? ' if everyone keen comes' : ''}` : status.is_admin ? 'Costs, food plan and the deposit' : 'Not started yet' },
-    costsOn && dep && { k: 'deposits', icon: '💳', title: `Deposits · ${money(plan.deposit_pp)} each`, sub: `${dep.people.filter((p) => p.state === 'paid').length} of ${dep.people.length} paid` },
+    costsOn && dep && { k: 'deposits', icon: '💳', title: `Deposits · ${money(plan.deposit_pp)} each`, sub: `${dep.people.filter((p) => p.state === 'paid').length} of ${dep.people.length} paid (in or maybe)` },
   ].filter(Boolean).filter((r) => !only || only.includes(r.k));
   if (!rows.length) return null;
   return (

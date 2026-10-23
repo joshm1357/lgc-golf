@@ -9,6 +9,7 @@ import { batchNonVoters } from '../lib/tripbuilder.js';
 import { organiserView, hasAnsweredAll, sectionResults, timeLeft, closesWord, groupBallot, detailCounts, detailQuestion, detailVerdict, votersOf, lastDayNudge, ballotHeader } from '../lib/callvote.js';
 import { PollCard, DecidedLine } from './PollCard.jsx';
 import { closedAtLockIn } from '../lib/lockin.js';
+import { replies, repliesLine } from '../lib/headcount.js';
 import { useOptionKeys, detailsFor, OptionDetailsSheet } from './OptionDetails.jsx';
 import { ShareVoteButton } from './CallVote.jsx';
 
@@ -73,7 +74,7 @@ export function VoteBatchCard({ batch, pd, voterOnly = false }) {
   const name = (id) => playerName(data.playersById[id]);
   const answeredCount = polls.filter((p) => pd.votes.some((v) => v.poll_id === p.id && v.player_id === me)).length + (batch.keen && mine ? 1 : 0);
   // V3: "South Coast NSW · about $450 each · 2 hr drive · 9 in so far" (saved with the vote when it was called).
-  const header = ballotHeader({ areas: st?.voteHeader?.[batch.id]?.areas || [], ins: pd.rsvps.filter((r) => r.status === 'in').length });
+  const header = ballotHeader({ areas: st?.voteHeader?.[batch.id]?.areas || [], ins: replies({ players: data.players, rsvps: pd.rsvps }).in });
   // I3: the last day of the vote — who it's waiting on, and a cheeky message for the group chat.
   const nudge = open ? lastDayNudge({ closes: batch.closes_on, today: todayISO(), waiting: waiting.map(name), planName: pd.plan.name, title: batch.title, link: appLink(`/plan/${pd.plan.id}?tab=vote`) }) : null;
   const voters = votersOf(polls, pd.votes);
@@ -101,7 +102,7 @@ export function VoteBatchCard({ batch, pd, voterOnly = false }) {
           ))}
         </div>
       )}
-      <span className="small muted">{['in', 'maybe', 'out'].map((x) => `${pd.rsvps.filter((r) => r.status === x).length} ${x}`).join(' · ')}</span>
+      <span className="small muted" data-testid="keen-count">{repliesLine(replies({ players: data.players, rsvps: pd.rsvps }))}</span>
     </div>
   );
   return (

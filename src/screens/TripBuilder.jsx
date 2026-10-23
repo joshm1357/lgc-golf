@@ -40,7 +40,7 @@ import { weekendStatus, fallsThrough, goWithBackup, deadOptions, goWithPost, add
 import { lockInWords } from '../lib/lockin.js';
 import { lockInTrip, redateTripJobs } from './TripPlan.jsx';
 import OtherWays from '../components/OtherWays.jsx';
-import { stagePatch, jobStage } from '../lib/tripjobs.js';
+import { stagePatch, jobStage, dueWords } from '../lib/tripjobs.js';
 import { icsFor } from '../lib/plan.js';
 import { shareText, downloadFile, appLink } from '../lib/push.js';
 import { TRIP_STEPS, areaLine, coursesLine, upToLine } from '../lib/tripsteps.js';
@@ -869,7 +869,7 @@ function BeforeReopened({ before }) {
             {(b.weekends || []).length > 0 && <div>{rolesLine(b.weekends)}</div>}
             {(b.stays || []).length > 0 && <div>Stay: {b.stays.join(', ')}</div>}
             {b.pickedText && <div>Picked: {b.pickedText}</div>}
-            {b.calls ? <div>{b.calls} call{b.calls === 1 ? '' : 's'} made · re-opened {b.at}</div> : <div>Re-opened {b.at}</div>}
+            {b.calls ? <div>{b.calls} call{b.calls === 1 ? '' : 's'} made · re-opened {dueWords(b.at)}</div> : <div>Re-opened {dueWords(b.at)}</div>}
           </div>
         ))}
       </div>

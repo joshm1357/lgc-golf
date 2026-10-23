@@ -56,7 +56,14 @@ function useReducedMotion() {
   return r;
 }
 
+/** A fresh show for each trip and each ?only= (moving between them never carries over the place you were up to). */
 export default function AwardsShow() {
+  const { tripId } = useParams();
+  const [params] = useSearchParams();
+  return <Presentation key={`${tripId || ''}|${params.get('only') || ''}`} />;
+}
+
+function Presentation() {
   const { tripId } = useParams();
   const [params] = useSearchParams();
   const only = params.get('only');

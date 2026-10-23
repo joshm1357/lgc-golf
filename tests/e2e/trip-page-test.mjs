@@ -86,7 +86,8 @@ const openMore = async (page) => {
   const text = await page.getByTestId('your-weekend').innerText();
   check(/days to go/.test(text) && /12 Beach Rd, Shoalhaven Heads NSW/.test(text), 'dates, countdown and the house address');
   check(/maps/.test(await page.getByTestId('yw-address').getAttribute('href')), 'the address opens in Maps');
-  check(/Shoalhaven Heads GC/.test(text) && /7:52am with Bo and Cy/.test(text), 'each day: the course, my tee time and my group');
+  check(/Shoalhaven Heads GC/.test(text) && /7:52/.test(text) && /with Bo and Cy/.test(text) && await page.getByTestId('your-weekend').getByTestId('your-round').count() === 1
+    && /Tee time and group to come/.test(text), `each day: ov28's Your round where it's set, "to come" where not; each day: the course, my tee time and my group (${text.replace(/\n/g, ' / ')})`);
   check(/Josh’s car · pick-up Leichhardt 6:30am/.test(await page.getByTestId('yw-car').innerText()), 'my car');
   check(/still to pay \$\d[\d,.]* to Josh/.test(await page.getByTestId('money-line').innerText()), 'paid and owed: one money line, "to Josh"');
   check(/Seats confirmed: 1 of 5 \(paid\)/.test(await page.getByTestId('yw-seats').innerText()), `I7: seats confirmed (${await page.getByTestId('yw-seats').innerText()})`);

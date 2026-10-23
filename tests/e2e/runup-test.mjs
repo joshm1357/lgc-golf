@@ -158,7 +158,7 @@ const noSideScroll = async (page, label) => {
   const head = await page.getByTestId('runup-countdown').innerText();
   check(/\d+ days to go/.test(head) && /📅/.test(head), `Your weekend: dates and countdown (${head.replace(/\n/g, ' ')})`);
   check(/Hunter Valley/.test(await page.getByTestId('yw-address').innerText()), 'Your weekend: where we’re staying (tap for maps)');
-  check(/Cypress Lakes/.test(await page.getByTestId('yw-day').first().innerText()) && /9:12am with Bo/.test(await page.getByTestId('yw-tee').first().innerText()), 'Your weekend: the course, my tee time and my group');
+  check(/Cypress Lakes/.test(await page.getByTestId('yw-day').first().innerText()) && /9:12/.test(await page.getByTestId('yw-day').first().innerText()) && /Bo/.test(await page.getByTestId('yw-day').first().innerText()), 'Your weekend: the course, my tee time and my group');
   const todos = await page.getByTestId('runup-todos').innerText();
   check(/Pay Josh your \$300 deposit/.test(todos) && /Check your handicap \(11\)/.test(todos) && /Pick your winner/.test(todos), `your to-dos: deposit (pay Josh), handicap, tip (${todos.replace(/\n/g, ' / ')})`);
   check(/Call Nowra Golf Club/.test(todos), 'your to-dos: your job');

@@ -315,7 +315,7 @@ export function RoundGames({ round }) {
           <div className="row" style={{ gap: 8 }}>
             <div className="grow"><strong>{GAME_INFO[g.kind]?.emoji} {gameLabel(g)}</strong><div className="small muted">{g.house_rules ? `House rules: ${g.house_rules}` : GAME_INFO[g.kind]?.blurb}</div>
               {isOptIn(g) && <div className="small" data-testid="admin-opt-in">Opt-in{g.created_by && g.created_by !== status.player_id ? ` · put up by ${playerName(data.playersById[g.created_by])}` : ''}</div>}</div>
-            <GameHelp kind={g.kind} houseRules={g.house_rules || ''} label="How" />
+            <GameHelp kind={g.kind} houseRules={g.house_rules || ''} optIn={isOptIn(g)} label="How" />
             <button type="button" className="btn ghost sm" onClick={() => setEditing(editing === g.id ? null : g.id)}>{editing === g.id ? 'Close' : 'Change'}</button>
           </div>
           {!gameSuits(g.kind, round.format) && <div className="small muted">Not played in Ambrose rounds.</div>}

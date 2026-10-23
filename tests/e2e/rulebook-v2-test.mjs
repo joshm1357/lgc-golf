@@ -170,6 +170,7 @@ await page.goto(`${BASE}#/admin`);
 await page.getByTestId('round-games').first().waitFor({ timeout: 15000 });
 const sat = page.getByTestId('round-games').last();
 const chip = sat.getByRole('button', { name: /\+ Beer skins/ });
+await chip.waitFor({ timeout: 10000 }).catch(() => {}); // custom games load after the round's games
 check(await chip.isVisible(), 'the custom game is offered on a round like a standard one');
 await chip.click();
 await page.waitForTimeout(800);

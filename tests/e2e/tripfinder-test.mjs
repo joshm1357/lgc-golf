@@ -144,6 +144,9 @@ page.on('dialog', (d) => d.accept());
 
 // 1. The trip: organisers see "Find a course" (Organise → Plan, ov14).
 await page.goto(`${BASE}#/plan/${PLAN}?view=organise&step=plan`);
+// ov26 (O2): "Find a course" is one of the "Other ways to do this" under the Next step.
+await page.getByTestId('other-ways').locator('summary').waitFor({ timeout: 15000 });
+await page.getByTestId('other-ways').locator('summary').click();
 await page.locator('[data-testid="tf-link"]').waitFor({ timeout: 15000 });
 check(true, 'the trip shows "Find a course" for the organiser');
 await page.locator('[data-testid="tf-link"]').click();

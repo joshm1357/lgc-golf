@@ -274,7 +274,9 @@ export function makePrimary(weekends = [], start) {
  * → { weekends, added } (added = null when the shortlist has nothing left).
  */
 export function openUpWeekend(st = {}, points = {}) {
-  const pool = st.weekendPool?.length ? st.weekendPool : (st.weekends || []);
+  // O5: a weekend that fell through (deadWeekends) is never offered again.
+  const dead = new Set(st.deadWeekends || []);
+  const pool = (st.weekendPool?.length ? st.weekendPool : (st.weekends || [])).filter((w) => !dead.has(w.from || w.start));
   const inNow = new Set((st.weekends || []).map((w) => w.from || w.start));
   const next = rankWeekends(pool, points).find((w) => !inNow.has(w.from || w.start));
   if (!next) return { weekends: st.weekends || [], added: null };

@@ -228,6 +228,8 @@ await page.getByRole('button', { name: /Lock it in/ }).first().waitFor({ timeout
 await page.screenshot({ path: `${SHOTS}/t5-lock-in.png`, fullPage: true });
 writes.length = 0;
 await page.getByRole('button', { name: /Lock it in/ }).first().click();
+// ov26 (V1): one box first — the open votes on where and when close too.
+await page.getByTestId('confirm-yes').click();
 await page.waitForTimeout(800);
 check(writes.some((w) => w.method === 'PATCH' && w.table === 'plans' && w.body.status === 'confirmed'), 'lock it in sets the trip to Locked in');
 

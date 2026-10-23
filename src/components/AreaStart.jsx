@@ -18,6 +18,7 @@ import { CourseSheet, StaySheet } from './PlaceSheets.jsx';
 import { usePlaceInfo, RowTip } from './PlanMapTools.jsx';
 import { courseTip, stayTip } from '../lib/placeinfo.js';
 import OtherWays from './OtherWays.jsx';
+import PinDropper, { tapToPin } from './PinDropper.jsx';
 import './planux.css';
 
 export const slimCourse = (c) => ({ id: c.id, name: c.name, area: c.area || null, lat: c.lat, lng: c.lng, mine_avg: c.mine_avg ?? null, others_avg: c.others_avg ?? null, others_n: c.others_n ?? null });
@@ -117,11 +118,10 @@ export default function AreaStart({ plan, st, save, org, areas, history, accom =
     save({ ...st, region: r, regionOptions: [r], stays, days });
   }
   const goingHere = () => chooseArea(area);
-  const dropPin = () => {
-    const p = { key: `pin:${Date.now()}`, name: pinName.trim(), lat: Math.round(addPin.lat * 1000) / 1000, lng: Math.round(addPin.lng * 1000) / 1000, custom: true, area };
+  const dropPin = (at, name) => {
+    const p = { key: `pin:${Date.now()}`, name, lat: Math.round(at.lat * 1000) / 1000, lng: Math.round(at.lng * 1000) / 1000, custom: true, area };
     const list = onTableStays.length < TB.MAX_AREA_STAYS ? [...onTableStays, p] : onTableStays;
     save({ ...st, pins: [...(st.pins || []), p], areaStays: { ...(st.areaStays || {}), [area]: list }, ...(area === st.region ? { stays: list.slice(0, TB.MAX_STAYS) } : {}) });
-    setAddPin(null); setPinName('');
   };
 
   const mapCourses = cands.slice(0, 40).map((c) => ({ id: c.course.id, name: c.course.name, lat: c.course.lat, lng: c.course.lng, on: onTableCourses.includes(c.course.id), sub: c.drive.text, sug: c.suggested && !onTableCourses.includes(c.course.id) }));
@@ -151,7 +151,7 @@ export default function AreaStart({ plan, st, save, org, areas, history, accom =
       <div className="as-grid">
       <div className="as-map">
       <BuilderMap className="tb-map tb-map-tall" courses={mapCourses} stays={mapStays} onCourse={(c) => toggleCourse(courseMap[c.id] || c)} onStay={toggleStay}
-        info={pi} tipFor={tipFor} onTap={org && addPin === 'tap' ? (p) => { setAddPin(p); setPinName(''); } : undefined} />
+        info={pi} tipFor={tipFor} onTap={org && addPin === 'tap' ? tapToPin(areas, setAddPin, setPinName) : undefined} />
       <span className="small muted">{pi.canHover ? 'Point at a course dot or 🏠 pin for a summary; click it for everything' : 'Tap a course dot or 🏠 pin for a summary, tap again for everything'} — tick them in the lists to put them on the table. ✨ = suggested — you choose.</span>
       </div>
       <div className="stack as-lists" style={{ gap: 10 }}>
@@ -180,15 +180,7 @@ export default function AreaStart({ plan, st, save, org, areas, history, accom =
               <span className="small muted" style={{ display: 'block' }}>{TB.staySupport(s, onTableCourses, courseMap, st.stayMax)} of the courses on the table within {st.stayMax} min</span></span>
           </div>
         ))}
-        {org && (addPin === null
-          ? <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={() => setAddPin('tap')} data-testid="drop-pin">📍 Drop a pin (a part of town, beachside…)</button>
-          : addPin === 'tap' ? <span className="small" style={{ fontWeight: 700 }}>Tap the map where you’d stay… <button type="button" className="btn ghost sm" onClick={() => setAddPin(null)}>Cancel</button></span>
-            : (
-              <div className="row" style={{ gap: 6 }}>
-                <input className="input grow" value={pinName} maxLength={40} onChange={(e) => setPinName(e.target.value)} placeholder="Name it, e.g. Kiama beachside" aria-label="Place name" />
-                <button type="button" className="btn sm" disabled={pinName.trim().length < 2} onClick={dropPin}>Add</button>
-              </div>
-            ))}
+        {org && <PinDropper areas={areas} addPin={addPin} setAddPin={setAddPin} pinName={pinName} setPinName={setPinName} onAdd={dropPin} />}
         <span className="small muted">Accommodation searches come in the next step, once the area’s chosen.</span>
       </div>
 

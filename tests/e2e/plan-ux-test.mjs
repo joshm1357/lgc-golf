@@ -312,6 +312,32 @@ await page.getByTestId('plan-with-ai').click();
 await page.getByTestId('caddie-plan-sheet').waitFor({ timeout: 5000 });
 check((await page.getByTestId('chat-me').count()) === 3, 'back in: the messages are still there');
 check(await page.getByTestId('open-trip').isVisible(), 'and a button back to the trip it’s filling in');
+// v10.5 (Josh: "that should not be the requirement"): an answer from anywhere opens the trip it updates — no button.
+await page.getByLabel('Your message').fill('Those weekends work');
+await page.getByRole('button', { name: 'Send', exact: true }).click();
+await page.waitForURL(new RegExp(`#/plan/${newPlan}/build`), { timeout: 15000 }).catch(() => {});
+check(page.url().includes(`/plan/${newPlan}/build`), 'answering from the Trips page opens the trip it’s filling in');
+// The trip gets called off: the chat lets it go and starts a new one, instead of filling in a hidden trip.
+db.plans.find((x) => x.id === newPlan).status = 'cancelled';
+const oldBuild = JSON.stringify(build());
+await page.getByRole('button', { name: 'Close' }).last().click(); await wait(300);
+await page.goto(`${BASE}#/plan`);
+await page.getByTestId('plan-with-ai').click();
+await page.getByTestId('caddie-plan-sheet').waitFor({ timeout: 5000 });
+await page.getByTestId('plan-gone').waitFor({ timeout: 5000 }).catch(() => {});
+check(/“Spring away” was called off/.test(await page.getByTestId('plan-gone').innerText().catch(() => '')), 'reopening the chat: it says the trip was called off');
+check(!(await page.getByTestId('open-trip').count()), 'and no button to the called-off trip');
+const plansBefore = db.plans.length;
+await page.getByLabel('Your message').fill('Start again with the same idea');
+await page.getByRole('button', { name: 'Send', exact: true }).click();
+await page.waitForURL((u) => /#\/plan\/[0-9a-f-]{36}\/build/.test(u.href) && !u.href.includes(newPlan), { timeout: 15000 }).catch(() => {});
+const newer = (page.url().match(/plan\/([0-9a-f-]{36})\/build/) || [])[1];
+check(db.plans.length === plansBefore + 1 && newer && newer !== newPlan, 'the next answer makes a new trip and opens it');
+check(JSON.stringify(build()) === oldBuild, 'the called-off trip is left alone');
+await page.getByRole('button', { name: 'Close' }).last().click().catch(() => {}); await wait(300);
+await page.goto(`${BASE}#/plan`);
+await page.getByTestId('plan-with-ai').click();
+await page.getByTestId('caddie-plan-sheet').waitFor({ timeout: 5000 });
 await page.getByRole('button', { name: 'Close' }).last().click(); await wait(300);
 
 // ---------------------------------------------------------------- B. A page per region, then side by side

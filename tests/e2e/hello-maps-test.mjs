@@ -376,10 +376,21 @@ const box = (loc) => loc.boundingBox();
   await page.mouse.move(5, 5);
   const far = page.getByTestId('area-course').filter({ hasText: 'Branxton' });
   if (await far.count()) {
+    // v10.5 (Josh: "should instead have a click, then zoom to"): pointing at the row doesn't move the map…
+    const inView = async () => {
+      const hp = await map2.locator('path.leaflet-interactive.pm-hot').boundingBox();
+      const mm = await map2.locator('.leaflet-container').boundingBox();
+      return !!(hp && hp.x >= mm.x && hp.x <= mm.x + mm.width && hp.y >= mm.y && hp.y <= mm.y + mm.height);
+    };
+    const pane = () => map2.locator('.leaflet-map-pane').evaluate((el) => el.style.transform);
+    const zoomNow = () => map2.locator('.leaflet-container').evaluate((el) => el.querySelector('.leaflet-tile')?.src || '');
+    const before = `${await pane()}|${await zoomNow()}`;
     await far.hover(); await wait(600);
-    const hp = await map2.locator('path.leaflet-interactive.pm-hot').boundingBox();
-    const mm = await map2.locator('.leaflet-container').boundingBox();
-    check(hp && hp.x >= mm.x && hp.x <= mm.x + mm.width && hp.y >= mm.y && hp.y <= mm.y + mm.height, 'a course off the map: the map pans to it');
+    check(`${await pane()}|${await zoomNow()}` === before, 'pointing at a row doesn’t move the map');
+    // …a click does: it zooms to it, with its summary; a second click opens everything.
+    await far.getByRole('button', { name: /Branxton/ }).click(); await wait(600);
+    check(await inView(), 'a click on the row: the map zooms to it');
+    check(!(await page.getByTestId('tb-course').count()), 'the first click doesn’t open the details');
   } else check(false, 'Branxton row to point at');
   await page.mouse.move(5, 5); await wait(400);
   // Frame everything again (reload) and hover a pin → its row lights up, a summary card on the pin.
@@ -397,7 +408,8 @@ const box = (loc) => loc.boundingBox();
   await page.screenshot({ path: `${SHOTS}/c-06-hover-pin.png` });
   // 6. Click → everything: the Cypress Lakes sheet.
   await page.mouse.move(5, 5); await wait(400);
-  await page.getByTestId('area-course').filter({ hasText: 'Cypress Lakes' }).getByRole('button', { name: /Cypress Lakes/ }).click();
+  await page.getByTestId('area-course').filter({ hasText: 'Cypress Lakes' }).getByRole('button', { name: /Cypress Lakes/ }).click(); await wait(300);
+  await page.getByTestId('area-course').filter({ hasText: 'Cypress Lakes' }).getByRole('button', { name: /Cypress Lakes/ }).click(); // second click
   const sheet = page.getByTestId('tb-course');
   await sheet.waitFor({ timeout: 6000 });
   await sheet.getByTestId('about-groups').waitFor({ timeout: 6000 });

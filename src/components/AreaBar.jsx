@@ -43,7 +43,9 @@ export default function AreaBar({ st, save, org, areas, tab, onTab, guides = [] 
     return (
       <div className="card pad row between" style={{ gap: 8 }} data-testid="area-bar">
         <span><span className="small muted" style={{ display: 'block' }}>The area</span><strong data-testid="tb-region">📍 {st.region}</strong></span>
-        {org && <button type="button" className="btn ghost sm" onClick={() => save({ ...st, region: null, regionOptions: st.areaPool?.length ? st.areaPool : options })}>Change</button>}
+        {/* v10.5 (Josh: "why have a change next to areas, just have an add area"): add another → back to a list of options. */}
+        {org && <button type="button" className="btn ghost sm" data-testid="add-area"
+          onClick={() => { setAdding(true); save({ ...st, region: null, regionOptions: st.areaPool?.length ? [...new Set([st.region, ...st.areaPool])] : options }); }}>+ Add another area</button>}
       </div>
     );
   }

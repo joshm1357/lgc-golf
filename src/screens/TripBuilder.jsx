@@ -28,6 +28,7 @@ import { extrasSection } from '../lib/extras.js';
 import { useCourseResearch } from '../components/CourseResearch.jsx';
 import { shortFacts } from '../lib/courseresearch.js';
 // ov23: areas bar, every weekend in the window, how long, stays in step 2, the vote's results, primary / backup.
+import PinDropper, { tapToPin } from '../components/PinDropper.jsx';
 import AreaBar, { useRegionGuides } from '../components/AreaBar.jsx';
 import WeekendPicker, { LengthPicker } from '../components/WeekendPicker.jsx';
 import StayIdeas from '../components/StayIdeas.jsx';
@@ -431,7 +432,7 @@ export default function TripBuilder() {
   const map = (
     <BuilderMap courses={mapCourses} stays={mapStays} origin={org ? origin : null}
       onCourse={openCourse} onStay={org && st.region ? toggleStay : undefined} info={pi} tipFor={tipFor}
-      onTap={org && addPin === 'tap' ? (p) => { setAddPin(p); setPinName(''); } : undefined} />
+      onTap={org && addPin === 'tap' ? tapToPin(areas, setAddPin, setPinName) : undefined} />
   );
 
   const lockedNote = (s) => <div className="tb-locked">🔒 After: {s.after}</div>;
@@ -452,20 +453,21 @@ export default function TripBuilder() {
   const tabNow = areaTab === '__compare' && areaOptions.length > 1 ? '__compare' : areaOptions.includes(areaTab) ? areaTab : areaOptions[0] || null;
   const comparing = tabNow === '__compare';
   const ptsBadge = (k) => (points[k] ? <span className="tb-chip-pts">{points[k]}</span> : null);
+  // v10.5: plain words — "The weekend" and "If the courses can't fit you" (the course calls still say Primary / Backup).
   const primaryBackup = st.weekendsSettled && st.weekends.length > 0 && (
     <div className="card pad stack" style={{ gap: 4 }} data-testid="tb-weekends-settled">
-      <strong className="small">📅 The weekends the courses get called about</strong>
       {st.weekends.map((w, i) => (
         <div key={w.start} className="row between small" style={{ gap: 6 }} data-testid="settled-weekend">
-          <span><strong>{weekendRole(i)}:</strong> {TB.weekendLabel({ start: w.start, end: w.end })}</span>
+          <span>{i === 0 ? <strong>📅 The weekend: {TB.weekendLabel({ start: w.start, end: w.end })}</strong>
+            : <>{i === 1 ? 'If the courses can’t fit you: ' : 'Then: '}{TB.weekendLabel({ start: w.start, end: w.end })}</>}</span>
           {org && i > 0 && <span className="row" style={{ gap: 4 }}>
-            <button type="button" className="btn ghost sm" onClick={() => patch({ weekends: makePrimary(st.weekends, w.start) })}>Make primary</button>
+            <button type="button" className="btn ghost sm" onClick={() => patch({ weekends: makePrimary(st.weekends, w.start) })}>Go with this one</button>
             <button type="button" className="btn ghost sm" aria-label={`Drop ${w.start}`} onClick={() => patch({ weekends: st.weekends.filter((x) => x.start !== w.start) })}>✕</button>
           </span>}
         </div>
       ))}
       {org && <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-        {openUpWeekend(st, points).added && <button type="button" className="btn ghost sm" onClick={() => patch({ weekends: openUpWeekend(st, points).weekends })} data-testid="add-backup">+ Add another backup</button>}
+        {openUpWeekend(st, points).added && <button type="button" className="btn ghost sm" onClick={() => patch({ weekends: openUpWeekend(st, points).weekends })} data-testid="add-backup">+ Another fallback weekend</button>}
         <button type="button" className="btn ghost sm" onClick={() => patch({ weekendsSettled: false, weekends: st.weekendPool?.length ? st.weekendPool : st.weekends })}>Change</button>
       </div>}
     </div>
@@ -490,7 +492,7 @@ export default function TripBuilder() {
         // O2: one gold button (Call the vote); skipping the vote is one of the other ways.
         <OtherWays open={!votesOn}>
           <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={() => settleWeekends(st.nights)} data-testid="settle-weekends">
-            {st.weekends.length > 1 ? 'Skip the vote: the first is the primary weekend, the next the backup' : 'This is the weekend'}
+            {st.weekends.length > 1 ? 'Skip the vote: go with the first weekend (the next is the fallback)' : 'This is the weekend'}
           </button>
         </OtherWays>
       )}
@@ -529,19 +531,14 @@ export default function TripBuilder() {
           })}
         </div>
       )}
-      {org && (addPin === null
-        ? <button type="button" className="btn ghost sm" onClick={() => setAddPin('tap')}>+ Add your own place (tap the map)</button>
-        : addPin === 'tap' ? <span className="small" style={{ fontWeight: 700 }}>Tap the map where you’d stay… <button type="button" className="btn ghost sm" onClick={() => setAddPin(null)}>Cancel</button></span>
-          : (
-            <div className="row" style={{ gap: 6 }}>
-              <input className="input grow" value={pinName} maxLength={40} onChange={(e) => setPinName(e.target.value)} placeholder="Name it, e.g. Callala Beach" aria-label="Place name" />
-              <button type="button" className="btn sm" disabled={pinName.trim().length < 2} onClick={() => {
-                const p = { key: `pin:${Date.now()}`, name: pinName.trim(), lat: Math.round(addPin.lat * 100) / 100, lng: Math.round(addPin.lng * 100) / 100, custom: true };
-                patch({ pins: [...pins, p], stays: stays.length < TB.MAX_STAYS ? [...stays, p] : stays });
-                setAddPin(null);
-              }}>Add</button>
-            </div>
-          ))}
+      {org && (
+        <PinDropper areas={areas} addPin={addPin} setAddPin={setAddPin} pinName={pinName} setPinName={setPinName}
+          startLabel="+ Add your own place (tap the map or type a town)" placeholder="Name it, e.g. Callala Beach"
+          onAdd={(at, name) => {
+            const p = { key: `pin:${Date.now()}`, name, lat: Math.round(at.lat * 100) / 100, lng: Math.round(at.lng * 100) / 100, custom: true };
+            patch({ pins: [...pins, p], stays: stays.length < TB.MAX_STAYS ? [...stays, p] : stays });
+          }} />
+      )}
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
         <label className="field grow"><span>Stay days: up to {st.stayMax} min from where we stay</span>
           <input type="range" min="0" max={STAY_LIMITS.length - 1} value={Math.max(0, STAY_LIMITS.indexOf(st.stayMax))} disabled={!org}

@@ -94,9 +94,16 @@ export async function notify(type, payload = {}) {
 }
 
 /** Share sheet (pick Messenger) where available; otherwise copy to the clipboard. Returns 'shared' | 'copied' | 'failed'. */
+// v10.5 (Josh 23 Oct: "share to group chat doesn't really work on my computer, can't just copy the link — it brings up a
+// random window with Outlook etc."): on a computer (mouse/trackpad) the link is copied, ready to paste into the group
+// chat; phones keep the share sheet (WhatsApp, Messages…).
+export const onComputer = () => {
+  try { return !!window.matchMedia?.('(hover: hover) and (pointer: fine)').matches && !window.matchMedia?.('(pointer: coarse)').matches; } catch { return false; }
+};
+
 export async function shareText(text, title = (typeof document !== 'undefined' && document.title) || 'The Golf Trip') {
   try {
-    if (navigator.share) {
+    if (navigator.share && !onComputer()) {
       await navigator.share({ title, text });
       return 'shared';
     }

@@ -393,8 +393,12 @@ function Activities({ pd, ru, me, isOrg, guest, costsOn }) {
                 {activityWhen(a) && <div className="small muted">{activityWhen(a)}</div>}
                 <div className="small" data-testid="activity-money">{m.line}</div>
               </div>
+              {/* ov28 (walkthrough small fix): in = solid green with a tick; not in = an outline "I'm in" to tap. */}
               {!guest && me && (
-                <button type="button" className={iAm ? 'btn ghost sm' : 'btn gold sm'} disabled={busy} data-testid="activity-in" onClick={() => toggle(a, !iAm)}>{iAm ? '✓ I’m in' : 'I’m in'}</button>
+                <button type="button" className="btn sm" aria-pressed={iAm} disabled={busy} data-testid="activity-in" onClick={() => toggle(a, !iAm)}
+                  style={iAm ? { background: '#1F6B3A', borderColor: '#1F6B3A', color: '#fff', fontWeight: 800 } : { background: '#fff', borderColor: 'var(--navy)', color: 'var(--navy)', fontWeight: 700 }}>
+                  {iAm ? '✓ You’re in' : 'I’m in'}
+                </button>
               )}
             </div>
             {m.count > 0 && <div className="row" style={{ gap: 6, marginTop: 4 }}><AvatarStack players={m.ids.map((id) => data.playersById[id]).filter(Boolean)} size={22} /></div>}

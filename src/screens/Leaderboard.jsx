@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useData, useScores, useSession, useSideEntriesState, useFeature, playerName } from '../lib/store.jsx';
-import { readyBoard, headlines, isNetFormat, isTeamFormat } from '../lib/board.js';
+import { readyBoard, headlines, isNetFormat, isTeamFormat, orderBoard, hasPace, isMine } from '../lib/board.js';
 import { formatToPar, strokesReceived, stablefordPoints, strokeHoleNet } from '../lib/scoring.js';
 import { Header, Seg, AvatarStack, Icon, Sheet, Loading, toast } from '../components/ui.jsx';
 import { supabase, friendlyError } from '../lib/supabase.js';
@@ -67,12 +67,14 @@ export default function Leaderboard() {
   const adjustments = useRoundAdjustments(round?.id);
 
   // Null until everything the total needs is here (side comp bonus strokes included), so it never flickers.
-  const board = useMemo(() => readyBoard({
+  const rawBoard = useMemo(() => readyBoard({
     round, course: round && data.coursesById[round.course_id], teams: (round && data.teamsByRound[round.id]) || [],
     roundPlayers: (round && data.roundPlayers[round.id]) || [], playersById: data.playersById,
     scoresIdx: scores.index, quickResults: data.quick_results, adjustments,
     sideEntries: side.rows, sideLoaded: side.loaded,
   }), [round, data, scores.index, side, adjustments]);
+  // ov28 (D2): points order by default ("15 points sat above 19"); "On pace" keeps the old against-2-a-hole order.
+  const board = useMemo(() => orderBoard(rawBoard, mode === 'pace' ? 'pace' : 'points'), [rawBoard, mode]);
 
   // "Since you last looked": ranks stored on this phone at the last visit.
   const storeKey = round ? `lgc-ranks-${round.id}` : null;
@@ -152,7 +154,9 @@ export default function Leaderboard() {
         right={round.status === 'live' ? <span className="pill-live"><span className="dot" />LIVE</span> : round.status === 'locked' ? <span className="pill-live">FINAL</span> : <span className="pill-live">NOT STARTED</span>}
       >
         {round.status !== 'locked' && (
-          <Seg value={mode} onChange={setMode} options={[{ value: 'live', label: 'Live' }, { value: 'proj', label: 'Projected' }]} />
+          <Seg value={mode} onChange={setMode} options={hasPace(round.format)
+            ? [{ value: 'live', label: 'Points' }, { value: 'pace', label: 'On pace' }, { value: 'proj', label: 'Projected' }]
+            : [{ value: 'live', label: 'Live' }, { value: 'proj', label: 'Projected' }]} />
         )}
       </Header>
       <SaveSpotBanner />
@@ -242,7 +246,11 @@ export default function Leaderboard() {
             ) : (drawOn ? 'Teams come out of the draw — keep the app open and it will pop up.' : 'Teams aren’t set yet.')) : isFour ? (status?.is_admin ? <Link to="/admin" className="btn ghost">Pick the pairs in Admin</Link> : 'The pairs aren’t set yet.') : 'No players in this round yet.'}
           </div>
         )}
-        {rows.map((r, i) => {
+        {(() => {
+          // ov28 (D2): your row (or your team's) is highlighted, and pinned at the top when you're further down.
+          const at = projected ? -1 : rows.findIndex((r) => isMine(r, me));
+          return at >= 4 ? [{ ...rows[at], pinned: true }, ...rows] : rows;
+        })().map((r, i) => {
           const prev = prevRanks?.[r.id];
           const mv = prev ? prev - r.rank : 0;
           const mainVal = projected ? r.proj?.projected : isNet ? r.netToPar : r.points;
@@ -251,7 +259,8 @@ export default function Leaderboard() {
             : r.thru === 0 ? '–' : isNet ? formatToPar(r.netToPar, r.finished && r.netToPar % 1 ? 1 : 0) : String(r.points);
           const under = isNet && mainVal < 0 && r.thru > 0;
           return (
-            <button key={r.id} type="button" className={'lb-row' + (i === 0 && (r.thru > 0 || projected) ? ' lead' : '')} onClick={() => setOpen(r)}>
+            <button key={`${r.pinned ? 'pin-' : ''}${r.id}`} type="button" data-testid={r.pinned ? 'lb-pinned' : isMine(r, me) ? 'lb-me' : undefined}
+              className={'lb-row' + ((projected ? i === 0 : r.rank === 1 && !r.pinned) && (r.thru > 0 || projected) ? ' lead' : '') + (isMine(r, me) ? ' me' : '') + (r.pinned ? ' lb-pin' : '')} onClick={() => setOpen(r)}>
               <span className="lb-rank">{projected ? i + 1 : r.rankLabel}</span>
               <span className="stack" style={{ gap: 5, minWidth: 0 }}>
                 <span className="lb-name ellipsis">{r.name}</span>
@@ -303,6 +312,7 @@ export default function Leaderboard() {
       {!status?.quick && <RoundRecap round={round} board={board} course={course} />}
       {scores.pendingCount > 0 && <div className="sync">{scores.pendingCount} score{scores.pendingCount > 1 ? 's' : ''} waiting to sync — they'll send when signal's back.</div>}
 
+      {canScore && <div className="fab-space" aria-hidden="true" />}
       {canScore && (
         <Link to={`/score/${round.id}`} className="btn gold fab">Enter score{myTeam ? ` — ${myTeam.name}` : ''}</Link>
       )}

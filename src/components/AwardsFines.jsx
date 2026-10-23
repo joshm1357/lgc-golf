@@ -61,7 +61,7 @@ export function AwardsRunUp({ trip, title = '🏷 Awards & fines for this trip',
     <div className="card pad stack" style={{ gap: 8 }} data-testid="awards-runup">
       <div className="row between" style={{ gap: 8 }}>
         <strong>{title}</strong>
-        {trip && <Link to={`/dinner/${trip.id}`} className="small" style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>Dinner awards →</Link>}
+        {trip && <Link to={`/dinner/${trip.id}`} className="small" style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>Awards &amp; fines →</Link>}
       </div>
       {list.length === 0 && <span className="small muted">Nothing on yet — propose the first.</span>}
       {list.map((x) => <AwardLine key={x.key} item={x} />)}
@@ -175,7 +175,7 @@ export function ProposeSheet({ trip, start = {}, onClose, onSaved }) {
               <button type="button" className="chip" aria-pressed={!v.best} onClick={() => set({ best: '' })}>The vote</button>
               {bests.map((b) => <button key={b.key} type="button" className="chip" aria-pressed={v.best === b.key} onClick={() => set({ best: b.key })} data-testid={`best-${b.key}`}>{b.label}</button>)}
             </div>
-            {v.best && <span className="small muted">The app ranks the claims; the vote at dinner confirms.</span>}
+            {v.best && <span className="small muted">The app ranks the claims; the group’s vote confirms.</span>}
           </div>
         )}
         {trip && (
@@ -375,7 +375,7 @@ export function FineSheet({ post, who: whoStart, onClose, onSaved }) {
             {needs.time && <label className="field"><span>Time (needed)</span><input className="input" type="datetime-local" value={time} onChange={(e) => setTime(e.target.value)} data-testid="fine-time" /></label>}
             {needs.number && <label className="field"><span>{item.terms.number_unit ? `How many (${item.terms.number_unit})` : 'The number'} (needed)</span><input className="input" inputMode="decimal" value={num} onChange={(e) => setNum(e.target.value.replace(/[^\d.]/g, ''))} data-testid="fine-number" /></label>}
             <label className="field"><span>Note (optional)</span><input className="input" value={reason} maxLength={140} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Not his ball on 7" data-testid="fine-note" /></label>
-            <div className="small muted">{chipText({ kind: item.kind, title: item.title, worth: item.worth })} goes on the post, and into the vote at dinner.</div>
+            <div className="small muted">{chipText({ kind: item.kind, title: item.title, worth: item.worth })} goes on the post, and into the vote when you get together.</div>
             <button type="button" className="btn gold block" disabled={busy || !ok} onClick={save} data-testid="fine-save">{item.kind === 'fine' ? 'Fine them' : 'Nominate them'}</button>
           </>
         )}

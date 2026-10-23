@@ -19,7 +19,7 @@ export function DinnerAwardsLink() {
   if (!on || !trip) return null;
   return (
     <Link to={`/dinner/${trip.id}`} className="small" style={{ fontWeight: 700, display: 'block' }} data-testid="feed-dinner-link">
-      🍽️ Fines and dinner awards{voting ? ` — ${voting} open for votes` : ''} →
+      🏅 Awards and fines{voting ? ` — ${voting} open for votes` : ''} →
     </Link>
   );
 }

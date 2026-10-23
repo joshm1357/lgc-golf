@@ -98,7 +98,7 @@ export default function RoundCallout({ pd }) {
             {plan.round_id && (
               <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
                 <Link to={`/?r=${plan.round_id}`} className="btn gold sm" data-testid="co-open-round">⛳ Open the round</Link>
-                {round && v.standing.status === 'in' && round.status !== 'locked' && <Link to={`/score/${plan.round_id}`} className="btn ghost sm" style={{ color: '#fff', borderColor: 'rgba(255,255,255,.5)' }}>Enter scores</Link>}
+                {round && v.standing.status === 'in' && round.status !== 'locked' && <Link to={`/score/${plan.round_id}`} className="btn ghost sm" style={{ color: '#fff', background: 'transparent', borderColor: 'rgba(255,255,255,.5)' }}>Enter scores</Link>}
               </div>
             )}
           </div>
@@ -150,7 +150,9 @@ export default function RoundCallout({ pd }) {
               {names(v.spots.reserve, byId).map((p, i) => <Person key={p.id} p={p} right={<span className="co-pill reserve" data-testid="co-reserve">Reserve #{i + 1}</span>} />)}
               {v.spots.in.length === 0 && <span className="small muted">Nobody in yet.</span>}
               <span className="small muted" data-testid="co-counts">
-                {repliesLine(counts)}
+                {/* headcount.js counts the replies; reserves are split out of "in" here. */}
+                {counts.total ? [v.locked ? `${v.spots.in.length} playing` : `${v.spots.in.length} in`, v.spots.reserve.length ? `${v.spots.reserve.length} on reserve` : null,
+                  counts.maybe ? `${counts.maybe} maybe` : null, counts.out ? `${counts.out} can’t` : null, counts.noReply ? `${counts.noReply} not replied` : null].filter(Boolean).join(' · ') : repliesLine(counts)}
                 {counts.ids.maybe.length > 0 ? ` · maybe: ${names(counts.ids.maybe, byId).map(playerName).join(', ')}` : ''}
                 {counts.ids.out.length > 0 ? ` · can’t: ${names(counts.ids.out, byId).map(playerName).join(', ')}` : ''}
               </span>

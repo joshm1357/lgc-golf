@@ -255,7 +255,7 @@ export function CalloutSheet({ prefill = {}, onClose, onSaved }) {
         </div>
 
         {/* ---------------- 5. Closes, note, name */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <div className="stack" style={{ gap: 8 }}>
           <label className="field"><span>Replies close</span>
             <input className="input" type="datetime-local" value={closes || toInput(autoCloses)} onChange={(e) => setCloses(e.target.value)} data-testid="co-closes" /></label>
           <label className="field"><span>Name (optional)</span><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={placeholderName} maxLength={60} /></label>

@@ -110,7 +110,7 @@ export function CalloutSheet({ prefill = {}, onClose, onSaved }) {
   const [picked, setPicked] = useState(() => new Set(people.map((p) => p.id)));
   const [closes, setCloses] = useState('');
   const [note, setNote] = useState('');
-  const [name, setName] = useState('');
+  const [name, setName] = useState(String(prefill.name || '').slice(0, 60)); // e.g. "Moore Park again" from Same time next year?
   const [extras, setExtras] = useState({});
   const [courseChoices, setCourseChoices] = useState([]); // the course vote: [{ kind, id, name }]
   const autoCloses = useMemo(() => defaultCloses(options), [options.map(keyOf).join(',')]); // eslint-disable-line react-hooks/exhaustive-deps

@@ -49,7 +49,7 @@ export default function Trips() {
   // ov34: "Same time next year?" after a quick round (kind=round) opens ⛳ Put a round out, filled in.
   useEffect(() => {
     const q = new URLSearchParams(loc.search);
-    if (q.get('suggest') && q.get('kind') !== 'trip') openCallout({ date: q.get('date') || null, place: (q.get('place') || '').slice(0, 80) || null });
+    if (q.get('suggest') && q.get('kind') !== 'trip') openCallout({ date: q.get('date') || null, place: (q.get('place') || '').slice(0, 80) || null, name: (q.get('name') || '').slice(0, 60) || null });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const notifyOn = useFeature('notifications');
   const aiOn = useFeature('ai_helper');

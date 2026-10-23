@@ -24,6 +24,9 @@ import { SaveSpotBanner } from '../components/SaveSpot.jsx';
 import { FirstOpen } from '../components/FirstOpen.jsx';
 import Memories from '../components/Memories.jsx';
 import { gate } from '../lib/savedgate.js';
+// ov34: "⛳ Put a round out" — a round call-out on the same plans engine (components/CalloutCard.jsx, CalloutSheet.jsx).
+import { openCallout } from '../lib/calloutopen.js';
+import { CalloutStrip } from '../components/CalloutCard.jsx';
 
 const TABLES = ['plans', 'plan_rsvps', 'plan_polls', 'plan_options'];
 
@@ -37,10 +40,16 @@ export default function Trips() {
   const [suggesting, setSuggesting] = useState(() => {
     const q = new URLSearchParams(loc.search);
     if (!q.get('suggest')) return false;
+    if (q.get('kind') !== 'trip') return false; // ov34: a one-day round is a call-out now (opened below)
     const d = q.get('date');
     return { kind: q.get('kind') === 'trip' ? 'trip' : 'round', name: (q.get('name') || '').slice(0, 60), dates: d ? [{ start_date: d, end_date: d }] : [],
       place: (q.get('place') || '').slice(0, 80) || null, share: q.get('share') === '1' };
   });
+  // ov34: "Same time next year?" after a quick round (kind=round) opens ⛳ Put a round out, filled in.
+  useEffect(() => {
+    const q = new URLSearchParams(loc.search);
+    if (q.get('suggest') && q.get('kind') !== 'trip') openCallout({ date: q.get('date') || null, place: (q.get('place') || '').slice(0, 80) || null });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const notifyOn = useFeature('notifications');
   const aiOn = useFeature('ai_helper');
   const [firstCard, setFirstCard] = useState(null); // 'starter' | 'welcome' | null (F1)
@@ -79,7 +88,10 @@ export default function Trips() {
     if (!sorted) return [];
     const onTrip = menu.now?.on ? menu.now.trip.id : null;
     const lift = (x) => (onTrip && x.plan.trip_id === onTrip && x.stage === 'locked' ? { ...x, stage: 'on' } : x);
-    return stageSections({ now: sorted.now && lift(sorted.now), later: sorted.later.map(lift), ideas: sorted.ideas, past: sorted.past });
+    // ov34: open round call-outs have their own cards ("⛳ Rounds going out"); once done or called off they're listed here.
+    const notOut = (x) => !(x.plan.callout && ['idea', 'deciding', 'locked', 'on'].includes(x.stage));
+    const nowX = sorted.now && notOut(sorted.now) ? lift(sorted.now) : null;
+    return stageSections({ now: nowX, later: sorted.later.filter(notOut).map(lift), ideas: sorted.ideas.filter(notOut), past: sorted.past });
   }, [sorted, menu]);
 
   if (!rows) return <div className="page"><Header logo title="Trips" /><Loading /></div>;
@@ -116,6 +128,14 @@ export default function Trips() {
         {rows.failed && <div className="err">Couldn’t load the trips — check your signal and open Trips again.</div>}
         {/* ov28 (I16, ov28 builder): this time last year, and the six-month nudge to suggest the next trip. */}
         <Memories />
+        {/* ov34: open call-outs with their reply buttons, and "⛳ Put a round out". */}
+        {!starting && (
+          <CalloutStrip onPutOut={(
+            <button {...gate('propose_trip')} type="button" className="btn ghost block" style={{ minHeight: 52 }} onClick={() => openCallout({})} data-testid="put-round-out">
+              ⛳ Put a round out <span className="small muted" style={{ fontWeight: 500 }}>— who’s up for a hit?</span>
+            </button>
+          )} />
+        )}
 
         {!has('on') && !has('locked') && !starting && (
           <button type="button" className="card pad row" data-testid="trips-plan-it" onClick={openPlanner}
@@ -268,7 +288,7 @@ function blankDate() { return { start_date: '', end_date: '' }; }
 export function SuggestSheet({ onClose, onSaved, initial = null }) {
   const { status } = useSession();
   // initial: a ready-made idea, e.g. "Same time next year?" after a quick round ({ kind, name, dates }).
-  const [kind, setKind] = useState(initial?.kind || 'trip');
+  const [kind, setKind] = useState(initial?.kind === 'round' ? 'trip' : initial?.kind || 'trip'); // ov34: rounds go to openCallout
   const [name, setName] = useState(initial?.name || '');
   const [dates, setDates] = useState(() => (initial?.dates?.length ? [...initial.dates, blankDate()] : [blankDate(), blankDate()]));
   const [rough, setRough] = useState('');
@@ -310,7 +330,8 @@ export function SuggestSheet({ onClose, onSaved, initial = null }) {
       <div className="stack">
         <div className="seg light" role="group">
           <button type="button" aria-pressed={kind === 'trip'} onClick={() => setKind('trip')}>🧳 Trip (away)</button>
-          <button type="button" aria-pressed={kind === 'round'} onClick={() => setKind('round')}>⛳ One-day round</button>
+          {/* ov34: a one-day round is a call-out now — "⛳ Put a round out". */}
+          <button type="button" aria-pressed={kind === 'round'} onClick={() => { onClose(); openCallout({}); }} data-testid="suggest-one-day-round">⛳ One-day round</button>
         </div>
         <label className="field"><span>Name</span><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={kind === 'trip' ? 'e.g. Autumn trip 2027' : 'e.g. Xmas Ambrose'} /></label>
 

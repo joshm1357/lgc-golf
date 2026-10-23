@@ -5,6 +5,8 @@
 //       while a weekend works; going with the backup posts ONE Feed message and sends a one-tap "Still good for …?"
 //       (I6) that players see; when nothing works, "+ Backup" puts the new weekend in the caller's job (back to To do,
 //       they're told) with one Feed post — and the dead weekend is never offered again.
+//   I3  The last day of a vote: "Waiting on …" with a "Nudge them in the group chat" button.
+//   I5  When the last call's done, the caller's moment goes in the Feed ("Al rang 2 courses …").
 // Usage: node tests/e2e/ov26-votes-test.mjs <base> <shotDir>
 import { chromium } from '/opt/npm-tools/node_modules/playwright/index.mjs';
 import fs from 'node:fs';
@@ -38,6 +40,15 @@ Object.assign(planB(), { start_date: plusDays(40), end_date: plusDays(42), locat
 const SHIRT = crypto.randomUUID();
 db.plan_polls.push({ id: SHIRT, plan_id: PB, group_id: GROUP, kind: 'other', question: 'Shirt colour?', status: 'open', closes_on: plusDays(5), created_by: K, created_at: now });
 db.plan_options.push({ id: crypto.randomUUID(), poll_id: SHIRT, group_id: GROUP, label: 'Pink', created_by: K, created_at: now }, { id: crypto.randomUUID(), poll_id: SHIRT, group_id: GROUP, label: 'Navy', created_by: K, created_at: now });
+
+// ================================================================ I3: the last day of a vote
+const sydToday = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
+db.vote_batches.find((b) => b.plan_id === PB).closes_on = sydToday;
+await page.goto(`${BASE}#/plan/${PB}?view=organise&step=area`);
+await page.getByTestId('last-day-nudge').first().waitFor({ timeout: 15000 });
+const nudgeText = await page.getByTestId('last-day-nudge').first().innerText();
+check(/Last day · Waiting on \w+/.test(nudgeText) && /Nudge them in the group chat/.test(nudgeText), `I3: "Waiting on …" and a nudge for the group chat (${nudgeText.replace(/\n/g, ' / ')})`);
+await shot('i3-01-last-day');
 
 await page.goto(`${BASE}#/plan/${PB}?view=organise&step=lockin`);
 await page.getByTestId('lock-in-card').waitFor({ timeout: 15000 });
@@ -154,6 +165,21 @@ check(fake.notifyCalls.filter((n) => n.type === 'job_assigned').length === 2, 'A
 const p2 = (db.posts || []).slice(before2);
 check(p2.length === 1 && /asking the courses about/.test(p2[0].body) && /Al has the new calls/.test(p2[0].body), `ONE Feed post (${p2.map((p) => p.body).join(' | ')})`);
 await shot('o5-03-open-it-up');
+
+// I5: Al rings both courses about the new weekend (they have times on its Saturday) and finishes the calls: the
+// second "That's the call done" puts his moment in the Feed, once. And the banner now says to go with the new one.
+db.trip_tee_options.push(tee(sat(W3), L(1), 'yes'), tee(sat(W3), L(2), 'yes'));
+me = { id: AL, admin: false };
+await openCalls();
+const before3 = (db.posts || []).length;
+for (let i = 0; i < 2; i++) {
+  await page.getByTestId('call-done').first().waitFor({ timeout: 8000 });
+  await page.getByTestId('call-done').first().click(); await wait(1500);
+}
+const p3 = (db.posts || []).slice(before3);
+check(p3.length === 1 && /Al rang 2 courses — tee times on 1 of 2 days\. Thanks Al!/.test(p3[0].body), `I5: ONE Feed post for the caller (${p3.map((p) => p.body).join(' | ')})`);
+check(/works at both courses/.test(await page.getByTestId('falls-through').innerText()), 'and the banner says the new weekend works');
+await shot('i5-01-calls-done');
 
 check(!errors.length, `no page errors (${errors.slice(0, 2).join(' | ')})`);
 await browser.close();

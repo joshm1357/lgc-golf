@@ -361,11 +361,16 @@ for (const who of [pid(2), pid(3)]) {
   db.plan_votes.push({ id: crypto.randomUUID(), poll_id: pollQ('Which area?').id, option_id: optL(pollQ('Which area?'), 'Hunter Valley').id, player_id: who, response: 'yes', created_at: now });
   db.plan_votes.push({ id: crypto.randomUUID(), poll_id: pollQ('How long?').id, option_id: optL(pollQ('How long?'), '3 nights').id, player_id: who, response: 'yes', created_at: now });
 }
+// V2: one more says yes to every weekend but only to 2 nights — the organiser's told to check with them.
+for (const o of db.plan_options.filter((x) => x.poll_id === pollQ('Which weekend?').id)) db.plan_votes.push({ id: crypto.randomUUID(), poll_id: o.poll_id, option_id: o.id, player_id: pid(4), response: 'yes', created_at: now });
+db.plan_votes.push({ id: crypto.randomUUID(), poll_id: pollQ('How long?').id, option_id: optL(pollQ('How long?'), '2 nights').id, player_id: pid(4), response: 'yes', created_at: now });
 await tb();
 await page.getByTestId('vote-results').waitFor({ timeout: 8000 });
+const ln = await page.getByTestId('length-check').innerText().catch(() => '');
+check(/^3 nights won, so it’s \w{3} \d+ – \w{3} \d+ \w{3}\. 1 person only said yes to a shorter trip — check with them\. \(\w+/.test(ln.trim()), `V2: who to check with (${ln})`);
 const hv = page.locator('[data-testid="result-area"][data-area="Hunter Valley"]');
-// V4: a third or more went into the detail here (1 of 3), so it counts; under a third it'd say "not enough to go by — you choose" (unit-tested).
-check((await hv.innerText()).includes('LEADING') && (await hv.getByTestId('result-detail').innerText()) === '1 of 3 went into the detail', `results: Hunter Valley leads; ${await hv.getByTestId('result-detail').innerText()}`);
+// V4: under a third went into the detail (1 of 4), so the results say it plainly: not enough to go by.
+check((await hv.innerText()).includes('LEADING') && (await hv.getByTestId('result-detail').innerText()) === 'Only 1 of 4 picked courses and places — not enough to go by. You choose.', `results: Hunter Valley leads; ${await hv.getByTestId('result-detail').innerText()}`);
 check((await hv.getByTestId('choose-voted-area').innerText()) === 'Go with Hunter Valley' && (await page.getByTestId('choose-voted-area').count()) === 1, 'O2: one gold “Go with Hunter Valley”; other areas are under “Other ways”');
 check(/3 nights/.test(await page.getByTestId('result-length').innerText()), 'results: 3 nights is leading');
 check(/Primary:[\s\S]*Backup:/.test(await page.getByTestId('result-weekends').innerText()), 'results: the weekends, Primary then Backup');

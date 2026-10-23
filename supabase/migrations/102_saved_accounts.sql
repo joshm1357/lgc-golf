@@ -48,7 +48,8 @@
 --   (penalty_proposals, score_adjustments, cup_points, award_runs, case_votes, committee_seats and the like have no
 --   write access from the app at all — only through the functions below.)
 --
--- FUNCTIONS (re-saved with "perform private.require_saved(...)" as their first line):
+-- FUNCTIONS (re-saved with the check as their first line — the first starting value in "declare" where there is one,
+-- else straight after "begin"; each is marked "/* 102: saved accounts only */"):
 --   organiser: add_cup_points, admin_create_player, assign_player, release_player, remove_member, set_member_role,
 --     set_feature, set_features (both), set_group_look, set_group_source, set_pins, turn_off_admin_pin,
 --     reset_group_code, make_group_official, delete_group, set_round_tv, set_cap_tip_name, set_vote_channel,
@@ -66,6 +67,9 @@
 --   invites: group_invite, reset_group_invite, create_player_link, create_my_player_link, make_organiser_link,
 --     team_invite, share_join_code
 --   only sometimes: award_claim_post (only when claiming for someone else)
+--   always, whatever the switch (private.saved_account_ok): create_group (both), start_quick_round,
+--     request_club_claim — starting a group or a quick round, or a club claiming its course page. Phone-only accounts
+--     now only come from joining an existing group through its invite link.
 --   NOT gated on purpose: finalise_case (cast_vote calls it when the last vote is in), award_for_trip (claiming
 --     "Latest out" for yourself calls it), award_propose_from_scores (the app runs it after a round), cast_vote,
 --     vote_case, vote_election, answer_nomination, set_defence, add_case_post, report_case, set_cup_hole,
@@ -106,6 +110,26 @@ language plpgsql stable security definer set search_path = '' as $$
 begin
   perform private.saved_ok(p_group);
 end $$;
+
+-- Starting a group or a quick round, and a club claiming its course page: always a saved account, whatever the
+-- group's switch (there's no group yet, and whoever starts one is its organiser).
+create or replace function private.saved_account_ok() returns boolean
+language plpgsql stable security definer set search_path = '' as $$
+begin
+  if not private.is_saved_user() then
+    raise exception 'Save your spot first (Google or email) to do this' using errcode = '42501', hint = 'save_spot';
+  end if;
+  return true;
+end $$;
+create or replace function private.require_saved_account() returns void
+language plpgsql stable security definer set search_path = '' as $$
+begin
+  perform private.saved_account_ok();
+end $$;
+revoke all on function private.saved_account_ok() from public, anon;
+grant execute on function private.saved_account_ok() to authenticated, service_role;
+revoke all on function private.require_saved_account() from public, anon;
+grant execute on function private.require_saved_account() to authenticated, service_role;
 
 revoke all on function private.is_saved_user() from public, anon;
 revoke all on function private.saved_ok(uuid) from public, anon;
@@ -196,13 +220,12 @@ create policy "saved accounts only (remove)" on public.course_social_times as re
   using (private.saved_ok(group_id));
 
 -- ------------------------------------------------------------------ Functions: the check as their first line
--- Each function is re-saved from its current definition (pg_get_functiondef) with one line added straight after its
--- first "begin". Same name, arguments, return type, settings and permissions. A function that already has the check
+-- Each function is re-saved from its current definition (pg_get_functiondef) with one line added at the top of its body
+-- (first in "declare", else straight after "begin"). Same name, arguments, return type, settings and permissions. A function that already has the check
 -- is left alone, so this is safe to run twice. A missing function is skipped (an older database).
 do $$
 declare
-  r record; v_def text; v_pos int; v_m text[]; v_check text; v_n int := 0;
-  v_default constant text := 'perform private.require_saved(null)';
+  r record; v_def text; v_pos int; v_m text[]; v_check text; v_add text; v_n int := 0;
 begin
   for r in
     select p.oid, p.proname, l.lanname
@@ -228,32 +251,46 @@ begin
       'group_invite', 'reset_group_invite', 'create_player_link', 'create_my_player_link', 'make_organiser_link',
       'team_invite', 'share_join_code',
       -- only sometimes
-      'award_claim_post'])
+      'award_claim_post',
+      -- always a saved account (no group yet)
+      'create_group', 'start_quick_round', 'request_club_claim'])
     order by p.proname, p.oid
   loop
     v_def := pg_get_functiondef(r.oid);
-    if position('private.require_saved' in v_def) > 0 then continue; end if;
+    if position('102: saved accounts only' in v_def) > 0 then continue; end if;
     if r.lanname <> 'plpgsql' then raise exception '102: % is %, not plpgsql — add its check by hand', r.proname, r.lanname; end if;
+    -- The check, as a true-or-refuse expression.
     v_check := case r.proname
-      when 'award_claim_post' then
-        -- Claiming for yourself is fine; claiming for someone else (or on their post) is nominating them.
-        'if coalesce(p_player, (select x.player_id from public.posts x where x.id = p_post), '
-        || '(select private.my_player_id(x.group_id) from public.posts x where x.id = p_post)) '
-        || 'is distinct from (select private.my_player_id(x.group_id) from public.posts x where x.id = p_post) then '
-        || 'perform private.require_saved((select x.group_id from public.posts x where x.id = p_post)); end if'
-      when 'set_cap_tip_name' then 'perform private.require_saved(p_group)'
-      when 'set_vote_channel' then 'perform private.require_saved(p_group)'
-      when 'set_vote_decider' then 'perform private.require_saved(p_group)'
-      when 'delete_group' then 'perform private.require_saved(p_group)'
-      when 'make_organiser_link' then 'perform private.require_saved(p_group)'
-      else v_default end;
-    -- The body starts after "AS $function$"; the check goes straight after the body's first "begin".
+      when 'create_group' then 'private.saved_account_ok()'
+      when 'start_quick_round' then 'private.saved_account_ok()'
+      when 'request_club_claim' then 'private.saved_account_ok()'
+      when 'set_cap_tip_name' then 'private.saved_ok(p_group)'
+      when 'set_vote_channel' then 'private.saved_ok(p_group)'
+      when 'set_vote_decider' then 'private.saved_ok(p_group)'
+      when 'delete_group' then 'private.saved_ok(p_group)'
+      when 'make_organiser_link' then 'private.saved_ok(p_group)'
+      else 'private.saved_ok(null)' end;
+    -- The body starts after "AS $function$".
     v_pos := position('$function$' in v_def);
     if v_pos = 0 then raise exception '102: can''t find the body of %', r.proname; end if;
-    v_m := regexp_match(substr(v_def, v_pos), '^(.*?\mbegin\M)', 'is');
-    if v_m is null then raise exception '102: can''t find "begin" in %', r.proname; end if;
-    v_def := substr(v_def, 1, v_pos - 1) || v_m[1]
-             || E'\n  ' || v_check || '; -- 102: saved accounts only'
+    v_pos := v_pos + length('$function$');
+    if r.proname = 'award_claim_post' then
+      -- Claiming for yourself is fine; claiming for someone else (or on their post) is nominating them. After "begin".
+      v_m := regexp_match(substr(v_def, v_pos), '^(.*?\mbegin\M)', 'is');
+      v_add := E'\n  if coalesce(p_player, (select x.player_id from public.posts x where x.id = p_post), '
+        || '(select private.my_player_id(x.group_id) from public.posts x where x.id = p_post)) '
+        || 'is distinct from (select private.my_player_id(x.group_id) from public.posts x where x.id = p_post) then '
+        || 'perform private.saved_ok((select x.group_id from public.posts x where x.id = p_post)); end if;';
+    elsif substr(v_def, v_pos) ~* '^\s*declare\M' then
+      -- First thing in "declare", so it runs before any other starting values (some of those check who you are).
+      v_m := regexp_match(substr(v_def, v_pos), '^(\s*declare\M)', 'i');
+      v_add := E'\n  saved_102 boolean := ' || v_check || ';';
+    else
+      v_m := regexp_match(substr(v_def, v_pos), '^(.*?\mbegin\M)', 'is');
+      v_add := E'\n  perform ' || v_check || ';';
+    end if;
+    if v_m is null then raise exception '102: can''t find where to add the check in %', r.proname; end if;
+    v_def := substr(v_def, 1, v_pos - 1) || v_m[1] || v_add || E' /* 102: saved accounts only */\n  '
              || substr(v_def, v_pos + length(v_m[1]));
     execute v_def;
     v_n := v_n + 1;

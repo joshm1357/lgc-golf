@@ -1,0 +1,67 @@
+1. can: reads the trip → ok Hunter Trip
+2. can: In for the trip → ok in
+3. can: Maybe instead → ok maybe
+4. can: votes in the trip poll → ok yes
+5. can: votes on a proposed rule → ok for
+6. can: votes for an award → ok voted
+7. can: enters a score → ok 5
+8. can: posts to the Feed → ok Birdie!
+9. can: reacts → ok 🔥
+10. can: comments → ok Nice
+11. can: gives a cap tip → ok given
+12. can: opts in to a side game → ok in
+13. can: claims for himself (past the save check; no award set up here) → refused: That award isn't in the Rulebook for this trip
+14. can: changes his own profile → ok Hammo
+15. can: nominates himself → ok nominated
+16. my_saved_status → ok {"saved": false, "limited": true}
+17. no: suggests a trip → refused: Save your spot first (Google or email) to do this
+18. no: suggests a vote option → refused: Save your spot first (Google or email) to do this
+19. no: suggests a stay → refused: Save your spot first (Google or email) to do this
+20. no: suggests an activity → refused: Save your spot first (Google or email) to do this
+21. no: logs a cost → refused: Save your spot first (Google or email) to do this
+22. no: "I've paid" → refused: Save your spot first (Google or email) to do this
+23. no: proposes a rule → refused: Save your spot first (Google or email) to do this
+24. no: proposes a fine → refused: Save your spot first (Google or email) to do this
+25. no: fines Tom → refused: Save your spot first (Google or email) to do this
+26. no: claims for Tom → refused: Save your spot first (Google or email) to do this
+27. no: claims on Tom's post → refused: Save your spot first (Google or email) to do this
+28. no: proposes a side game → refused: Save your spot first (Google or email) to do this
+29. no: creates a cup → refused: new row violates row-level security policy for table "cups"
+30. no: raises a dispute → refused: Save your spot first (Google or email) to do this
+31. no: lodges a Tribunal case → refused: Save your spot first (Google or email) to do this
+32. no: applies a penalty → refused: Save your spot first (Google or email) to do this
+33. no: makes the invite link → refused: Save your spot first (Google or email) to do this
+34. no: makes his personal link → refused: Save your spot first (Google or email) to do this
+35. no: changes Tom's profile → refused: Save your spot first (Google or email) to do this
+36. no: starts a new group → refused: Save your spot first (Google or email) to do this
+37. organiser (phone-only): every gated function → ok 80 of 80 refused
+38. organiser (phone-only): adds a trip → refused: Save your spot first (Google or email) to do this
+39. organiser (phone-only): changes the round → refused: Save your spot first (Google or email) to do this
+40. organiser (phone-only): closes the poll → refused: Save your spot first (Google or email) to do this
+41. organiser (phone-only): adds a course → refused: Save your spot first (Google or email) to do this
+42. organiser (phone-only): creates a cup → refused: Save your spot first (Google or email) to do this
+43. organiser (phone-only): removes Tom → refused: Save your spot first (Google or email) to do this
+44. organiser (phone-only): switches the limit off → refused: Save your spot first (Google or email) to do this
+45. organiser (phone-only): still enters a score → ok 4
+46. organiser just saved (old token): adds a trip → ok added
+47. saved player: suggests a trip → ok added
+48. saved player: "I've paid" → ok paid
+49. saved player: proposes a rule → ok proposed
+50. saved player: fines the organiser → ok nominated
+51. saved player: proposes a side game → ok proposed
+52. saved player: my_saved_status → ok {"saved": true, "limited": true}
+53. saved organiser: adds a trip → ok added
+54. saved organiser: closes the poll → ok closed
+55. saved organiser: makes the invite link → ok true
+56. saved organiser: creates a cup → ok made
+57. saved organiser: starts a new group → ok true
+58. nobody (phone-only): starts a group → refused: Save your spot first (Google or email) to do this
+59. nobody (phone-only): starts a quick round → refused: Save your spot first (Google or email) to do this
+60. nobody (phone-only): a club claims a course page → refused: Save your spot first (Google or email) to do this
+61. quick group (phone-only): my_saved_status → ok {"saved": false, "limited": false}
+62. saved organiser switches the limit off → ok 
+63. switched off: Hamish suggests a trip → ok added
+64. switched off: Hamish "I've paid" → ok paid
+65. switched off: still can't start a new group → refused: Save your spot first (Google or email) to do this
+66. tables with all three saved-only policies → 45
+67. phone_only_limited default → true

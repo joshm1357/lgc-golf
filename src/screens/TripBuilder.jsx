@@ -452,20 +452,21 @@ export default function TripBuilder() {
   const tabNow = areaTab === '__compare' && areaOptions.length > 1 ? '__compare' : areaOptions.includes(areaTab) ? areaTab : areaOptions[0] || null;
   const comparing = tabNow === '__compare';
   const ptsBadge = (k) => (points[k] ? <span className="tb-chip-pts">{points[k]}</span> : null);
+  // v10.5: plain words — "The weekend" and "If the courses can't fit you" (the course calls still say Primary / Backup).
   const primaryBackup = st.weekendsSettled && st.weekends.length > 0 && (
     <div className="card pad stack" style={{ gap: 4 }} data-testid="tb-weekends-settled">
-      <strong className="small">📅 The weekends the courses get called about</strong>
       {st.weekends.map((w, i) => (
         <div key={w.start} className="row between small" style={{ gap: 6 }} data-testid="settled-weekend">
-          <span><strong>{weekendRole(i)}:</strong> {TB.weekendLabel({ start: w.start, end: w.end })}</span>
+          <span>{i === 0 ? <strong>📅 The weekend: {TB.weekendLabel({ start: w.start, end: w.end })}</strong>
+            : <>{i === 1 ? 'If the courses can’t fit you: ' : 'Then: '}{TB.weekendLabel({ start: w.start, end: w.end })}</>}</span>
           {org && i > 0 && <span className="row" style={{ gap: 4 }}>
-            <button type="button" className="btn ghost sm" onClick={() => patch({ weekends: makePrimary(st.weekends, w.start) })}>Make primary</button>
+            <button type="button" className="btn ghost sm" onClick={() => patch({ weekends: makePrimary(st.weekends, w.start) })}>Go with this one</button>
             <button type="button" className="btn ghost sm" aria-label={`Drop ${w.start}`} onClick={() => patch({ weekends: st.weekends.filter((x) => x.start !== w.start) })}>✕</button>
           </span>}
         </div>
       ))}
       {org && <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-        {openUpWeekend(st, points).added && <button type="button" className="btn ghost sm" onClick={() => patch({ weekends: openUpWeekend(st, points).weekends })} data-testid="add-backup">+ Add another backup</button>}
+        {openUpWeekend(st, points).added && <button type="button" className="btn ghost sm" onClick={() => patch({ weekends: openUpWeekend(st, points).weekends })} data-testid="add-backup">+ Another fallback weekend</button>}
         <button type="button" className="btn ghost sm" onClick={() => patch({ weekendsSettled: false, weekends: st.weekendPool?.length ? st.weekendPool : st.weekends })}>Change</button>
       </div>}
     </div>
@@ -490,7 +491,7 @@ export default function TripBuilder() {
         // O2: one gold button (Call the vote); skipping the vote is one of the other ways.
         <OtherWays open={!votesOn}>
           <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={() => settleWeekends(st.nights)} data-testid="settle-weekends">
-            {st.weekends.length > 1 ? 'Skip the vote: the first is the primary weekend, the next the backup' : 'This is the weekend'}
+            {st.weekends.length > 1 ? 'Skip the vote: go with the first weekend (the next is the fallback)' : 'This is the weekend'}
           </button>
         </OtherWays>
       )}

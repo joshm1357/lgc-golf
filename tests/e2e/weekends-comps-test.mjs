@@ -373,7 +373,7 @@ const hv = page.locator('[data-testid="result-area"][data-area="Hunter Valley"]'
 check((await hv.innerText()).includes('LEADING') && (await hv.getByTestId('result-detail').innerText()) === 'Only 1 of 4 picked courses and places — not enough to go by. You choose.', `results: Hunter Valley leads; ${await hv.getByTestId('result-detail').innerText()}`);
 check((await hv.getByTestId('choose-voted-area').innerText()) === 'Go with Hunter Valley' && (await page.getByTestId('choose-voted-area').count()) === 1, 'O2: one gold “Go with Hunter Valley”; other areas are under “Other ways”');
 check(/3 nights/.test(await page.getByTestId('result-length').innerText()), 'results: 3 nights is leading');
-check(/Primary:[\s\S]*Backup:/.test(await page.getByTestId('result-weekends').innerText()), 'results: the weekends, Primary then Backup');
+check(/^1\. [\s\S]*LEADING[\s\S]*\n2\. /.test((await page.getByTestId('result-weekends').innerText()).split('\n').slice(1).join('\n')) && !/Primary|Backup/.test(await page.getByTestId('result-weekends').innerText()), 'results: the weekends ranked by votes, plain words (v10.5)');
 check(/🔒/.test(await step('calls').innerText()), 'Call the courses is locked until the area is chosen');
 await both('flow-07-organiser-results');
 await hv.getByTestId('choose-voted-area').click(); await wait(800);
@@ -383,7 +383,7 @@ const posts0 = (db.posts || []).filter((p) => /^🗳️ .*: it’s /.test(p.body
 check(posts0.length === 1 && /it’s Hunter Valley, \w{3} \d+ – \w{3} \d+ \w{3}\. 3 nights\./.test(posts0[0].body), `I4: one result post in the Feed (${posts0.map((p) => p.body).join(' | ')})`);
 check(state().days.find((d) => d.leg === 'stay')?.options?.length >= 1, 'stay days pre-filled with the area’s courses');
 await step('area').getByRole('button').first().click(); await wait(400);
-check(/Primary:[\s\S]*Backup:/.test(await page.getByTestId('tb-weekends-settled').innerText()), 'step 1 shows "Primary" and "Backup"');
+check(/The weekend: [\s\S]*If the courses can’t fit you: /.test(await page.getByTestId('tb-weekends-settled').innerText()), 'step 1 shows "The weekend" and the fallback in plain words (v10.5)');
 check(await page.getByTestId('result-card').isVisible() && await page.getByTestId('result-calendar').isVisible(), 'I4: the result card, with Share and Add to calendar');
 await both('flow-08-chosen-primary-backup');
 await step('calls').getByRole('button').first().click(); await wait(500);

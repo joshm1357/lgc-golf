@@ -27,6 +27,7 @@
 --     first reserve up and tells them, and tells whoever put it out. Saying you're in later takes a free spot or goes
 --     on the end of the reserve list. Once the round has started (live) nothing moves by itself.
 --   * Calling a call-out off (091's call_off_plan) removes its round if nobody has scored on it.
+--   * Feed posts link to '/plan/<id>?c=1' — the ?c=1 tells the Feed to show the reply buttons on the post.
 --   * The job (every 10 minutes): when replies close, whoever put it out is nudged to lock it in (with the app's
 --     suggestion); the evening before, everyone with a spot gets "⛳ Tomorrow: 1:20pm at Moore Park — with Bo, Sam and
 --     Al". Buzzes are written by the database into notify_queue (kinds callout_*) and the notify function sends them
@@ -480,7 +481,7 @@ begin
   if p_invite is null and public.feature_on(v_g, 'feed') then
     insert into public.posts (group_id, kind, player_id, body, link)
     values (v_g, 'user', me, '⛳ Who’s up for a hit? ' || v_name || ' — ' || v_when || coalesce(' at ' || v_course_name, '')
-      || coalesce(' · ' || p_spots || ' spots', '') || '. Say if you can.', '/plan/' || v_id::text);
+      || coalesce(' · ' || p_spots || ' spots', '') || '. Say if you can.', '/plan/' || v_id::text || '?c=1');
   end if;
   return v_id;
 end $$;
@@ -627,7 +628,7 @@ begin
     insert into public.posts (group_id, kind, player_id, trip_id, round_id, body, link)
     values (v.group_id, 'user', me, v_trip, v_round, '🔒 Locked in: ' || v.name || ' — ' || v_when || ' at ' || v_course_name || '. '
       || case when cardinality(v_in) > 0 then private.callout_names(v_in) || '.' else '' end
-      || case when cardinality(v_res) > 0 then ' ' || cardinality(v_res) || ' on reserve.' else '' end, '/plan/' || p_plan::text);
+      || case when cardinality(v_res) > 0 then ' ' || cardinality(v_res) || ' on reserve.' else '' end, '/plan/' || p_plan::text || '?c=1');
   end if;
   return jsonb_build_object('round_id', v_round, 'trip_id', v_trip, 'in', to_jsonb(v_in), 'reserve', to_jsonb(v_res));
 end $$;

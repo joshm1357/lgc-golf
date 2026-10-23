@@ -127,7 +127,7 @@ insert into t_results (label, result) select 'buzzed (callout_new): not Bo, not 
   from public.notify_queue q join public.group_members gm on gm.user_id = q.user_id and gm.group_id = q.group_id join public.players pl on pl.id = gm.player_id
   where q.kind = 'callout_new' and q.url = '#/plan/' || pg_temp.id('c1');
 insert into t_results (label, result) select 'the buzz', min(q.title) || ' — ' || min(q.body) from public.notify_queue q where q.kind = 'callout_new' and q.url = '#/plan/' || pg_temp.id('c1');
-insert into t_results (label, result) select 'Feed post', count(*) || ' · ' || min(body) from public.posts where link = '/plan/' || pg_temp.id('c1');
+insert into t_results (label, result) select 'Feed post', count(*) || ' · ' || min(body) from public.posts where link = '/plan/' || pg_temp.id('c1') || '?c=1';
 
 -- ---------------------------------------------------------------- Replies (✓ in the order ticked)
 create function pg_temp.tick(p_user text, p_anon boolean, p_who text, p_opt int, p_resp text) returns void language plpgsql as $$
@@ -191,7 +191,7 @@ insert into t_results (label, result) select 'buzz: locked (full)', pg_temp.queu
 insert into t_results (label, result) select 'buzz: booker', pg_temp.queued(pg_temp.id('c1'), 'callout_booker');
 insert into t_results (label, result) select 'booking job', i.title || ' · ' || pg_temp.names(array[i.owner_id]) || ' · due set ' || (i.due is not null)
   from public.plan_items i where i.plan_id = pg_temp.id('c1') and i.kind = 'job';
-insert into t_results (label, result) select 'lock-in Feed post', count(*)::text from public.posts where link = '/plan/' || pg_temp.id('c1') and body like '🔒 Locked in%';
+insert into t_results (label, result) select 'lock-in Feed post', count(*)::text from public.posts where link = '/plan/' || pg_temp.id('c1') || '?c=1' and body like '🔒 Locked in%';
 
 -- ---------------------------------------------------------------- Pull-outs
 select pg_temp.as_user('00000000-0000-4000-8000-0000003a0a04', true);   -- Al, phone-only
@@ -241,7 +241,7 @@ insert into t_results (label, result) select 'a fixed time: no vote, Bo in', (se
   || (select string_agg(pl.nickname || ' ' || r.status, ',') from public.plan_rsvps r join public.players pl on pl.id = r.player_id where r.plan_id = pg_temp.id('c2'))
   || ' · tee ' || (select tee_time from public.plans where id = pg_temp.id('c2'));
 insert into t_results (label, result) select 'buzz: only Sam asked', pg_temp.queued(pg_temp.id('c2'), 'callout_new');
-insert into t_results (label, result) select 'no Feed post for a list', count(*)::text from public.posts where link = '/plan/' || pg_temp.id('c2');
+insert into t_results (label, result) select 'no Feed post for a list', count(*)::text from public.posts where link = '/plan/' || pg_temp.id('c2') || '?c=1';
 select pg_temp.as_user('00000000-0000-4000-8000-0000003a0a05', false);  -- Kurt, not asked
 set local role authenticated;
 select pg_temp.try('Kurt (not asked) says he''s in', $q$insert into public.plan_rsvps (plan_id, player_id, status) values (pg_temp.id('c2'), pg_temp.id('kurt'), 'in') returning status$q$);

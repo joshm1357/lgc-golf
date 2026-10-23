@@ -194,15 +194,19 @@ export function useHot() {
 
 // ------------------------------------------------------------------ the summary card
 
-/** tip: { name, lines }. onMore: open the details (a "More →" button). hint: a quiet line instead (mouse, beside a row). */
-export function TipCard({ tip, onMore, onEnter, onLeave, hint = '' }) {
+/** tip: { name, lines }. onMore: open the details (a "More →" button). hint: a quiet line instead (mouse, beside a row).
+ *  action (ov36): { label, onClick } — e.g. "+ Put on the table", so any dot on the map can be picked from its summary. */
+export function TipCard({ tip, onMore, onEnter, onLeave, hint = '', action = null }) {
   if (!tip) return null;
   return (
     <div className="pm-tip-card" data-testid="place-tip" onMouseEnter={onEnter} onMouseLeave={onLeave}>
       <strong>{tip.name}</strong>
       {tip.lines.map((l) => <span key={l} className="pm-tip-line">{l}</span>)}
-      {hint ? <span className="pm-tip-hint">{hint}</span> : onMore && (
-        <button type="button" className="pm-tip-more" onClick={(e) => { e.stopPropagation(); onMore(); }} data-testid="place-tip-more">More →</button>
+      {hint ? <span className="pm-tip-hint">{hint}</span> : (onMore || action) && (
+        <span className="pm-tip-btns">
+          {action && <button type="button" className={`pm-tip-act${action.on ? ' on' : ''}`} onClick={(e) => { e.stopPropagation(); action.onClick(); }} data-testid="place-tip-action">{action.label}</button>}
+          {onMore && <button type="button" className="pm-tip-more" onClick={(e) => { e.stopPropagation(); onMore(); }} data-testid="place-tip-more">More →</button>}
+        </span>
       )}
     </div>
   );

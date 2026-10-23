@@ -47,9 +47,13 @@ import { shareText, downloadFile, appLink } from '../lib/push.js';
 import { TRIP_STEPS, areaLine, coursesLine, upToLine } from '../lib/tripsteps.js';
 import { CourseSheet, StaySheet } from '../components/PlaceSheets.jsx';
 import { usePlaceInfo, RowTip } from '../components/PlanMapTools.jsx';
+// ov35: two votes, either order — 📅 When? and 📍 Where? (old trips with one combined vote keep the old screen).
+import WhenWhere from '../components/WhenWhere.jsx';
+import { PART_LOOK, BOTH_TITLE, isCombined, cardPolls, callChoices, splitRange, settleWhen, winnerKeys, partResultPost, whenLabel } from '../lib/votecards.js';
 import { courseTip, stayTip } from '../lib/placeinfo.js';
 
 const STAY_LIMITS = [20, 30, 40, 50, 60];
+const PARTS_SHOWN = ['when', 'where'];
 const FILTERS = [['notPlayed', 'Not played before'], ['favourites', 'Our favourites'], ['stayPlay', 'Stay & play']];
 const LEG_ICON = { way: '🚗', stay: '⛳', home: '🏠' };
 const slim = (c) => ({ id: c.id, name: c.name, area: c.area || null, lat: c.lat, lng: c.lng, mine_avg: c.mine_avg ?? null, others_avg: c.others_avg ?? null, others_n: c.others_n ?? null });
@@ -239,22 +243,26 @@ export default function TripBuilder() {
   };
   // ------------------------------------------------------------------ ov23: the area, the length, primary / backup
   const v1polls = (pd?.polls || []).filter((p) => p.vote_batch && p.vote_batch === st.votes?.v1);
-  const detail = detailCounts(v1polls, pd?.votes || []);
+  // ov35: new trips have two cards (When? / Where?); old ones the combined vote (v1).
+  const combined = isCombined(st);
+  const whenPolls = combined ? v1polls : cardPolls('when', { st, polls: pd?.polls || [], options: pd?.options || [] });
+  const wherePolls = combined ? v1polls : cardPolls('where', { st, polls: pd?.polls || [], options: pd?.options || [] });
+  const detail = detailCounts(wherePolls, pd?.votes || []);
   const votedNights = st.lengthVote?.on ? leadingNights(points, st.nights) : st.nights;
   // ------------------------------------------------------------------ walkthrough fixes (23 Oct): telling the group
   // One Feed post per real change (never one per click): the vote's result (I4), the calls done (I5), a weekend
   // falling through (O5). `st.posted` remembers what's been posted so a second tap doesn't post again.
   const post = (body) => supabase.from('posts').insert({ kind: 'user', player_id: me, body, link: `/plan/${planId}` }).then(() => {}, () => {});
   const nameOf = (id) => (id ? playerName(data.playersById[id]) : null);
-  const mainV1 = groupBallot(v1polls).main;
+  const mainV1 = groupBallot(wherePolls).main;
   const voters = votersOf(mainV1, pd?.votes || []);
   // V2: "3 nights won, so it's Fri 22 – Mon 25 Jan. 2 people only said yes to a shorter trip — check with them."
   const lengthNote = (() => {
-    if (!st.lengthVote?.on || !v1) return null;
+    if (!st.lengthVote?.on || (combined ? !v1 : !st.votes?.when)) return null;
     const top = rankWeekends(st.weekendPool?.length ? st.weekendPool : st.weekends, points)[0];
-    const lc = lengthCheck({ polls: v1polls, options: pd.options, votes: pd.votes, optionKeys: st.optionKeys || {}, nights: votedNights,
+    const lc = lengthCheck({ polls: whenPolls, options: pd.options, votes: pd.votes, optionKeys: st.optionKeys || {}, nights: votedNights,
       primary: top ? resizeWeekend(top, votedNights, st.extraNight || null) : null, primaryKey: top ? `weekend:${top.from || top.start}` : null });
-    return lc && pd.votes.some((v) => v1polls.some((p) => p.id === v.poll_id)) ? lc : null;
+    return lc && pd.votes.some((v) => whenPolls.some((p) => p.id === v.poll_id)) ? lc : null;
   })();
   // The vote's over once the area and the weekends are set from it: close it, with the winners ticked.
   const closeV1 = async (next) => {
@@ -285,7 +293,20 @@ export default function TripBuilder() {
   // "Go with <the leader>" (O2: the one gold button once the vote's in): the area with the vote's favourite courses and
   // places ticked, and (once there's a vote) the primary and backup weekends at the winning length. Closes the vote and
   // tells the group (I4).
-  const chooseArea = (area, nights = null) => run(async () => {
+  const chooseArea = (area, nights = null) => {
+    if (!combined) {
+      // ov35: choosing the area never settles the weekend. With the Where? vote out, say it closes it (and posts).
+      if (wherePolls.some((p) => p.status === 'open')) {
+        askConfirm({ title: `Go with ${area}?`, body: 'That closes the Where? vote now and posts the result in the Feed. The weekend isn’t touched.', yes: `Close the vote and go with ${area}`, tone: 'go' })
+          .then((yes) => yes && closeWhere(area));
+        return;
+      }
+      closeWhere(area);
+      return;
+    }
+    chooseAreaOld(area, nights);
+  };
+  const chooseAreaOld = (area, nights = null) => run(async () => {
     const n = nights ?? votedNights;
     const base = n !== st.nights ? { ...st, nights: n, days: TB.resizeDays(st.days, n) } : st;
     let next = chooseAreaFromVotes(base, area, points, courseMap);
@@ -302,6 +323,60 @@ export default function TripBuilder() {
     let next = { ...st, ...s, ...(n !== st.nights ? { days: TB.resizeDays(st.days, n) } : {}) };
     if (await closeV1(next)) next = await announce(next);
     await save(next);
+    pd.reload();
+  });
+  // ------------------------------------------------------------------ ov35: the two cards' actions
+  // Close one card's open votes, ticking the winners (by option key).
+  const closePart = async (part, keys) => {
+    const want = new Set(keys);
+    const list = part === 'when' ? whenPolls : wherePolls;
+    let closed = 0;
+    for (const p of list.filter((x) => x.status === 'open')) {
+      const w = pd.options.find((o) => o.poll_id === p.id && want.has(st.optionKeys?.[o.id]));
+      await supabase.from('plan_polls').update({ status: 'closed', winner_option_id: w?.id || null }).eq('id', p.id);
+      closed += 1;
+    }
+    return closed;
+  };
+  // The card's result in the Feed — once per vote, and only when there was a vote.
+  const announcePart = async (part, next, label, winKey) => {
+    const batch = st.votes?.[part];
+    const list = part === 'when' ? whenPolls : wherePolls;
+    if (!batch || !list.length || st.posted?.[part] === batch) return next;
+    const poll = list.find((p) => pd.options.some((o) => o.poll_id === p.id && st.optionKeys?.[o.id] === winKey)) || null;
+    const opts = poll ? pd.options.filter((o) => o.poll_id === poll.id) : [];
+    const win = opts.find((o) => st.optionKeys?.[o.id] === winKey);
+    const otherDone = part === 'when' ? !!next.region : !!next.weekendsSettled;
+    const text = partResultPost({ planName: plan.name, part, label, nights: part === 'when' && st.lengthVote?.on ? next.nights : null,
+      votes: poll ? topTwoYes(opts.map((o) => o.id), pd.votes, win?.id) : null, otherDone });
+    await post(text);
+    return { ...next, posted: { ...(next.posted || {}), [part]: batch }, results: { ...(next.results || {}), [part]: text } };
+  };
+  // 📅 "Close the vote and go with <weekend>" (or "Go with" when it's closed / no vote): settles the weekend and its
+  // fallback at the voted length. Never touches the area.
+  const closeWhen = (start = null, nights = null) => run(async () => {
+    const n = nights ?? votedNights;
+    const pool = st.weekendPool?.length ? st.weekendPool : st.weekends;
+    const ranked = rankWeekends(pool, points);
+    const chosen = start ? ranked.find((w) => (w.from || w.start) === start) : ranked[0];
+    const s = settleWhen(st, ranked, { start, nights: n, resize: (w, k) => resizeWeekend(w, k, st.extraNight || null) });
+    if (!s || !chosen) return;
+    let next = { ...st, ...s, ...(n !== st.nights ? { days: TB.resizeDays(st.days, n) } : {}) };
+    const winKey = `weekend:${chosen.from || chosen.start}`;
+    await closePart('when', winnerKeys('when', { weekendKey: chosen.from || chosen.start, nights: st.lengthVote?.on ? n : null }));
+    next = await announcePart('when', next, whenLabel(s.weekends[0]), winKey);
+    await save(next);
+    pd.reload();
+  }, 'The weekend’s set');
+  // 📍 "Close the vote and go with <area>": the area with the vote's favourite courses and places ticked. The weekend
+  // isn't touched.
+  const closeWhere = (area) => run(async () => {
+    let next = chooseAreaFromVotes(st, area, points, courseMap);
+    next = { ...next, areaPool: st.areaPool?.length ? st.areaPool : st.regionOptions };
+    await closePart('where', winnerKeys('where', { area }));
+    next = await announcePart('where', next, area, `area:${area}`);
+    await save(next);
+    setAreaTab(area);
     pd.reload();
   });
   const setHead = (v) => patch({ headcount: v === '' ? null : Math.max(1, Math.min(200, Number(v))), headcountBy: v === '' ? null : 'organiser' });
@@ -332,7 +407,7 @@ export default function TripBuilder() {
     const golf = fees.length ? Math.round(fees.reduce((a, b) => a + b, 0) / fees.length) * Math.max(1, Number(s0.nights) || 1) : 0;
     return { area: r.area, costEach: (r.costEach || 0) + golf || null, drive: r.driveText || null };
   });
-  const vote1 = (depth = 'full', s0 = st) => {
+  const ballotRange = (depth = 'full', s0 = st) => {
     const range = TB.startRange(s0, { courseMap, accom, extras: extrasSection(s0.extras), depth, length: lengthSection(s0.lengthVote), notes: voteNotes(s0) });
     // V2: with "How long?" on the ballot, each weekend shows what it would be at each length ("Plus Mon 25 if we go
     // 3 nights"), so nobody says yes to Fri–Sun and gets Fri–Mon.
@@ -348,16 +423,35 @@ export default function TripBuilder() {
         }) });
       }
     }
+    return range;
+  };
+  const vote1 = (depth = 'full', s0 = st) => {
+    const range = ballotRange(depth, s0);
     if (!range.length) { toast('Nothing on the table yet — add a second option somewhere, or just pick'); return; }
     // The vote keeps the shortlist and the areas (weekendPool / areaPool) so "open it up" can go back to them later.
     setCalling({ title: st.region ? 'Weekend, where to stay and courses' : 'Where and when?', range, keen: true, slot: 'v1', depth,
       multi: !st.region && st.regionOptions.length > 1, state: { weekendPool: st.weekends, areaPool: st.region ? [st.region] : st.regionOptions },
       header: headerAreas(st) });
   };
+  // ov35: call the When? vote, the Where? vote, or both in one message (one batch; each card closes on its own).
+  const callPart = (part, depth = 'full', s0 = st) => {
+    const range = ballotRange(depth, s0);
+    const r = part === 'both' ? range : splitRange(range)[part];
+    if (!r.length) { toast(part === 'when' ? 'Add a second weekend (or How long?) to vote on' : 'Add a second area, or courses and places, to vote on'); return; }
+    const where = part !== 'when';
+    setCalling({ title: part === 'both' ? BOTH_TITLE : PART_LOOK[part].batch, range: r, part, depth,
+      keen: !(s0.votes?.when || s0.votes?.where || s0.votes?.v1), slot: part === 'both' ? ['when', 'where'] : [part],
+      multi: where && !s0.region && (s0.regionOptions || []).length > 1,
+      state: { ...(part !== 'where' ? { weekendPool: s0.weekends } : {}), ...(where ? { areaPool: s0.region ? [s0.region] : s0.regionOptions } : {}) },
+      header: where ? headerAreas(s0) : null });
+  };
+  // ov35: what each card can call now (nothing with votes switched off), and how many could vote.
+  const choices = votesOn && !combined ? callChoices(st, ballotRange('full', st)) : { when: false, where: false, both: false };
+  const eligible = (data.players || []).filter((p) => p.approved !== false).length;
   const called = async ({ batch: b, keys }) => {
     const c = calling;
     for (const id of c.attach || []) await supabase.from('plan_polls').update({ vote_batch: b.id }).eq('id', id);
-    await save({ ...st, ...(c.state || {}), optionKeys: { ...(st.optionKeys || {}), ...keys }, votes: { ...(st.votes || {}), [c.slot]: b.id }, ...(c.depth ? { voteDepth: c.depth } : {}),
+    await save({ ...st, ...(c.state || {}), optionKeys: { ...(st.optionKeys || {}), ...keys }, votes: { ...(st.votes || {}), ...Object.fromEntries([].concat(c.slot).map((k) => [k, b.id])) }, ...(c.depth ? { voteDepth: c.depth } : {}),
       ...(c.header ? { voteHeader: { ...(st.voteHeader || {}), [b.id]: { areas: c.header } } } : {}) });
     pd.reload(); loadAccom();
   };
@@ -478,17 +572,17 @@ export default function TripBuilder() {
       {areaOptions.length > 0 && (
         <AreaStart plan={plan} st={st} save={save} org={org} areas={areas} history={history} accom={accom}
           people={head.people} origin={origin} tees={tees} tab={tabNow} onTab={setAreaTab} onChoose={(r) => chooseArea(r)}
-          onCallVote={org && votesOn && !v1 ? () => vote1('full') : null} />
+          onCallVote={org && votesOn && (combined ? false : choices.where) ? () => callPart('where') : null} />
       )}
-      {v1 && !st.region && <AreaVoteResults st={st} points={points} detail={detail} courseMap={courseMap} org={org} onChoose={chooseArea} onSettle={settleWeekends} voters={voters} lengthNote={lengthNote?.line || null} checkNames={(lengthNote?.check || []).map(nameOf)} />}
+      {combined && v1 && !st.region && <AreaVoteResults st={st} points={points} detail={detail} courseMap={courseMap} org={org} onChoose={chooseArea} onSettle={settleWeekends} voters={voters} lengthNote={lengthNote?.line || null} checkNames={(lengthNote?.check || []).map(nameOf)} />}
       {!comparing && <>
       {org && (
         <div className="small muted">Coming from: <strong>{origin?.label || 'not set'}</strong>{!origin && ' — add starting points in “Find a course”, or people’s home suburbs.'}</div>
       )}
       <LengthPicker st={st} save={save} org={org} leading={st.lengthVote?.on && v1 ? votedNights : null} />
       {st.weekendsSettled ? primaryBackup : <WeekendPicker st={st} save={save} org={org} points={points} nights={st.lengthVote?.on && v1 ? votedNights : st.nights} />}
-      {v1 && st.region && !st.weekendsSettled && <AreaVoteResults st={st} points={points} detail={detail} courseMap={courseMap} org={org} onChoose={chooseArea} onSettle={settleWeekends} voters={voters} lengthNote={lengthNote?.line || null} checkNames={(lengthNote?.check || []).map(nameOf)} />}
-      {org && !v1 && st.region && st.weekends.length > 0 && !st.weekendsSettled && (
+      {combined && v1 && st.region && !st.weekendsSettled && <AreaVoteResults st={st} points={points} detail={detail} courseMap={courseMap} org={org} onChoose={chooseArea} onSettle={settleWeekends} voters={voters} lengthNote={lengthNote?.line || null} checkNames={(lengthNote?.check || []).map(nameOf)} />}
+      {combined && org && !v1 && st.region && st.weekends.length > 0 && !st.weekendsSettled && (
         // O2: one gold button (Call the vote); skipping the vote is one of the other ways.
         <OtherWays open={!votesOn}>
           <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={() => settleWeekends(st.nights)} data-testid="settle-weekends">
@@ -504,15 +598,24 @@ export default function TripBuilder() {
         <span className="small muted">{head.people ? `${head.people} — ${head.words}` : 'not known yet'}</span>
       </div>
       <ExtrasPanel plan={plan} st={st} save={save} org={org} />
-      {org && votesOn && !v1 && (st.regionOptions.length > 0 || st.region) && (
+      {combined && org && votesOn && !v1 && (st.regionOptions.length > 0 || st.region) && (
         <div className="stack" style={{ gap: 6 }}>
           <button type="button" className="btn gold block" disabled={busy} onClick={() => vote1('full')} data-testid="tb-call-vote1">🗳️ Call the vote: “{st.region ? 'Weekend, where to stay and courses' : 'Where and when?'}”</button>
           {!st.region && st.regionOptions.length > 1 && <span className="small muted">You choose how deep on the next screen: just the areas, or the areas and what’s in them.</span>}
         </div>
       )}
       </>}
+      {/* ov35: 📅 When? and 📍 Where? — two cards, call either first or both at once. */}
+      {!combined && (
+        <WhenWhere st={st} pd={pd} points={points} org={org} busy={busy} of={eligible} today={todayISO()} courseMap={courseMap}
+          detail={detail} voters={voters} choices={choices} votedNights={votedNights} lengthNote={lengthNote?.line || null}
+          checkNames={(lengthNote?.check || []).map(nameOf)} planId={planId}
+          onCall={callPart} onCloseWhen={closeWhen} onCloseWhere={(a) => (wherePolls.some((p) => p.status === 'open') ? closeWhere(a) : chooseArea(a))}
+          onSkipWhen={() => settleWeekends(st.nights)} />
+      )}
       {v1 && <VoteLink planId={planId} title={v1.title} />}
       {st.resultText && <ResultCard text={st.resultText} plan={plan} st={st} />}
+      {PARTS_SHOWN.map((k) => st.results?.[k] && <ResultCard key={k} text={st.results[k]} plan={plan} st={st} part={k} />)}
       {(st.before || []).length > 0 && <BeforeReopened before={st.before} />}
     </>
   );
@@ -554,8 +657,11 @@ export default function TripBuilder() {
       ))}
       {/* ov23: where to stay — ideas and search links with the real head count — live here now, not in step 1. */}
       <StayIdeas plan={plan} st={st} save={save} org={org} accom={accom} reloadAccom={loadAccom} head={head} />
-      {org && votesOn && st.region && !st.votes?.v1 && (
+      {combined && org && votesOn && st.region && !st.votes?.v1 && (
         <button type="button" className="btn gold block" disabled={busy} onClick={() => vote1('full')} data-testid="tb-vote1">🗳️ Call the vote (one vote card)</button>
+      )}
+      {!combined && org && choices.where && st.region && (
+        <button type="button" className="btn ghost block" disabled={busy} onClick={() => callPart('where')} data-testid="tb-vote-detail">🗳️ Ask the group: courses and where to stay</button>
       )}
       {v1 && <VoteLink planId={planId} title={v1.title} />}
     </>
@@ -604,20 +710,21 @@ export default function TripBuilder() {
         const r = reopenArea(st, points);
         const failed = st.region;
         for (const job of callJobRows) if (jobStage(job) !== 'done') await supabase.from('plan_items').update(stagePatch('done')).eq('id', job.id);
-        for (const p of v1polls.filter((x) => x.status === 'open')) await supabase.from('plan_polls').update({ status: 'closed' }).eq('id', p.id);
+        for (const p of (combined ? v1polls : wherePolls).filter((x) => x.status === 'open')) await supabase.from('plan_polls').update({ status: 'closed' }).eq('id', p.id);
         const dead = new Set(st.deadWeekends || []);
         const pool = (st.weekendPool?.length ? st.weekendPool : st.weekends).filter((w) => !dead.has(w.from || w.start));
         const live = (r.state.regionOptions || []).filter((a) => a !== failed);
         const before = [...(st.before || []), { at: todayISO(), region: failed, stays: stays.map((x) => x.name), weekends: st.weekends.map((w) => ({ start: w.start, end: w.end })), pickedText: st.pickedText || null, calls: callJobRows.length }].slice(-3);
         const next = {
           ...r.state, regionOptions: live.length ? live : r.state.regionOptions, weekends: pool, weekendsSettled: false, stays: [], picked: null, pickedText: null,
-          callsMade: false, callJobs: {}, configs: [], before, votes: { ...(st.votes || {}), v1: null, v2: null }, resultText: null,
+          callsMade: false, callJobs: {}, configs: [], before, votes: { ...(st.votes || {}), v1: null, v2: null, ...(combined ? {} : { where: null }) }, resultText: null,
+          ...(combined ? {} : { results: { ...(st.results || {}), where: null } }),
         };
         await post(reopenedPost({ planName: plan.name, area: failed, runnerUp: r.runnerUp }));
         await save(next);
         setAreaTab(r.runnerUp); setStep('area');
         pd.reload();
-        if (org && votesOn) vote1('full', next); // the fresh vote, with only the options still in play
+        if (org && votesOn) { if (combined) vote1('full', next); else callPart('where', 'full', next); } // the fresh vote, with only the options still in play
         return r.runnerUp ? `The area’s open again — ${r.runnerUp} came next in the vote` : 'The area’s open again';
       }).then((m) => m && toast(m)));
     }
@@ -801,7 +908,7 @@ export default function TripBuilder() {
           intro={calling.multi ? (
             <div className="stack" style={{ gap: 6 }} data-testid="vote-depth">
               <span className="label">How deep?</span>
-              <Seg light options={[{ value: 'areas', label: 'Areas only' }, { value: 'full', label: 'Areas + what’s in them' }]} value={calling.depth} onChange={(d) => vote1(d)} />
+              <Seg light options={[{ value: 'areas', label: 'Areas only' }, { value: 'full', label: 'Areas + what’s in them' }]} value={calling.depth} onChange={(d) => (calling.part ? callPart(calling.part, d) : vote1(d))} />
               <span className="small muted">{calling.depth === 'areas'
                 ? 'Just “Which area?” (and the weekends). Courses and places get sorted once the area’s picked.'
                 : 'Each area’s courses and places to stay go under it, optional — voters can answer just the areas and weekends, or go into the detail.'}</span>

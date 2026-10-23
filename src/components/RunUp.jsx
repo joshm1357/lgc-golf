@@ -91,7 +91,7 @@ export function RunUp({ pd, trip = null, onOrganise = null, slots = {}, more = n
   const data = useData();
   const { status } = useSession();
   const feature = { planner_rooms: useFeature('planner_rooms'), planner_tasks: useFeature('planner_tasks'), stats: useFeature('stats'),
-    feed: useFeature('feed'), planner_costs: useFeature('planner_costs'), dinner: useFeature('dinner_awards'), tribunal: useFeature('tribunal') };
+    feed: useFeature('feed'), planner_costs: useFeature('planner_costs'), dinner: useFeature('dinner_awards'), tribunal: useFeature('tribunal'), games: useFeature('games') };
   const plan = pd.plan;
   const me = status.player_id;
   const guest = status.role === 'guest';
@@ -136,6 +136,7 @@ export function RunUp({ pd, trip = null, onOrganise = null, slots = {}, more = n
       <YourWeekend pd={pd} trip={trip} rounds={rounds} tees={ru.tees} cars={cars} me={me} guest={guest} onMore={openMore} />
       {ru.missing && <div className="small muted">Some of the run-up (cars, side activities, tipping) needs a database update — it’ll appear once that’s done.</div>}
       <SideGamesOnOffer tripId={tripId} />
+      {feature.games && !guest && <Link to="/games" className="small" style={{ fontWeight: 700 }} data-testid="runup-games-link">🎲 Side games: see what's on, or put one up →</Link>}
 
       {sections.includes('todos') && (!guest || todos.length > 0) && <Todos todos={todos} pd={pd} me={me} mine={mine} onOrganise={organise} onMore={openMore} reload={ru.reload} guest={guest} />}
 

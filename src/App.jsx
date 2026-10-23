@@ -36,6 +36,7 @@ import { pickActiveTrip } from './lib/activetrip.js';
 import ScoreEntry from './screens/ScoreEntry.jsx';
 import Feed from './screens/Feed.jsx';
 import More from './screens/More.jsx';
+import { PlanRole } from './components/CoOrganisers.jsx';
 
 // Loaded when first opened (the service worker saves them all for offline use in the background).
 const Admin = lazyScreen(() => import('./screens/Admin.jsx'));
@@ -85,7 +86,6 @@ const Present = lazyScreen(() => import('./screens/Present.jsx'), 'Present');
 const AwardsShow = lazyScreen(() => import('./screens/AwardsShow.jsx')); // ov28 (I14): the awards presentation
 const TripFinder = lazyScreen(() => import('./screens/TripFinder.jsx'));
 const TripBuilder = lazyScreen(() => import('./screens/TripBuilder.jsx'));
-import { PlanRole } from './components/CoOrganisers.jsx';
 const Notifications = lazyScreen(() => import('./screens/Notifications.jsx'));
 const CompsBoard = lazyScreen(() => import('./screens/CompsBoard.jsx'));
 const TripOverviewScreen = lazyScreen(() => import('./screens/TripOverview.jsx')); // a trip's overview (trips with no plan)

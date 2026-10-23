@@ -71,7 +71,7 @@ const NOT_IN_DIGEST = new Set(['swing']);
 const KIND_FEATURE: Record<string, string> = {
   poll_open: 'planner_tasks', poll_decided: 'planner_tasks', poll_closing: 'planner_tasks', nudge_votes: 'planner_tasks',
   job_assigned: 'planner_tasks', job_due: 'planner_tasks',
-  plan_new: 'planner', plan_proposed: 'planner', trip_locked: 'planner', rsvp_locked: 'planner', rsvp_deadline: 'planner',
+  plan_new: 'planner', plan_proposed: 'planner', coorganiser_added: 'planner', trip_locked: 'planner', rsvp_locked: 'planner', rsvp_deadline: 'planner',
   nudge_rsvp: 'planner', trip_week: 'planner', trip_tomorrow: 'planner', comment: 'planner',
   nudge_kitty: 'planner_costs', payment_recorded: 'planner_costs', groups_set: 'planner_rooms',
   deposit_ask: 'planner_costs', nudge_deposit: 'planner_costs',
@@ -530,7 +530,13 @@ Deno.serve(async (req) => {
     const g = m.group_id as string;
     const me = { player_id: m.player_id as string | null, is_admin: m.role === 'organiser' };
     const adminOnly = ['plan_new', 'trip_locked', 'rsvp_locked', 'nudge_votes', 'nudge_rsvp', 'nudge_kitty', 'groups_set', 'draw_open', 'deposit_ask', 'nudge_deposit', 'nudge_signin', 'draw_out'];
-    if (adminOnly.includes(body.type) && !me.is_admin) return json({ error: 'Organisers only' }, 403);
+    // ov35 (104): a trip's co-organisers can send that trip's organiser messages (the trip is named by plan_id).
+    const coorg = async (planId: unknown) => {
+      if (!planId || typeof planId !== 'string' || !m.player_id) return false;
+      const { data: c } = await db.from('plan_coorganisers').select('player_id').eq('plan_id', planId).eq('group_id', g).eq('player_id', m.player_id).maybeSingle();
+      return !!c;
+    };
+    if (adminOnly.includes(body.type) && !me.is_admin && !(body.type !== 'plan_new' && await coorg(body.plan_id).catch(() => false))) return json({ error: 'Organisers only' }, 403);
     const from = me.player_id as string | null;
     // Someone who hasn't picked their name yet can't send anything to others (only the test buzz to themselves).
     if (!from && !me.is_admin && body.type !== 'test') return json({ error: 'Pick your name first' }, 403);
@@ -579,7 +585,8 @@ Deno.serve(async (req) => {
         if (!me.is_admin) {
           // The trip's organiser may pick winners when the group allows it.
           const [{ data: gr }, pl0] = await Promise.all([db.from('groups').select('vote_decider').eq('id', g).single(), plan(g, p.plan_id)]);
-          if (gr?.vote_decider !== 'admin_or_organiser' || !from || pl0.organiser_id !== from) return json({ error: 'Organisers only' }, 403);
+          const byOrganiser = gr?.vote_decider === 'admin_or_organiser' && !!from && pl0.organiser_id === from;
+          if (!byOrganiser && !(await coorg(p.plan_id).catch(() => false))) return json({ error: 'Organisers only' }, 403);
         }
         if (!(await once(`poll-decided:${p.id}`))) break;
         const { data: o } = p.winner_option_id ? await db.from('plan_options').select('label').eq('id', p.winner_option_id).eq('group_id', g).maybeSingle() : { data: null };
@@ -663,6 +670,17 @@ Deno.serve(async (req) => {
         const owe = (rs || []).filter((r) => paid(r.player_id) < dep - 0.5).map((r) => r.player_id);
         const amt = `$${dep.toFixed(2).replace(/\.00$/, '')}`;
         sent = await send(g, owe, { title: body.type === 'deposit_ask' ? `🏠 ${pl.name}: accommodation’s booked` : `💳 ${pl.name}: deposit reminder`, body: `Confirm you’re in and pay your ${amt} deposit.`, url: planUrl(pl.id) }, from, body.type);
+        break;
+      }
+      // ov35 (104): "Hamish made you a co-organiser of March trip" — only whoever added them, within 10 minutes, once.
+      case 'coorganiser_added': {
+        const pl = await plan(g, body.plan_id);
+        const { data: c } = await db.from('plan_coorganisers').select('player_id,added_by,created_at').eq('plan_id', pl.id).eq('group_id', g).eq('player_id', body.player_id).maybeSingle();
+        if (!c || (c.added_by !== from && !me.is_admin)) return json({ error: 'Not yours to send' }, 403);
+        if (Date.now() - new Date(c.created_at).getTime() > 10 * 60 * 1000) break;
+        if (!(await once(`coorg:${pl.id}:${c.player_id}:${c.created_at}`))) break;
+        const ppl = await players(g);
+        sent = await send(g, [c.player_id], { title: `🧰 You’re a co-organiser: ${pl.name}`, body: `${name(ppl.find((p) => p.id === from))} asked you to help plan it — you can change the plan, call the votes and sort the jobs.`, url: `${planUrl(pl.id)}?view=organise` }, from, 'coorganiser_added');
         break;
       }
       case 'plan_proposed': {

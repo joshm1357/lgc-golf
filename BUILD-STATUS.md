@@ -1682,3 +1682,13 @@ Merged with v10-int (ov28): "Your round" is mounted in Your weekend, and the mon
   `"google,password,email"` (join links: Google or a code; the front door still takes passwords people have set) or
   `"google,email"` (a code everywhere). Check the Supabase "Magic link" and "Confirm sign up" emails include
   `{{ .Token }}` (docs/SIGN-IN-SETUP.md). Deploy the notify function. Apply 096 on staging, then live.
+## ov32 — The group's cups, cap tips, vibe points (23 Oct 2026, branch `ov32-cups`, migration 101, staging only)
+**Run order:** 101 after 100 (ov31's `cup_points`). Not applied to any Supabase project.
+- **Library** (`cups`): golf (Stableford, stroke, Ambrose, 4BBB, match play, eclectic), weekend, combined; real trophy: has_trophy / photo / held_by. Backfill makes a library cup from each golf comp already played for.
+- **Up for grabs in the run-up** (components/CupsUpForGrabs.jsx inside CompsOnTheDay, so Organise step 6 shows the same): organisers tick cups on, set the specifics (rounds and each round's format, what counts, placings scale, cap tip settings and the group's name for them), "+ New cup". Players see the list read-only with one line on how to win.
+- **What counts** (src/lib/cups.js `cupStandings`): awards & fines, activities, adjustments, cap tips (cup_points); golf placings, Cup matches, side comps and dots, skins/bets won, tipping (097 + 094), rule breaches (score_adjustments 'rule_breach'), vibe points — worked out at standings time. Breakdown per player, e.g. "Latest out +2 · 🧢 Cap tips ×1 +1 · Vibe +2 (1 photo)". `compStandings` hands cup comps to `cupStandings`, so the trip page, comps board, Trophy Room and results all use it.
+- **Cap tips** (`cap_tips`): from a Feed post chip, a player's card or the day screen; "3 left to give"; undo for 10 minutes; each writes cup_points 'kudos'. The database enforces allowance / most to one person / no self / guests.
+- **Organiser entries**: side activity placings and adjustments with a reason (`add_cup_points`, `waive_cup_points`), shown to everyone and disputable (cup_points.points, 100).
+- **Day screen**: the cups card under "Counts for". **Results**: each cup's standings, the hand-over, the real cup's photo; Trophy Room shows the photo and who has it.
+- **"Do you have a cup for this?"** Yes → photo + who has it; Not yet → run-up reminder + ComingSoon ("🛒 Get one: coming soon", "I'm interested" → one beta idea "Interested: trophy_shop (<cup>)").
+- **Tests:** src/lib/cups.test.js (23), supabase/tests/101_cups.sql (54 checks, run in PGlite with 001–100 + a 099 stand-in), tests/e2e/cups-test.mjs (29 checks). Existing cup, comps, runup, results, awards, awards-fines, day-screen, weekends-comps, your-round, own-comps, stage2 e2e and all vitest pass.

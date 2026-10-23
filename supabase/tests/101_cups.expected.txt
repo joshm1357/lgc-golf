@@ -1,0 +1,54 @@
+1. organiser adds a weekend cup → ok social
+2. organiser adds a golf cup with no format → refused: A golf cup needs a format
+3. organiser adds a golf cup (Stableford) → ok stableford
+4. organiser adds the same name twice → refused: duplicate key value violates unique constraint "cups_one_name_idx"
+5. organiser: a made-up thing to count → refused: Unknown thing to count: karaoke
+6. organiser: "we have a cup", held by Hamish → ok true
+7. organiser: held by someone in another group → refused: That belongs to another group
+8. organiser puts the weekend cup up for grabs → ok social
+9. organiser: a round from another trip counts → refused: A round that counts isn't one of this trip's rounds
+10. organiser: points out of range → refused: The setting "per" doesn't fit "kudos"
+11. organiser: a weekend cup with rounds on the comp itself → refused: An awarded comp has no rounds
+12. organiser calls them fist bumps → ok 
+13. player reads the cups → ok 2
+14. player adds a cup → refused: new row violates row-level security policy for table "cups"
+15. player changes a cup → ok 0
+16. player ticks a cup off for the trip → ok 0
+17. player renames cap tips → refused: Only an organiser can change that
+18. Hamish → Tom (1) → ok Great putt
+19. Hamish → Tom (2) → ok given
+20. Hamish → Tom (3): most 2 to one person → refused: Most 2 to the same person
+21. Hamish → Hamish → refused: Not to yourself
+22. Hamish gives as Tom → refused: new row violates row-level security policy for table "cap_tips"
+23. Hamish → the guest (guests off) → refused: Guests can't get them on this cup
+24. Hamish → the organiser (3 of 3) → ok given
+25. Hamish: a 4th (allowance 3) → refused: None left to give: 3 each on this cup
+26. cap tip points (cup_points, kudos): Tom / labels → ok 2 / Fist bump from Hamish, Fist bump from Hamish: Great putt
+27. Hamish changes a cap tip → refused: permission denied for table cap_tips
+28. Hamish takes one back (just now) → ok 1
+29. its points went with it → ok 0
+30. player enters an adjustment → refused: Only an organiser can do that
+31. Hamish takes one back after 10 minutes → ok 0
+32. guest reads the cups → ok 2
+33. guest adds a cup → refused: new row violates row-level security policy for table "cups"
+34. guest changes a cup → ok 0
+35. guest puts a cup up for grabs → refused: new row violates row-level security policy for table "comps"
+36. guest gives a cap tip (guests off) → refused: Guests can't give them on this cup
+37. organiser lets guests in → ok changed
+38. guest gives a cap tip (guests on) → ok given
+39. its label uses the group's name → ok Fist bump from Gus
+40. organiser: go-karts 1st → ok true
+41. … written as a confirmed cup_points row → ok Go-karts 1st 3 activity true
+42. organiser: an adjustment with no reason → refused: Say why (a few words)
+43. organiser: an adjustment for another group's player → refused: That player isn't in this group
+44. organiser: takes the go-karts back → ok 
+45. organiser: can't waive a cap tip here → refused: Only side activities and adjustments are taken back here
+46. organiser turns cap tips off → ok changed
+47. Tom gives one (cap tips off) → refused: Cap tips aren't on for that cup
+48. player reads the cup's points → ok 4
+49. other group reads our cups / cap tips → ok 0 / 0
+50. other group changes our cup → ok 0
+51. other group gives on our cup → refused: That belongs to another group
+52. other group adds points on our cup → refused: Cup not found
+53. cap tips left in the table → 3
+54. the group calls them → fist

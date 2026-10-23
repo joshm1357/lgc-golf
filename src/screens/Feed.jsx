@@ -11,6 +11,9 @@ import { useFeedClaims, ClaimChips, AwardRunCard, runIdFromLink, FromScoresPropo
 import { BringAsk } from '../components/BringAsk.jsx';
 import { bringAskPlan } from '../lib/runup.js';
 import { SideGameAsk, sideGameFromLink } from '../components/GamesChip.jsx'; // ov29 (098)
+import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
+
+const CapTipChip = lazyScreen(() => import('../components/CupStandings.jsx'), 'CapTipChip', { inline: true }); // ov32: 🧢 next to 🏷
 
 const REACTIONS = ['🔥', '😂', '👏', '🤦', '🍺'];
 
@@ -146,6 +149,7 @@ function Post({ post, me, comments, reactions, onReact, onChanged, isAdmin, chip
             </button>
           ))}
           {onFine && <button type="button" className="react" onClick={() => onFine(post.player_id || null)} aria-label="Fine or award" data-testid="fine-post">🏷 Fine / award</button>}
+          {!auto && <LazyArea quiet><CapTipChip post={post} /></LazyArea>}
         </div>
         {comments.length > 2 && !showAll && (
           <button type="button" className="small muted" style={{ background: 'none', border: 0, padding: 0, textAlign: 'left' }} onClick={() => setShowAll(true)}>View all {comments.length} comments</button>

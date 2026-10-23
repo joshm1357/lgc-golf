@@ -17,6 +17,7 @@ import { useTripFines } from './FinesTicker.jsx';
 import { useTips } from './Tips.jsx';
 import { AvatarStack, toast } from './ui.jsx';
 import { TrophyArt } from './TrophyArt.jsx';
+import { CupsResults, CupPhoto } from './CupStandings.jsx'; // ov32: the group's cups (standings, the real cup's photo)
 import { shareText } from '../lib/push.js';
 import { todayISO } from '../lib/plan.js';
 import { AutoAwardResults } from './AutoAwards.jsx';
@@ -181,7 +182,8 @@ export default function TripResults({ trip, moneyLine = null }) {
           <strong>🏆 Trophies</strong>
           {res.trophies.map((t) => (
             <div key={t.comp.id} className="row between" style={{ gap: 8, alignItems: 'flex-start' }} data-testid="results-trophy">
-              <span className="grow" style={{ minWidth: 0 }}>{t.line || <><span className="muted">{t.name}:</span> {t.comp.kind === 'manual' ? 'not awarded yet' : 'no winner yet'}</>}</span>
+              <span className="grow" style={{ minWidth: 0 }}>{t.line || <><span className="muted">{t.name}:</span> {t.comp.kind === 'manual' && !t.comp.settings?.cup ? 'not awarded yet' : 'no winner yet'}</>}
+                {t.comp.cup_id && <CupPhoto comp={t.comp} size={44} />}</span>
               {t.winner && <span className="small muted" style={{ whiteSpace: 'nowrap' }}>{t.engraved ? '✓ Engraved' : 'To engrave'}</span>}
             </div>
           ))}
@@ -196,6 +198,9 @@ export default function TripResults({ trip, moneyLine = null }) {
           {trophiesOn && <Link to="/trophies" className="small" style={{ fontWeight: 700 }}>The Trophy Room →</Link>}
         </div>
       )}
+
+      {/* ov32: the group's weekend / combined cups — who got what, with the breakdown */}
+      <CupsResults trip={trip} />
 
       {/* The team / Cup verdict */}
       {res.cup && (

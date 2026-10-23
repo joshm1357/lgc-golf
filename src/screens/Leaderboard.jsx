@@ -28,6 +28,7 @@ import { PendingPenalties } from '../components/RulePenalty.jsx';
 import { penaltyBadgeWord, penaltyRowWords, projectedStrokes } from '../lib/drives.js';
 
 const DrawSetup = lazyScreen(() => import('../components/DrawSetup.jsx'), 'default', { inline: true });
+const CupsToday = lazyScreen(() => import('../components/CupStandings.jsx'), 'CupsToday', { inline: true }); // ov32: the group's cups today
 
 export function useRoundChoice() {
   const data = useData();
@@ -169,6 +170,7 @@ export default function Leaderboard() {
       {trip && !status?.quick && <div className="section" style={{ paddingBottom: 0 }}><Link to={`/trip-now/${trip.id}`} className="small" style={{ fontWeight: 700 }} data-testid="back-to-trip">‹ {trip.name}</Link></div>}
       <RoundChips round={round} onChoose={choose} />
       <CompChips round={round} />
+      {trip && !status?.quick && <LazyArea quiet><CupsToday trip={trip} /></LazyArea>}
       <RulesTodayChip round={round} />
       <TeeGroupsBoard round={round} />
       <AwardCards />

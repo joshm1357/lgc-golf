@@ -17,6 +17,7 @@ import { shareText } from '../lib/push.js';
 import RuleTag from '../components/RuleTag.jsx';
 import { SignInCard } from './Group.jsx';
 import { VoteChannelCard } from '../components/VoteEmail.jsx';
+import { CapTipButton } from '../components/CupStandings.jsx'; // ov32: give this player a cap tip
 
 /** Everything we know about a player: Stableford rounds, Ambrose results, trophies, comps, Tribunal, handicap. */
 export function usePlayerHistory(playerId) {
@@ -162,6 +163,7 @@ export default function Profile() {
           ))}
         </div>
 
+        <CapTipButton playerId={playerId} />
         <PlayerStatsCard playerId={playerId} />
 
         {h.honours.length > 0 && (

@@ -24,6 +24,7 @@ export function leadWho(rows = [], finished = false, team = false) {
 import { playGame, moneyTally, formatMoney, GAME_INFO } from './games.js';
 import { compsForRound, sortOwnEntries } from './sidecomps.js';
 import { bestEntry, scoreText } from './awards.js';
+import { isCupComp, cupStandings, cleanCounts } from './cups.js'; // ov32: social, combined and eclectic cups
 
 // ------------------------------------------------------------------ the catalogue (the picker's cards)
 
@@ -101,6 +102,13 @@ export function cleanSettings(kind, settings = {}) {
       if (Object.keys(one).length) sessions[rid] = one;
     }
     if (Object.keys(sessions).length) out.sessions = sessions;
+  }
+  // ov32 (101): a group cup played as kind 'manual' — what it is, which rounds, what counts.
+  if (kind === 'manual' && ['social', 'combined', 'eclectic'].includes(s.cup)) {
+    out.cup = s.cup;
+    if (Array.isArray(s.rounds)) out.rounds = s.rounds.filter((x) => /^[0-9a-f-]{36}$/.test(String(x))).slice(0, 20);
+    if (s.cup === 'eclectic' && typeof s.net === 'boolean') out.net = s.net;
+    if (s.cup !== 'eclectic' && s.counts) out.counts = cleanCounts(s.counts);
   }
   return out;
 }
@@ -228,6 +236,7 @@ function addUp(rounds, boards, { by, value, higherBetter, unit }) {
  * cup → sides, won, projected, total, toWin, perRound; side_comps → results; games → settle.
  */
 export function compStandings(comp, data = {}) {
+  if (isCupComp(comp)) return cupStandings(comp, data); // ov32: worked out in cups.js (points, or the eclectic)
   const rounds = compRounds(comp, data.rounds || []);
   const base = { kind: comp.kind, rounds, rows: [], higherBetter: true, leaderText: null, note: '', empty: null };
   const fitting = rounds.filter((r) => fits(comp.kind, r));

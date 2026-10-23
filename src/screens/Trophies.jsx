@@ -10,6 +10,7 @@ import { honourOrder } from '../lib/history.js';
 import { StatsLink } from '../components/PlayerStats.jsx';
 import { ReplayChips } from '../components/ReplayChips.jsx';
 import { useTripComps } from '../components/CompsChip.jsx';
+import { CupPhoto } from '../components/CupStandings.jsx'; // ov32: the real cup's photo and who has it
 import { useCompData, CompStandingsView } from './CompsBoard.jsx';
 import { compStandings } from '../lib/comps.js';
 import RuleTag from '../components/RuleTag.jsx';
@@ -155,6 +156,7 @@ export default function Trophies() {
             )}
           </div>
 
+          {compOf(trophy)?.cup_id && <CupPhoto comp={compOf(trophy)} size={120} />}
           {trip && !trophy.historyOnly && <Link to={`/comps-board?trip=${trip.id}${compOf(trophy) ? `&c=${encodeURIComponent(compOf(trophy).id)}` : ''}`} className="small" style={{ color: '#EBD496', fontWeight: 700 }}>The standings, with this trip’s other comps →</Link>}
           {general && (
             <>

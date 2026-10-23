@@ -22,6 +22,7 @@ import RuleTag, { useActiveRules, useOpenDisputes } from './RuleTag.jsx';
 import { TripPenaltyRules } from './RulePenalty.jsx';
 import { upForGrabs, usualComps, handicapRows, ruleDisputes, reviewDue } from '../lib/compsday.js';
 import { todayISO } from '../lib/plan.js';
+import CupsUpForGrabs from './CupsUpForGrabs.jsx'; // ov32: the group's cups — tick which are up for grabs, the specifics
 
 function useTripComps(tripId) {
   const [rows, setRows] = useState(null);
@@ -64,7 +65,9 @@ function GrabsList({ trip, isOrg }) {
   const trophiesOn = useFeature('trophies');
   const [comps, reloadComps] = useTripComps(trip?.id || null);
   const [busy, run] = useRun();
-  const grabs = useMemo(() => (trip ? upForGrabs({ comps: comps || [], trophies: data.trophies || [], tripId: trip.id, cupOn }) : []), [trip, comps, data.trophies, cupOn]);
+  // ov32: comps that play for one of the group's cups are listed by CupsUpForGrabs, not again here.
+  const cupComps = useMemo(() => new Set((comps || []).filter((c) => c.cup_id).map((c) => c.id)), [comps]);
+  const grabs = useMemo(() => (trip ? upForGrabs({ comps: comps || [], trophies: data.trophies || [], tripId: trip.id, cupOn }).filter((g) => !cupComps.has(g.id)) : []), [trip, comps, data.trophies, cupOn, cupComps]);
   const usual = useMemo(() => (trip ? [] : usualComps({ trips: data.trips, trophies: data.trophies || [], cupOn })), [trip, data.trips, data.trophies, cupOn]);
   const toggleComp = (c) => run(async () => {
     if (c.virtual) { toast('Set it up on the comps page first'); return; }
@@ -73,8 +76,9 @@ function GrabsList({ trip, isOrg }) {
   });
   return trip ? (
     <>
+      <CupsUpForGrabs trip={trip} isOrg={isOrg} />
       {comps === null && <span className="small muted">Loading…</span>}
-      {comps !== null && !grabs.length && <span className="small muted">No trophies or comps for this trip yet.</span>}
+      {comps !== null && !grabs.length && <span className="small muted">No other trophies or comps for this trip yet.</span>}
       {grabs.map((c) => (
         <label key={c.id} className="row" style={{ gap: 10, minHeight: 44, alignItems: 'center' }} data-testid="grab">
           <input type="checkbox" checked={!c.retired} disabled={!isOrg || busy || c.virtual} onChange={() => toggleComp(c)} style={{ width: 22, height: 22, flex: 'none' }} aria-label={c.name} />

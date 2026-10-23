@@ -7,6 +7,8 @@ import { useData, useRealtime, useScores, cacheGet, cacheSet } from '../lib/stor
 import { useRoundGames } from './GamesChip.jsx';
 import { currentGroup } from '../lib/group.js';
 import { tripComps, roundComps, COMP_TYPE } from '../lib/comps.js';
+import { isCupComp, mainWinnerIds } from '../lib/cups.js';
+import { tripSpan } from '../lib/activetrip.js';
 
 /** The group's comps (every trip, retired ones too — the screens filter), live. An older database has none. */
 export function useComps() {
@@ -59,8 +61,15 @@ export function useCompData(tripId, { scores = true, entries = true, scoresIdx =
   const ids = useMemo(() => (data.rounds || []).filter((r) => r.trip_id === tripId).map((r) => r.id), [data.rounds, tripId]);
   const sc = useScores(scores && !scoresIdx ? ids : []);
   const [games] = useRoundGames();
+  const [allComps] = useComps();
+  // ov32: a weekend / combined cup on this trip needs a few more things (cup_points, cap tips, posts, tips, breaches).
+  const cupComps = useMemo(() => (allComps || []).filter((c) => c.trip_id === tripId && !c.retired && isCupComp(c)), [allComps, tripId]);
+  const hasCup = cupComps.length > 0;
   const [extra, setExtra] = useState({ sideEntries: [], ownDefs: [], ownEntries: [], cupSides: [], cupMatches: [] });
+  const [cupExtra, setCupExtra] = useState({});
   const idKey = ids.join(',');
+  const trip = (data.trips || []).find((t) => t.id === tripId) || null;
+  const span = trip ? tripSpan(trip, data.rounds || []) : { start: null, end: null };
   const load = useCallback(async () => {
     const q = (b) => Promise.resolve(b).then((r) => (r.error ? [] : r.data || []), () => []);
     const none = Promise.resolve([]);
@@ -73,13 +82,41 @@ export function useCompData(tripId, { scores = true, entries = true, scoresIdx =
     ]);
     setExtra({ cupSides, cupMatches, sideEntries, ownDefs, ownEntries });
   }, [idKey, entries]); // eslint-disable-line react-hooks/exhaustive-deps
+  const loadCup = useCallback(async () => {
+    if (!hasCup || !tripId) { setCupExtra({}); return; }
+    const q = (b) => Promise.resolve(b).then((r) => (r.error ? [] : r.data || []), () => []);
+    const shift = (d, n) => (d ? new Date(Date.parse(`${d}T00:00:00Z`) + n * 86400000).toISOString() : null);
+    const posts = span.start
+      ? supabase.from('posts').select('id,kind,player_id,photo_url,link,body,trip_id,created_at').gte('created_at', shift(span.start, -2)).lte('created_at', shift(span.end || span.start, 3)).limit(2000)
+      : null;
+    const [cupPoints, capTips, postRows, tips, plans, scoreAdjustments, groups] = await Promise.all([
+      q(supabase.from('cup_points').select('*').eq('trip_id', tripId)),
+      q(supabase.from('cap_tips').select('*').eq('trip_id', tripId).order('created_at')),
+      posts ? q(posts) : [],
+      q(supabase.from('tips').select('*').eq('trip_id', tripId)),
+      q(supabase.from('plans').select('id,status,trip_id').eq('trip_id', tripId)),
+      ids.length ? q(supabase.from('score_adjustments').select('*').in('round_id', ids)) : [],
+      currentGroup() ? q(supabase.from('groups').select('id,cap_tip_name').eq('id', currentGroup())) : [],
+    ]);
+    const plan = plans.find((p) => p.status !== 'cancelled');
+    const tripTips = plan ? await q(supabase.from('trip_tips').select('player_id,pick_id').eq('plan_id', plan.id)) : [];
+    setCupExtra({ cupPoints, capTips, posts: postRows, tips, tripTips, scoreAdjustments, capTipName: groups[0]?.cap_tip_name || 'cap' });
+  }, [hasCup, tripId, idKey, span.start, span.end]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadCup(); }, [loadCup]);
   useRealtime(entries ? ['cup_sides', 'cup_matches', 'side_entries', 'side_comp_defs', 'side_comp_entries'] : ['cup_sides', 'cup_matches'], load);
+  useRealtime(hasCup ? ['cup_points', 'cap_tips', 'posts', 'tips', 'score_adjustments'] : [], loadCup);
   const index = scoresIdx || sc.index;
-  return useMemo(() => ({
-    trips: data.trips || [], rounds: data.rounds || [], coursesById: data.coursesById || {}, playersById: data.playersById || {},
-    players: data.players || [], roundPlayers: data.roundPlayers || {}, teamsByRound: data.teamsByRound || {},
-    scoresIdx: index, quickResults: data.quick_results || [], honourBoard: data.honour_board || [], trophies: data.trophies || [],
-    games, ...extra, reload: load,
-  }), [data, index, games, extra, load]);
+  return useMemo(() => {
+    const out = {
+      trips: data.trips || [], rounds: data.rounds || [], coursesById: data.coursesById || {}, playersById: data.playersById || {},
+      players: data.players || [], roundPlayers: data.roundPlayers || {}, teamsByRound: data.teamsByRound || {},
+      scoresIdx: index, quickResults: data.quick_results || [], honourBoard: data.honour_board || [], trophies: data.trophies || [],
+      games, ...extra, ...cupExtra, reload: load, reloadCup: loadCup,
+    };
+    if (hasCup && (cupExtra.tripTips || []).length) {
+      try { out.mainWinnerIds = mainWinnerIds((allComps || []).filter((c) => c.trip_id === tripId), out); } catch { out.mainWinnerIds = []; }
+    }
+    return out;
+  }, [data, index, games, extra, cupExtra, load, loadCup, hasCup, allComps, tripId]);
 }

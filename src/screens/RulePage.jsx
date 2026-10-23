@@ -10,6 +10,7 @@ import { challengeBlock, sydneyDate, applyWords, canRaise, KIND } from '../lib/g
 import { RuleSheet, Chips } from './Rulebook.jsx';
 import { RuleScopeLine } from '../components/RuleLayers.jsx';
 import { LateRuleNumbers } from '../components/LateJobs.jsx';
+import { RuleBreachNumbers } from '../components/RulePenalty.jsx';
 import RuleTag from '../components/RuleTag.jsx';
 import { OpinionBox } from '../components/AwardsFines.jsx';
 import { proofLabel, bestLabel, LEFTOVER_KEY } from '../lib/awardsfines.js';
@@ -65,6 +66,7 @@ export default function RulePage() {
           <Chips rule={rule} />
           <RuleScopeLine rule={rule} />
           {rule.system_key === 'late_job' && <LateRuleNumbers rule={rule} />}
+          {rule.system_key !== 'late_job' && <RuleBreachNumbers rule={rule} />}
           {(rule.award_kind || rule.system_key === LEFTOVER_KEY) && rule.value && (
             <div className="small" data-testid="award-worth">
               {rule.award_kind === 'fine' ? '🏷 Fine: ' : rule.award_kind ? '🏅 Reward: ' : '💰 '}

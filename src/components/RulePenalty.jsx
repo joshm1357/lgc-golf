@@ -7,7 +7,8 @@ import { supabase } from '../lib/supabase.js';
 import { useData, useRealtime, useSession, playerName } from '../lib/store.jsx';
 import { useRun } from '../lib/run.js';
 import { Sheet } from './ui.jsx';
-import { penaltyPower, ruleStrokes, penaltyArgs, breachLabel } from '../lib/drives.js';
+import RuleTag from './RuleTag.jsx';
+import { penaltyPower, ruleStrokes, penaltyArgs, breachLabel, DRIVES_KEY, drivesRule, drivesTable, signed } from '../lib/drives.js';
 
 /** organiser → 'apply', player → 'propose', guest / viewing / no profile → null. */
 export function usePenaltyPower() {
@@ -182,6 +183,50 @@ export function PendingPenalties({ round }) {
         </div>
       ))}
     </div></div>
+  );
+}
+
+/**
+ * On a rule's page: the drives rule's numbers (each tappable to see or dispute) with the defaults table, or any other
+ * rule's penalty ("Penalty for breaking it: +2 strokes").
+ */
+export function RuleBreachNumbers({ rule }) {
+  if (!rule) return null;
+  const tag = (field, label, value, explain, children, testId) => (
+    rule.status === 'active'
+      ? <RuleTag testId={testId} rule={{ table: 'rules', id: rule.id, field, label, value, rule_id: rule.id }} explain={explain}>{children}</RuleTag>
+      : children
+  );
+  if (rule.system_key === DRIVES_KEY) {
+    const dr = drivesRule([rule]);
+    return (
+      <div className="stack small" style={{ gap: 6 }} data-testid="drive-rule-numbers">
+        <div className="row" style={{ gap: 14, flexWrap: 'wrap' }}>
+          <span>Three: <strong>{tag('drives_3', 'Drives each in a team of three', dr.n3, 'Drives each player needs in a team of three over 18 holes.', `${dr.n3} each`, 'drives-3-tag')}</strong></span>
+          <span>Four: <strong>{tag('drives_4', 'Drives each in a team of four', dr.n4, 'Drives each player needs in a team of four over 18 holes.', `${dr.n4} each`, 'drives-4-tag')}</strong></span>
+          <span>Pair: <strong>{tag('drives_2', 'Drives each in a pair', dr.n2, 'Drives each player needs in a pair over 18 holes.', `${dr.n2} each`, 'drives-2-tag')}</strong></span>
+          <span>Penalty: <strong>{tag('breach_strokes', 'Strokes per drive short', dr.strokes, 'Strokes added to the team for each drive a player is short.', `${signed(dr.strokes)} a drive short`, 'drives-strokes-tag')}</strong></span>
+        </div>
+        <DrivesTable dr={dr} />
+      </div>
+    );
+  }
+  if (!(rule.breach_strokes > 0)) return null;
+  return (
+    <div className="small" data-testid="breach-strokes">
+      ⚖️ Penalty for breaking it: <strong>{tag('breach_strokes', `${rule.title}: penalty`, rule.breach_strokes, 'Strokes added to the score of whoever breaks this rule (the team’s, in Ambrose). An organiser applies it, or confirms a player’s.', `+${rule.breach_strokes} stroke${rule.breach_strokes === 1 ? '' : 's'}`, 'breach-strokes-tag')}</strong>
+    </div>
+  );
+}
+
+/** "Drives each: Pair 6 (3 on 9 holes) · Three 6 (3) · Four 4 (2) · Five 3 (1)". */
+export function DrivesTable({ dr }) {
+  const rows = drivesTable(dr);
+  return (
+    <table className="sc" data-testid="drives-table" style={{ maxWidth: 360 }}>
+      <thead><tr><th>Team</th><th>18 holes</th><th>9 holes</th></tr></thead>
+      <tbody>{rows.map((r) => <tr key={r.size}><td>{r.label}</td><td>{r.n18} each</td><td>{r.n9} each</td></tr>)}</tbody>
+    </table>
   );
 }
 

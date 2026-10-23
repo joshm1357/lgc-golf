@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabase.js';
 import { useData, useRealtime, playerName } from '../lib/store.jsx';
 import { courseHoles } from '../lib/board.js';
 import RuleTag, { roundRef } from './RuleTag.jsx';
-import { DRIVES_KEY, drivesRule, minDrivesFor, drivePenaltyFor, driveStatus, projectedDrivePenalties, signed } from '../lib/drives.js';
+import { DRIVES_KEY, drivesRule, minDrivesFor, drivePenaltyFor, driveStatus, projectedDrivePenalties, drivesRoundLine, signed } from '../lib/drives.js';
 
 let cache = { at: 0, rows: null };
 
@@ -83,6 +83,26 @@ export default function AmbroseDrives({ round, team, holes, hole, scores = {}, p
         {skipped.length > 0 && <span className="small muted" data-testid="drive-skipped">No drive picked on hole{skipped.length > 1 ? 's' : ''} {skipped.join(', ')} — tap the hole to add it.</span>}
       </div>
     </div>
+  );
+}
+
+/** The round's rules line for Ambrose: "🏌️ Minimum drives: 6 each in a three, 4 each in a four — +2 strokes for each drive short". */
+export function DrivesRoundRule({ round }) {
+  const data = useData();
+  const dr = useDrivesRule();
+  if (round?.format !== 'ambrose' || round.status === 'locked') return null;
+  const sizes = (data.teamsByRound?.[round.id] || []).map((t) => (t.players || []).filter(Boolean).length);
+  const holes = courseHoles(data.coursesById?.[round.course_id]).length || 18;
+  const line = drivesRoundLine({ dr, round, teamSizes: sizes, holes });
+  if (!line) return null;
+  const ref = round.min_drives != null || round.drive_penalty != null || !dr?.rule
+    ? { ...roundRef(round, round.drive_penalty != null ? 'drive_penalty' : 'min_drives', line, []), ...(dr?.rule?.id && dr.on ? { rule_id: dr.rule.id } : {}) }
+    : { table: 'rules', id: dr.rule.id, field: 'breach_strokes', label: line, value: dr.strokes, rule_id: dr.rule.id, where: { path: `/rules/${dr.rule.id}` } };
+  return (
+    <div className="section"><div className="card pad small" data-testid="drives-round-rule" style={{ lineHeight: 1.45 }}>
+      🏌️ <RuleTag testId="drives-rule-tag" rule={ref} explain={EXPLAIN(minDrivesFor({ dr, round, teamSize: sizes[0] || 3, holes }), drivePenaltyFor({ dr, round }))}>{line}</RuleTag>
+      <span className="muted"> · tap whose drive on each hole.</span>
+    </div></div>
   );
 }
 

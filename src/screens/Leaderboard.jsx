@@ -23,7 +23,7 @@ import { AskChip } from '../components/AskChip.jsx';
 import { RoundTools } from '../components/RoundTools.jsx';
 import { SaveSpotBanner } from '../components/SaveSpot.jsx';
 import { useRoundAdjustments, PenaltyLines } from '../components/LateJobs.jsx';
-import { useProjectedDrives, DriveTracker } from '../components/AmbroseDrives.jsx';
+import { useProjectedDrives, DriveTracker, DrivesRoundRule } from '../components/AmbroseDrives.jsx';
 import { PendingPenalties } from '../components/RulePenalty.jsx';
 import { penaltyBadgeWord, penaltyRowWords, projectedStrokes } from '../lib/drives.js';
 
@@ -221,6 +221,7 @@ export default function Leaderboard() {
         <div className="section"><div className="card pad small" style={{ lineHeight: 1.45 }}><strong><RuleTag testId="todays-rules" rule={{ table: 'rounds', id: round.id, field: 'rules', label: 'Today’s rules', value: round.rules, where: { round_id: round.id, trip_id: round.trip_id, path: '/' } }}
           explain={round.rules}>Today's rules:</RuleTag></strong> {round.rules}{status?.legacy && <> <a href="?guide" style={{ fontWeight: 700 }}>How it works</a></>}</div></div>
       )}
+      <DrivesRoundRule round={round} />
 
       {heads.length > 0 && round.status !== 'locked' && (
         <div className="heads">

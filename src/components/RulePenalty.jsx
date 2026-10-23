@@ -7,8 +7,9 @@ import { supabase } from '../lib/supabase.js';
 import { useData, useRealtime, useSession, playerName } from '../lib/store.jsx';
 import { useRun } from '../lib/run.js';
 import { Sheet } from './ui.jsx';
+import { Link } from 'react-router-dom';
 import RuleTag from './RuleTag.jsx';
-import { penaltyPower, ruleStrokes, penaltyArgs, breachLabel, DRIVES_KEY, drivesRule, drivesTable, signed } from '../lib/drives.js';
+import { penaltyPower, ruleStrokes, penaltyArgs, breachLabel, DRIVES_KEY, drivesRule, drivesTable, drivesRoundLine, signed } from '../lib/drives.js';
 
 /** organiser → 'apply', player → 'propose', guest / viewing / no profile → null. */
 export function usePenaltyPower() {
@@ -24,7 +25,7 @@ function usePenaltyRules(open) {
     if (!open) return;
     supabase.from('rules').select('*').eq('status', 'active').then(({ data: r, error }) => {
       if (error) { setRows([]); return; }
-      setRows((r || []).filter((x) => x.system_key !== 'late_job' && !x.award_kind)
+      setRows((r || []).filter((x) => x.system_key !== 'late_job' && x.system_key !== 'leftover_kitty' && !x.award_kind)
         .sort((a, b) => (Number(b.breach_strokes > 0) - Number(a.breach_strokes > 0)) || String(a.title).localeCompare(String(b.title))));
     }, () => setRows([]));
   }, [open]);
@@ -215,6 +216,22 @@ export function RuleBreachNumbers({ rule }) {
   return (
     <div className="small" data-testid="breach-strokes">
       ⚖️ Penalty for breaking it: <strong>{tag('breach_strokes', `${rule.title}: penalty`, rule.breach_strokes, 'Strokes added to the score of whoever breaks this rule (the team’s, in Ambrose). An organiser applies it, or confirms a player’s.', `+${rule.breach_strokes} stroke${rule.breach_strokes === 1 ? '' : 's'}`, 'breach-strokes-tag')}</strong>
+    </div>
+  );
+}
+
+/** For "Rules for this trip": the drives rule and its penalty, and any rule's penalty for breaking it. */
+export function TripPenaltyRules({ rules: given }) {
+  const loaded = usePenaltyRules(!given); // loads the rules itself when not handed them
+  const rules = given || loaded || [];
+  const dr = drivesRule(rules || []);
+  const drives = dr?.on ? drivesRoundLine({ dr, round: null, teamSizes: [3, 4] }) : '';
+  const others = (rules || []).filter((r) => r.status === 'active' && !r.system_key && r.breach_strokes > 0);
+  if (!drives && !others.length) return null;
+  return (
+    <div className="stack small" style={{ gap: 4 }} data-testid="trip-penalty-rules">
+      {drives && <Link to={`/rules/${dr.rule.id}`} style={{ color: 'inherit' }}>🏌️ <strong>Ambrose</strong> — {drives}</Link>}
+      {others.length > 0 && <span>⚖️ <strong>Penalties:</strong> {others.map((r) => `${r.title} +${r.breach_strokes}`).join(' · ')}</span>}
     </div>
   );
 }

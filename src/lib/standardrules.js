@@ -47,7 +47,7 @@ export const STANDARD_SECTIONS = [
   ]),
   S('ambrose', 'format', '🤝', 'Ambrose', [
     ['how', 'How it works', 'Everyone in the team tees off; pick the best shot and everyone plays from there (within a club-length, no closer to the hole). Repeat until it’s in the hole.'],
-    ['drives', 'Each player’s drives', 'Each player must have a minimum number of their tee shots used (your organiser sets it — often 4 or 6 in a team of four).'],
+    ['drives', 'Each player’s drives', 'Each player must have a minimum number of their tee shots used: usually 6 each in a team of three, 4 each in a four (over 18 holes; half on 9). Each drive short adds 2 strokes to the team’s score. Your group can change the numbers, and the app counts them as you go.'],
     ['putting', 'On the green', 'Mark the chosen spot and everyone putts from within a putter-head of it. First one in counts.'],
     ['handicap', 'Team handicap', 'Combined handicaps ÷ (2 × the number in the team): pairs ÷ 4, threes ÷ 6, fours ÷ 8 — unless the organiser sets the team handicap.'],
     ['score', 'Scoring', 'Straight strokes, not points. Net = gross less the team handicap. Lowest net wins; ties on countback.'],

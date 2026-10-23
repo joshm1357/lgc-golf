@@ -1457,3 +1457,48 @@ general (not Cup-only), any meal (not "dinner"), don't flood.
   trip-overview (updated for the results page), trips, jokes, stroke, links, nav, phone, history, own-comps,
   commentary, desktop pass. `quick` and `signin-first` fail the same way on v10-int (not touched here).
 - **Deploy when convenient:** the notify function (new kinds). Apply 097 on staging, then live.
+
+## ov26 — Votes and the organiser's planning flow (23 Oct 2026, branch `ov26-votes-organising`, migration 095)
+
+From Josh's walkthrough review: V1–V4, O1–O7 and ideas I3–I6 (option A everywhere).
+
+- **V1 Lock-in closes the planning votes** (`lib/lockin.js`, migration 095 trigger): every way of locking in — Planner's
+  Lock it in card, the Next step / builder's "Lock this in", "Set it up in the app", "Lock in who's coming" — shows one
+  box and closes the open votes on where and when (dates, places, stays, vote cards, the optional detail). Votes on
+  anything else stay open. A closed one shows as one line: "Decided: Fri 22 – Mon 25 Jan, Nowra".
+- **V2** Weekends on a ballot with "How long?" show the shortest trip plus "Plus Mon 25 if we go 3 nights". After the
+  vote: "3 nights won, so it's Fri 22 – Mon 25 Jan. 1 person only said yes to a shorter trip — check with them (Bo)".
+  Choosing the area sets the length to the winner.
+- **V3** "Are you in?" first; header line "South Coast NSW · about $450 each · 2 h drive · 9 in so far"; the same words
+  everywhere (Yes / Maybe / No; places Keen / Happy with it / Not keen — also in the vote emails); detail folded last.
+- **V4** Under a third went into the detail: "Only 1 of 4 picked courses and places — not enough to go by. You choose."
+- **O1** One "Up to step 4 of 6: Pick & lock in" line on Organise, the builder and its card; step 5's tick and "x of y
+  jobs done" count the same jobs; a locked-in trip never points back at step 1.
+- **O2** One gold Next step button per screen; the rest under "Other ways to do this" (`components/OtherWays.jsx`).
+- **O3** Call the courses: golf days only, one form per course ("Nothing that weekend", one Save), the script and the
+  screen use the same headcount, due dates "by Fri 30 Oct".
+- **O4** Pick & lock in: the best way as one card (courses, tee times, about $ each, drive) with one "Lock this in";
+  "The backup weekend also works"; the others and "Ask the group instead" under Other ways.
+- **O5** A weekend falls through (`lib/tripnews.js`): one banner "… is out. … works at both courses → Go with …"; "Open
+  it up" only when nothing works; dead weekends come off open votes and are never offered again; new calls go back on
+  the caller's list and they're told; re-opening the area asks first, keeps the old work under "Before you reopened"
+  and sends a fresh vote; a late joiner never sees "You've voted ✓". One Feed post per change.
+- **O6** One headcount rule, `lib/headcount.js` ("9 in · 1 maybe · 1 not replied", targets labelled "for 10
+  (target)"). Used by the builder, the call script, stay searches, the vote card; ov28's `peopleStatus` now uses it
+  (`replyOf`). Deposits say who they count ("0 of 10 paid (in or maybe)").
+- **O7** When the start date changes the usual jobs move with it (app + 095 trigger), never after the trip or into the
+  past; jobs already due after the trip are pulled back; overdue ones show in red.
+- **I3** Last day of a vote: "Waiting on Lou, Mo and Pete" + "Nudge them in the group chat" (pre-written message).
+- **I4** The vote's result: one Feed post ("It's Hunter Valley, Fri 22 – Mon 25 Jan. 3 nights. 10 votes to 6.") and a
+  result card with Share and Add to calendar.
+- **I5** The last call done: "📞 Al rang 3 courses and got tee times every day ⛳" in the Feed, once.
+- **I6** Going with the backup sends a one-tap "Still good for Fri 15 – Sun 17 Jan?" to everyone.
+- **Migration 095** (`095_lockin_closes_votes.sql`, additive, not applied): two trigger functions in `private` (lock-in
+  closes planning votes; jobs follow the start date). No tables, columns or checks touched. Test:
+  `supabase/tests/095_lockin_closes_votes.sql` (+ expected).
+- **Tests:** Vitest 1541 pass (new lockin, headcount, tripnews, ov26). Deno notify / vote-link / email 23 pass, notify
+  and vote-link type-check. Browser: new `ov26-votes` (V1, I3, O5, I6, I5); `weekends-comps` now covers V2, V3, V4, I4
+  and re-open; trip-builder, plan-ux, organise-tidy, email-votes, trip-plan, tripfinder, trips, your-round,
+  trip-overview, runup pass.
+- **Deploy when convenient:** the notify and vote-link functions (new answer words in vote emails). Apply 095 on
+  staging, then live.

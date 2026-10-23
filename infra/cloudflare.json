@@ -8,7 +8,7 @@
   "_github_pages_retired": "true only at release B, step 5: stops deploy.yml so a push can't put the old app back over the hand-over page",
   "sign_in": {
     "staging": "google,email",
-    "live": "google,password"
+    "live": "google,password,email"
   },
   "_sign_in": "e.g. \"google\" or \"google,email\" once that provider is set up for that database",
   "new_groups": {

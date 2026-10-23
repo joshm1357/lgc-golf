@@ -16,7 +16,8 @@ const nameList = (names) => (names.length <= 1 ? names.join('') : `${names.slice
 
 /**
  * Who's in for a trip: the player ids who said In.
- * LOCAL HELPER (ov27): W1 is making src/lib/headcount.js the ONE headcount rule. Switch this to it at the merge.
+ * LOCAL HELPER (ov27), MARKED FOR SWITCHING: ov26 (branch ov26-votes-organising, not yet in v10-int) makes
+ * src/lib/headcount.js the ONE headcount rule. Once it's merged, switch to `replies({ players, rsvps }).ids.in`.
  */
 export function peopleIn(rsvps = []) {
   return [...new Set((rsvps || []).filter((r) => r.status === 'in').map((r) => r.player_id))];

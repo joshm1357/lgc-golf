@@ -8,7 +8,7 @@
 -- payment"); a trip organiser who isn't one of them couldn't. These two rules let the trip's own organiser
 -- (plans.organiser_id) tick off — or remove ("Not received") — money paid in for THEIR trip:
 --   * only rows with no to_id (money paid in, not person-to-person payments — those stay with the receiver);
---   * only on a plan they organise;
+--   * only on a plan they organise (their player in THAT row's group — private.my_player_id(group_id), as 022's rules);
 --   * the existing guard trigger (017 plan_rows_guard) still stops anything but `confirmed` changing on an update;
 --   * the restrictive "same group only" and "feature on: planner_costs" rules still apply on top (they're AND-ed).
 --
@@ -25,14 +25,14 @@ begin
                  and policyname = 'trip organiser confirms money paid in') then
     create policy "trip organiser confirms money paid in" on public.plan_transfers for update to authenticated
       using (to_id is null and exists (select 1 from public.plans p
-                                       where p.id = plan_transfers.plan_id and p.organiser_id = public.my_player_id()))
+                                       where p.id = plan_transfers.plan_id and p.organiser_id = private.my_player_id(plan_transfers.group_id)))
       with check (to_id is null and exists (select 1 from public.plans p
-                                            where p.id = plan_transfers.plan_id and p.organiser_id = public.my_player_id()));
+                                            where p.id = plan_transfers.plan_id and p.organiser_id = private.my_player_id(plan_transfers.group_id)));
   end if;
   if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'plan_transfers'
                  and policyname = 'trip organiser removes money paid in') then
     create policy "trip organiser removes money paid in" on public.plan_transfers for delete to authenticated
       using (to_id is null and exists (select 1 from public.plans p
-                                       where p.id = plan_transfers.plan_id and p.organiser_id = public.my_player_id()));
+                                       where p.id = plan_transfers.plan_id and p.organiser_id = private.my_player_id(plan_transfers.group_id)));
   end if;
 end $$;

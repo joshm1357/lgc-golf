@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest';
 import React from 'react';
 import { renderToString } from 'react-dom/server';
 import { HELLO_KEY, HELLO_TEXT, helloSeen, markHelloSeen, shouldSayHello, isPlanATrip, caddieHidden } from './caddie.js';
-import { cleanQuestions, togglePick, multiSend, multiOther, typesIt, quickChoice } from './planchat.js';
+import { cleanQuestions, togglePick, multiSend, multiOther, typesIt, quickChoice, answersMessage, pickCount } from './planchat.js';
 import {
   readNames, saveNames, NAMES_KEY, shortName, declutter, labelPriority, courseTip, stayTip, nearestCourses, stayIdeasSummary,
   extraResearchLines, mapLink, tapAction,
@@ -74,19 +74,29 @@ describe('pick several quick answers, then send', () => {
     expect(multiSend(regions, [])).toBeNull();
     expect(multiSend({ text: '' }, ['A', 'B'])).toEqual({ send: 'A, B' });
   });
-  it('one-answer questions still send on tap (unchanged)', () => {
+  it('quickChoice still words one answer the same way (used for wording only now)', () => {
     expect(quickChoice({ text: 'Driving or flying?' }, 'Driving')).toEqual({ send: 'Driving or flying? → Driving' });
+  });
+  it('v10.4: one Send carries every question’s picks plus what’s typed, one line each', () => {
+    const qs = [regions, { id: 'go', text: 'Driving or flying?', quick: ['Driving', 'Flying'] }];
+    expect(answersMessage(qs, { where: ['Hunter Valley', 'South Coast'], go: ['Driving'] }, ''))
+      .toBe('Which areas? → Hunter Valley, South Coast\nDriving or flying? → Driving');
+    expect(answersMessage(qs, { go: ['Flying'] }, '  12 of us  ')).toBe('Driving or flying? → Flying\n12 of us');
+    expect(answersMessage(qs, {}, 'just typed')).toBe('just typed');
+    expect(answersMessage(qs, {}, '   ')).toBe('');
+    expect(pickCount({ where: ['A', 'B'], go: ['C'] })).toBe(3);
+    expect(pickCount({})).toBe(0);
   });
   it('"Other…" opens the box with the picks so far', () => {
     expect(multiOther(regions, ['Hunter Valley'])).toEqual({ ask: 'Which areas? → Hunter Valley, ' });
     expect(multiOther(regions, [])).toEqual({ ask: 'Other: ' });
   });
-  it('the chat shows toggle chips and a Send button for a pick-several question, plain chips otherwise', () => {
+  it('v10.4: every question has toggle chips, and there is one Send for all of them', () => {
     const turns = [{ role: 'assistant', text: 'Where to?', questions: cleanQuestions([regions, { id: 'go', text: 'Driving or flying?', quick: ['Driving', 'Flying'] }]) }];
     const html = renderToString(React.createElement(AiChat, { turns, onSend: () => {} }));
-    expect(html).toContain('data-testid="chat-multi-send"');
     expect(html).toMatch(/aria-pressed="false"[^>]*>Hunter Valley/);
-    expect(html).toContain('Pick any, then send');
+    expect(html).toMatch(/aria-pressed="false"[^>]*>Driving/);
+    expect(html).toContain('Tap as many as fit, then send');
     expect((html.match(/data-testid="chat-multi-send"/g) || []).length).toBe(1);
   });
 });

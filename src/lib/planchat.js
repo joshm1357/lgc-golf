@@ -111,6 +111,22 @@ export function multiOther(question, picks = [], quick = 'Other…') {
   return { ask: `${about ? `${about} → ` : ''}${list.join(', ')}, ` };
 }
 
+/**
+ * Josh (23 Oct): "I click one and it submits… I need to select multiple then submit." Every quick answer now toggles;
+ * one Send sends all the picks (across the 1–3 questions) plus anything typed, as one message. → '' when nothing.
+ */
+export function answersMessage(questions = [], picks = {}, typed = '') {
+  const lines = (questions || []).map((q) => {
+    const c = multiSend(q, (picks || {})[q.id] || []);
+    return c ? c.send : null;
+  }).filter(Boolean);
+  const t = String(typed || '').trim();
+  if (t) lines.push(t);
+  return lines.join('\n');
+}
+/** How many quick answers are picked across the questions. */
+export const pickCount = (picks = {}) => Object.values(picks || {}).reduce((n, l) => n + (l || []).length, 0);
+
 /** How many questions are left in this chat. */
 export const turnsLeft = (turns) => Math.max(0, MAX_TURNS - (turns || []).filter((t) => t.role === 'user').length);
 

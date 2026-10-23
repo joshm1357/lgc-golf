@@ -4,6 +4,7 @@ import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useScores, useSession, playerName } from '../lib/store.jsx';
 import { roundBoard } from '../lib/board.js';
 import { honourOrder, winnerNames } from '../lib/history.js';
+import { gate } from '../lib/savedgate.js';
 
 // "Sam" is on "Sam & Josh", but not on "Samuel".
 const namedIn = (winners, name) => winnerNames(winners).some((w) => w.toLowerCase() === String(name).toLowerCase());
@@ -22,7 +23,6 @@ import { CapTipButton } from '../components/CupStandings.jsx'; // ov32: give thi
 /** Everything we know about a player: Stableford rounds, Ambrose results, trophies, comps, Tribunal, handicap. */
 export function usePlayerHistory(playerId) {
   const data = useData();
-import { gate } from '../lib/savedgate.js';
   const roundIds = data.rounds.map((r) => r.id);
   const scores = useScores(roundIds);
   const [extra, setExtra] = useState({ hist: [], cases: [], side: [] });

@@ -193,7 +193,7 @@ check(await page.getByText(/Tap \+1 each time\. Most dots wins/).first().isVisib
 // 6. Side comps switched off: hidden.
 for (const f of db.group_features) if (f.feature_key === 'side_comps') f.enabled = false;
 await page.reload();
-await page.getByText('Admin').first().waitFor({ timeout: 15000 });
+await page.getByText('Organiser tools').first().waitFor({ timeout: 15000 });
 await page.waitForTimeout(800);
 check(!(await page.getByRole('button', { name: 'Your own side comps' }).isVisible().catch(() => false)), 'switched off: no side comps in Admin');
 await page.goto(`${BASE}#/comps?r=${R1}`);

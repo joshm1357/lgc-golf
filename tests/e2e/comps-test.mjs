@@ -115,11 +115,11 @@ const text = () => page.locator('.page').first().innerText();
 
 // 1. The guided setup has the new step, between Rounds and Players.
 await page.goto(`${BASE}#/setup`);
-const stepBtn = page.getByRole('button', { name: /What are you playing for\?/ });
+const stepBtn = page.getByRole('button', { name: /^Trophies & cups/ });
 await stepBtn.waitFor({ timeout: 15000 });
 const order = await page.locator('.page .card > button strong').allInnerTexts();
 const iR = order.findIndex((t) => t.startsWith('Rounds'));
-const iC = order.findIndex((t) => t.startsWith('What are you playing for'));
+const iC = order.findIndex((t) => t.startsWith('Trophies & cups'));
 const iP = order.findIndex((t) => t.startsWith('Players'));
 check(iR >= 0 && iR < iC && iC < iP, `step sits between Rounds and Players (${order.join(' / ')})`);
 await stepBtn.click();
@@ -173,7 +173,7 @@ check(Number(db.trips[0].cup_points) === 8, 'the trip’s cup points are set too
 
 // 5. To-do lists.
 await page.reload();
-await page.getByRole('button', { name: /What are you playing for\?/ }).click();
+await page.getByRole('button', { name: /^Trophies & cups/ }).click();
 await page.getByText('6th Ryder Cup').first().waitFor();
 await page.waitForTimeout(600);
 const t5 = await text();

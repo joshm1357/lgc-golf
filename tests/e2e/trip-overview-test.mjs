@@ -156,7 +156,7 @@ await page.screenshot({ path: `${SHOTS}/1-past.png`, fullPage: true });
 await noSideScroll('past overview');
 
 // 2. Organise is one tap away.
-await page.getByRole('tab', { name: '🧰 Organise' }).click();
+await page.getByRole('tab', { name: '🧰 Plan the trip' }).click();
 await page.getByRole('tab', { name: '💬 Chat' }).waitFor({ timeout: 5000 });
 check(true, 'Organise shows the planner tabs');
 await page.getByRole('tab', { name: '⛳ Overview' }).click();
@@ -189,8 +189,8 @@ check(await page.getByRole('tab', { name: '📋 Jobs' }).getAttribute('aria-sele
 
 // 4. A trip still being decided opens on Organise.
 await page.goto(`${BASE}#/plan/${IDEA}`);
-await page.getByRole('tab', { name: '🧰 Organise' }).waitFor({ timeout: 15000 });
-check(await page.getByRole('tab', { name: '🧰 Organise' }).getAttribute('aria-selected') === 'true', 'deciding trip: opens on Organise');
+await page.getByRole('tab', { name: '🧰 Plan the trip' }).waitFor({ timeout: 15000 });
+check(await page.getByRole('tab', { name: '🧰 Plan the trip' }).getAttribute('aria-selected') === 'true', 'deciding trip: opens on Organise');
 
 // 5. A trip with no plan gets the overview at /trip/:id.
 db.plans = db.plans.filter((p) => p.id !== PAST);

@@ -210,8 +210,8 @@ check(await seen(page.getByText(/GUILTY 2–0/), 15000), 'past verdicts list it'
 
 // 5. Governance settings: presets.
 await as(K, '/group');
-check(await seen(page.getByRole('link', { name: /Governance/ }), 15000), 'Players & group links to Governance');
-await page.getByRole('link', { name: /Governance/ }).click();
+check(await seen(page.getByRole('link', { name: /Group rules/ }), 15000), 'Players & group links to Governance');
+await page.getByRole('link', { name: /Group rules/ }).click();
 check(await seen(page.getByTestId('presets')), 'Governance screen opens with presets');
 for (const label of ['Organiser runs it', 'Majority rules', 'Club style', 'L.G.C (as today)']) check(await page.getByText(label, { exact: true }).isVisible(), `preset: ${label}`);
 check(await page.getByTestId('row-change_rule').getByText(/Any organiser/).isVisible(), 'today: an organiser decides rule changes');

@@ -180,7 +180,7 @@ await page.goto(`${BASE}#/more`);
 await page.getByText('Players & group').waitFor({ timeout: 10000 });
 check(!(await page.getByText('✨ Ask the AI helper').isVisible().catch(() => false)), 'no Ask in More (the Caddie button is the way in)');
 await page.goto(`${BASE}#/ask`);
-await page.getByText('The AI helper is switched off for this group.').waitFor({ timeout: 10000 });
+await page.getByText('The Caddie is switched off for this group.').waitFor({ timeout: 10000 });
 check(true, 'switched off: /ask says so');
 check(calls.length === before, 'switched off: the function isn’t called');
 

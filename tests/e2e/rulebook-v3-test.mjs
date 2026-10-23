@@ -220,7 +220,7 @@ await page.goto(`${BASE}#/tribunal/case/${CASE}`);
 const card = page.getByTestId('verdict-rulebook');
 await card.waitFor({ timeout: 15000 });
 await page.getByTestId('draft-source').waitFor({ timeout: 10000 });
-check((await page.getByTestId('draft-source').innerText()).includes('AI drafted this from the verdict — check it'), 'the case shows "AI drafted this from the verdict — check it"');
+check((await page.getByTestId('draft-source').innerText()).includes('The Caddie drafted this from the verdict — check it'), 'the case shows "The Caddie drafted this from the verdict — check it"');
 check(await page.getByTestId('draft-title').inputValue() === 'BD: OB is stroke and distance', 'the draft has the AI’s title');
 check(await page.getByTestId('draft-scope').inputValue() === `comp:${BD}`, 'the draft is for the BD Trophy');
 check(aiCalls.some((b) => b.mode === 'rules_draft' && b.case_id === CASE && Array.isArray(b.standard)), 'the app asked the AI with the case id and the standard rules (as data)');

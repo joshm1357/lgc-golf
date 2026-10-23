@@ -229,7 +229,7 @@ await page.locator('[data-testid="tb-region-hits"]').getByRole('button').first()
 check(JSON.stringify(state().regionOptions) === JSON.stringify(['South Coast NSW', 'Hunter Valley']), `adding an area that's already there just opens it (${JSON.stringify(state().regionOptions)})`);
 check(await page.getByTestId('area-chip').count() === 2, 'two area chips');
 const tabTitles = (await page.locator('.tb-steps').locator('.tb-step').allInnerTexts()).map((t) => t.replace(/^\S+\s/, '').replace(/ ↗$/, ''));
-check(JSON.stringify(tabTitles) === JSON.stringify(['Areas & weekends', 'Courses & stays', 'Call the courses', 'Pick & lock in', 'Jobs & money', 'Comps & on the day']), `the builder's step bar is the same six steps as Organise (${tabTitles.join(' · ')})`);
+check(JSON.stringify(tabTitles) === JSON.stringify(['Areas & weekends', 'Courses & stays', 'Call the courses', 'Pick & lock in', 'Jobs & money', 'The run-up']), `the builder's step bar is the same six steps as Organise (${tabTitles.join(' · ')})`);
 await both('flow-01-area-chips');
 // Add one more, then take it off with ✕.
 const extra = { id: crypto.randomUUID(), name: 'Bowral', state: 'NSW', region: 'Southern Highlands', lat: -34.48, lng: 150.42, sort: 99 };
@@ -424,7 +424,7 @@ check((db.posts || []).some((p) => /didn’t work out, so where we go is open ag
 await page.goto(`${BASE}#/plan/${PLAN2}?view=organise&step=day`);
 await page.getByTestId('organise-steps').waitFor({ timeout: 15000 }); await wait(800);
 const titles = await page.locator('.org-step-title').allInnerTexts();
-check(['Areas & weekends', 'Courses & stays', 'Call the courses', 'Pick & lock in', 'Jobs & money', 'Comps & on the day'].every((t, i) => (titles[i] || '').startsWith(t)), `steps: ${titles.map((t) => t.replace(/\s*Now$/i, '')).join(' · ')}`);
+check(['Areas & weekends', 'Courses & stays', 'Call the courses', 'Pick & lock in', 'Jobs & money', 'The run-up'].every((t, i) => (titles[i] || '').startsWith(t)), `steps: ${titles.map((t) => t.replace(/\s*Now$/i, '')).join(' · ')}`);
 const runup = page.getByTestId('comps-day');
 await runup.waitFor({ timeout: 8000 });
 const grabs = await runup.getByTestId('grab').allInnerTexts();

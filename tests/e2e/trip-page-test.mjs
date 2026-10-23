@@ -104,7 +104,7 @@ const openMore = async (page) => {
   for (const id of ['runup-cars', 'runup-votes', 'runup-grabs', 'runup-rules', 'runup-bring', 'runup-chat', 'overview-days']) {
     check(await page.getByTestId(id).count() === 1, `More about this trip: ${id.replace(/^(runup|overview)-/, '')} shows once`);
   }
-  check(await page.getByText('What’s up for grabs', { exact: false }).count() <= 1 || await page.getByTestId('runup-grabs').count() === 1, '"What’s up for grabs" once');
+  check(await page.getByText('Trophies & cups', { exact: false }).count() <= 1 || await page.getByTestId('runup-grabs').count() === 1, '"What’s up for grabs" once');
   await page.screenshot({ path: `${SHOTS}/r1-more-375.png`, fullPage: true });
   await noSideScroll(page, 'trip page');
   // The deposit to-do's Pay goes to the money line.

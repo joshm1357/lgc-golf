@@ -162,7 +162,7 @@ check(await page.getByRole('group', { name: 'What was wrong' }).count() === 0, '
 
 // 3. Wishes → ✨ AI helper: A vs B with the verdict.
 await page.goto(`${BASE}#/wishes`);
-await page.getByRole('button', { name: '✨ AI helper' }).click();
+await page.getByRole('button', { name: '✨ The Caddie' }).click();
 await page.getByLabel('Model test').waitFor({ timeout: 10000 });
 const verdict = await page.getByLabel('Verdict').innerText();
 check(/B is better \(95% sure\)/.test(verdict), `verdict from the fake data: ${verdict.trim()}`);

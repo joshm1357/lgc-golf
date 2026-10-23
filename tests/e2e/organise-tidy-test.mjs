@@ -51,7 +51,7 @@ check(await golds() === 1, `new trip: one big button on the page (${await golds(
 check((await page.getByTestId('step-area').innerText()).includes('Hunter Valley'), 'new trip: Areas & weekends says the place so far');
 // ov23: the same six steps as the trip builder's tabs — no separate Plan or Vote step.
 const titles = (await page.locator('.org-step-title').allInnerTexts()).map((t) => t.replace(/\s*Now$/i, ''));
-check(JSON.stringify(titles) === JSON.stringify(['Areas & weekends', 'Courses & stays', 'Call the courses', 'Pick & lock in', 'Jobs & money', 'Comps & on the day']), `one step list: ${titles.join(' · ')}`);
+check(JSON.stringify(titles) === JSON.stringify(['Areas & weekends', 'Courses & stays', 'Call the courses', 'Pick & lock in', 'Jobs & money', 'The run-up']), `one step list: ${titles.join(' · ')}`);
 check(await page.getByTestId('organise-more').getByRole('tab', { name: '💬 Chat' }).isVisible(), 'chat is under More');
 await shot('01-new');
 await noSideScroll('new trip');
@@ -131,7 +131,7 @@ check((await primary().innerText()) === 'Lock it in', 'Lock in: "Lock it in"');
 await primary().click();
 // ov26 (V1): one box — the open votes on where and when close too.
 await page.getByTestId('confirm-sheet').waitFor({ timeout: 5000 });
-check(/Then the to-do list is made/.test(await page.getByTestId('confirm-sheet').innerText()), 'V1: one box before locking in');
+check(/Then the jobs are made/.test(await page.getByTestId('confirm-sheet').innerText()), 'V1: one box before locking in');
 await page.getByTestId('confirm-yes').click();
 await wait(1500);
 check(plan().status === 'confirmed', 'locked in');

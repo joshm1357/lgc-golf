@@ -119,7 +119,7 @@ const visible = (page, sel) => page.evaluate((s) => { const el = document.queryS
 
 // 1. Phone screens unchanged: pixel-compare this branch with the product branch at 375 px (live-style builds).
 const title = (page, text) => page.locator('.page .hdr-title', { hasText: text }).first().waitFor({ timeout: 15000 });
-for (const [hash, text, name] of [['#/', 'Saturday', 'leaderboard'], ['#/feed', 'Feed', 'feed'], ['#/plan', 'Spring Trip', 'trips'], ['#/rules', 'Governance', 'rulebook']]) {
+for (const [hash, text, name] of [['#/', 'Saturday', 'leaderboard'], ['#/feed', 'Feed', 'feed'], ['#/plan', 'Spring Trip', 'trips'], ['#/rules', 'Group rules', 'rulebook']]) {
   const shots = [];
   for (const base of [PRODUCT, LIVE]) {
     const { ctx, page } = await newPage(375, 812, { phone: true });
@@ -167,7 +167,7 @@ for (const w of [768, 1280, 1920]) {
     check(true, `${w} px: sidebar Trips opens the Trips tab`);
     await page.screenshot({ path: `${SHOTS}/${w}-trips.png` });
     check(await page.locator('.side .side-link.active').innerText() === 'Trips', `${w} px: Trips is marked as the current page`);
-    for (const [label, text] of [['Trophy Room', 'Trophy'], ['Governance', 'Governance'], ['Feed', 'Feed']]) {
+    for (const [label, text] of [['Trophy Room', 'Trophy'], ['Group rules', 'Group rules'], ['Feed', 'Feed']]) {
       await page.locator('.side').getByText(label, { exact: true }).click();
       let ok = false; try { await page.locator('.page .hdr-title', { hasText: text }).first().waitFor({ timeout: 6000 }); ok = true; } catch { /* below */ }
       check(ok && await noSideScroll(page), `${w} px: ${label} opens, no sideways scroll`);

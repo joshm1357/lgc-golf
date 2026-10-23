@@ -181,7 +181,7 @@ await page.getByTestId('awards-runup').first().waitFor({ timeout: 15000 });
 // v10 merge: a locked-in trip's Overview shows the run-up, and the awards sit in its "What's up for grabs" part (once).
 check(await page.getByTestId('awards-runup').count() === 1, 'Overview: the awards card shows once');
 const ov = await page.getByTestId('runup-grabs').innerText();
-check(ov.includes('What’s up for grabs') && (await page.getByTestId('runup-grabs').getByTestId('awards-runup').count()) === 1 && ov.includes('Wrong-ball fine') && ov.includes('Latest out'), 'Overview: What’s up for grabs');
+check(ov.includes('Trophies & cups') && (await page.getByTestId('runup-grabs').getByTestId('awards-runup').count()) === 1 && ov.includes('Wrong-ball fine') && ov.includes('Latest out'), 'Overview: What’s up for grabs');
 await shot('4-overview-375');
 
 // 6. Fine Al's post from the Feed.

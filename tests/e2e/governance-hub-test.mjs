@@ -264,9 +264,9 @@ await page.screenshot({ path: `${SHOTS}/375-8-committees-filled.png`, fullPage: 
 // 5. Laptop width: one Governance item in the sidebar, the tabs across the top.
 const wide = await makePage(1440, 900, false);
 await as(K, '/governance/committees', wide);
-check(await seen(wide.locator('nav.side').getByRole('link', { name: 'Governance' }), 15000), 'sidebar: one “Governance” item');
+check(await seen(wide.locator('nav.side').getByRole('link', { name: 'Group rules' }), 15000), 'sidebar: one “Governance” item');
 check(!(await wide.locator('nav.side').getByRole('link', { name: 'Rulebook' }).isVisible().catch(() => false)) && !(await wide.locator('nav.side').getByRole('link', { name: 'Tribunal' }).isVisible().catch(() => false)), 'sidebar: no separate Rulebook / Tribunal items');
-check(await wide.locator('nav.side').getByRole('link', { name: 'Governance' }).evaluate((a) => a.classList.contains('active')), 'sidebar item lit on a Governance tab');
+check(await wide.locator('nav.side').getByRole('link', { name: 'Group rules' }).evaluate((a) => a.classList.contains('active')), 'sidebar item lit on a Governance tab');
 await wide.screenshot({ path: `${SHOTS}/1440-committees.png`, fullPage: true });
 for (const t of ['rulebook', 'tribunal']) { await wide.getByTestId(`gov-tab-${t}`).click(); await wide.waitForTimeout(700); await wide.screenshot({ path: `${SHOTS}/1440-${t}.png`, fullPage: true }); }
 await as(K, `/tribunal/case/${el.id}`, wide);
@@ -275,7 +275,7 @@ await wide.screenshot({ path: `${SHOTS}/1440-election.png`, fullPage: true });
 
 // 6. More (phone): one Governance entry.
 await as(K, '/more');
-check(await seen(page.getByRole('link', { name: /⚖️ Governance/ }), 15000), 'More: a ⚖️ Governance entry');
+check(await seen(page.getByRole('link', { name: /⚖️ Group rules/ }), 15000), 'More: a ⚖️ Governance entry');
 check(!(await page.getByRole('link', { name: /Handicap Tribunal/ }).isVisible().catch(() => false)), 'More: no separate Tribunal entry');
 
 await browser.close();

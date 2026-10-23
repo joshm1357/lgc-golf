@@ -120,6 +120,6 @@ await shot('2-presentation');
 // 6. The awards page says "Awards and fines" and has Present.
 await page.goto(`${BASE}#/dinner/${TRIP}`);
 await page.getByTestId('present-awards').waitFor({ timeout: 15000 });
-check(/Awards and fines/.test(await page.locator('.hdr').first().innerText()), 'awards page: "Awards and fines", not "dinner"');
+check(/Fines & awards/.test(await page.locator('.hdr').first().innerText()), 'awards page: "Fines & awards", not "dinner"');
 
 await t.done();

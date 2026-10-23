@@ -294,7 +294,7 @@ await page.getByText('Set up your trip').first().waitFor({ timeout: 15000 });
 await page.waitForTimeout(400);
 check(!(await page.getByLabel('Bring your history').isVisible().catch(() => false)), 'switched off: no card in the guided setup');
 await page.goto(`${BASE}#/import`);
-await page.getByText('The AI helper is switched off for this group.').waitFor({ timeout: 10000 });
+await page.getByText('The Caddie is switched off for this group.').waitFor({ timeout: 10000 });
 check(true, 'switched off: /import says so');
 check(calls.length === before, 'switched off: the function isn’t called');
 

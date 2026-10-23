@@ -145,7 +145,9 @@ await page.getByRole('tab', { name: '⛳ Overview' }).waitFor({ timeout: 15000 }
 await page.waitForTimeout(800);
 check(await page.getByRole('tab', { name: '⛳ Overview' }).getAttribute('aria-selected') === 'true', 'past trip: opens on Overview');
 check(await page.getByText('Done and dusted').isVisible(), 'past trip: says it’s done');
-check(await page.getByText('🏆 Honours').isVisible() && await page.getByText('BD Trophy').isVisible(), 'past trip: honours shown');
+// ov28 (W1): the results page hands the trophies over (the old Honours card is for trips with no rounds).
+await page.getByTestId('results-trophies').waitFor({ timeout: 10000 }).catch(() => {});
+check(/Josh wins the BD Trophy/.test(await page.getByTestId('results-trophies').innerText().catch(() => '')), 'past trip: the results hand the trophy over');
 check(await page.getByText('Mollymook Hilltop').first().isVisible(), 'past trip: the course is listed');
 check(await page.getByText(/🏆 Josh · \d+ pts/).isVisible(), 'past trip: the round’s winner with points');
 check(await page.getByRole('link', { name: '▶ Watch the replay' }).isVisible(), 'past trip: replay button on the finished round');
@@ -158,7 +160,7 @@ await page.getByRole('tab', { name: '🧰 Organise' }).click();
 await page.getByRole('tab', { name: '💬 Chat' }).waitFor({ timeout: 5000 });
 check(true, 'Organise shows the planner tabs');
 await page.getByRole('tab', { name: '⛳ Overview' }).click();
-await page.getByText('🏆 Honours').waitFor({ timeout: 5000 });
+await page.getByTestId('trip-results').waitFor({ timeout: 5000 });
 check(true, 'and back to the overview');
 
 // 3. A coming trip (ov27, R1): "Your weekend" at the top — dates and countdown, where, each day's course; who's in;

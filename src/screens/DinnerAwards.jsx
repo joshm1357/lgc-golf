@@ -70,16 +70,18 @@ export default function DinnerAwards() {
   const nameOf = useCallback((id) => playerName(data.playersById[id]) || 'Someone', [data.playersById]);
   const card = useMemo(() => (d ? resultsCard({ tripName: trip?.name, awards: d.awards, nominations: d.nominations, votes: d.votes, nameOf }) : null), [d, trip, nameOf]);
 
-  if (!trip) return <div className="page"><Header back title="Dinner awards" /><div className="empty">No trip yet — dinner awards belong to a trip.</div></div>;
-  if (!d) return <div className="page"><Header back title="Dinner awards" sub={trip.name} /><Loading /></div>;
+  if (!trip) return <div className="page"><Header back title="Awards and fines" /><div className="empty">No trip yet — awards and fines belong to a trip.</div></div>;
+  if (!d) return <div className="page"><Header back title="Awards and fines" sub={trip.name} /><Loading /></div>;
   const list = sortAwards(d.awards);
 
   return (
     <div className="page">
-      <Header back title="Fines and dinner awards" sub={trip.name} />
+      <Header back title="Awards and fines" sub={trip.name} />
       <div className="section stack">
         {d.failed && <div className="err">Couldn’t load the awards — check your signal.</div>}
-        {list.length === 0 && <div className="empty">No awards or fines yet. Add the first — the group nominates, then votes at dinner.</div>}
+        {list.length === 0 && <div className="empty">No awards or fines yet. Add the first — the group nominates, then votes when you get together (dinner, lunch or at the course).</div>}
+        {/* ov28 (I14): the presentation — winners one by one on the TV or a phone, at dinner, lunch or the course. */}
+        <Link to={`/present/awards/${trip.id}`} className="btn gold block" data-testid="present-awards">🎤 Present the awards</Link>
         {list.map((a) => (
           <AwardCard key={a.id} award={a} d={d} nameOf={nameOf} readOnly={readOnly} onNominate={() => setNominating(a)} reload={reload} trip={trip} joke={lineFor(jokes, a.id)} />
         ))}
@@ -87,7 +89,7 @@ export default function DinnerAwards() {
         {!readOnly && status.role !== 'guest' && <button type="button" className="btn ghost block" onClick={() => setProposing(true)} data-testid="dinner-propose">📜 Propose one for the Rulebook (every trip, with a reward and proof)</button>}
         {card?.rows.length > 0 && (
           <SharePicture kind="awards" data={card} label="🖼️ Share the results as a picture"
-            text={`🍽️ ${trip.name} — fines and dinner awards`} />
+            text={`🏅 ${trip.name} — awards and fines`} />
         )}
         <p className="note" style={{ margin: 0 }}>
           Roast the golf and the mates — never race, religion, sexuality, disability or anything tragic (the app won’t take it).

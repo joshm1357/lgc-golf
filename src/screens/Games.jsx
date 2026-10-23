@@ -17,6 +17,7 @@ import { withCustom, roundGameFromCustom, copyFrom } from '../lib/customgames.js
 import { useCustomGames, CustomGamesCard, OptionControls, CustomGameSheet } from '../components/CustomGames.jsx';
 import { RulesLink } from '../components/RulesLinks.jsx';
 import RuleTag from '../components/RuleTag.jsx';
+import GameHelp from '../components/GameHelp.jsx';
 
 const byId = (list) => Object.fromEntries(list.map((c) => [c.id, c]));
 
@@ -144,7 +145,7 @@ function GameCard({ played, round }) {
   return (
     <div className="card pad stack" style={{ gap: 8 }} data-testid={`game-${kind}`}>
       <div className="row between" style={{ gap: 8 }}>
-        <strong style={{ fontSize: 17 }}>{info.emoji} {gameLabel(game)}</strong>
+        <span className="row" style={{ gap: 6, flexWrap: 'wrap' }}><strong style={{ fontSize: 17 }}>{info.emoji} {gameLabel(game)}</strong><GameHelp kind={kind} houseRules={game.house_rules || ''} /></span>
         <span className="small" style={{ fontWeight: 700, color: skipped ? 'var(--muted)' : final ? 'var(--up)' : 'var(--gold)' }}>{skipped ? 'Not on' : final ? 'Final ✓' : round.status === 'live' ? 'Live' : 'Not started'}</span>
       </div>
       <div className="small muted">{info.blurb} <RuleTag testId="game-stake" rule={{ table: 'round_games', id: game.id, field: 'stake', label: stakeWords(game).replace(/\.$/, ''), value: Number(game.stake), where: { round_id: round.id, trip_id: round.trip_id, path: `/games?r=${round.id}` } }}
@@ -298,6 +299,7 @@ export function RoundGames({ round }) {
         <div key={g.id} className="card pad stack" style={{ gap: 6 }}>
           <div className="row" style={{ gap: 8 }}>
             <div className="grow"><strong>{GAME_INFO[g.kind]?.emoji} {gameLabel(g)}</strong><div className="small muted">{g.house_rules ? `House rules: ${g.house_rules}` : GAME_INFO[g.kind]?.blurb}</div></div>
+            <GameHelp kind={g.kind} houseRules={g.house_rules || ''} label="How" />
             <button type="button" className="btn ghost sm" onClick={() => setEditing(editing === g.id ? null : g.id)}>{editing === g.id ? 'Close' : 'Change'}</button>
           </div>
           {!gameSuits(g.kind, round.format) && <div className="small muted">Not played in Ambrose rounds.</div>}
@@ -323,6 +325,10 @@ export function RoundGames({ round }) {
             {offer.map((p) => (
               <button key={p.key} type="button" className="chip" disabled={busy} onClick={() => add(p)} title={GAME_INFO[p.kind].blurb}>+ {gameLabel(p)}</button>
             ))}
+          </div>
+          <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }} data-testid="games-explained">
+            <span className="small muted">Not sure what they are?</span>
+            {[...new Set(offer.map((p) => p.kind))].map((k) => <GameHelp key={k} kind={k} label={GAME_INFO[k]?.name || 'How it works'} />)}
           </div>
         </div>
       )}

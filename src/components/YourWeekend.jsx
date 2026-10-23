@@ -5,9 +5,9 @@
 //   🎟️ Seats confirmed: 6 of 10 (paid)  (I7, when the trip asks for a deposit)
 // A guest (R2) gets the same card headed "You're Josh's guest for the L.G.C long weekend".
 //
-// The "Your round" slot: W3 is building src/components/YourRound.jsx (your team, group, opponents, tee time). When
-// that file exists its default export is shown for each of your rounds, in place of the tee time line here; until
-// then the tee time and group come from tee_groups. Props it gets: { round, course, teeGroup, plan, trip, me }.
+// "Your round" (ov28's components/YourRound.jsx: your team, partner, opponents, group, tee time) is mounted for each of
+// your rounds — the `yourRound` prop (pass null to leave it out). It shows nothing when there's nothing set yet, so the
+// line "Tee time and group to come" stays until the tee groups are out.
 // The words are in lib/yourweekend.js.
 import React, { useMemo } from 'react';
 import { useData } from '../lib/store.jsx';
@@ -17,9 +17,8 @@ import { stayAddress, toGoWords, weekendDays, teeLine, carWords, guestHeading } 
 import { seatsLine } from '../lib/money.js';
 import { MoneyLine } from './MoneyLine.jsx';
 
-// W3's YourRound, if it's in the app yet (an empty object until then — nothing breaks either way).
-const ROUND_SLOT = import.meta.glob('./YourRound.jsx', { eager: true });
-export const YourRoundSlot = Object.values(ROUND_SLOT)[0]?.default || null;
+import YourRoundCard from './YourRound.jsx';
+export const YourRoundSlot = YourRoundCard;
 
 /**
  * pd: the plan's data; cars / rooms: lib/runup.js carsView / roomsView; tees: the trip's tee_groups;
@@ -62,8 +61,9 @@ export function YourWeekend({ pd, trip = null, rounds = [], tees = [], cars = nu
               <div key={r.round.id} className="yw-round">
                 <div className="yw-course"><strong>{r.courseName}</strong>{r.format ? <span className="muted"> · {r.format}</span> : null}</div>
                 {Round
-                  ? <Round round={r.round} course={r.course} teeGroup={r.teeGroup} plan={plan} trip={trip} me={me} />
-                  : <div className="small" data-testid="yw-tee">{teeLine(r) ? <>🕖 {teeLine(r)}</> : <span className="muted">Tee time and group to come</span>}</div>}
+                  ? <Round trip={trip} round={r.round} me={me} />
+                  : teeLine(r) && <div className="small" data-testid="yw-tee">🕖 {teeLine(r)}</div>}
+                {!r.teeGroup && <div className="small muted" data-testid="yw-tee-tbc">Tee time and group to come</div>}
               </div>
             ))}
           </div>

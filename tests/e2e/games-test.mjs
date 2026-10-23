@@ -144,6 +144,12 @@ const settle = clean(await page.getByTestId('settle-row').allInnerTexts());
 check(JSON.stringify(settle) === JSON.stringify(['Kurt pays Al Blue $65', 'Bo Red pays Al Blue $5']), `settle-up: Kurt pays Al $65, Bo pays Al $5 (got ${JSON.stringify(settle)})`);
 check((await page.locator('.page').innerText()).includes('Pick-ups'), 'pick-up rules shown on screen');
 await page.screenshot({ path: `${SHOTS}/2-games.png`, fullPage: true });
+// 2b. "How it works" (23 Oct): every game card has an ⓘ that explains it in plain words, with an example.
+await page.getByTestId('game-help-nassau').first().click();
+const helpText = await page.getByTestId('game-help-sheet').innerText();
+check(/front 9/i.test(helpText) && /Example/i.test(helpText) && /money/i.test(helpText), 'Nassau: How it works explains the three bets, with an example and the money');
+await page.screenshot({ path: `${SHOTS}/2b-nassau-help.png` });
+await page.getByRole('button', { name: 'Got it' }).click();
 
 // 3. Live: a new score changes things (the fake has no realtime, so reload). Al birdies 18: the skin with the 7
 //    carried from 11–17 (8 skins), and the 18 outright.
@@ -161,6 +167,7 @@ await page.goto(`${BASE}#/admin`);
 const sat = page.getByTestId('round-games').filter({ hasText: '+ Stableford pot $10' }).last();
 await sat.waitFor({ timeout: 15000 });
 await page.screenshot({ path: `${SHOTS}/3-admin.png`, fullPage: true });
+check(await page.getByTestId('games-explained').first().isVisible(), 'Admin: "Not sure what they are?" explains each game on offer');
 const satCount = await page.getByTestId('round-games').count();
 const satGames = page.getByTestId('round-games').nth(satCount - 1);
 await satGames.getByRole('button', { name: '+ Stableford pot $10' }).click();

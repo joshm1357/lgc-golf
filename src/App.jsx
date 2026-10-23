@@ -80,6 +80,7 @@ const CardPicker = lazyScreen(() => import('./screens/PaperCard.jsx'), 'CardPick
 const PaperCard = lazyScreen(() => import('./screens/PaperCard.jsx'), 'PaperCard');
 const PrintRound = lazyScreen(() => import('./screens/PaperCard.jsx'), 'PrintRound');
 const Present = lazyScreen(() => import('./screens/Present.jsx'), 'Present');
+const AwardsShow = lazyScreen(() => import('./screens/AwardsShow.jsx')); // ov28 (I14): the awards presentation
 const TripFinder = lazyScreen(() => import('./screens/TripFinder.jsx'));
 const TripBuilder = lazyScreen(() => import('./screens/TripBuilder.jsx'));
 const Notifications = lazyScreen(() => import('./screens/Notifications.jsx'));
@@ -307,7 +308,7 @@ function Inside() {
         <Route path="/committees" element={<GovRedirect to="/governance/committees" />} />
         <Route path="/tribunal/:caseId" element={<FeatureRoute feature="tribunal" label="The Handicap Tribunal"><TribunalCase /></FeatureRoute>} />
         <Route path="/stats" element={<FeatureRoute feature="stats" label="Player stats"><Stats /></FeatureRoute>} />
-        <Route path="/dinner/:tripId?" element={<FeatureRoute feature="dinner_awards" label="Fines and dinner awards"><DinnerAwards /></FeatureRoute>} />
+        <Route path="/dinner/:tripId?" element={<FeatureRoute feature="dinner_awards" label="Awards and fines"><DinnerAwards /></FeatureRoute>} />
         <Route path="/tribunal/case/:caseId" element={<CaseRoute><CaseHearing /></CaseRoute>} />
         <Route path="/governance" element={<GovRedirect to="/governance/rulebook" />} />
         <Route path="/governance/settings" element={<FeatureRoute feature="tribunal" label="The Tribunal"><Governance /></FeatureRoute>} />
@@ -337,6 +338,7 @@ function Inside() {
         <Route path="/round/:roundId/print" element={<PrintRound />} />
         <Route path="/round/:roundId/present" element={<Present />} />
         <Route path="/present" element={<Present />} />
+        <Route path="/present/awards/:tripId?" element={<AwardsShow />} />
         <Route path="/desk/*" element={<DeskForward />} />
         <Route path="*" element={<Home />} />
       </Routes>

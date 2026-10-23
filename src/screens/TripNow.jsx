@@ -16,6 +16,8 @@ import { LazyArea } from '../lib/lazy.jsx';
 import { AwardCards } from '../components/Awards.jsx';
 // Loaded with the app (like the leaderboard): the first screen opens from one file, even on weak signal.
 import TripStatus from '../components/TripStatus.jsx';
+import { MoneyLine } from '../components/MoneyLine.jsx'; // ov27 (I15): Settle up on the results
+import Memories from '../components/Memories.jsx';
 
 /** The group's plans (id, trip, status) — for "Trip page →" and to leave called-off trips out of Next / Last. */
 export function usePlans(on) {
@@ -68,6 +70,8 @@ export default function TripNow({ menu: given }) {
       <SaveSpotBanner />
       <AwardCards />
       <div className="section stack" style={{ gap: 12, paddingBottom: 24 }}>
+        {/* ov28 (I16): "this time last year" and, six months after the last trip, a nudge to suggest the next. */}
+        {!tripId && <Memories plans={menu.plans} />}
         {trip ? (
           <>
             <Link to={tripPath(trip, menu.plans)} className="card pad row" data-testid="this-trip"
@@ -82,7 +86,7 @@ export default function TripNow({ menu: given }) {
               </span>
             </Link>
             <LazyArea resetKey={trip.id} fallback={<Loading />}>
-              <TripStatus trip={trip} />
+              <TripStatus trip={trip} moneyLine={<MoneyLine tripId={trip.id} settle organiser={false} />} />
             </LazyArea>
           </>
         ) : (

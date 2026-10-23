@@ -18,6 +18,8 @@ import { batchNonVoters, reminderGroups, batchMessage } from './batch.ts';
 // ov25: the run-up's personal reminders (a week out: "3 things waiting for you"; the day before: your car, room, tee
 // time and what you're bringing). The words are shared with the app's tests.
 import { dayBeforeMessage, countdownPush } from '../_shared/runup.js';
+// ov28: "your round" — the draw is out (I8), your tee time tomorrow (I11), swing alerts (I13).
+import { roundBits, drawOutFor, teeTomorrowFor, swingGap, matchSwing, pointsSwing } from './yourround.ts';
 
 // The app's web address for links in notifications. Set APP_URL in the function's secrets when the app moves
 // (e.g. https://app.thegolftrip.club/); until then it's the GitHub Pages address.
@@ -55,7 +57,11 @@ const ALWAYS_NOW = new Set(['draw_open', 'test']);
 // Tribunal (061, queued from the database): a case about you, your committee's case, a case over to the organisers or
 // needing a casting vote, a report, a term ending, and "voting closes tomorrow".
 const IMPORTANT = new Set(['draw_open', 'test', 'job_assigned', 'job_due', 'payment_recorded', 'nudge_kitty', 'deposit_ask', 'nudge_deposit', 'trip_tomorrow', 'award',
-  'case_about_you', 'case_committee', 'case_fallback', 'case_casting', 'case_report', 'case_closing', 'term_ending']);
+  'case_about_you', 'case_committee', 'case_fallback', 'case_casting', 'case_report', 'case_closing', 'term_ending',
+  // ov28: who you're playing with and when you're off.
+  'draw_out', 'tee_tomorrow']);
+/** ov28: only worth it in the moment — "straight away" people get them; never saved up for a digest. */
+const NOT_IN_DIGEST = new Set(['swing']);
 
 /** Which feature each kind of message belongs to (Stage 3): nothing goes out for a switched-off feature. */
 const KIND_FEATURE: Record<string, string> = {
@@ -68,6 +74,9 @@ const KIND_FEATURE: Record<string, string> = {
   rule_proposed: 'rule_voting', draw_open: 'draw', award: 'awards', award_minor: 'awards', commentary: 'commentary',
   case_new: 'tribunal', case_about_you: 'tribunal', case_committee: 'tribunal', case_fallback: 'tribunal', case_casting: 'tribunal',
   case_report: 'tribunal', case_closing: 'tribunal', case_verdict: 'tribunal', term_ending: 'committees',
+  // ov28: swing alerts ride on live commentary's switch (and its buzz level); the draw-out and tee-time buzzes are
+  // core (teams, tee groups and Cup matches can each be set without any other feature).
+  swing: 'commentary',
   // rule_decided: not tied to voting — organisers deciding rules is part of the Rulebook itself.
 };
 /** Is a feature on for group g? (An older database without switches: everything on.) */
@@ -121,7 +130,7 @@ async function send(g: string, to: string[] | 'all', msg: Msg, except: string | 
   for (const u of users) {
     const m = mode.get(u) || 'instant';
     if (ALWAYS_NOW.has(kind) || m === 'instant' || (m === 'important' && IMPORTANT.has(kind))) now.push(u);
-    else if (m === 'digest') later.push(u);
+    else if (m === 'digest' && !NOT_IN_DIGEST.has(kind)) later.push(u);
   }
   if (later.length) {
     await db.from('notify_queue').insert(later.map((u) => ({ group_id: g, user_id: u, kind, title: msg.title, body: msg.body, url: msg.url })));
@@ -443,15 +452,42 @@ async function dailyFor(g: string) {
   return sent;
 }
 
+/** ov28 (I11): the evening call (7pm Sydney in summer, 6pm in winter) — "Your tee time tomorrow: 7:52" to everyone
+ *  with a tee time or playing group in a round tomorrow, with their lift if the trip's cars are sorted. Only when a
+ *  time or group is set ("If selected"); once per person per round. */
+async function evening() {
+  let sent = 0;
+  const tomorrow = sydneyDate(1);
+  const { data: rounds } = await db.from('rounds').select('id,group_id,trip_id').eq('play_date', tomorrow).neq('status', 'locked');
+  for (const r of rounds || []) {
+    const g = r.group_id as string;
+    if (!(await featureOn(g, 'notifications'))) continue;
+    const bits = await roundBits(db, g, r.id).catch(() => null);
+    if (!bits) continue;
+    // The trip's cars (run-up, 094), when there's a plan for it.
+    let car: (pid: string) => any = () => null;
+    if (r.trip_id && (await featureOn(g, 'planner'))) {
+      const { data: pl } = await db.from('plans').select('*').eq('group_id', g).eq('trip_id', r.trip_id).neq('status', 'cancelled').limit(1).maybeSingle();
+      const each = pl ? await runUpFor(g, pl, [], false).catch(() => null) : null;
+      if (each) car = (pid: string) => each.dayBefore(pid).car;
+    }
+    for (const { pid, msg } of teeTomorrowFor(bits, car)) {
+      if (!(await once(`tee-tomorrow:${r.id}:${pid}`))) continue;
+      sent += await send(g, [pid], { title: msg.title, body: msg.body, url: `${APP}#/trip-now/${r.trip_id}`, tag: `tee-${r.id}` }, null, 'tee_tomorrow');
+    }
+  }
+  return sent;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   try {
     await loadKeys();
     const body = await req.json().catch(() => ({}));
 
-    if (body.type === 'daily' || body.type === 'digest' || body.type === 'commentary') {
+    if (body.type === 'daily' || body.type === 'digest' || body.type === 'commentary' || body.type === 'evening') {
       if (!cronSecret || req.headers.get('x-cron-secret') !== cronSecret) return json({ error: 'Not allowed' }, 401);
-      return json({ sent: body.type === 'daily' ? await daily() : body.type === 'commentary' ? await commentaryNow() : await digest() });
+      return json({ sent: body.type === 'daily' ? await daily() : body.type === 'commentary' ? await commentaryNow() : body.type === 'evening' ? await evening() : await digest() });
     }
 
     // Everyone else must be a signed-in member of the group.
@@ -465,7 +501,7 @@ Deno.serve(async (req) => {
     if (!m) return json({ error: 'Join the group first' }, 403);
     const g = m.group_id as string;
     const me = { player_id: m.player_id as string | null, is_admin: m.role === 'organiser' };
-    const adminOnly = ['plan_new', 'trip_locked', 'rsvp_locked', 'nudge_votes', 'nudge_rsvp', 'nudge_kitty', 'groups_set', 'draw_open', 'deposit_ask', 'nudge_deposit', 'nudge_signin'];
+    const adminOnly = ['plan_new', 'trip_locked', 'rsvp_locked', 'nudge_votes', 'nudge_rsvp', 'nudge_kitty', 'groups_set', 'draw_open', 'deposit_ask', 'nudge_deposit', 'nudge_signin', 'draw_out'];
     if (adminOnly.includes(body.type) && !me.is_admin) return json({ error: 'Admin only' }, 403);
     const from = me.player_id as string | null;
     // Someone who hasn't picked their name yet can't send anything to others (only the test buzz to themselves).
@@ -662,6 +698,43 @@ Deno.serve(async (req) => {
         const to = [...(rs || []).map((r) => r.player_id), ...(earlier || []).map((r) => r.player_id), pl.organiser_id, pl.created_by].filter(Boolean);
         const text = String(c.body || '');
         sent = await send(g, to, { title: `💬 ${name(ppl.find((p) => p.id === from))} on ${pl.name}`, body: text.length > 120 ? `${text.slice(0, 117)}…` : text, url: planUrl(pl.id, 'chat'), tag: `chat-${pl.id}` }, from, 'comment');
+        break;
+      }
+      case 'draw_out': {
+        // ov28 (I8): "The draw is out" for any teams / pairs / Cup matches / playing groups: each player gets their own
+        // line ("You & Bo v Kurt & Al, Thu 7:00am"). Once an hour per round at most (an organiser fiddling with groups
+        // doesn't buzz everyone ten times).
+        const bits = await roundBits(db, g, body.round_id);
+        if (!bits) throw new NotYours();
+        if (!(await once(`draw-out:${bits.round.id}:${Math.floor(Date.now() / 3600000)}`))) break;
+        for (const { pid, msg } of drawOutFor(bits)) {
+          sent += await send(g, [pid], { title: msg.title, body: msg.body, url: `${APP}#/trip-now/${bits.round.trip_id}`, tag: `draw-${bits.round.id}` }, null, 'draw_out');
+        }
+        break;
+      }
+      case 'swing': {
+        // ov28 (I13): swing alerts. The app says WHAT was just scored (a Cup match's hole, or a player's hole); this
+        // works out whether it's a swing and writes the words. Limits: the group's commentary buzz level (feed only =
+        // none), once per match state / per mover per hole, and one swing buzz a person per 10 or 30 minutes.
+        const gap = await swingGap(db, g);
+        if (gap == null) break;
+        const hole = Number(body.hole) || 0;
+        const bucket = Math.floor(Date.now() / (gap * 60000));
+        const room = async (pids: string[]) => {
+          const ok: string[] = [];
+          for (const pid of pids) if (await once(`swing-p:${pid}:${gap}:${bucket}`)) ok.push(pid);
+          return ok;
+        };
+        if (body.match_id) {
+          const s = await matchSwing(db, g, body.match_id, hole);
+          if (!s || !(await once(`swing-m:${s.key}`))) break;
+          sent = await send(g, await room(s.to.filter((p: string) => p !== from)), { title: '⚔️ The Cup', body: s.text, url: `${APP}#/cup/${body.match_id}`, tag: `swing-${body.match_id}` }, from, 'swing');
+        } else if (body.round_id) {
+          const mover = typeof body.player_id === 'string' ? body.player_id : from;
+          const s = mover ? await pointsSwing(db, g, body.round_id, mover, hole) : null;
+          if (!s || !(await once(`swing-pass:${body.round_id}:${mover}:${hole}`))) break;
+          sent = await send(g, await room([mover!]), { title: '⛳ On the move', body: s.text, url: `${APP}#/?r=${body.round_id}`, tag: `swing-${body.round_id}` }, null, 'swing');
+        }
         break;
       }
       case 'draw_open':

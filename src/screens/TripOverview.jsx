@@ -19,6 +19,7 @@ import { CourseGuideChip } from '../components/CourseGuideLink.jsx';
 import TripHistory from '../components/TripHistory.jsx';
 import { ImportLink } from './AiImport.jsx';
 import TripStatus from '../components/TripStatus.jsx'; // ov15: the trip's leaderboards and comps
+import { MoneyLine } from '../components/MoneyLine.jsx'; // ov27 (I15): Settle up on the results
 import { AwardsRunUp } from '../components/AwardsFines.jsx'; // ov24: what's up for grabs
 
 function useTripPhotos(tripId, on) {
@@ -145,14 +146,17 @@ export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage 
       {/* R2 (ov27): guests don't vote on the group's trips. */}
       {status?.role !== 'guest' && votes}
       {/* ov15: the trip's status — live board, what we're playing for (with leaders), and each round's leaderboard. */}
-      {tripId && <TripStatus trip={trip || data.trips.find((t) => t.id === tripId)} overview />}
+      {/* I15 (ov27): a finished trip's results end with "Settle up" — the same money line as the trip page. */}
+      {tripId && <TripStatus trip={trip || data.trips.find((t) => t.id === tripId)} overview moneyLine={<MoneyLine tripId={tripId} settle organiser={false} />} />}
 
       {/* ov24: the trip's awards and fines, before the trip ("What's up for grabs"). Once the run-up shows, they're in its
           own "What's up for grabs" part instead (v10 merge: one place per screen). */}
       {!done && !runUp && <AwardsRunUp trip={trip || data.trips.find((t) => t.id === tripId) || null} title="🎁 What’s up for grabs" overview />}
 
       {/* Results (done) */}
-      {done && honours.length > 0 && (
+      {/* ov28 (W1): a played trip's results page (in TripStatus above) hands the trophies over; this card is for trips
+          from history with no rounds, so the page never says "Lou leads" and "Honours: Fin" at once. */}
+      {done && honours.length > 0 && rounds.length === 0 && (
         <div className="card pad stack" style={{ gap: 6 }}>
           <strong>🏆 Honours</strong>
           {honours.map((h) => <div key={h.id} className="row between" style={{ gap: 8 }}><span className="muted">{h.trophy_name}</span><strong style={{ textAlign: 'right' }}>{h.winner_names}</strong></div>)}
@@ -187,7 +191,7 @@ export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage 
       )}
       {done && ((dinnerOn && !plan) || statsOn) && (
         <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-          {dinnerOn && tripId && !plan && <Link to={`/dinner/${tripId}`} className="btn sm ghost">🍽️ Dinner awards</Link>}
+          {dinnerOn && tripId && !plan && <Link to={`/dinner/${tripId}`} className="btn sm ghost">🏅 Awards &amp; fines</Link>}
           {statsOn && <Link to="/stats" className="btn sm ghost">📊 Stats</Link>}
         </div>
       )}

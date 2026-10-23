@@ -12,7 +12,20 @@ import { shareText } from '../lib/push.js';
 import { useComps } from '../components/CompsChip.jsx';
 import { cleanSettings } from '../lib/comps.js';
 import RuleTag from '../components/RuleTag.jsx';
-import { sideHandicap, shotsOnHole, shots, matchState, matchText, cupTotals, toWin, pts, nextHole, matchPoints } from '../lib/cup.js';
+import { sideHandicap, shotsOnHole, shots, matchState, matchText, cupTotals, toWin, pts, nextHole, matchPoints, cupVerdict } from '../lib/cup.js';
+// ov28 (walkthrough C1, C2, I8, I9, I13, W1): your round at the top, your match first, tee times on matches, maybes
+// marked in the pickers, "the draw is out", tipping, swing alerts, and a real verdict once the trip's over.
+import YourRound, { usePeopleStatus } from '../components/YourRound.jsx';
+import { TipPicker, useTips } from '../components/Tips.jsx';
+import { notify } from '../lib/push.js';
+import { focusRound } from '../lib/activetrip.js';
+import { todayISO } from '../lib/plan.js';
+import { tripFinished } from '../lib/results.js';
+import { flagMark } from '../lib/yourround.js';
+import { parseTime, showTime } from '../lib/teegroups.js';
+
+/** "7:52 · hole 1" for a match with a tee time, else ''. */
+const matchTee = (m) => (m?.tee_time ? `${showTime(m.tee_time)}${m.start_hole ? ` · hole ${m.start_hole}` : ''}` : '');
 
 const FORMAT_LABEL = { ambrose: 'Ambrose pairs', singles: 'Singles' };
 const DEFAULT_SIDES = [{ name: 'Team Blue', colour: '#1F4B9E', sort: 1 }, { name: 'Team Red', colour: '#B3261E', sort: 2 }];
@@ -84,32 +97,49 @@ export default function Cup() {
   const cupPoints = Number(data.currentTrip?.cup_points) || Number(cupComp?.settings?.points) || totals.total;
   const n = sideNames(sides);
   const [A, B] = sides;
+  const trip = data.currentTrip || null;
+  const me = status?.player_id;
+  const tipsState = useTips(trip?.id);
+  // W1: once the trip's over, the board says the verdict — "Team Blue win 7–5", "All square 6–6", or "Not finished:
+  // 6 of 12 points played" — instead of "6½ to win".
+  const finished = !!trip && tripFinished(trip, data.rounds, todayISO());
+  const verdict = cupVerdict({ matches, total: cupPoints, names: n, finished });
+  const settled = finished || verdict.status === 'won' || verdict.status === 'halved';
+  const focus = trip ? focusRound(trip, data.rounds) : null;
+  const mine = (m) => !!me && [...(m.a_players || []), ...(m.b_players || [])].includes(me);
+  const started = matches.some((m) => matchState(m).started);
 
   if (!cup.ready) return <div className="page"><Header logo title="The Cup" /><Loading /></div>;
   return (
     <div className="page">
       <Header logo title={cupComp?.name || data.currentTrip?.name || 'The Cup'} sub="Team match play" />
       <Offline cup={cup} />
+      {/* C1: your team, partner, opponents and tee time, for the round that's on or next. */}
+      {!finished && focus && <div className="section" style={{ paddingBottom: 0 }}><YourRound trip={trip} round={focus.round} /></div>}
       {sides.length === 2 ? (
         <div className="section">
           <div className="card pad" style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 8, textAlign: 'center' }}>
             <div><div style={{ fontWeight: 800, color: A.colour }}>{A.name}</div><div style={{ fontSize: 40, fontWeight: 800, color: A.colour }}>{pts(totals.won.a)}</div></div>
-            <div className="small muted">{cupPoints ? (data.currentTrip?.id && data.currentTrip?.cup_points
+            <div className="small muted" data-testid="cup-middle">{settled && verdict.status !== 'none' ? <strong data-testid="cup-verdict" style={{ color: verdict.winner ? (verdict.winner === 'a' ? A.colour : B.colour) : 'var(--text)', maxWidth: 120, display: 'inline-block' }}>{verdict.text}</strong> : cupPoints ? (data.currentTrip?.id && data.currentTrip?.cup_points
               ? <RuleTag testId="cup-to-win" rule={{ table: 'trips', id: data.currentTrip.id, field: 'cup_points', label: `${pts(toWin(cupPoints))} to win (of ${pts(cupPoints)})`, value: Number(cupPoints), where: { trip_id: data.currentTrip.id, path: '/cup' } }}
                   explain={`The Cup is worth ${pts(cupPoints)} points; a side needs more than half — ${pts(toWin(cupPoints))} — to win it.`}>{pts(toWin(cupPoints))}<br />to win</RuleTag>
               : <>{pts(toWin(cupPoints))}<br />to win</>) : 'v'}</div>
             <div><div style={{ fontWeight: 800, color: B.colour }}>{B.name}</div><div style={{ fontSize: 40, fontWeight: 800, color: B.colour }}>{pts(totals.won.b)}</div></div>
-            {(totals.projected.a !== totals.won.a || totals.projected.b !== totals.won.b) && (
+            {!settled && (totals.projected.a !== totals.won.a || totals.projected.b !== totals.won.b) && (
               <div className="small muted" style={{ gridColumn: '1 / -1' }}>If it finished now: {A.name} {pts(totals.projected.a)} – {pts(totals.projected.b)} {B.name}</div>
             )}
           </div>
+          {/* I9: tip the Cup before the first match starts. Bragging rights only. */}
+          {trip && <div style={{ marginTop: 8 }}><TipPicker tripId={trip.id} target="cup" targetId={trip.id} locked={started} title="Tip the Cup"
+            options={sides.map((s) => ({ value: s.id, label: s.name, colour: s.colour }))} tips={tipsState.tips} reload={tipsState.reload} /></div>}
         </div>
       ) : (
         cup.failed ? null : <div className="empty">{status.is_admin ? 'Set up the two teams below to start the cup.' : 'The organiser hasn’t set up the teams yet.'}</div>
       )}
 
       {rounds.map((r) => {
-        const ms = matches.filter((m) => m.round_id === r.id);
+        // C1: your match first, and marked.
+        const ms = matches.filter((m) => m.round_id === r.id).sort((x, y) => Number(mine(y)) - Number(mine(x)));
         const t = cupTotals(ms);
         return (
           <div key={r.id} className="section stack" style={{ gap: 8 }}>
@@ -117,7 +147,13 @@ export default function Cup() {
               <div className="label">{r.name}</div>
               <div className="small muted">{pts(t.won.a)} – {pts(t.won.b)} · {pts(t.total)} pts</div>
             </div>
-            {ms.map((m) => <MatchRow key={m.id} m={m} sides={sides} data={data} />)}
+            {ms.map((m) => (
+              <div key={m.id} className="stack" style={{ gap: 4 }}>
+                <MatchRow m={m} sides={sides} data={data} mine={mine(m)} />
+                {trip && !matchState(m).started && <div style={{ padding: '0 6px' }}><TipPicker compact tripId={trip.id} target="match" targetId={m.id} tips={tipsState.tips} reload={tipsState.reload}
+                  options={[{ value: 'a', label: n.a, colour: A?.colour }, { value: 'h', label: 'Halved' }, { value: 'b', label: n.b, colour: B?.colour }]} /></div>}
+              </div>
+            ))}
           </div>
         );
       })}
@@ -135,17 +171,19 @@ export default function Cup() {
   );
 }
 
-function MatchRow({ m, sides, data }) {
+function MatchRow({ m, sides, data, mine = false }) {
   const n = sideNames(sides);
   const s = matchState(m);
   const col = s.leader === 'a' ? sides[0]?.colour : s.leader === 'b' ? sides[1]?.colour : 'var(--muted)';
   const p = matchPoints(m);
+  const tee = matchTee(m);
   return (
-    <Link to={`/cup/${m.id}`} className="card pad" style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 8, alignItems: 'center', textDecoration: 'none', color: 'inherit', borderLeft: `5px solid ${s.leader === 'a' || s.winner === 'a' ? sides[0]?.colour : 'var(--line)'}`, borderRight: `5px solid ${s.leader === 'b' || s.winner === 'b' ? sides[1]?.colour : 'var(--line)'}` }}>
+    <Link to={`/cup/${m.id}`} className="card pad" data-testid={mine ? 'cup-my-match' : 'cup-match'} style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 8, alignItems: 'center', textDecoration: 'none', color: 'inherit', borderLeft: `5px solid ${s.leader === 'a' || s.winner === 'a' ? sides[0]?.colour : 'var(--line)'}`, borderRight: `5px solid ${s.leader === 'b' || s.winner === 'b' ? sides[1]?.colour : 'var(--line)'}`, ...(mine ? { outline: '3px solid var(--gold)', background: 'var(--gold-soft)' } : {}) }}>
+      {mine && <div className="small" style={{ gridColumn: '1 / -1', fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', textAlign: 'center' }}>Your match{tee ? ` · ${tee}` : ''}</div>}
       <div style={{ fontWeight: 700, color: sides[0]?.colour }}>{names(data, m.a_players)}</div>
       <div style={{ textAlign: 'center', minWidth: 96 }}>
         <div style={{ fontWeight: 800, color: col }}>{matchText(m, n)}</div>
-        <div className="small muted">{FORMAT_LABEL[m.format]} · {s.decided ? `${pts(p.a)}–${pts(p.b)}` : `${pts(Number(m.points))} pt${Number(m.points) === 1 ? '' : 's'}`}</div>
+        <div className="small muted">{FORMAT_LABEL[m.format]} · {s.decided ? `${pts(p.a)}–${pts(p.b)}` : `${pts(Number(m.points))} pt${Number(m.points) === 1 ? '' : 's'}`}{!mine && tee && !s.started ? ` · ${tee}` : ''}</div>
       </div>
       <div style={{ fontWeight: 700, color: sides[1]?.colour, textAlign: 'right' }}>{names(data, m.b_players)}</div>
     </Link>
@@ -186,6 +224,8 @@ export function CupMatch() {
     const holes = await run(() => must(supabase.rpc('set_cup_hole', { p_match: m.id, p_hole: h, p_result: result })));
     if (!holes) return;
     setLocal(holes);
+    // I13: the server decides if that hole swung the match (lead changed hands / back to level) and buzzes, rate-limited.
+    if (result) notify('swing', { match_id: m.id, hole: h });
     const after = matchState({ ...match, holes });
     setSaved(result ? { hole: h, text: result === 'h' ? 'halved' : result === 'a' ? n.a : n.b } : null);
     if (result && !after.decided && h < 18) {
@@ -211,7 +251,7 @@ export function CupMatch() {
 
   return (
     <div className="page">
-      <Header back="The Cup" title={`${names(data, m.a_players)} v ${names(data, m.b_players)}`} sub={`${round?.name || ''} · ${FORMAT_LABEL[m.format]} · ${pts(Number(m.points))} pt${Number(m.points) === 1 ? '' : 's'}`} />
+      <Header back="The Cup" title={`${names(data, m.a_players)} v ${names(data, m.b_players)}`} sub={[round?.name, FORMAT_LABEL[m.format], `${pts(Number(m.points))} pt${Number(m.points) === 1 ? '' : 's'}`, matchTee(m) ? `off ${matchTee(m)}` : null].filter(Boolean).join(' · ')} />
       <Offline cup={cup} />
       <div className="section">
         <div className="card pad" style={{ textAlign: 'center' }}>
@@ -257,7 +297,7 @@ export function CupMatch() {
           {big('b', `${n.b} — ${names(data, m.b_players)}`, sides[1]?.colour || 'var(--navy)')}
         </>}
         {res && <button type="button" className="btn ghost sm" disabled={busy || status.viewing} onClick={() => save(null)}>Clear hole {h}</button>}
-        {s.decided && <div className="card pad" style={{ textAlign: 'center', fontWeight: 700 }}>Match over: {matchText(match, n)}. Tap a hole above to fix a mistake.</div>}
+        {s.decided && <div className="card pad" style={{ textAlign: 'center', fontWeight: 700 }}>Match over: {matchText(match, n)}. Tap a hole above to fix a mistake.{s.extra > 0 ? ` (${s.extra} hole${s.extra === 1 ? '' : 's'} put in after it finished don’t count.)` : ''}</div>}
         <button type="button" className="btn ghost block" onClick={() => nav('/cup')}>Back to the board</button>
       </div>
     </div>
@@ -268,6 +308,7 @@ export function CupMatch() {
 function CupSetup({ cup, cupComp }) {
   const data = useData();
   const [busy, run] = useRun();
+  const people = usePeopleStatus(data.currentTrip);
   const { sides } = cup;
   if (sides.length < 2) {
     return (
@@ -286,9 +327,59 @@ function CupSetup({ cup, cupComp }) {
       <TeamsCard cup={cup} />
       <CupPoints cupComp={cupComp} />
       {sides.map((s) => <TeamLink key={s.id} side={s} />)}
-      <PlayersCard cup={cup} />
-      <AddMatch cup={cup} cupComp={cupComp} />
+      <PlayersCard cup={cup} people={people} />
+      <AddMatch cup={cup} cupComp={cupComp} people={people} />
       <MatchList cup={cup} data={data} />
+      <DrawOut cup={cup} />
+    </div>
+  );
+}
+
+/** C1: "Mo (maybe)" / "Lou (not paid)" in the pickers, and one tap to nudge everyone who hasn't said they're in. */
+function MaybesNudge({ people, ids }) {
+  const data = useData();
+  const flagged = ids.filter((id) => ['maybe', 'no reply'].includes(people.statusOf(id).flag));
+  const unpaid = ids.filter((id) => people.statusOf(id).flag === 'not paid');
+  if (!people.plan || (!flagged.length && !unpaid.length)) return null;
+  const nm = (list) => list.map((id) => playerName(data.playersById[id])).join(', ');
+  return (
+    <div className="card pad small stack" style={{ gap: 6, background: 'var(--gold-soft)', borderColor: 'var(--gold)' }} data-testid="maybes-in-draw">
+      {flagged.length > 0 && <span>🙋 In the draw but not confirmed: <strong>{nm(flagged)}</strong></span>}
+      {unpaid.length > 0 && <span>💸 In the draw, deposit not paid: <strong>{nm(unpaid)}</strong></span>}
+      {flagged.length > 0 && (
+        <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} data-testid="nudge-maybes"
+          onClick={async () => { const r = await notify('nudge_rsvp', { plan_id: people.plan.id }); toast(r?.error ? 'Couldn’t send the nudge' : 'Nudged — they’ll see “Are you coming?” on their round too'); }}>
+          Nudge them: are you coming?
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** I8: "The draw is out" — once the matches are set, tell everyone (Feed post + each player's own buzz). */
+function DrawOut({ cup }) {
+  const data = useData();
+  const { status } = useSession();
+  const [busy, run] = useRun();
+  const roundIds = [...new Set(cup.matches.map((m) => m.round_id))];
+  const rounds = data.rounds.filter((r) => roundIds.includes(r.id) && r.status !== 'locked');
+  if (!rounds.length || cup.sides.length < 2) return null;
+  const [A, B] = cup.sides;
+  return (
+    <div className="card pad stack" style={{ gap: 8 }} data-testid="draw-out">
+      <strong>📣 The draw is out</strong>
+      <div className="small muted">Tell everyone: a Feed post, and each player gets their own buzz — “You & Bo v Kurt & Al, Sat 7:00am”.</div>
+      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        {rounds.map((r) => (
+          <button key={r.id} type="button" className="btn gold sm" disabled={busy} data-testid="draw-out-send" onClick={() => run(async () => {
+            const ms = cup.matches.filter((m) => m.round_id === r.id);
+            const nm = (ids) => ids.map((id) => playerName(data.playersById[id])).join(' & ');
+            const lines = ms.map((m) => `${nm(m.a_players)} v ${nm(m.b_players)}${matchTee(m) ? ` · ${matchTee(m)}` : ''}`);
+            await supabase.from('posts').insert({ kind: 'user', player_id: status.player_id, trip_id: r.trip_id || null, body: `📣 The draw is out — ${r.name}: ${A.name} v ${B.name}\n${lines.join('\n')}` });
+            await notify('draw_out', { round_id: r.id });
+          }, 'Sent — it’s in the Feed and on everyone’s phone')}>{r.name}</button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -383,7 +474,7 @@ function TeamLink({ side }) {
   );
 }
 
-function PlayersCard({ cup }) {
+function PlayersCard({ cup, people }) {
   const data = useData();
   const [busy, run] = useRun();
   const [open, setOpen] = useState(false);
@@ -399,7 +490,7 @@ function PlayersCard({ cup }) {
       {open && players.map((p) => (
         <div key={p.id} className="row" style={{ gap: 8 }}>
           <Avatar player={p} size={28} />
-          <div className="grow ellipsis">{playerName(p)} <span className="small muted">({Number(p.handicap)})</span></div>
+          <div className="grow ellipsis">{playerName(p)} <span className="small muted">({Number(p.handicap)}){flagMark(people?.statusOf(p.id).flag)}</span></div>
           {cup.sides.map((s) => (
             <button key={s.id} type="button" className="chip" disabled={busy} aria-pressed={p.cup_side === s.id}
               style={p.cup_side === s.id ? { background: s.colour, borderColor: s.colour, color: '#fff' } : undefined}
@@ -408,11 +499,12 @@ function PlayersCard({ cup }) {
         </div>
       ))}
       {open && !players.length && <div className="small muted">Nobody yet — send the team links.</div>}
+      {people && <MaybesNudge people={people} ids={players.filter((p) => p.cup_side).map((p) => p.id)} />}
     </div>
   );
 }
 
-function PlayerPick({ label, colour, options, value, onChange, max }) {
+function PlayerPick({ label, colour, options, value, onChange, max, statusOf = null }) {
   return (
     <div className="stack" style={{ gap: 6 }}>
       <div className="small" style={{ fontWeight: 700, color: colour }}>{label} (pick {max === 1 ? '1' : 'up to 2'})</div>
@@ -423,7 +515,7 @@ function PlayerPick({ label, colour, options, value, onChange, max }) {
             <button key={p.id} type="button" className="chip" aria-pressed={on}
               style={on ? { background: colour, borderColor: colour, color: '#fff' } : undefined}
               onClick={() => onChange(on ? value.filter((x) => x !== p.id) : max === 1 ? [p.id] : [...value, p.id].slice(-max))}>
-              {playerName(p)}
+              {playerName(p)}{statusOf && statusOf(p.id).flag ? <span style={{ opacity: 0.75, fontWeight: 400 }}>{flagMark(statusOf(p.id).flag)}</span> : null}
             </button>
           );
         })}
@@ -433,9 +525,11 @@ function PlayerPick({ label, colour, options, value, onChange, max }) {
   );
 }
 
-function AddMatch({ cup, cupComp }) {
+function AddMatch({ cup, cupComp, people = null }) {
   const data = useData();
   const [busy, run] = useRun();
+  // C2: a tee time (and starting hole) on each match — "Add a match" had no time at all.
+  const [tee, setTee] = useState({ time: '', hole: '' });
   const tripRounds = data.rounds.filter((r) => r.trip_id === data.currentTrip?.id);
   const [roundId, setRoundId] = useState(() => (tripRounds.find((r) => r.status !== 'locked') || tripRounds[0])?.id || '');
   // Each session's format and points a match, as set on the Cup comp (migration 067).
@@ -456,10 +550,22 @@ function AddMatch({ cup, cupComp }) {
   const bH = hcp.b === '' ? auto(b) : num(hcp.b);
   const ok = roundId && a.length && b.length && (format === 'singles' || (a.length === 2 && b.length === 2)) && num(points) > 0
     && Number.isFinite(aH) && Number.isFinite(bH) && aH >= -10 && aH <= 54 && bH >= -10 && bH <= 54;
+  const teeTime = tee.time ? parseTime(tee.time) : null;
+  const teeHole = tee.hole === '' ? null : Math.max(1, Math.min(18, Number(tee.hole) || 1));
   const add = () => run(async () => {
     const sort = cup.matches.filter((m) => m.round_id === roundId).length + 1;
-    await must(supabase.from('cup_matches').insert({ round_id: roundId, sort, format, a_players: a, b_players: b, a_hcp: aH, b_hcp: bH, points: num(points) }));
+    const row = { round_id: roundId, sort, format, a_players: a, b_players: b, a_hcp: aH, b_hcp: bH, points: num(points) };
+    // Before 097 there's no tee_time column: save the match without it rather than not at all.
+    const { error } = await supabase.from('cup_matches').insert(teeTime ? { ...row, tee_time: teeTime, start_hole: teeHole } : row);
+    if (error && teeTime && /tee_time|start_hole/.test(error.message || '')) await must(supabase.from('cup_matches').insert(row));
+    else if (error) throw error;
     setA([]); setB([]); setHcp({ a: '', b: '' });
+    // The next match is usually the next group off: move the time on 8 minutes.
+    if (teeTime) {
+      const [h, mm] = teeTime.split(':').map(Number);
+      const t = (h * 60 + mm + 8) % 1440;
+      setTee({ time: `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`, hole: tee.hole });
+    }
     await cup.reload();
   }, 'Match added');
   return (
@@ -480,8 +586,16 @@ function AddMatch({ cup, cupComp }) {
           <button key={f} type="button" className="chip" aria-pressed={format === f} onClick={() => { setFormat(f); setPoints(f === 'ambrose' ? '2' : '1'); setA([]); setB([]); setHcp({ a: '', b: '' }); }}>{FORMAT_LABEL[f]}</button>
         ))}
       </div>
-      <PlayerPick label={A.name} colour={A.colour} options={pool(A.id)} value={a} onChange={(v) => { setA(v); setHcp((h) => ({ ...h, a: '' })); }} max={max} />
-      <PlayerPick label={B.name} colour={B.colour} options={pool(B.id)} value={b} onChange={(v) => { setB(v); setHcp((h) => ({ ...h, b: '' })); }} max={max} />
+      <PlayerPick label={A.name} colour={A.colour} options={pool(A.id)} value={a} onChange={(v) => { setA(v); setHcp((h) => ({ ...h, a: '' })); }} max={max} statusOf={people?.statusOf} />
+      <PlayerPick label={B.name} colour={B.colour} options={pool(B.id)} value={b} onChange={(v) => { setB(v); setHcp((h) => ({ ...h, b: '' })); }} max={max} statusOf={people?.statusOf} />
+      <div className="row" style={{ gap: 8 }}>
+        <label className="field grow"><span>Tee time (optional)</span>
+          <input className="input" type="time" value={tee.time} onChange={(e) => setTee({ ...tee, time: e.target.value })} aria-label="Match tee time" data-testid="match-tee-time" />
+        </label>
+        <label className="field" style={{ width: 96 }}><span>Start hole</span>
+          <input className="input" inputMode="numeric" placeholder="1" value={tee.hole} onChange={(e) => setTee({ ...tee, hole: e.target.value.replace(/[^0-9]/g, '').slice(0, 2) })} aria-label="Start hole" />
+        </label>
+      </div>
       <div className="row" style={{ gap: 8 }}>
         <label className="field grow"><span>{A.name} hcp</span><input className="input" inputMode="decimal" value={hcp.a === '' ? String(aH) : hcp.a} onChange={(e) => setHcp({ ...hcp, a: e.target.value })} /></label>
         <label className="field grow"><span>{B.name} hcp</span><input className="input" inputMode="decimal" value={hcp.b === '' ? String(bH) : hcp.b} onChange={(e) => setHcp({ ...hcp, b: e.target.value })} /></label>
@@ -490,6 +604,24 @@ function AddMatch({ cup, cupComp }) {
       <div className="small muted">{format === 'ambrose' ? 'Ambrose pairs: each pair’s handicap is their two handicaps added up ÷ 4.' : 'Singles: each player’s handicap.'} The higher side gets the difference as shots on the hardest holes. Change either number if you’ve agreed something else.</div>
       <button type="button" className="btn gold" disabled={busy || !ok} onClick={add}>Add match</button>
     </div>
+  );
+}
+
+/** C2: set or change a match's tee time from the list (the time it's off; tap "Time" → pick → saves). */
+function MatchTeeEdit({ m, reload }) {
+  const [open, setOpen] = useState(false);
+  const [val, setVal] = useState(m.tee_time || '');
+  const [busy, run] = useRun();
+  if (!open) return <button type="button" className="btn ghost sm" onClick={() => setOpen(true)} data-testid="match-tee-edit">{m.tee_time ? 'Time' : '+ Time'}</button>;
+  return (
+    <span className="row" style={{ gap: 4 }}>
+      <input className="input" type="time" style={{ width: 110, minHeight: 36 }} value={val} onChange={(e) => setVal(e.target.value)} aria-label="Tee time for this match" />
+      <button type="button" className="btn sm" disabled={busy} onClick={() => run(async () => {
+        await must(supabase.from('cup_matches').update({ tee_time: val ? parseTime(val) : null }).eq('id', m.id));
+        setOpen(false);
+        await reload();
+      }, 'Tee time saved')}>Save</button>
+    </span>
   );
 }
 
@@ -503,7 +635,8 @@ function MatchList({ cup, data }) {
         const r = data.rounds.find((x) => x.id === m.round_id);
         return (
           <div key={m.id} className="row" style={{ gap: 8 }}>
-            <div className="grow small">{r?.name} · {names(data, m.a_players)} v {names(data, m.b_players)} · {Number(m.a_hcp)} v {Number(m.b_hcp)} · {pts(Number(m.points))} pts</div>
+            <div className="grow small">{r?.name} · {names(data, m.a_players)} v {names(data, m.b_players)} · {Number(m.a_hcp)} v {Number(m.b_hcp)} · {pts(Number(m.points))} pts{matchTee(m) ? ` · ⛳ ${matchTee(m)}` : ''}</div>
+            <MatchTeeEdit m={m} reload={cup.reload} />
             <button type="button" className="btn ghost sm" disabled={busy} onClick={() => {
               if (window.confirm('Delete this match and its hole results?')) run(async () => { await must(supabase.from('cup_matches').delete().eq('id', m.id)); await cup.reload(); }, 'Match deleted');
             }}>Delete</button>

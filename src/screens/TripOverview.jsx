@@ -127,7 +127,9 @@ export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage 
       {!done && !runUp && <AwardsRunUp trip={trip || data.trips.find((t) => t.id === tripId) || null} title="🎁 What’s up for grabs" overview />}
 
       {/* Results (done) */}
-      {done && honours.length > 0 && (
+      {/* ov28 (W1): a played trip's results page (in TripStatus above) hands the trophies over; this card is for trips
+          from history with no rounds, so the page never says "Lou leads" and "Honours: Fin" at once. */}
+      {done && honours.length > 0 && rounds.length === 0 && (
         <div className="card pad stack" style={{ gap: 6 }}>
           <strong>🏆 Honours</strong>
           {honours.map((h) => <div key={h.id} className="row between" style={{ gap: 8 }}><span className="muted">{h.trophy_name}</span><strong style={{ textAlign: 'right' }}>{h.winner_names}</strong></div>)}
@@ -172,7 +174,7 @@ export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage 
       )}
       {done && ((dinnerOn && !plan) || statsOn) && (
         <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-          {dinnerOn && tripId && !plan && <Link to={`/dinner/${tripId}`} className="btn sm ghost">🍽️ Dinner awards</Link>}
+          {dinnerOn && tripId && !plan && <Link to={`/dinner/${tripId}`} className="btn sm ghost">🏅 Awards &amp; fines</Link>}
           {statsOn && <Link to="/stats" className="btn sm ghost">📊 Stats</Link>}
         </div>
       )}

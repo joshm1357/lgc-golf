@@ -1,0 +1,23 @@
+RESULTS: 1. josh sets the match tee time → ok 07:52 hole 1
+2. josh sets a bad tee time → refused: new row for relation "cup_matches" violates check constraint "cup_matches_tee_time_check"
+3. mike tips the cup (red) → ok tipped
+4. mike tips the cup as josh → refused: new row violates row-level security policy for table "tips"
+5. mike tips a made-up side → refused: Pick a team or a halve
+6. mike tips the match (b) → ok tipped
+7. mike tips team 2 in the ambrose → ok tipped
+8. mike tips josh for stableford → ok tipped
+9. mike tips a non-player → refused: Pick someone playing that round
+10. mike moves a tip to another thing → refused: Change your pick, not what it's on
+11. mike changes his match pick → ok h
+12. mike reads tips → ok 4
+13. mike changes the match pick after it started → refused: That match has started — tipping's closed
+14. mike changes the cup pick after the first match → refused: Tipping on the Cup closed once the first match started
+15. mike deletes his ambrose tip after the start → refused: That round has started — tipping's closed
+16. mike changes stableford tip (not started) → ok changed
+17. guest reads tips → ok 3
+18. guest tips → refused: new row violates row-level security policy "no guest writes (add)" for table "tips"
+19. tipping switched off → refused: new row violates row-level security policy "feature on: tipping (add)" for table "tips"
+20. switched off: still reads → ok 3
+21. other group reads tips → ok 0
+22. other group tips on our trip → refused: That belongs to another group
+23. other group sees our match tee time → ok 0

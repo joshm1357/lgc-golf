@@ -47,8 +47,11 @@ export const FEATURES = [
   { key: 'stats', name: 'Player stats and season ladder', description: 'Each player’s scoring, best and worst holes, head-to-heads, and an order of merit across trips.', newGroup: true },
   { key: 'trip_finder', name: 'Trip finder', description: 'Which courses suit the group: tee-time windows, drive times and course facts, ranked on a map.', parent: 'planner', newGroup: false },
   { key: 'weather', name: 'Weather on the trip', description: 'The forecast for the trip’s place in the week before.', parent: 'planner', newGroup: true },
-  { key: 'dinner_awards', name: 'Fines and dinner awards', description: 'Nominate and vote for the trip’s awards and fines at dinner.', newGroup: false },
+  // ov28 (I14, Josh: "not just dinner — often just lunch after the last game and head home"): same key, plainer words.
+  { key: 'dinner_awards', name: 'Awards and fines', description: 'Nominate and vote for the trip’s awards and fines, then present them — at dinner, lunch or the course.', newGroup: false },
   { key: 'commentary', name: 'Live commentary', description: 'A short line in the Feed (and the odd buzz) as the round goes on: lead changes, birdie runs, aces, the Cup — plus a round report.', parent: 'awards', newGroup: true },
+  // ov28 (migration 097, walkthrough I9): bragging rights only — no money.
+  { key: 'tipping', name: 'Tipping', description: 'Tip the Cup, a match, or who wins a round. Bragging rights only — no money in the app.', newGroup: true },
 ].map((f) => ({ parent: null, tier: 'free', ...f }));
 
 export const FEATURE_BY_KEY = Object.fromEntries(FEATURES.map((f) => [f.key, f]));

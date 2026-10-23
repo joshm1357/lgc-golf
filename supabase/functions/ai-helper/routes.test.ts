@@ -27,7 +27,7 @@ Deno.test('go_to: a known place and the group’s own ids are accepted', () => {
   assertEquals((checkGoTo({ destination: 'score' }, { isAdmin: false, known, defaults: { round: R1 } }) as Any).go.round, R1);
   // By name, too (cheap models).
   assertEquals((checkGoTo({ destination: 'replay', round: 'cypress' }, { isAdmin: false, known }) as Any).go.round, R2);
-  assertEquals(checkGoTo({ destination: 'trip_organise', tab: 'kitty' }, { isAdmin: false, known, defaults: { plan: PL } }), { ok: true, go: { key: 'trip_organise', label: 'Organise the trip', plan: PL, tab: 'kitty' } });
+  assertEquals(checkGoTo({ destination: 'trip_organise', tab: 'kitty' }, { isAdmin: false, known, defaults: { plan: PL } }), { ok: true, go: { key: 'trip_organise', label: 'Plan the trip', plan: PL, tab: 'kitty' } });
   assertEquals(checkGoTo({ destination: 'rulebook' }, { isAdmin: false, known }), { ok: true, go: { key: 'rulebook', label: 'The Rulebook' } });
 });
 
@@ -130,5 +130,5 @@ Deno.test('go_to for the kitty finds the trip’s plan, read as the person', asy
     ? reply({ content: null, tool_calls: [{ id: 'g', type: 'function', function: { name: 'go_to', arguments: '{"destination":"trip_organise","tab":"kitty"}' } }] })
     : reply({ content: 'The kitty is on the trip’s Organise tab.' }))) as typeof fetch;
   const out: Any = await helperRequest({ mode: 'ask', text: 'Where do I pay the kitty?' }, deps(false, fetchFn));
-  assertEquals(out.go, { key: 'trip_organise', label: 'Organise the trip', plan: PL, tab: 'kitty' });
+  assertEquals(out.go, { key: 'trip_organise', label: 'Plan the trip', plan: PL, tab: 'kitty' });
 });

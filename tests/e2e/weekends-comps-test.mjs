@@ -287,7 +287,8 @@ check(state().headcount === 9 && state().headcountBy === 'organiser', 'the organ
 await both('flow-04-step1-weekends-length-headcount');
 
 // 3. Call the vote: choose how deep. Areas only = just the main questions; areas + contents = the detail under each.
-await page.getByTestId('tb-call-vote1').click();
+// ov35: two cards — "Call both" puts When? and Where? out in one message (each still closes on its own).
+await page.getByTestId('call-both').click();
 await page.getByTestId('vote-depth').waitFor({ timeout: 5000 });
 await page.getByTestId('vote-depth').getByRole('button', { name: 'Areas only' }).click(); await wait(300);
 const onlyQs = await page.getByTestId('ballot-section').locator('strong').allInnerTexts();
@@ -365,26 +366,30 @@ for (const who of [pid(2), pid(3)]) {
 for (const o of db.plan_options.filter((x) => x.poll_id === pollQ('Which weekend?').id)) db.plan_votes.push({ id: crypto.randomUUID(), poll_id: o.poll_id, option_id: o.id, player_id: pid(4), response: 'yes', created_at: now });
 db.plan_votes.push({ id: crypto.randomUUID(), poll_id: pollQ('How long?').id, option_id: optL(pollQ('How long?'), '2 nights').id, player_id: pid(4), response: 'yes', created_at: now });
 await tb();
-await page.getByTestId('vote-results').waitFor({ timeout: 8000 });
+await page.getByTestId('vote-card-where').waitFor({ timeout: 8000 });
 const ln = await page.getByTestId('length-check').innerText().catch(() => '');
 check(/^3 nights won, so it’s \w{3} \d+ – \w{3} \d+ \w{3}\. 1 person only said yes to a shorter trip — check with them\. \(\w+/.test(ln.trim()), `V2: who to check with (${ln})`);
 const hv = page.locator('[data-testid="result-area"][data-area="Hunter Valley"]');
-// V4: under a third went into the detail (1 of 4), so the results say it plainly: not enough to go by.
-check((await hv.innerText()).includes('LEADING') && (await hv.getByTestId('result-detail').innerText()) === 'Only 1 of 4 picked courses and places — not enough to go by. You choose.', `results: Hunter Valley leads; ${await hv.getByTestId('result-detail').innerText()}`);
-check((await hv.getByTestId('choose-voted-area').innerText()) === 'Go with Hunter Valley' && (await page.getByTestId('choose-voted-area').count()) === 1, 'O2: one gold “Go with Hunter Valley”; other areas are under “Other ways”');
+// V4: how many of the Where? voters went into the detail. ov35: the votes are separate now, so it's out of the 3
+// who answered Where? (the 4th only answered When?) — 1 of 3 is a third, enough to go by.
+check((await hv.innerText()).includes('LEADING') && (await hv.getByTestId('result-detail').innerText()) === '1 of 3 went into the detail', `results: Hunter Valley leads; ${await hv.getByTestId('result-detail').innerText()}`);
+check((await page.getByTestId('close-where').innerText()) === 'Close the vote and go with Hunter Valley' && (await page.getByTestId('close-where').count()) === 1, 'O2 + ov35: one gold “Close the vote and go with Hunter Valley”; other areas are under “Other ways”');
 check(/3 nights/.test(await page.getByTestId('result-length').innerText()), 'results: 3 nights is leading');
-check(/^1\. [\s\S]*LEADING[\s\S]*\n2\. /.test((await page.getByTestId('result-weekends').innerText()).split('\n').slice(1).join('\n')) && !/Primary|Backup/.test(await page.getByTestId('result-weekends').innerText()), 'results: the weekends ranked by votes, plain words (v10.5)');
+check(/^1\. [\s\S]*LEADING[\s\S]*\n2\. /.test(await page.getByTestId('result-weekends').innerText()) && !/Primary|Backup/.test(await page.getByTestId('result-weekends').innerText()), 'results: the weekends ranked by votes, plain words (v10.5)');
 check(/🔒/.test(await step('calls').innerText()), 'Call the courses is locked until the area is chosen');
 await both('flow-07-organiser-results');
-await hv.getByTestId('choose-voted-area').click(); await wait(800);
+await page.getByTestId('close-where').click(); await wait(800);
 check(state().region === 'Hunter Valley' && state().stays?.map((s) => s.name).join(',') === 'Pokolbin', `chosen: Hunter Valley, Pokolbin ticked for step 2 (${state().stays?.map((s) => s.name)})`);
+check(!state().weekendsSettled, 'ov35: going with the area leaves the weekend to its own vote');
+check(/^Closed — Hunter Valley won \d+–\d+$/.test((await page.getByTestId('vote-card-where').getByTestId('vote-status').innerText()).replace(/^✓ /, '')), `ov35: Where? says Closed (${await page.getByTestId('vote-card-where').getByTestId('vote-status').innerText()})`);
+await page.getByTestId('close-when').click(); await wait(800);
 check(state().weekendsSettled === true && state().weekends.length === 2 && state().nights === 3, `primary and backup weekends at 3 nights (${JSON.stringify(state().weekends?.map((w) => [w.start, w.end]))})`);
-const posts0 = (db.posts || []).filter((p) => /^🗳️ .*: it’s /.test(p.body || ''));
-check(posts0.length === 1 && /it’s Hunter Valley, \w{3} \d+ – \w{3} \d+ \w{3}\. 3 nights\./.test(posts0[0].body), `I4: one result post in the Feed (${posts0.map((p) => p.body).join(' | ')})`);
+const posts0 = (db.posts || []).filter((p) => /^(📍|📅) Spring trip — /.test(p.body || ''));
+check(posts0.length === 2 && /we’re going to Hunter Valley\..*Still to decide: when\./.test(posts0[0].body) && /the weekend’s decided: \w{3} \d+ – \w{3} \d+ \w{3} \(3 nights\)\..*Next: ringing the courses/.test(posts0[1].body), `I4 + ov35: one result post per vote in the Feed (${posts0.map((p) => p.body).join(' | ')})`);
 check(state().days.find((d) => d.leg === 'stay')?.options?.length >= 1, 'stay days pre-filled with the area’s courses');
 await step('area').getByRole('button').first().click(); await wait(400);
 check(/The weekend: [\s\S]*If the courses can’t fit you: /.test(await page.getByTestId('tb-weekends-settled').innerText()), 'step 1 shows "The weekend" and the fallback in plain words (v10.5)');
-check(await page.getByTestId('result-card').isVisible() && await page.getByTestId('result-calendar').isVisible(), 'I4: the result card, with Share and Add to calendar');
+check(await page.getByTestId('result-card').count() === 2 && await page.getByTestId('result-calendar').first().isVisible(), 'I4: the result cards (one per vote), with Share and Add to calendar');
 await both('flow-08-chosen-primary-backup');
 await step('calls').getByRole('button').first().click(); await wait(500);
 check(!(await step('calls').innerText()).includes('After:') && await page.getByTestId('tb-make-calls').isVisible(), 'Call the courses is unlocked for the winning area');

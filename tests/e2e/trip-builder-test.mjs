@@ -208,7 +208,10 @@ await page.locator('[data-testid="area-courses"]').getByLabel('Gerringong GC').c
 await page.locator('[data-testid="area-courses"]').getByLabel('Kiama GC').check(); await wait(400);
 check(state().areaCourses?.['South Coast NSW']?.length === 2, `South Coast has its own course set (${JSON.stringify(state().areaCourses)})`);
 await page.screenshot({ path: `${SHOTS}/1-area.png`, fullPage: true });
-await page.getByTestId('tb-call-vote1').click();
+// ov35: two cards (📅 When? / 📍 Where?) — "Call both" sends them in one message, as before.
+check(await page.getByTestId('vote-card-when').isVisible() && await page.getByTestId('vote-card-where').isVisible(), 'ov35: the When? and Where? cards');
+check((await page.getByTestId('vote-card-when').getByTestId('vote-status').innerText()).includes('Not called yet'), 'ov35: When? says "Not called yet"');
+await page.getByTestId('call-both').click();
 await page.getByTestId('call-vote').waitFor({ timeout: 5000 });
 await page.getByTestId('call-the-vote').click();
 await page.getByTestId('how-it-goes-out').waitFor({ timeout: 8000 });
@@ -246,8 +249,17 @@ await page.goto(`${BASE}#/plan/${PLAN}/build`);
 await step('area').waitFor({ timeout: 10000 });
 // ov26 (O2): picking it yourself (skipping the vote) is one of the "Other ways to do this".
 await page.locator('[data-testid="area-start"] [data-testid="other-ways"] summary').click(); await wait(300);
-await page.getByTestId('going-here').click(); await wait(1200);
+await page.getByTestId('going-here').click(); await wait(500);
+// ov35: the Where? vote is out, so going with an area says it closes that vote (and posts) — and asks first.
+check(/closes the Where\? vote/.test(await page.getByTestId('confirm-sheet').innerText()), 'ov35: choosing the area while the vote is out says it closes the Where? vote');
+await page.getByTestId('confirm-yes').click(); await wait(1200);
+check(state().region === 'South Coast NSW' && !state().weekendsSettled, 'ov35: area decided — the weekend isn’t (dates don’t depend on the place)');
+check(/^Closed — South Coast NSW/.test((await page.getByTestId('vote-card-where').getByTestId('vote-status').innerText()).replace(/^✓ /, '')), `ov35: Where? says Closed (${await page.getByTestId('vote-card-where').getByTestId('vote-status').innerText()})`);
+check(/^Out now — 1 of \d+ voted, closes /.test((await page.getByTestId('vote-card-when').getByTestId('vote-status').innerText()).replace(/^🗳️ /, '')), `ov35: When? is still out (${await page.getByTestId('vote-card-when').getByTestId('vote-status').innerText()})`);
+check(/^Close the vote and go with Fri /.test(await page.getByTestId('close-when').innerText()), `ov35: the button says it closes the vote (${await page.getByTestId('close-when').innerText()})`);
+await page.getByTestId('close-when').click(); await wait(1200);
 check(state().region === 'South Coast NSW' && state().weekends.length === 2 && state().weekendsSettled === true, 'area decided; primary and backup weekends set');
+check(db.plan_polls.filter((p) => p.vote_batch === b1.id && !p.optional).every((p) => p.status === 'closed'), 'ov35: both cards’ votes closed');
 await step('area').getByRole('button').first().click(); await wait(300);
 await page.getByTestId('settled-weekend').nth(1).getByRole('button', { name: /^Drop/ }).click(); await wait();
 check(state().weekends.length === 1 && state().weekendsSettled === true, 'just the primary weekend now');

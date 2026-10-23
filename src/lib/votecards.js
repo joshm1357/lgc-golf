@@ -13,7 +13,7 @@ export const PART_LOOK = {
   when: { icon: '📅', title: 'When?', batch: 'When are we going?', what: 'the weekend' },
   where: { icon: '📍', title: 'Where?', batch: 'Where are we going?', what: 'where we go' },
 };
-export const BOTH_TITLE = 'When and where?';
+export const BOTH_TITLE = 'Where and when?';
 
 const WHEN_KEY = /^(weekend|nights):/;
 

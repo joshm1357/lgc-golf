@@ -573,7 +573,7 @@ export default function TripBuilder() {
       {areaOptions.length > 0 && (
         <AreaStart plan={plan} st={st} save={save} org={org} areas={areas} history={history} accom={accom}
           people={head.people} origin={origin} tees={tees} tab={tabNow} onTab={setAreaTab} onChoose={(r) => chooseArea(r)}
-          onCallVote={org && votesOn && (combined ? false : choices.where) ? () => callPart('where') : null} />
+          onCallVote={org && votesOn && !combined && choices.where ? () => callPart(choices.both ? 'both' : 'where') : null} />
       )}
       {combined && v1 && !st.region && <AreaVoteResults st={st} points={points} detail={detail} courseMap={courseMap} org={org} onChoose={chooseArea} onSettle={settleWeekends} voters={voters} lengthNote={lengthNote?.line || null} checkNames={(lengthNote?.check || []).map(nameOf)} />}
       {!comparing && <>

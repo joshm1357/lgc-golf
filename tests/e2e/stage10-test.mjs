@@ -199,6 +199,11 @@ PAGE.v = { id: LIB[0].id, slug: 'bowral-golf-club', name: 'Bowral Golf Club', ar
   club: { name: 'Bowral Golf Club', logo_url: null, booking_email: 'bookings@bowral.example', booking_phone: '02 4800 0001', booking_note: null, offers: null } };
 await page.goto(`${BASE}#/c/bowral-golf-club`);
 await page.getByRole('button', { name: '📨 Ask about a group booking' }).click();
+// v10.2: an enquiry sends your details to a club, so it needs Google or email first (no phone-only account).
+check(await page.getByTestId('sign-in-to-continue').waitFor({ timeout: 8000 }).then(() => true, () => false), 'phone-only: the enquiry asks for Google or email first (v10.2)');
+STATUS.v = { ...STATUS.v, signed_in: true };
+await page.reload();
+await page.getByRole('button', { name: '📨 Ask about a group booking' }).click({ timeout: 15000 });
 await page.getByLabel('Your name').fill('Pip Smith');
 check(await page.getByRole('button', { name: 'Send to the club' }).isDisabled(), 'needs an email or phone to send');
 await page.getByLabel('Email').fill('pip@example.com');

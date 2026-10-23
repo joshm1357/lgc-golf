@@ -1965,4 +1965,14 @@ for themselves. Organising, money and proposing need a saved account (Google or 
 - e2e: tests/e2e/saved-gate-test.mjs (new, google,email build): phone-only votes and scores, taps "Suggest a trip or
   round", gets the sheet, saves with email + code on the same account, the form opens by itself and the trip goes up;
   the database's refusal opens the sheet; Start / Play a round / club ask for Google or email and never make a
-  phone-only account. signin-first, signin-home and save-spot updated for the new wording.
+  phone-only account (28 checks). signin-first, signin-home and save-spot updated for the new wording.
+- Existing tests changed because the rule changed: start-test (step 1 now needs Google or email; no "Carry on"),
+  quick-test (a phone-only person tapping "Start a round" gets the sign-in card first; the starter is signed in after),
+  stage10-test (a group-booking enquiry asks for Google or email first).
+- Full e2e run: all 76 pass — 66 on the default build; quick / start / stage9 on VITE_NEW_GROUPS=on; signin-first
+  (73, incl. the google,password,email build), save-spot (89), signin-home (79) and saved-gate (28) on the sign-in
+  builds at 127.0.0.1; beta (46).
+
+**Next:** Josh's OK, then apply 102 on staging (after 101) and run supabase/tests/102_saved_accounts.sql there. Before
+live: any L.G.C organiser still on a phone-only account needs to Save their spot first (or the group switches
+`phone_only_limited` off) — 102 stops their organiser changes until they do.

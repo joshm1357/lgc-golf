@@ -134,7 +134,7 @@ const NEW = { is_member: true, is_admin: true, player_id: P1, group_name: 'The M
   look: { short_name: 'MULL', crest_url: null, primary: '#1F4B33', accent: '#E0B84A', font: 'serif' }, groups: [{ id: GROUP, name: 'The Mulligans', slug: 'mull', role: 'organiser' }] };
 const COURSE_PAGE = { id: 'aaaa0000-0000-4000-8000-0000000000a1', slug: 'bowral-golf-club', name: 'Bowral Golf Club', area: 'Bowral NSW', osm: true,
   holes: holes.map((h) => ({ n: h.n, par: [3, 12].includes(h.n) ? 3 : [5, 14].includes(h.n) ? 5 : 4, si: h.si, green: h.green, osm: true })) };
-const QUICK_ORG = { ...NEW, group_name: "Josh's round at Bowral Golf Club", quick: true, groups: [{ id: GROUP, name: "Josh's round at Bowral Golf Club", slug: 'josh-at-bowral-golf-club', role: 'organiser' }] };
+const QUICK_ORG = { ...NEW, signed_in: true /* v10.2: whoever starts a quick round has signed in */, group_name: "Josh's round at Bowral Golf Club", quick: true, groups: [{ id: GROUP, name: "Josh's round at Bowral Golf Club", slug: 'josh-at-bowral-golf-club', role: 'organiser' }] };
 STATUS.v = { is_member: false, is_admin: false, player_id: null, group_name: null, group_id: null, legacy: null, role: null, signed_in: false, look: null, groups: [] };
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
@@ -167,6 +167,15 @@ check(await page.getByText(/OpenStreetMap/).first().isVisible(), 'OpenStreetMap 
 await page.screenshot({ path: `${SHOTS}/q1-course.png`, fullPage: true });
 await noScroll('Course page');
 
+// 1b. v10.2 (Josh): a quick round makes a group you run, so it needs Google or email first — no phone-only start.
+await page.getByRole('button', { name: '⛳ Start a round with your mates' }).click();
+check(await page.getByTestId('sign-in-to-continue').waitFor({ timeout: 8000 }).then(() => true, () => false), 'phone-only: "Start a round" asks for Google or email first (v10.2)');
+check(!(await page.getByLabel('Your name').isVisible().catch(() => false)), 'phone-only: …the start form waits');
+// Now signed in with Google or email.
+STATUS.v = { ...STATUS.v, signed_in: true };
+await page.reload();
+await page.getByRole('button', { name: '⛳ Start a round with your mates' }).waitFor({ timeout: 15000 });
+
 // 2. Start a round: name, format, side comps (pre-filled) — then get mates in.
 await page.getByRole('button', { name: '⛳ Start a round with your mates' }).click();
 await page.getByLabel('Your name').fill('Josh');
@@ -189,7 +198,7 @@ const secs = Math.round((Date.now() - t0) / 1000);
 check(secs < 120, `scan to scoring in ${secs}s (target under 2 minutes, including typing)`);
 
 // 3. A mate opens the link: just a name.
-STATUS.v = { ...QUICK_ORG, is_admin: false, role: 'guest', player_id: null, groups: [{ ...QUICK_ORG.groups[0], role: 'guest' }] };
+STATUS.v = { ...QUICK_ORG, signed_in: false /* a mate from the link: phone-only */, is_admin: false, role: 'guest', player_id: null, groups: [{ ...QUICK_ORG.groups[0], role: 'guest' }] };
 await page.goto(`${BASE}#/`);
 await page.reload();
 await page.getByRole('button', { name: 'Join the round' }).waitFor({ timeout: 15000 });
@@ -232,8 +241,8 @@ await page.getByRole('button', { name: /Make it official/ }).waitFor({ timeout: 
 await page.getByRole('button', { name: /Make it official/ }).click();
 await page.waitForTimeout(1500);
 check(rpc('make_group_official').length === 1 && /#\/start\/new/.test(page.url()), 'make it official opens the wizard');
-check(await page.getByText('Step 1 of 7').isVisible(), 'not signed in yet: the wizard starts with signing in');
-await page.getByRole('button', { name: 'Next' }).click();
+// v10.2: a quick round needs a saved account, so they're signed in already: the wizard skips the sign-in step.
+check(!(await page.getByText('Step 1 of 7').isVisible().catch(() => false)), 'already signed in (a quick round needs it): no sign-in step');
 await page.getByText('Name and crest').waitFor({ timeout: 10000 });
 check(await page.getByLabel('Group name').isVisible(), 'then straight to the group’s proper name and crest');
 

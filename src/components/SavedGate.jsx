@@ -101,7 +101,13 @@ export function SavedGate() {
 export function SignInToContinue({ returnHash = '', title = 'First, sign in', why = '' }) {
   const { user } = useSession() || {};
   if (!SIGN_IN.length) {
-    return <div className="card pad small" data-testid="sign-in-to-continue">Signing in with Google or email isn’t switched on yet — check back soon.</div>;
+    return (
+      <div className="card pad stack" style={{ gap: 6 }} data-testid="sign-in-to-continue">
+        <strong>{title}</strong>
+        {why && <span className="small">{why}</span>}
+        <span className="small muted">Signing in with Google or email isn’t switched on yet — check back soon.</span>
+      </div>
+    );
   }
   return (
     <div className="card pad stack" style={{ gap: 10, borderColor: 'var(--gold)' }} data-testid="sign-in-to-continue">

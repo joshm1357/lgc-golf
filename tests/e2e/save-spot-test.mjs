@@ -175,19 +175,17 @@ async function joinAsKurt(page, base) {
   await page.getByText('Courses', { exact: true }).first().waitFor({ timeout: 10000 });
 }
 
-// 1. Join from the link → name → notifications pop-up → Save your spot → email + password → code → same user, same page.
+// 1. Join from the link → name → Save your spot (ov27 F1: the notifications ask waits for the second visit) → email + password → code → same user, same page.
 {
   const S = server({ confirm: true });
   const { ctx, page } = await phone(S);
   await joinAsKurt(page, PW);
   check(page.url().endsWith('#/courses'), 'join: lands on the shared page (?to=/courses)');
   const notif = page.getByRole('dialog', { name: /Turn on notifications/ });
-  check(await notif.waitFor({ timeout: 8000 }).then(() => true, () => false), 'the notifications pop-up comes first');
-  check(!(await saveSheet(page).isVisible().catch(() => false)), 'Save your spot waits while the notifications one is open');
-  await page.waitForTimeout(4000);
-  check(!(await saveSheet(page).isVisible().catch(() => false)), '…and keeps waiting');
-  await notif.getByRole('button', { name: 'Not now' }).click();
+  // ov27 (F1): one pop-up a visit, and the notifications ask waits for the second visit — so Save your spot is this
+  // first visit's one pop-up.
   check(await saveSheet(page).waitFor({ timeout: 8000 }).then(() => true, () => false), 'then Save your spot, once');
+  check(!(await notif.isVisible().catch(() => false)), 'no notifications pop-up on top of it (one pop-up a visit, F1)');
   const txt = await saveSheet(page).innerText();
   check(/Connect Google or email so you can sign in on your laptop/.test(txt), 'it says why, in plain words (ov13 wording)');
   check(await saveSheet(page).getByRole('button', { name: /Continue with Google/ }).isVisible(), 'Continue with Google');

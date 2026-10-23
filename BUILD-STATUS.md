@@ -1919,3 +1919,50 @@ feature name inside `require_feature` errors (e.g. "Dinner Awards is switched of
 | `components/Shortcuts.jsx` | { label: 'Trophies & cups', to: '/comps-board', kind: 'Screen', words: ['comps', 'standings', 'side comps'] } | { label: 'Trophies & cups', to: '/comps-board', kind: 'Screen', words: ['comps', 'standings', 'side comps', 'playing for', 'up for grabs'] } |
 | `components/RuleLayers.jsx` | {r.play_date ? ' · ${r.play_date}' : ''} | {r.play_date ? ' · ${fmtRange(r.play_date)}' : ''} |
 | `lib/history.js` | problems.push('Line ${n}: ${date} is in the future') | problems.push('Line ${n}: ${shortDate(date)} is in the future') |
+
+## v10.2 — Saved accounts: phone-only can look and play (23 Oct 2026, branch `v10-2-saved-accounts`, from `v10-1-links`, migration 102, not applied anywhere)
+**Josh's option B.** "Just this phone: scoring and voting only" (a phone-only, anonymous account) can see everything,
+say In / Maybe / Out, vote, score, post / react / comment, give cap tips, opt in to a side game and claim "Latest out"
+for themselves. Organising, money and proposing need a saved account (Google or email added with Save your spot).
+
+**App**
+- One gate: `src/lib/savedgate.js` (the lists, `needsSaved`, the words) and `src/components/SavedGate.jsx` (`<SavedGate />`
+  in App.jsx, `useSavedGate()`, `askToSave()`, `OrganiserSaveCard`, `SignInToContinue`). A button marked
+  `{...gate('money')}` stays visible; tapped by a phone-only person it opens "🔐 Save your spot to do this" (Save your
+  spot's own Google / email panel, linked to the SAME account), then the tap carries on by itself. The database's
+  "Save your spot first …" (toast) opens the same sheet, so an unmarked button still lands there.
+- Marked: Suggest a trip (Trips, the organiser start), Call a vote (Planner, Organise), Close now & pick (PollCard),
+  I've paid (trip page, money line), + Add a cost, + Propose one (fines & awards), Fine someone, Put up a side game,
+  Penalty / confirm / decline / waive, Dispute this, award disputes (AutoAwards), Raise a case (Tribunal), + Propose a
+  rule (Rulebook), + New cup, invite Share link, Copy my link. Organiser tools, Players & group and the Organise view
+  show "Organisers need a saved account" to a phone-only organiser.
+- Never asks when: the build has no sign-in (VITE_SIGN_IN empty — no dead end), the group switched it off, a quick
+  round, an organiser viewing as a player.
+- Wording: the Join button is "📱 Just this phone: scoring and voting only" with "You can follow along, vote and score.
+  To organise, pay or propose things, save your spot (Google or email)." under it (replaces the old line). The Save
+  your spot pop-up and the gate sheet name the option the same way.
+- No phone-only starts: the Start wizard's step 1 is Google / email (no "Carry on without signing in"); a course page's
+  "Start a round", the group-booking enquiry, "Play a round" (course search) and the club page ask for Google / email
+  first. `ensureSignedIn()` / `signInAnonymously` removed from Start.jsx, Club.jsx and CoursePage.jsx; it's left only
+  where someone opens an existing group's link (Join.jsx) or a personal link (PersonalLink.jsx).
+- Feature `phone_only_limited` ("Phone-only accounts: look and play only"), on for new groups and in every preset.
+
+**Database — 102_saved_accounts.sql** (run after 101; not applied to any project)
+- `private.is_saved_user()`, `private.saved_ok(group)` (true, or refuses with "Save your spot first (Google or email)
+  to do this", errcode 42501, hint save_spot), `private.saved_account_ok()`, `require_saved` / `require_saved_account`,
+  `public.my_saved_status()`. The feature catalogue row.
+- Restrictive policies (insert / update / delete) on 45 tables, and partial ones on players (someone else),
+  dinner_award_nominations (anyone but yourself), side_comp_entries, commentary, award_moments, course_social_times.
+- 81 security-definer functions re-saved with the check as their first line (from their live definition; same name,
+  arguments and permissions; safe to run twice). The full list is in the file's header.
+- Starting a group, a quick round, a club claim and a group-booking enquiry refuse phone-only whatever the switch.
+
+**Tests**
+- Vitest: src/lib/savedgate.test.js (17); features / joinfirst updated. Full run: 1,711 pass.
+- SQL: supabase/tests/102_saved_accounts.sql (67 checks; local Postgres 16 with every migration 001–102 and Supabase
+  stand-ins). 102 also loads twice cleanly. Existing 090, 093, 098, 099, 101, stage1b, stage3 tests give the same
+  results with 102 in (100's test fails at the same line with or without 102 — it depends on the time of day).
+- e2e: tests/e2e/saved-gate-test.mjs (new, google,email build): phone-only votes and scores, taps "Suggest a trip or
+  round", gets the sheet, saves with email + code on the same account, the form opens by itself and the trip goes up;
+  the database's refusal opens the sheet; Start / Play a round / club ask for Google or email and never make a
+  phone-only account. signin-first, signin-home and save-spot updated for the new wording.

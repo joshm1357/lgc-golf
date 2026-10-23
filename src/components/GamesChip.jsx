@@ -109,7 +109,7 @@ export function WhosIn({ game, round, optIns = [], teeGroups = [], reload, compa
   const canTakeDown = st.open && !guest && (organiser || (me && game.created_by === me));
   const others = Object.values(data.playersById || {}).filter((p) => !ids.includes(p.id) && p.approved !== false)
     .sort((a, b) => playerName(a).localeCompare(playerName(b)));
-  const takeDown = () => run(async () => {
+  const takeDown = () => window.confirm('Take this side game down? It comes off the round and everyone who’s in is out.') && run(async () => {
     await must(supabase.from('round_games').update({ retired: true }).eq('id', game.id));
     await reload?.();
   }, 'Side game taken down');
@@ -120,7 +120,8 @@ export function WhosIn({ game, round, optIns = [], teeGroups = [], reload, compa
         {names.length ? names.map((n, i) => (
           <span key={n.id} data-testid="whos-in-name">
             {i ? ', ' : ''}{n.name}
-            {organiser && <button type="button" className="linkish small" aria-label={`Take ${n.name} out`} disabled={busy} onClick={() => toggle(false, n.id)} style={{ marginLeft: 2 }}>×</button>}
+            {organiser && <button type="button" aria-label={`Take ${n.name} out`} disabled={busy} onClick={() => toggle(false, n.id)}
+              style={{ background: 'none', border: 0, padding: '0 6px', minHeight: 0, color: 'var(--muted)', font: 'inherit', fontWeight: 700, cursor: 'pointer' }}>×</button>}
           </span>
         )) : <span className="muted">nobody yet</span>}
       </div>
@@ -141,7 +142,7 @@ export function WhosIn({ game, round, optIns = [], teeGroups = [], reload, compa
           <button type="button" className="btn ghost sm" disabled={!adding || busy} onClick={() => { toggle(true, adding); setAdding(''); }}>Add</button>
         </div>
       )}
-      {canTakeDown && !compact && <button type="button" className="linkish small" disabled={busy2} onClick={takeDown} data-testid="take-down" style={{ alignSelf: 'flex-start' }}>Take it down</button>}
+      {canTakeDown && !compact && <button type="button" className="btn ghost sm" disabled={busy2} onClick={takeDown} data-testid="take-down" style={{ alignSelf: 'flex-start' }}>Take it down</button>}
     </div>
   );
 }

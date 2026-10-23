@@ -161,6 +161,8 @@ const made = db.round_games.find((g) => g.round_id === R2);
 check(made && made.kind === 'skins' && Number(made.stake) === 5 && made.who_in === 'opt_in' && made.created_by === B, 'propose: an opt-in $5 skins for Saturday, put up by Bo');
 check(notifies.length === 1 && notifies[0].type === 'game_proposed' && notifies[0].game_id === made?.id, `propose: one "game_proposed" notification (got ${JSON.stringify(notifies)})`);
 await page.getByTestId('game-skins').waitFor({ timeout: 15000 });
+// The screen moves from Friday to Saturday after the sheet closes — wait for Saturday's list (Bo alone).
+await page.getByTestId('game-skins').getByText(/Who’s in \(1\)/).waitFor({ timeout: 15000 }).catch(() => {});
 const satWhos = await page.getByTestId('game-skins').getByTestId('whos-in').innerText();
 check(/Who’s in \(1\)/.test(satWhos) && satWhos.includes('Bo'), 'Saturday: Bo is in automatically');
 check(/Opt-in closes at the first tee/.test(await page.getByTestId('opt-closes').first().innerText()), 'Saturday: "Opt-in closes at the first tee"');
@@ -182,6 +184,14 @@ check(await ask.waitFor({ timeout: 15000 }).then(() => true, () => false), 'Feed
 check((await page.locator('.page').innerText()).includes('put up $5 skins for Saturday'), 'Feed: “Bo’s put up $5 skins for Saturday. You in?”');
 await page.screenshot({ path: `${SHOTS}/4-feed.png`, fullPage: true });
 
+// 4b. The day screen (today is Friday, live): the side games card says who's in, and that opt-in has closed.
+await page.goto(`${BASE}#/`);
+const today = page.getByTestId('side-games-today');
+check(await today.waitFor({ timeout: 15000 }).then(() => true, () => false), 'day screen: a Side games card');
+const todayText = (await today.innerText().catch(() => '')).replace(/\s+/g, ' ');
+check(/Who’s in \(2\): Al Blue, Kurt/.test(todayText) && /closed at the first tee/.test(todayText), `day screen: who's in (names) and opt-in closed (${todayText})`);
+await page.screenshot({ path: `${SHOTS}/4b-day.png`, fullPage: true });
+
 // 5. An organiser: Saturday's game shows "Opt-in" in Admin; house rules are optional on a custom game.
 me = { player_id: K, is_admin: true, role: 'organiser' };
 await page.goto(`${BASE}#/games?r=${R2}`);
@@ -199,6 +209,13 @@ await page.goto(`${BASE}#/admin`);
 await page.getByTestId('admin-opt-in').first().waitFor({ timeout: 15000 }).catch(() => {});
 check((await page.getByTestId('admin-opt-in').allInnerTexts()).some((t) => t.includes('put up by Bo')), 'Admin: Saturday’s game says "Opt-in · put up by Bo"');
 await page.screenshot({ path: `${SHOTS}/5-admin.png`, fullPage: true });
+
+// 6. The organiser takes Saturday's game down before the round (retired, never deleted).
+await page.goto(`${BASE}#/games?r=${R2}`);
+await page.getByTestId('take-down').first().waitFor({ timeout: 15000 });
+await page.getByTestId('take-down').first().click();
+await page.waitForTimeout(800);
+check(db.round_games.find((g) => g.id === made.id)?.retired === true, 'take it down: Saturday’s game is retired');
 
 await browser.close();
 console.log(fails.length ? `\n${fails.length} FAILED:\n- ${fails.join('\n- ')}` : '\nAll checks passed.');

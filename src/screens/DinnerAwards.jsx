@@ -17,6 +17,8 @@ import {
 import { lineFor } from '../lib/injokes.js';
 import { termsOf, worthOf, proofNeeds, proofLabel, bestLabel, claimWords, rankClaims } from '../lib/awardsfines.js';
 import { ProposeSheet } from '../components/AwardsFines.jsx';
+import { AutoAwardRuns, FromScoresProposer } from '../components/AutoAwards.jsx';
+import { autoTerms } from '../lib/autoawards.js';
 
 const TABLES = ['dinner_awards', 'dinner_award_nominations', 'dinner_award_votes'];
 
@@ -72,16 +74,20 @@ export default function DinnerAwards() {
 
   if (!trip) return <div className="page"><Header back title="Awards and fines" /><div className="empty">No trip yet — awards and fines belong to a trip.</div></div>;
   if (!d) return <div className="page"><Header back title="Awards and fines" sub={trip.name} /><Loading /></div>;
-  const list = sortAwards(d.awards);
+  // 100: a nightly (daily, from-the-scores) award shows as its runs below, not as a card to vote on; the nights'
+  // copies (parent_id) are inside those runs.
+  const list = sortAwards(d.awards.filter((a) => !a.parent_id && autoTerms(a, d.rulesById?.[a.rule_id] || null).runs === 'trip'));
 
   return (
     <div className="page">
       <Header back title="Awards and fines" sub={trip.name} />
       <div className="section stack">
         {d.failed && <div className="err">Couldn’t load the awards — check your signal.</div>}
-        {list.length === 0 && <div className="empty">No awards or fines yet. Add the first — the group nominates, then votes when you get together (dinner, lunch or at the course).</div>}
+        {list.length === 0 && d.awards.length === 0 && <div className="empty">No awards or fines yet. Add the first — the group nominates, then votes when you get together (dinner, lunch or at the course).</div>}
         {/* ov28 (I14): the presentation — winners one by one on the TV or a phone, at dinner, lunch or the course. */}
         <Link to={`/present/awards/${trip.id}`} className="btn gold block" data-testid="present-awards">🎤 Present the awards</Link>
+        <AutoAwardRuns trip={trip} />
+        <FromScoresProposer trip={trip} />
         {list.map((a) => (
           <AwardCard key={a.id} award={a} d={d} nameOf={nameOf} readOnly={readOnly} onNominate={() => setNominating(a)} reload={reload} trip={trip} joke={lineFor(jokes, a.id)} />
         ))}

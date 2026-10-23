@@ -19,6 +19,7 @@ import { AvatarStack, toast } from './ui.jsx';
 import { TrophyArt } from './TrophyArt.jsx';
 import { shareText } from '../lib/push.js';
 import { todayISO } from '../lib/plan.js';
+import { AutoAwardResults } from './AutoAwards.jsx';
 import {
   tripFinished, tripYear, roundPodium, previousHolder, engraved, handoverLine, compWinner, finesTally, tippedRight,
   bestPhotos, resultsText,
@@ -238,6 +239,9 @@ export default function TripResults({ trip, moneyLine = null }) {
           {res.tally.slice(0, 6).map((t) => <div key={t.player_id} className="row between small" style={{ gap: 8 }}><span>{res.nameOf(t.player_id)}</span><span className="muted">{t.count} · {[...new Set(t.titles)].join(', ')}</span></div>)}
         </div>
       )}
+
+      {/* 100: nightly awards and fines decided on the trip, and their points */}
+      {awardsOn && <AutoAwardResults trip={trip} />}
 
       {/* Who tipped right */}
       {res.tipped.length > 0 && (

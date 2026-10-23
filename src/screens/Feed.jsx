@@ -7,6 +7,7 @@ import { Header, Avatar, Icon, Sheet, timeAgo, toast, PhotoButtons } from '../co
 import { DinnerAwardsLink } from '../components/DinnerAwardsLink.jsx';
 import { isCommentaryPost } from '../lib/commentary.js';
 import { usePostChips, PostChips, FineSheet } from '../components/AwardsFines.jsx';
+import { useFeedClaims, ClaimChips, AwardRunCard, runIdFromLink, FromScoresProposer } from '../components/AutoAwards.jsx';
 import { BringAsk } from '../components/BringAsk.jsx';
 import { bringAskPlan } from '../lib/runup.js';
 
@@ -48,6 +49,8 @@ export default function Feed() {
   const [chips, reloadChips] = usePostChips(useMemo(() => posts.map((p) => p.id), [posts]));
   const [fining, setFining] = useState(null); // { post, who }
   const canFine = useFeature('dinner_awards') && !status.viewing && status.role !== 'guest' && !!me;
+  // 100: "Claim Latest out?" on night photos; the morning's proposal with Confirm / Dispute.
+  const claims = useFeedClaims();
 
   async function toggleReact(post, emoji) {
     const mine = reactions.find((r) => r.post_id === post.id && r.player_id === me && r.emoji === emoji);
@@ -75,17 +78,18 @@ export default function Feed() {
             comments={comments.filter((c) => c.post_id === p.id)}
             reactions={reactions.filter((r) => r.post_id === p.id)}
             onReact={(e) => toggleReact(p, e)} onChanged={load} isAdmin={status.is_admin}
-            chips={chips[p.id] || []} onChips={reloadChips} onFine={canFine ? (who) => setFining({ post: p, who }) : null} />
+            chips={chips[p.id] || []} onChips={reloadChips} onFine={canFine ? (who) => setFining({ post: p, who }) : null} claims={claims} />
         ))}
         {posts.length >= limit && <button type="button" className="btn ghost" onClick={() => setLimit(limit + 40)}>Load older posts</button>}
       </div>
       {composing && <Composer onClose={() => setComposing(false)} onPosted={load} />}
+      {claims.trip && <FromScoresProposer trip={claims.trip} />}
       {fining && <FineSheet post={fining.post} who={fining.who} onClose={() => setFining(null)} onSaved={reloadChips} />}
     </div>
   );
 }
 
-function Post({ post, me, comments, reactions, onReact, onChanged, isAdmin, chips = [], onChips, onFine }) {
+function Post({ post, me, comments, reactions, onReact, onChanged, isAdmin, chips = [], onChips, onFine, claims }) {
   const data = useData();
   const author = post.player_id ? data.playersById[post.player_id] : null;
   const [text, setText] = useState('');
@@ -131,6 +135,7 @@ function Post({ post, me, comments, reactions, onReact, onChanged, isAdmin, chip
       <div className="pad stack" style={{ paddingTop: post.photo_url ? 10 : 0 }}>
         {!auto && post.body && <div style={{ fontSize: 16, lineHeight: 1.4 }}>{post.body}</div>}
         <PostChips chips={chips} onChanged={onChips} />
+        {runIdFromLink(post.link) ? <AwardRunCard runId={runIdFromLink(post.link)} compact /> : <ClaimChips post={post} claims={claims} />}
         {bringAskPlan(post.link) && <BringAsk planId={bringAskPlan(post.link)} />}
         <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
           {counts.map((c) => (

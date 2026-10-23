@@ -160,6 +160,93 @@ export function gameSuits(kind, format) {
 }
 export const AMBROSE_NOTE = 'Ambrose rounds: skins and Nassau are played team v team (winnings split between the team). Stableford pot, birdie pool and eclectic are for individual rounds.';
 
+// ------------------------------------------------------------------ who's in (098, 23 Oct 2026)
+// Josh: "The side games need to be proposed by someone to other people, or put out for an opt-in."
+// Each game has a "Who's in" setting (round_games.who_in):
+//   'everyone' — everyone in the round (the default, and how every game worked before 098);
+//   'opt_in'   — only players who tapped "I'm in" (round_game_players) are in its results and its money.
+// Opt-ins close when the round starts (status live) or at its first tee time if one is set (Sydney time); after that
+// the list is fixed, except an organiser can still add or take someone out. The database checks the same (098).
+export const WHO_IN = {
+  everyone: { label: 'Everyone in the round', short: 'Everyone' },
+  opt_in: { label: 'Opt-in', short: 'Opt-in' },
+};
+export const AMBROSE_OPT_IN_NOTE = 'Ambrose: a team is in if any of its players is in (the team’s winnings and losses are split between all its players).';
+
+/** Is this an opt-in game? (Anything else, including a row from before 098, is everyone.) */
+export const isOptIn = (game) => game?.who_in === 'opt_in';
+
+/** The player ids in an opt-in game, from round_game_players rows ({ game_id, player_id }). null = everyone. */
+export function optInIds(game, optIns = []) {
+  if (!isOptIn(game)) return null;
+  return new Set((optIns || []).filter((o) => o.game_id === game.id).map((o) => o.player_id));
+}
+
+/** The subjects who are in. A team (Ambrose) is in if any of its players is in; a player if they are. */
+export function subjectsIn(subjects, ids) {
+  if (!ids) return subjects;
+  return subjects.filter((s) => ids.has(s.id) || (s.members || []).some((m) => ids.has(m)));
+}
+
+/** "YYYY-MM-DD HH:MM" in Sydney, now. */
+export function sydneyClock(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now);
+  const v = (t) => parts.find((p) => p.type === t)?.value || '';
+  return `${v('year')}-${v('month')}-${v('day')} ${v('hour') === '24' ? '00' : v('hour')}:${v('minute')}`;
+}
+
+const teeOk = (t) => (/^([01]\d|2[0-3]):[0-5]\d$/.test(String(t || '')) ? String(t) : null);
+
+/** "8:10am" from "08:10". */
+export function clockWords(hhmm) {
+  const [h, m] = String(hhmm).split(':').map(Number);
+  return `${h % 12 || 12}${m ? `:${String(m).padStart(2, '0')}` : ''}${h < 12 ? 'am' : 'pm'}`;
+}
+
+/** "Sat" / "Saturday" for a round's day (play_date), or '' with no date. */
+export function roundDay(round, long = false) {
+  const d = String(round?.play_date || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return '';
+  const [y, m, dd] = d.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, dd)).toLocaleDateString('en-AU', { weekday: long ? 'long' : 'short', timeZone: 'UTC' });
+}
+
+/**
+ * Are opt-ins still open for a round's games? Same rule as the database (098 side_game_closes_at / side_game_open):
+ * closed once the round is live or locked, or from its first tee time (the earliest tee time of its tee groups, on its
+ * play date, Sydney time). No tee time set: open until the round starts.
+ * teeGroups: tee_groups rows (any rounds; this round's are picked out). → { open, closesAt: "YYYY-MM-DD HH:MM" | null, words }
+ */
+export function optInState(round, teeGroups = [], now = new Date()) {
+  if (!round) return { open: false, closesAt: null, words: '' };
+  const day = String(round.play_date || '').slice(0, 10);
+  const tee = (teeGroups || []).filter((t) => t.round_id === round.id).map((t) => teeOk(t.tee_time)).filter(Boolean).sort()[0] || null;
+  const closesAt = tee && /^\d{4}-\d{2}-\d{2}$/.test(day) ? `${day} ${tee}` : null;
+  const started = round.status === 'live' || round.status === 'locked';
+  const open = !started && (!closesAt || sydneyClock(now) < closesAt);
+  const when = closesAt ? ` (${clockWords(tee)}${roundDay(round) ? ` ${roundDay(round)}` : ''})` : '';
+  const words = open ? `Opt-in closes at the first tee${when}` : `Opt-in closed at the first tee${when} — the list is fixed`;
+  return { open, closesAt, words };
+}
+
+/** "$5 skins" — a game in a few words (a custom game keeps its own name). */
+const SHORT = { skins: 'skins', nassau: 'Nassau', stableford_pot: 'Stableford pot', birdie_pool: 'birdie pool', eclectic: 'eclectic' };
+export function gameShort(game) {
+  return `${formatMoney(toCents(game?.stake))} ${game?.name || SHORT[game?.kind] || 'side game'}`;
+}
+
+/** "Bo's put up $5 skins for Saturday. You in?" — the Feed post and notification words for a proposed game. */
+export function proposeWords({ who = 'Someone', game, round }) {
+  const day = roundDay(round, true) || round?.name || 'the round';
+  return `${who}’s put up ${gameShort(game)} for ${day}. You in?`;
+}
+
+/** "Side games on offer: $5 skins Sat (6 in)" — one line for a game whose opt-in is open. */
+export function offerLine(game, round, inCount) {
+  const day = roundDay(round) || round?.name || '';
+  return `${gameShort(game)}${day ? ` ${day}` : ''} (${inCount} in)`;
+}
+
 // ------------------------------------------------------------------ money (whole cents)
 
 /** $ (number or text) → whole cents. */
@@ -550,30 +637,36 @@ export function eclectic({ rounds, options, stakeCents = 0 }) {
 
 /**
  * Work out one game. ctx: { round, course, teams, roundPlayers, playersById, scoresIdx, tripRounds?, teamsByRound?,
- * roundPlayersByRound?, coursesById? } (the trip bits are for the eclectic).
- * Returns { game, kind, subjects, result, money: { playerId: cents } (decided money only), final, skipped? }.
+ * roundPlayersByRound?, coursesById?, optIns? } (the trip bits are for the eclectic; optIns: round_game_players rows).
+ * An opt-in game (098) counts only the players who are in — results and money. For Ambrose, a team is in if any of its
+ * players is in.
+ * Returns { game, kind, subjects, result, money: { playerId: cents } (decided money only), final, skipped?,
+ *   optIn?: { ids: [playerId], teamNote? } }.
  */
 export function playGame(game, ctx) {
   const { round } = ctx;
   const stakeCents = toCents(game.stake);
   const locked = round.status === 'locked';
+  const inIds = optInIds(game, ctx.optIns);
+  const optIn = inIds ? { ids: [...inIds].sort(), ...(round.format === 'ambrose' ? { teamNote: AMBROSE_OPT_IN_NOTE } : {}) } : null;
+  const withIn = (x) => (optIn ? { ...x, optIn } : x);
   if (!gameSuits(game.kind, round.format)) {
-    return { game, kind: game.kind, subjects: [], result: null, money: {}, final: false, skipped: 'Not played in Ambrose rounds' };
+    return withIn({ game, kind: game.kind, subjects: [], result: null, money: {}, final: false, skipped: 'Not played in Ambrose rounds' });
   }
   if (game.kind === 'eclectic') {
     const tripRounds = (ctx.tripRounds || [round]).filter((r) => r.course_id === round.course_id && r.format !== 'ambrose');
     const rs = tripRounds.map((r) => ({
       id: r.id,
       holes: (ctx.coursesById?.[r.course_id] || ctx.course)?.holes || [],
-      subjects: gameSubjects({ round: r, teams: ctx.teamsByRound?.[r.id] || (r.id === round.id ? ctx.teams : []) || [], roundPlayers: ctx.roundPlayersByRound?.[r.id] || (r.id === round.id ? ctx.roundPlayers : []) || [], playersById: ctx.playersById }),
+      subjects: subjectsIn(gameSubjects({ round: r, teams: ctx.teamsByRound?.[r.id] || (r.id === round.id ? ctx.teams : []) || [], roundPlayers: ctx.roundPlayersByRound?.[r.id] || (r.id === round.id ? ctx.roundPlayers : []) || [], playersById: ctx.playersById }), inIds),
       scores: ctx.scoresIdx?.[r.id] || {},
       locked: r.status === 'locked',
     }));
     const result = eclectic({ rounds: rs, options: gameOptions(game), stakeCents });
     const subjects = result.rows.map((r) => ({ id: r.id, name: r.name, members: [r.id] }));
-    return { game, kind: game.kind, subjects, result, money: result.money, final: result.final, rounds: tripRounds.length };
+    return withIn({ game, kind: game.kind, subjects, result, money: result.money, final: result.final, rounds: tripRounds.length });
   }
-  const all = gameSubjects(ctx);
+  const all = subjectsIn(gameSubjects(ctx), inIds);
   const sc = ctx.scoresIdx?.[round.id] || {};
   // Paper-card players (points only, no hole scores) count in the Stableford pot; hole-by-hole games leave them out.
   const quick = Object.fromEntries((ctx.quickResults || []).filter((q) => q.round_id === round.id).map((q) => [q.player_id, q.points]));
@@ -585,8 +678,8 @@ export function playGame(game, ctx) {
     : game.kind === 'nassau' ? nassau(args)
       : game.kind === 'stableford_pot' ? stablefordPot(args)
         : birdiePool(args);
-  return { game, kind: game.kind, subjects, result, money: toPlayers(result.money, subjects), final: result.final,
-    ...(game.kind !== 'stableford_pot' && leftOut.length ? { note: `Left out (paper card, no hole scores): ${leftOut.join(', ')}` } : {}) };
+  return withIn({ game, kind: game.kind, subjects, result, money: toPlayers(result.money, subjects), final: result.final,
+    ...(game.kind !== 'stableford_pot' && leftOut.length ? { note: `Left out (paper card, no hole scores): ${leftOut.join(', ')}` } : {}) });
 }
 
 /**

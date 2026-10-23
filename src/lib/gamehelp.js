@@ -60,3 +60,12 @@ export const GAME_HELP = {
 export function helpFor(kind) {
   return GAME_HELP[kind] || null;
 }
+
+/** A custom game's house rules for "How it works": the trimmed text, or null when there are none (show nothing). */
+export function helpHouseRules(text) {
+  return String(text ?? '').trim() || null;
+}
+
+/** Who's in (098): a line for an opt-in game. Everyone-in games need no line. */
+export const OPT_IN_HELP = 'Opt-in game: only the players who tapped “I’m in” play, and only they put in or win money. Everyone else is left out of it. Opt-in closes at the first tee.';
+export const helpWhoIn = (game) => (game?.who_in === 'opt_in' ? OPT_IN_HELP : null);

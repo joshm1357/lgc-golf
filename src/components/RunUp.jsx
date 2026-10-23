@@ -117,8 +117,19 @@ export function RunUp({ pd, trip = null, onOrganise = null, slots = {}, more = n
     setMoreOpen(true);
     setTimeout(() => document.querySelector(`[data-testid="runup-${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
   };
+  // Organisers pick the cups up for grabs here (Josh: "the selection of the cups up for grabs should be in the run-up"),
+  // so for them Trophies & cups sits above the fold; everyone else finds it in More about this trip.
+  const grabsUp = isOrg && !guest;
+  const grabsPart = sections.includes('up_for_grabs') ? (
+        <Part id="grabs" icon="🏆" title="Trophies & cups">
+          {S.compsForTrip ? <S.compsForTrip pd={pd} trip={trip} compact /> : <GrabsStandIn tripId={tripId} rounds={rounds} />}
+          {S.awardsForTrip ? <S.awardsForTrip pd={pd} trip={trip} compact /> : (feature.dinner && tripId && (
+            <Link to={`/dinner/${tripId}`} className="btn ghost sm" data-testid="runup-awards-link">🍽️ Fines & awards for this trip</Link>
+          ))}
+        </Part>
+  ) : null;
   const organise = guest ? null : onOrganise; // guests have no Organise view
-  const moreList = ['Getting there', !guest && 'votes', 'trophies & cups', !guest && 'rules', 'what to bring', 'chat'].filter(Boolean).join(', ');
+  const moreList = ['Getting there', !guest && 'votes', !grabsUp && 'trophies & cups', !guest && 'rules', 'what to bring', 'chat'].filter(Boolean).join(', ');
 
   return (
     <div className="runup stack" data-testid="runup">
@@ -127,6 +138,8 @@ export function RunUp({ pd, trip = null, onOrganise = null, slots = {}, more = n
       <SideGamesOnOffer tripId={tripId} />
 
       {sections.includes('todos') && (!guest || todos.length > 0) && <Todos todos={todos} pd={pd} me={me} mine={mine} onOrganise={organise} onMore={openMore} reload={ru.reload} guest={guest} />}
+
+      {grabsUp && grabsPart}
 
       <details className="ru-more" data-testid="runup-more" open={moreOpen} onToggle={(e) => setMoreOpen(e.currentTarget.open)}>
         <summary className="ru-more-head">
@@ -144,14 +157,7 @@ export function RunUp({ pd, trip = null, onOrganise = null, slots = {}, more = n
           {!pd.polls.some((p) => p.status === 'open') && !ru.cases.length && !S.awardVotes && <div className="small muted">Nothing to vote on right now.</div>}
         </Part>
       )}
-      {sections.includes('up_for_grabs') && (
-        <Part id="grabs" icon="🏆" title="Trophies & cups">
-          {S.compsForTrip ? <S.compsForTrip pd={pd} trip={trip} compact /> : <GrabsStandIn tripId={tripId} rounds={rounds} />}
-          {S.awardsForTrip ? <S.awardsForTrip pd={pd} trip={trip} compact /> : (feature.dinner && tripId && (
-            <Link to={`/dinner/${tripId}`} className="btn ghost sm" data-testid="runup-awards-link">🍽️ Fines & awards for this trip</Link>
-          ))}
-        </Part>
-      )}
+      {!grabsUp && grabsPart}
       {sections.includes('rules') && <RulesPart ru={ru} guest={guest} />}
       {sections.includes('activities') && <Activities pd={pd} ru={ru} me={me} isOrg={isOrg} guest={guest} costsOn={feature.planner_costs} />}
       {sections.includes('bring') && <Bring pd={pd} me={me} isOrg={isOrg} guest={guest} feedOn={feature.feed} onOrganise={onOrganise} />}

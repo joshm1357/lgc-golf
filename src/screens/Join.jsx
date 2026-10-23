@@ -271,13 +271,14 @@ function JoinSignIn({ code, returnHash, onPhone }) {
       {info !== undefined && (
         <div className="stack" style={{ width: '100%', maxWidth: 340, gap: 10 }}>
           {modes.google && <GoogleSignIn returnHash={returnHash} cont onError={(x) => setErr(friendlyError(x))} />}
-          {modes.google && (modes.password || modes.emailCode) && (
+          {modes.google && (modes.password || modes.emailCode || modes.joinCode) && (
             <div role="separator" style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--on-navy-muted)' }} className="small">
               <span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.2)' }} />or<span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.2)' }} />
             </div>
           )}
-          {modes.password && <EmailContinue />}
-          {modes.emailCode && <SignInButtons returnHash={returnHash} quiet emailOnly />}
+          {/* F2 (ov27, option B): one step — Google, or an emailed code (no password) when the build lists "email". */}
+          {modes.joinCode ? <SignInButtons returnHash={returnHash} quiet emailOnly codeOnly />
+            : modes.password && <EmailContinue />}
           {err && <div className="err" role="alert" style={{ color: '#FFB4AB' }}>{err}</div>}
         </div>
       )}
@@ -295,7 +296,7 @@ function JoinSignIn({ code, returnHash, onPhone }) {
 }
 
 /** Sign in with Google, or have a 6-digit code emailed. Makes an account if there isn't one. */
-export function SignInButtons({ returnHash = '', quiet = false, emailOnly = false }) {
+export function SignInButtons({ returnHash = '', quiet = false, emailOnly = false, codeOnly = false }) {
   const { refresh } = useSession();
   const modes = signInModes(SIGN_IN);
   const [email, setEmail] = useState('');
@@ -316,8 +317,8 @@ export function SignInButtons({ returnHash = '', quiet = false, emailOnly = fals
       {SIGN_IN.includes('google') && !emailOnly && <GoogleSignIn returnHash={returnHash} quiet={quiet} busy={busy} onError={(x) => setErr(friendlyError(x))} />}
       {SIGN_IN.includes('facebook') && !emailOnly && <button type="button" className="btn ghost block" style={ON_NAVY_GHOST} disabled={busy} onClick={go(() => signInWith('facebook', returnHash))}>Sign in with Facebook</button>}
       {/* Email + password (22 Oct): Sign in, Forgot password? (an emailed code), Create an account. */}
-      {modes.password && !emailOnly && <EmailPasswordSignIn />}
-      {modes.emailCode && (sent
+      {modes.password && !emailOnly && !codeOnly && <EmailPasswordSignIn />}
+      {(modes.emailCode || codeOnly) && (sent
         ? (
           // A 6-digit code, typed here — an emailed link would open Safari, not the Home Screen app.
           <form className="stack" style={{ gap: 8 }} onSubmit={go(async () => {

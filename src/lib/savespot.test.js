@@ -18,6 +18,11 @@ describe('signInModes', () => {
   it('password wins over email if both are listed', () => {
     expect(signInModes(['email', 'password'])).toMatchObject({ password: true, emailCode: false });
   });
+  it('F2: joining from a link asks for a code only whenever email is listed', () => {
+    expect(signInModes(['google', 'password']).joinCode).toBe(false); // live today: email + password on the join screen
+    expect(signInModes(['google', 'password', 'email'])).toMatchObject({ password: true, emailCode: false, joinCode: true });
+    expect(signInModes(['google', 'email'])).toMatchObject({ emailCode: true, joinCode: true });
+  });
   it('nothing listed: nothing on', () => {
     expect(signInModes([])).toMatchObject({ any: false, google: false, password: false, emailCode: false });
   });

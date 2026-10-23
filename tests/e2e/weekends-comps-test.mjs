@@ -335,7 +335,7 @@ const wkSection = card.getByTestId('vote-batch-section').nth(1);
 const wkButtons = await wkSection.getByRole('button', { name: '✓ Yes' }).count();
 for (let i = 0; i < wkButtons; i++) { await wkSection.getByRole('button', { name: '✓ Yes' }).nth(i).click(); await wait(250); }
 await card.getByTestId('vote-batch-section').nth(2).getByRole('button', { name: '⭐ Keen' }).nth(2).click(); await wait(500);
-await card.getByTestId('vote-batch-keen').getByRole('button', { name: '✓ In' }).click(); await wait(600);
+await card.getByTestId('vote-batch-keen').getByRole('button', { name: '✓ Yes' }).click(); await wait(600);
 check(await card.getByTestId('voter-thanks').isVisible(), 'answering the area, weekends and how long counts as answered — the detail is a bonus');
 // And go into the detail for Hunter Valley.
 await card.getByTestId('vote-detail-section').first().getByRole('button', { name: '⭐ Keen' }).first().click(); await wait(500);
@@ -358,7 +358,9 @@ for (const who of [pid(2), pid(3)]) {
 await tb();
 await page.getByTestId('vote-results').waitFor({ timeout: 8000 });
 const hv = page.locator('[data-testid="result-area"][data-area="Hunter Valley"]');
-check((await hv.innerText()).includes('LEADING') && /1 went into the detail/.test(await hv.getByTestId('result-detail').innerText()), 'results: Hunter Valley leads; 1 went into the detail');
+// V4: a third or more went into the detail here (1 of 3), so it counts; under a third it'd say "not enough to go by — you choose" (unit-tested).
+check((await hv.innerText()).includes('LEADING') && (await hv.getByTestId('result-detail').innerText()) === '1 of 3 went into the detail', `results: Hunter Valley leads; ${await hv.getByTestId('result-detail').innerText()}`);
+check((await hv.getByTestId('choose-voted-area').innerText()) === 'Go with Hunter Valley' && (await page.getByTestId('choose-voted-area').count()) === 1, 'O2: one gold “Go with Hunter Valley”; other areas are under “Other ways”');
 check(/3 nights/.test(await page.getByTestId('result-length').innerText()), 'results: 3 nights is leading');
 check(/Primary:[\s\S]*Backup:/.test(await page.getByTestId('result-weekends').innerText()), 'results: the weekends, Primary then Backup');
 check(/🔒/.test(await step('calls').innerText()), 'Call the courses is locked until the area is chosen');
@@ -393,10 +395,13 @@ const callBody = db.plan_items.find((i) => i.kind === 'job' && /Call/.test(i.tit
 check(/^Primary: .*; Backup: /.test(callBody), `the call job's script: ${callBody.split('\n')[0]}`);
 await page.getByTestId('open-it-up').waitFor({ timeout: 5000 });
 const n0 = state().weekends.length;
-await page.getByTestId('open-up-weekend').click(); await wait(500);
+await page.getByTestId('open-up-weekend').click(); await wait(1200);
 check(state().weekends.length === n0 + 1 && state().weekendsSettled, 'open it up: the next weekend from the vote goes on as another backup');
 await both('flow-11-calls-open-it-up');
-await page.getByTestId('open-up-area').click(); await wait(800);
+await page.getByTestId('open-up-area').click();
+await page.getByTestId('confirm-sheet').waitFor({ timeout: 5000 });
+await page.getByTestId('confirm-yes').click(); await wait(1500);
+await page.getByRole('button', { name: 'Close' }).first().click().catch(() => {}); await wait(300); // the fresh vote's sheet
 check(state().region === null && state().areaCourses?.['Hunter Valley']?.length >= 1, 'or re-open the area choice — nothing lost');
 
 // 8. Organise: the steps in the new order; the run-up in "Comps & on the day".

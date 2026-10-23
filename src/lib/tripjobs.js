@@ -292,7 +292,7 @@ export function nextStep(ctx) {
   if (phase === 'deciding') {
     const v = voteStep();
     if (v) return v;
-    if (!isOrganiser && !myRsvp) return step({ key: 'keen', icon: '🙋', title: 'Are you keen?', detail: 'Say In, Maybe or Out so the organiser knows numbers.', label: 'Answer', action: { type: 'tab', tab: 'people' } });
+    if (!isOrganiser && !myRsvp) return step({ key: 'keen', icon: '🙋', title: 'Are you in?', detail: 'Say yes, maybe or no so the organiser knows numbers.', label: 'Answer', action: { type: 'tab', tab: 'people' } });
     const calls = callJobs(items, builder.callJobIds).filter((j) => jobStage(j) !== 'done');
     if (!plan.start_date && !(builder.weekends > 0) && !calls.length) {
       return isOrganiser

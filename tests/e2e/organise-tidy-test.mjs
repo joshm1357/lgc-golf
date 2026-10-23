@@ -68,6 +68,8 @@ check(await page.getByRole('button', { name: /Organise this trip/ }).count() ===
 
 // 2. Planned → put to a vote ("Call a vote yourself" on the Plan step).
 await open();
+// ov26 (O2): calling a vote by hand is one of the "Other ways to do this" under the Next step.
+await page.getByTestId('other-ways').locator('summary').click();
 await page.getByRole('button', { name: '🗳️ Call a vote yourself' }).click();
 const dates = page.locator('.sheet input[type=date]');
 await dates.nth(1).fill(plusDays(40)); await dates.nth(2).fill(plusDays(42));
@@ -127,8 +129,13 @@ s = await states();
 check(s.lockin === 'current', `calls done: Lock in is current (${JSON.stringify(s)})`);
 check((await primary().innerText()) === 'Lock it in', 'Lock in: "Lock it in"');
 await primary().click();
-await wait(1200);
+// ov26 (V1): one box — the open votes on where and when close too.
+await page.getByTestId('confirm-sheet').waitFor({ timeout: 5000 });
+check(/Then the to-do list is made/.test(await page.getByTestId('confirm-sheet').innerText()), 'V1: one box before locking in');
+await page.getByTestId('confirm-yes').click();
+await wait(1500);
 check(plan().status === 'confirmed', 'locked in');
+check(!db.plan_polls.some((p) => p.plan_id === PA && p.kind === 'dates' && p.status === 'open'), 'V1: locking in closed the dates vote');
 check(db.plan_items.some((j) => j.plan_id === PA && j.formula_key === 'shortlist_stay'), 'locking in made the to-do list');
 await open();
 check((await page.getByTestId('step-lockin').innerText()).includes('Locked in'), 'Lock in says "Locked in"');

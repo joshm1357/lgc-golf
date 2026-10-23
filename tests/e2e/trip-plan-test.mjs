@@ -149,6 +149,8 @@ await open();
 await waitNext(/Lock it in/, 'lock it in (dates are set)');
 await shot('tp1-lock');
 await card().getByRole('button', { name: 'Lock it in' }).click();
+// ov26 (V1): one box ("Lock in …? The open votes on where and when close"), then it's locked in.
+await page.getByTestId('confirm-yes').click();
 await waitNext(/Shortlist accommodation/, 'shortlist accommodation once locked in');
 const jobs = db.plan_items.filter((j) => j.kind === 'job');
 check(jobs.length === 8 && jobs.every((j) => j.formula_key && j.due !== undefined), `the formula made 8 jobs (${jobs.length})`);

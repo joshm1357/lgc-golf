@@ -84,7 +84,8 @@ const startState = {
 const J1 = crypto.randomUUID(); const J2 = crypto.randomUUID();
 const callState = {
   ...startState, region: 'South Coast NSW', regionOptions: ['South Coast NSW'], weekends: [W1], weekendsSettled: true, stays: [pin('Kiama')],
-  days: [{ index: 0, leg: 'way', options: [] }, { index: 1, leg: 'stay', options: [L(14), L(12)] }, { index: 2, leg: 'home', options: [] }],
+  // ov26 (O3): only golf days are asked about, so both courses are options every day here (2 × 3 days).
+  days: [{ index: 0, leg: 'way', options: [L(14), L(12)] }, { index: 1, leg: 'stay', options: [L(14), L(12)] }, { index: 2, leg: 'home', options: [L(14), L(12)] }],
   callsMade: true, callJobs: { [L(14)]: J1, [L(12)]: J2 },
 };
 const stay = (plan, name, area, link, total = null, isList = false) => ({ id: crypto.randomUUID(), group_id: GROUP, plan_id: plan, name, area, link, total_cost: total, sleeps: total ? 12 : null, is_list: isList, option_id: null, chosen: false, created_by: K, created_at: now });
@@ -397,7 +398,7 @@ for (let i = 0; i < await sections.count(); i++) {
   const words = await sections.nth(i).locator('[data-answer="maybe"]').first().innerText().catch(() => '');
   if (words) { await sections.nth(i).locator('[data-answer="maybe"]').first().click(); await wait(350); }
 }
-await card.getByTestId('vote-batch-keen').getByRole('button', { name: '✓ In' }).click(); await wait(600);
+await card.getByTestId('vote-batch-keen').getByRole('button', { name: '✓ Yes' }).click(); await wait(600);
 check(await card.getByTestId('voter-thanks').isVisible(), 'answered everything: "Thanks — here’s how it’s looking"');
 check(db.plan_votes.some((v) => v.player_id === AL && v.response === 'maybe'), 'answers saved (stored as yes / maybe / no)');
 await shot('11-voter-thanks');
@@ -433,7 +434,7 @@ check(db.plan_items.find((j) => j.id === J2).owner_id === pid(2) && db.plan_item
 await page.getByTestId('calls-one').click();
 await page.getByLabel('One person for all').selectOption(AL); await wait(800);
 check(db.plan_items.find((j) => j.id === J2).owner_id === AL, 'back to one person for all');
-check((await page.getByTestId('tee-day').count()) === 6, 'each course covers every day of the weekend (2 × 3)');
+check((await page.getByTestId('tee-day').count()) === 6, 'each course covers every golf day of the weekend (2 × 3)');
 await shot('14-calls-who');
 
 asPlayer = true;
@@ -444,15 +445,26 @@ check((await page.getByTestId('next-step').innerText()).includes('Your job: call
 await page.goto(`${BASE}#/plan/${PLAN2}/build`);
 await page.locator('[data-testid="tb-step-calls"]').getByRole('button').first().click(); await wait(600);
 const day = (course, n) => page.locator('[data-testid="tb-call"]', { hasText: course }).locator(`[data-testid="tee-day"][data-date="${dayOf(W1, n)}"]`);
+// ov26 (O3): one form per course — "Fill in what they said", the days, one Save.
 const fill = async (course, n, avail, text = '') => {
+  const call = page.locator('[data-testid="tb-call"]', { hasText: course });
+  await call.getByTestId('call-fill').click();
   const d = day(course, n);
-  await d.getByTestId('tee-day-edit').click();
   await d.getByRole('button', { name: avail }).click();
   if (text) await d.getByLabel(`Times on offer ${dayOf(W1, n)}`).fill(text);
   if (avail === '✓ Yes') await d.getByLabel(`Price ${dayOf(W1, n)}`).fill('85');
-  await d.getByTestId('tee-day-save').click(); await wait(600);
+  await call.getByTestId('call-save').click(); await wait(600);
 };
-check((await page.locator('[data-testid="tb-call"]', { hasText: 'Kiama' }).getByTestId('call-checklist').textContent()).includes('Fri, Sat, Sun'), 'the caller’s checklist: every day of the weekend');
+check((await page.locator('[data-testid="tb-call"]', { hasText: 'Kiama' }).getByTestId('call-checklist').textContent()).includes('Every golf day: Fri, Sat, Sun'), 'the caller’s checklist: every golf day of the weekend');
+// "Nothing that weekend" sets every day of the weekend to no — then Cancel (nothing saved).
+{
+  const kc = page.locator('[data-testid="tb-call"]', { hasText: 'Kiama' });
+  await kc.getByTestId('call-fill').click();
+  await kc.getByTestId('nothing-that-weekend').first().click();
+  check((await kc.locator('[data-testid="tee-avail-no"][aria-pressed="true"]').count()) === 3, 'O3: “Nothing that weekend” answers every day of it');
+  await kc.getByRole('button', { name: 'Cancel' }).click();
+  check(db.trip_tee_options.filter((t) => t.plan_id === PLAN2).length === 0, 'nothing saved until Save');
+}
 await fill('Kiama', 0, '✓ Yes', '7:30-8:00');
 await fill('Kiama', 1, '✗ No');
 await fill('Kiama', 2, '? Not sure');

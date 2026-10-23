@@ -171,7 +171,7 @@ export function CallVoteSheet({ plan, title, range, keenDefault = true, keenOpti
           {keenOption && (
             <label className="row" style={{ gap: 10, minHeight: 44 }}>
               <input type="checkbox" checked={keen} onChange={(e) => setKeen(e.target.checked)} style={{ width: 22, height: 22 }} />
-              <span>Ask “Are you keen?” (In / Maybe / Out) too</span>
+              <span>Ask “Are you in?” (Yes / Maybe / No) first</span>
             </label>
           )}
           <label className="field"><span>Closes</span><input className="input" type="date" value={closes || ''} min={todayISO()} onChange={(e) => setCloses(e.target.value)} aria-label="Closes" /></label>
@@ -186,6 +186,8 @@ export function CallVoteSheet({ plan, title, range, keenDefault = true, keenOpti
               <div style={{ fontSize: 18, fontWeight: 800 }}>{title}</div>
             </div>
             <div className="stack" style={{ padding: 10, gap: 8 }}>
+              {/* V3 (walkthrough): "Are you in?" first — the one answer everyone must give. */}
+              {keenOption && keen && <div className="card pad"><strong>Are you in?</strong> <span className="small muted">✓ Yes · ? Maybe · ✗ No</span></div>}
               {(() => { const g = groupBallot(ballot.sections); return [...g.main, ...g.areas.flatMap((a) => a.polls)]; })().map((s, i, arr) => {
                 const words = answersFor({ kind: s.kind, question: s.question, purpose: s.options.some((o) => o.stayId) ? 'stay' : null });
                 const area = pollArea(s);
@@ -203,7 +205,6 @@ export function CallVoteSheet({ plan, title, range, keenDefault = true, keenOpti
                   </div>
                 );
               })}
-              {keenOption && keen && <div className="card pad"><strong>Are you keen?</strong> <span className="small muted">✓ In · ? Maybe · ✗ Out</span></div>}
               {!ballot.sections.length && !(keenOption && keen) && <span className="small muted">Nothing ticked yet.</span>}
             </div>
           </div>

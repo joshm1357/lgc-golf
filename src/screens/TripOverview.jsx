@@ -155,7 +155,7 @@ export function TripOverview({ trip, plan = null, rsvps = [], items = [], stage 
       {!done && plan && !runUp && (myJobs.length > 0 || bring.length > 0) && (
         <div className="card pad stack" style={{ gap: 6 }}>
           <strong>🙋 Your bits</strong>
-          {myJobs.map((j) => <div key={j.id} className="small">📋 {j.title}{j.due ? <span className="muted"> · by {j.due}</span> : null}</div>)}
+          {myJobs.map((j) => <div key={j.id} className="small">📋 {j.title}{j.due ? <span className="muted"> · by {fmtRange(j.due)}</span> : null}</div>)}
           {bring.length > 0 && <div className="small">🎒 Bring list: {bring.length} thing{bring.length === 1 ? '' : 's'}</div>}
           {onOrganise && <button type="button" className="btn sm ghost" style={{ alignSelf: 'flex-start' }} onClick={() => onOrganise(myJobs.length ? 'jobs' : 'details')}>See it all →</button>}
         </div>

@@ -143,6 +143,14 @@ begin
   return array_to_string(v[1:cardinality(v) - 1], ', ') || ' and ' || v[cardinality(v)];
 end $$;
 
+-- The whole group, for a call-out: approved players who aren't guests (the app's askable() says the same).
+create or replace function private.callout_everyone(p_group uuid) returns uuid[]
+language sql stable security definer set search_path = '' as $$
+  select coalesce(array_agg(p.id), '{}') from public.players p
+  where p.group_id = p_group and p.approved is not false
+    and not exists (select 1 from public.group_members gm where gm.group_id = p_group and gm.player_id = p.id and gm.role = 'guest')
+$$;
+
 -- A buzz, written here and sent by the notify function. To these players of the group (with a phone that takes
 -- notifications), never p_except. Belongs to the Trips planner: nothing when notifications or the planner are off.
 create or replace function private.callout_queue(p_group uuid, p_players uuid[], p_kind text, p_title text, p_body text,
@@ -180,7 +188,7 @@ do $$
 declare f text;
 begin
   foreach f in array array['private.callout_can_manage(public.plans)', 'private.callout_asked(public.plans, uuid)',
-    'private.callout_clock(text)', 'private.callout_when(date, text, text)', 'private.callout_first(uuid)', 'private.callout_names(uuid[])',
+    'private.callout_clock(text)', 'private.callout_when(date, text, text)', 'private.callout_first(uuid)', 'private.callout_names(uuid[])', 'private.callout_everyone(uuid)',
     'private.callout_queue(uuid, uuid[], text, text, text, uuid, uuid)', 'private.callout_order(uuid)'] loop
     execute format('revoke all on function %s from public, anon, authenticated', f);
   end loop;
@@ -432,13 +440,18 @@ begin
     returning id into v_poll;
     for o in select value from jsonb_array_elements(p_options) loop
       v_date := (o ->> 'date')::date; v_part := nullif(o ->> 'part', ''); v_tee := nullif(o ->> 'tee_time', '');
-      v_label := coalesce(nullif(btrim(left(o ->> 'label', 120)), ''), private.callout_when(v_date, v_tee, v_part));
+      v_label := coalesce(nullif(btrim(left(o ->> 'label', 120)), ''), to_char(v_date, 'Dy FMDD Mon') || coalesce(' · ' || private.callout_clock(v_tee), ' · ' || v_part, ''));
       insert into public.plan_options (poll_id, group_id, label, start_date, end_date, part, tee_time, created_by)
       values (v_poll, v_g, v_label, v_date, v_date, v_part, v_tee, me) returning id into v_opt;
       -- Whoever put it out is ✓ on every time they suggested (they can change it).
       insert into public.plan_votes (option_id, poll_id, player_id, response, group_id) values (v_opt, v_poll, me, 'yes', v_g);
     end loop;
-    v_when := jsonb_array_length(p_options) || ' times to pick from';
+    if jsonb_array_length(p_options) <= 3 then
+      select string_agg(private.callout_when((x ->> 'date')::date, nullif(x ->> 'tee_time', ''), nullif(x ->> 'part', '')), ' or ' order by (x ->> 'date')) into v_when
+      from jsonb_array_elements(p_options) x;
+    else
+      v_when := jsonb_array_length(p_options) || ' times to pick from';
+    end if;
   end if;
 
   -- The "vote on the course" extra: a 'location' vote with the courses listed.
@@ -461,7 +474,7 @@ begin
   end if;
 
   -- Tell the people asked (not whoever put it out). The whole group: a Feed post too.
-  perform private.callout_queue(v_g, coalesce(v_asked, (select array_agg(p.id) from public.players p where p.group_id = v_g and p.approved is not false)),
+  perform private.callout_queue(v_g, coalesce(v_asked, private.callout_everyone(v_g)),
     'callout_new', '⛳ ' || private.callout_first(me) || ' wants a hit — ' || v_when,
     coalesce(v_course_name, 'Course TBC') || ' · ' || coalesce(p_spots || ' spots', 'no cap') || '. Tap to say if you can.', v_id, me);
   if p_invite is null and public.feature_on(v_g, 'feed') then
@@ -585,7 +598,7 @@ begin
   end loop;
   -- Everyone else asked: maybes when it's full didn't get a spot; otherwise "locked in — tap to say you're in".
   if v.invite_all then
-    select coalesce(array_agg(p.id), '{}') into v_asked from public.players p where p.group_id = v.group_id and p.approved is not false;
+    v_asked := private.callout_everyone(v.group_id);
   else
     select coalesce(array_agg(i2.player_id), '{}') into v_asked from public.plan_invites i2 where i2.plan_id = p_plan;
   end if;

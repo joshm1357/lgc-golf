@@ -1457,3 +1457,42 @@ general (not Cup-only), any meal (not "dinner"), don't flood.
   trip-overview (updated for the results page), trips, jokes, stroke, links, nav, phone, history, own-comps,
   commentary, desktop pass. `quick` and `signin-first` fail the same way on v10-int (not touched here).
 - **Deploy when convenient:** the notify function (new kinds). Apply 097 on staging, then live.
+
+## ov29 — Side games: proposing, opting in, optional house rules (23 Oct 2026, branch `ov29-side-games-opt-in`, migration 098)
+
+From Josh's walkthrough notes: "The side games need to be proposed by someone to other people, or put out for an
+opt-in" and "You need to fill in the house rules, but it should not be a compulsory field."
+
+- **A. Who's in:** each side game is "Everyone in the round" (the default; every existing game and every game an
+  organiser adds stays this way) or "Opt-in" (`round_games.who_in`). Organisers can switch it in the game editor.
+  Settle-up (`lib/games.js playGame` → `subjectsIn`) counts only those in, for results and money, for every kind
+  (skins, Nassau, Stableford pot, birdie pool, eclectic). Ambrose: a team is in if any of its players is in — the line
+  "Ambrose: a team is in if any of its players is in…" shows on the game card. Opt-ins close when the round goes live
+  (or locked), or at the first tee time if tee groups have one (Sydney time) — same rule in the app (`optInState`) and
+  the database (`side_game_open`). An organiser can add or take out anyone, even after it closes.
+- **B. Anyone proposes:** "🎲 Put up a side game" on the Games screen for any member (not guests): pick a round that's
+  still open, a game and a stake. It's opt-in and the proposer is in automatically (database trigger). One Feed post
+  "🎲 Bo’s put up $5 skins for Saturday. You in?" (made by the database, once per game) with In / Out under it. One
+  notification, new notify kind `game_proposed` in its own block (`supabase/functions/notify/sidegames.ts`): once per
+  game, at most 3 a day from one person, never after the round starts. The proposer or an organiser can "Take it down"
+  (retired, never deleted) before the round. Up to 3 games up per person per round. A proposer can't change a game
+  (people opted in to what they saw) — take it down and put up a new one. Opt-in games aren't copied by "Do it again".
+- **C. House rules optional:** `customProblems` no longer needs them; the field says "House rules (optional)"; with
+  none, a custom game is the group's saved version of a standard game. No empty "House rules:" line anywhere (Your own
+  games card, How it works, the Rulebook's standard rules).
+- **D. Screens:** Games screen and the day screen (`SideGamesToday` in TripStatus) show who's in by name, "I'm in /
+  I'm out" while open, and "Opt-in closes at the first tee (8:10am Sat)". Run-up: `components/SideGamesOnOffer.jsx`
+  ("$5 skins Sat (6 in) [I'm in]"), a one-line mount in RunUp.jsx.
+- **Migration 098** (`098_side_games_opt_in.sql`, not applied): additive — `round_games.who_in` (default 'everyone') and
+  `offered_at`, table `round_game_players` (RLS: members read; own row in/out; organiser anyone; no guests; same group;
+  feature switch; closes at first tee), `side_game_closes_at` / `side_game_open`, policies "members propose" /
+  "proposer changes" / "proposer removes" beside 055's "organisers change" (untouched), the Feed post trigger.
+  **The one agreed non-additive change** (own block at the end): drops 073's `custom_games_rules_text_check`
+  (3–1000 letters) and adds `custom_games_rules_text_len` (0–1000). Column stays NOT NULL ('' = none).
+  Test `supabase/tests/098_side_games_opt_in.sql` (+ expected, 37 checks) — passed on the PGlite stand-in with all
+  114 migrations; 098 re-runs cleanly.
+- **Tests:** Vitest 1516 pass (opt-in maths for every kind, Ambrose teams, closing time, words, house rules optional,
+  repeat skips opt-in offers). Deno `notify/sidegames.test.ts` 3 pass; notify type-checks. Browser: new
+  `side-games-test` (propose → opt in → settle-up counts only those in, Feed In/Out, day screen, take it down, house
+  rules optional); games, runup (now checks the offer line), rulebook-v2, trip-overview, awards-fines pass.
+- **Deploy when convenient:** the notify function (new kind `game_proposed`). Apply 098 on staging, then live.

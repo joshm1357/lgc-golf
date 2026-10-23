@@ -141,7 +141,7 @@ check(/closed at the first tee/.test(await page.getByTestId('opt-closes').first(
 check(!(await page.getByTestId('opt-toggle').first().isVisible().catch(() => false)), 'Friday (live): no "I’m in" toggle once it’s closed');
 await page.getByTestId('skin-10').getByText('Al Blue').waitFor({ timeout: 15000 });
 check((await page.getByTestId('skin-2').innerText()).includes('Al Blue'), 'skins: Al wins hole 2 — Bo’s birdie doesn’t count, he isn’t in');
-check(/8 skins/.test(await page.getByTestId('skin-10').innerText()), 'skins: Al’s hole 10 is worth 8 skins (3–9 carried)');
+check(/8 skins/i.test(await page.getByTestId('skin-10').innerText()), 'skins: Al’s hole 10 is worth 8 skins (3–9 carried)');
 const tally = clean(await page.getByTestId('tally-row').allInnerTexts());
 check(JSON.stringify(tally) === JSON.stringify(['Al Blue +$40', 'Kurt −$40']), `tally: only those in — Al +$40, Kurt −$40, Bo not in it (got ${JSON.stringify(tally)})`);
 const settle = clean(await page.getByTestId('settle-row').allInnerTexts());

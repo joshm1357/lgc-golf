@@ -403,5 +403,3 @@ export function changedWords(at, now = Date.now()) {
   if (days < 14) return `changed ${days} days ago`;
   return `changed ${Math.round(days / 7)} weeks ago`;
 }
-/** What openPlanner asked for (a trip's id, or null for a new plan); undefined = nothing asked. */
-export const chatWanted = { planId: undefined };

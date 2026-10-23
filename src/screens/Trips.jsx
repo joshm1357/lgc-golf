@@ -24,6 +24,7 @@ import { SaveSpotBanner } from '../components/SaveSpot.jsx';
 import { FirstOpen } from '../components/FirstOpen.jsx';
 import Memories from '../components/Memories.jsx';
 import { gate } from '../lib/savedgate.js';
+import { MyDraftTrips } from '../components/DraftTrips.jsx';
 
 const TABLES = ['plans', 'plan_rsvps', 'plan_polls', 'plan_options'];
 
@@ -116,6 +117,8 @@ export default function Trips() {
         {rows.failed && <div className="err">Couldn’t load the trips — check your signal and open Trips again.</div>}
         {/* ov28 (I16, ov28 builder): this time last year, and the six-month nudge to suggest the next trip. */}
         <Memories />
+        {/* ov35: every trip being planned that I can change, each easy to get back to (and its ✨ planning chat). */}
+        <MyDraftTrips />
 
         {!has('on') && !has('locked') && !starting && (
           <button type="button" className="card pad row" data-testid="trips-plan-it" onClick={openPlanner}

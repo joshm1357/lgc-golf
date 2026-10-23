@@ -20,6 +20,7 @@ import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
 import { caddieHidden, usesPanel, HELLO_TEXT, helloSeen, markHelloSeen, shouldSayHello } from '../lib/caddie.js';
 import { previewOf } from '../lib/preview.js';
 import { noteVisit, popupThisVisit, helloReady, takePopup } from '../lib/firstopen.js';
+import { chatWanted, CHAT_SWITCH } from '../lib/chatwanted.js';
 import './caddie.css';
 
 const CaddieChat = lazyScreen(() => import('./CaddieChat.jsx'), 'default', { inline: true });
@@ -31,8 +32,17 @@ const MODE_KEY = 'tgt-caddie-mode'; // 'ask' | 'plan', for this visit
 export function openCaddie(question, { plan = false } = {}) {
   window.dispatchEvent(new CustomEvent('caddie:open', { detail: { question: question || null, plan: !!plan } }));
 }
-/** "✨ Plan it with AI": the Caddie, in planning mode. */
-export const openPlanner = () => openCaddie(null, { plan: true });
+/**
+ * "✨ Plan it with AI": the Caddie, in planning mode. ov35: openPlanner({ planId }) opens that trip's planning chat
+ * (null = a new plan); with no argument (or a click event) it opens whichever was open last.
+ */
+export const openPlanner = (opts) => {
+  if (opts && typeof opts === 'object' && 'planId' in opts && !opts.nativeEvent) {
+    chatWanted.planId = opts.planId || null;
+    window.dispatchEvent(new CustomEvent(CHAT_SWITCH, { detail: { planId: chatWanted.planId } }));
+  }
+  openCaddie(null, { plan: true });
+};
 
 /** An original glyph: a golf bag with three clubs. */
 export function CaddieGlyph({ size = 28 }) {

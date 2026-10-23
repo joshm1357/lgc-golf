@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase.js';
 import { useRealtime, useFeature, useSession } from '../lib/store.jsx';
 import { useRun, must } from '../lib/run.js';
 import { Sheet } from './ui.jsx';
+import GameHelp from './GameHelp.jsx';
 import { GAME_KINDS, GAME_INFO, STANDARD_OPTIONS } from '../lib/games.js';
 import { copyFrom, customProblems, customRow, customSummary, cleanCustomSettings, houseRules, RULES_MAX, NAME_MAX } from '../lib/customgames.js';
 
@@ -123,7 +124,7 @@ export function CustomGamesCard() {
       {live.map((c) => (
         <div key={c.id} className="stack" style={{ gap: 4, borderTop: '1px solid var(--line-soft)', paddingTop: 8 }} data-testid="custom-game">
           <div className="row between" style={{ gap: 8 }}>
-            <strong>{GAME_INFO[c.base_type]?.emoji} {c.name}</strong>
+            <span className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}><strong>{GAME_INFO[c.base_type]?.emoji} {c.name}</strong><GameHelp kind={c.base_type} houseRules={houseRules(c) || ''} label="How" /></span>
             {organiser && (
               <span className="row" style={{ gap: 6 }}>
                 <button type="button" className="btn ghost sm" onClick={() => setEditing({ existing: c })}>Change</button>

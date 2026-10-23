@@ -144,6 +144,8 @@ const settle = clean(await page.getByTestId('settle-row').allInnerTexts());
 check(JSON.stringify(settle) === JSON.stringify(['Kurt pays Al Blue $65', 'Bo Red pays Al Blue $5']), `settle-up: Kurt pays Al $65, Bo pays Al $5 (got ${JSON.stringify(settle)})`);
 check((await page.locator('.page').innerText()).includes('Pick-ups'), 'pick-up rules shown on screen');
 await page.screenshot({ path: `${SHOTS}/2-games.png`, fullPage: true });
+// 2a. v10.3: the games are explained at the top of the screen, always (even before a round has any).
+check(await page.getByTestId('games-explained-top').isVisible(), 'Games: "What are they?" row at the top');
 // 2b. "How it works" (23 Oct): every game card has an ⓘ that explains it in plain words, with an example.
 await page.getByTestId('game-help-nassau').first().click();
 const helpText = await page.getByTestId('game-help-sheet').innerText();

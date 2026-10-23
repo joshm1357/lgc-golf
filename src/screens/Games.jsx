@@ -13,8 +13,7 @@ import { useRun, must } from '../lib/run.js';
 import { formatToPar } from '../lib/scoring.js';
 import {
   GAME_INFO, PRESETS, PICKUP_RULES, AMBROSE_NOTE, cleanOptions, gameLabel, gameSuits, playGame, moneyTally,
-  formatMoney, toCents, gameOptions, splitOptions, STANDARD_OPTIONS, WHO_IN, isOptIn, proposableRounds, proposedRow, gameShort,
-} from '../lib/games.js';
+  formatMoney, toCents, gameOptions, splitOptions, STANDARD_OPTIONS, WHO_IN, isOptIn, proposableRounds, proposedRow, gameShort, GAME_KINDS } from '../lib/games.js';
 import { withCustom, roundGameFromCustom, copyFrom } from '../lib/customgames.js';
 import { useCustomGames, CustomGamesCard, OptionControls, CustomGameSheet } from '../components/CustomGames.jsx';
 import { RulesLink } from '../components/RulesLinks.jsx';
@@ -83,6 +82,11 @@ export default function Games() {
           <button {...gate('propose_award')} type="button" className="btn gold block" data-testid="propose-game" onClick={() => setProposing(true)}>🎲 Put up a side game</button>
         </div>
       )}
+      {/* v10.3: the games explained, always — even before any round has a game (Josh: "no idea what Nassau is"). */}
+      <div className="section row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }} data-testid="games-explained-top">
+        <span className="small muted">What are they?</span>
+        {GAME_KINDS.map((k) => <GameHelp key={k} kind={k} label={GAME_INFO[k]?.name || 'How it works'} />)}
+      </div>
       {proposing && <ProposeGameSheet onClose={() => setProposing(false)} onDone={async (r) => { await Promise.all([reloadGames(), reloadOptIns()]); setParams({ r }, { replace: true }); }} />}
       {!round || !played.length ? (
         <div className="empty">
@@ -452,7 +456,7 @@ function ProposeGameSheet({ onClose, onDone }) {
                 </button>
               ))}
             </div>
-            {preset && <div className="small muted">{GAME_INFO[preset.kind].blurb}</div>}
+            {preset && <div className="small muted">{GAME_INFO[preset.kind].blurb} <GameHelp kind={preset.kind} optIn label="How it works" /></div>}
             <label className="field"><span>Stake — {preset ? GAME_INFO[preset.kind].per : ''} ($)</span>
               <input className="input" inputMode="decimal" value={stake} onChange={(e) => setStake(e.target.value)} style={{ maxWidth: 140 }} data-testid="propose-stake" />
             </label>

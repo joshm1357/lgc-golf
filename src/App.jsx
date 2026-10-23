@@ -72,6 +72,7 @@ const Ask = lazyScreen(() => import('./screens/AiHelper.jsx'));
 const AiImport = lazyScreen(() => import('./screens/AiImport.jsx'));
 const Stats = lazyScreen(() => import('./screens/Stats.jsx'));
 const DinnerAwards = lazyScreen(() => import('./screens/DinnerAwards.jsx'));
+const AwardRunPage = lazyScreen(() => import('./components/AutoAwards.jsx'), 'AwardRunPage'); // 100: a night's proposed winner
 // Stage 11c's laptop tools, at home where they belong since the Trip desk folded into Trips (22 Oct).
 const DeskForward = lazyScreen(() => import('./screens/Desk.jsx')); // old /desk… links forward to the new homes
 const PlayersTable = lazyScreen(() => import('./screens/DeskTables.jsx'), 'PlayersTable');
@@ -309,6 +310,7 @@ function Inside() {
         <Route path="/tribunal/:caseId" element={<FeatureRoute feature="tribunal" label="The Handicap Tribunal"><TribunalCase /></FeatureRoute>} />
         <Route path="/stats" element={<FeatureRoute feature="stats" label="Player stats"><Stats /></FeatureRoute>} />
         <Route path="/dinner/:tripId?" element={<FeatureRoute feature="dinner_awards" label="Awards and fines"><DinnerAwards /></FeatureRoute>} />
+        <Route path="/award-run/:runId" element={<FeatureRoute feature="dinner_awards" label="Awards and fines"><AwardRunPage /></FeatureRoute>} />
         <Route path="/tribunal/case/:caseId" element={<CaseRoute><CaseHearing /></CaseRoute>} />
         <Route path="/governance" element={<GovRedirect to="/governance/rulebook" />} />
         <Route path="/governance/settings" element={<FeatureRoute feature="tribunal" label="The Tribunal"><Governance /></FeatureRoute>} />

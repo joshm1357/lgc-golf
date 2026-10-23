@@ -31,3 +31,9 @@
 - A player's penalty is a proposal until an organiser confirms it; guests can't give penalties. Organisers' go straight on.
 - Rule penalties count on the team score in Ambrose and the player's score otherwise; negative strokes are bonus lines.
 - `score_adjustments.kind` widened to 'late_job', 'rule_breach', 'award' ('award' reserved for a later migration).
+## ov31 — automatic awards (23 Oct 2026)
+- A time-proof award decided by latest / earliest runs each night by default (9pm–6am, proposed 7am or an hour before the first tee). Others stay once a trip unless set.
+- A claim is judged by the post's server time and the claim window, not by when you tap: a night's photos can be claimed until the proposal goes up.
+- The confirm deadline is that day's first tee, or noon with no round.
+- One tap claims for whoever posted the photo; "Someone else" picks a mate.
+- Points are written as pending when proposed and count only once confirmed; a dispute on one line holds just that line.

@@ -10,6 +10,7 @@ import { useRun, must } from '../lib/run.js';
 import { uploadPhoto } from '../lib/images.js';
 import { notify } from '../lib/push.js';
 import RuleTag from './RuleTag.jsx';
+import { AutoSettings, AUTO_START, autoRow, autoProblem } from './AutoAwards.jsx';
 import {
   REWARD_TYPES, PROOFS, BESTS, OPINIONS, IDEAS, LEFTOVER_KEY, rewardWords, proofNeeds, proofLabel, bestLabel, checkProposal,
   signedAmount, tripAwardList, chipText, claimWords, tallyOpinions, leftoverLine, leftoverWords, termsOf, worthOf,
@@ -111,7 +112,7 @@ function AwardLine({ item }) {
 export function ProposeSheet({ trip, start = {}, onClose, onSaved }) {
   const { status } = useSession();
   const votingOn = useFeature('rule_voting');
-  const [v, setV] = useState(() => ({ award_kind: 'award', title: '', detail: '', reward_type: 'strokes', amount: '1', reward_note: '', proof: 'none', best: '', number_unit: '', thisTrip: false, ...start }));
+  const [v, setV] = useState(() => ({ award_kind: 'award', title: '', detail: '', reward_type: 'strokes', amount: '1', reward_note: '', proof: 'none', best: '', number_unit: '', thisTrip: false, ...AUTO_START, ...start }));
   const [busy, run] = useRun();
   const set = (patch) => setV((cur) => ({ ...cur, ...patch }));
   const type = REWARD_TYPES.find((t) => t.key === v.reward_type);
@@ -122,8 +123,10 @@ export function ProposeSheet({ trip, start = {}, onClose, onSaved }) {
     title: v.title.trim(), award_kind: v.award_kind, reward_type: v.reward_type, reward_amount: amount,
     reward_note: v.reward_note.trim() || null, proof: v.proof, best: bests.some((b) => b.key === v.best) ? v.best : null,
     number_unit: needs.number ? v.number_unit.trim() || null : null,
+    // 100: when it runs (each night / day), from the scores, points towards a cup.
+    ...autoRow({ ...v, best: bests.some((b) => b.key === v.best) ? v.best : '' }),
   };
-  const err = v.title.trim() ? checkProposal(row) : '';
+  const err = v.title.trim() ? checkProposal(row) || autoProblem({ ...v, best: row.best }) : '';
   const blockedVote = !status.is_admin && !votingOn;
   const save = () => run(async () => {
     const created = await must(supabase.from('rules').insert({
@@ -178,6 +181,7 @@ export function ProposeSheet({ trip, start = {}, onClose, onSaved }) {
             {v.best && <span className="small muted">The app ranks the claims; the group’s vote confirms.</span>}
           </div>
         )}
+        <AutoSettings v={{ ...v, best: row.best || '' }} set={set} />
         {trip && (
           <label className="row" style={{ gap: 8 }}><input type="checkbox" checked={v.thisTrip} onChange={(e) => set({ thisTrip: e.target.checked })} /> <span>Just for {trip.name} (otherwise every trip)</span></label>
         )}

@@ -164,7 +164,7 @@ const tapSize = async (locator, label) => {
 };
 const state = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('tgt-save-spot') || '{}'));
 
-/** Join from the link (landing on #/courses) the phone-only way ("Just this phone for now", ov13), pick Kurt. */
+/** Join from the link (landing on #/courses) the phone-only way ("Just this phone: scoring and voting only", ov13), pick Kurt. */
 async function joinAsKurt(page, base) {
   await page.goto(`${base}#/join/${INVITE}?to=%2Fcourses`);
   await page.getByTestId('just-this-phone').click({ timeout: 15000 });
@@ -188,6 +188,7 @@ async function joinAsKurt(page, base) {
   check(!(await notif.isVisible().catch(() => false)), 'no notifications pop-up on top of it (one pop-up a visit, F1)');
   const txt = await saveSheet(page).innerText();
   check(/Connect Google or email so you can sign in on your laptop/.test(txt), 'it says why, in plain words (ov13 wording)');
+  check(/“Just this phone: scoring and voting only”/.test(txt), 'it names the phone-only option the same way as the join screen (v10.2)');
   check(await saveSheet(page).getByRole('button', { name: /Continue with Google/ }).isVisible(), 'Continue with Google');
   check(await saveSheet(page).getByRole('button', { name: /Use my email/ }).isVisible(), 'Use my email');
   check(await saveSheet(page).getByRole('button', { name: 'Not now' }).isVisible(), 'Not now');

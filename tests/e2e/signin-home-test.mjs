@@ -223,7 +223,7 @@ const tapSize = async (page, locator, label) => {
   await ctx.close();
 }
 
-// 5. A guest opens an invite link: sign in first, as part of joining (ov13); "Just this phone for now" underneath.
+// 5. A guest opens an invite link: sign in first, as part of joining (ov13); "Just this phone: scoring and voting only" underneath.
 {
   STATUS.v = null;
   const { ctx, page } = await phone();
@@ -232,7 +232,8 @@ const tapSize = async (page, locator, label) => {
   check(await page.getByText('Sign in so it’s you on any phone or laptop.').isVisible(), 'invite: sign in first, and why');
   check(await page.getByRole('button', { name: /Continue with Google/ }).isVisible(), 'invite: Continue with Google');
   check(await page.getByRole('button', { name: 'Email me a code' }).isVisible(), 'invite (email-code build): Email me a code');
-  check(await page.getByTestId('just-this-phone').isVisible(), 'invite: "Just this phone for now"');
+  check(await page.getByTestId('just-this-phone').isVisible(), 'invite: "Just this phone: scoring and voting only"');
+  check(/scoring and voting only/.test(await page.getByTestId('just-this-phone').innerText()), 'invite: the label says it’s limited (v10.2)');
   await page.screenshot({ path: `${SHOTS}/s7-invite.png`, fullPage: true });
   await noSideScroll(page, 'Invite');
   const [auth] = await Promise.all([

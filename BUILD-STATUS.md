@@ -1976,3 +1976,30 @@ for themselves. Organising, money and proposing need a saved account (Google or 
 **Next:** Josh's OK, then apply 102 on staging (after 101) and run supabase/tests/102_saved_accounts.sql there. Before
 live: any L.G.C organiser still on a phone-only account needs to Save their spot first (or the group switches
 `phone_only_limited` off) — 102 stops their organiser changes until they do.
+
+## ov36 — The trip map's courses: pick any, filter, search wider, your own area, on the way (23 Oct 2026, branch `ov36-course-map`, no migration)
+**Audit.** AreaStart built its candidates from `trip_finder_courses` in a box 50 km around the stay pins, kept those within
+`stayMax` (40) of a stay, ranked them (`rankCandidates`) and capped them at 40. The map drew all 40 but the list only the
+first 12 — so 28 dots couldn't be ticked, and a course put on the table from its sheet vanished from the list. Library
+rows carry `mine_avg` / `others_avg` / `played`; course type and rankings only exist as free text in
+`course_research.details.style` / `.rankings` (course_booking_info.features isn't loaded in the builder).
+**Built**
+- `src/lib/coursemap.js` (pure): ratingOf / playedOf / typesOf / rankOf, filterOptions, filterCourses (keeps on-table
+  ones, flagged), filtersOn / filterText, nextReach / showMore / fromText / searchMarginKm, inBox / boxTooBig /
+  roundBox / customAreaName / isCustomArea, onTheWay / onWayLine / corridorBoxes (the drive split into ~100 km boxes so
+  the 400 cap doesn't bite).
+- `AreaStart.jsx`: filters above the list (chips + selects), list = map (paged 12 at a time, on-table always shown,
+  "All N are on the map"), Show more → Search wider, "🔍 This part of the map" panel (filters, tick, Save as an area,
+  "Make <custom area> this part of the map", Back), "🚗 On the way up or back" card (Show/Hide, detour select, rows
+  with ticks; 🚗 dots on the map), research loaded for the candidates (types, "Ranked #18" tags on rows).
+- `BuilderMap.jsx`: `tipAction` (a button on a dot's summary card), `searchHere` (the bottom-centre button, reads the
+  map's bounds), 🚗 before on-the-way names. `PlanMapTools.jsx`: TipCard `action`. CSS in planmap.css / planux.css.
+- `TripBuilder.jsx` (2 tiny edits, ov35 owns this file): passes `starts` to AreaStart; once a custom area is the chosen
+  region, its pins stand in for the (missing) towns when loading courses for the days.
+- State (trip_builds.state, no migration): `courseFilters`, `courseReach{area}`, `onWayDetour`, `customAreas{name: box}`.
+**Tests**
+- Vitest: src/lib/coursemap.test.js (20). Full run 1,737 pass.
+- e2e: new tests/e2e/course-map-test.mjs (47 checks; phone: pick an unlisted dot, filters + remembered after reload,
+  show more, search wider ×2, on the way; laptop: pan to Port Stephens, search this part, filter, save as "Custom:
+  around Nelson Bay"). hello-maps 83, plan-ux 84, trip-builder 71, tripfinder 30, weekends-comps 75 all pass.
+**Next:** Josh to try it on the preview; "on the way up" vs "back" as separate options (by day) if he wants them.

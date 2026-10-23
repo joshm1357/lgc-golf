@@ -37,6 +37,8 @@ const hunter = Array.from({ length: 18 }, (_, i) => {
 hunter[0].name = 'Cypress Lakes Golf Club'; Object.assign(hunter[0], { mine_avg: 4.5, played: true });
 hunter[1].name = 'The Vintage Golf Club'; hunter[1].others_avg = 4.1;
 hunter[2].name = 'Links Valley Golf Club'; hunter[2].others_avg = 3.2;
+// Low on the list (our ★2.5) but on its own on the map: the dot to pick that isn't in the list.
+hunter.push({ id: L(19), name: 'Lone Pine Golf Club', area: 'Pokolbin NSW', lat: -32.745, lng: 151.255, mine_avg: 2.5 });
 const newcastle = [
   { id: L(31), name: 'Newcastle Golf Club', area: 'Newcastle NSW', lat: -32.95, lng: 151.80 },
   { id: L(32), name: 'Stockton Dunes Golf', area: 'Newcastle NSW', lat: -32.90, lng: 151.85 },
@@ -181,26 +183,22 @@ const rowNames = async (page, id = 'area-course') => (await page.getByTestId(id)
   await page.getByTestId('area-course').first().waitFor({ timeout: 15000 }); await wait(800);
   const first = await rowNames(page);
   check(first.length === 12, `the list shows a page of 12 (${first.length})`);
-  check(/Within 40 min of Pokolbin and Cessnock · 18 courses/.test(await listText(page)), 'says how far and how many');
+  check(/Within 40 min of Pokolbin and Cessnock · 19 courses/.test(await listText(page)), 'says how far and how many');
   const dots = await page.locator('[data-testid="tb-map"] path.leaflet-interactive').count();
-  check(dots >= 18, `every course within the drive is a dot on the map (${dots})`);
-  check((await listText(page)).includes('All 18 are on the map'), 'and the list says the rest are on the map');
+  check(dots >= 19, `every course within the drive is a dot on the map (${dots})`);
+  check((await listText(page)).includes('All 19 are on the map'), 'and the list says the rest are on the map');
   await page.screenshot({ path: `${SHOTS}/p-01-list-and-map.png`, fullPage: true });
 
   // A. A dot that isn't in the list → its summary → + Put on the table.
-  // Tap dots until one that isn't in the list (or on the table) shows its summary.
+  // The Lone Pine dot (its name label sits 12 px right of the dot and 10 px up).
   await page.getByTestId('tb-map').scrollIntoViewIfNeeded();
-  const onNames = ON.map((id) => library.find((c) => c.id === id).name);
   const tip = page.locator('[data-testid="tb-map"] .pm-tip [data-testid="place-tip"]');
-  const paths = page.locator('[data-testid="tb-map"] path.leaflet-interactive');
-  let unlisted = null;
-  const n = await paths.count();
-  for (let i = 0; i < n && !unlisted; i++) {
-    await paths.nth(i).dispatchEvent('click'); await wait(300);
-    const name = (await tip.innerText().catch(() => '')).split('\n')[0].trim();
-    if (name && !first.includes(name) && !onNames.includes(name) && !hunter.slice(0, 3).some((c) => c.name === name)) unlisted = name;
-  }
-  check(!!unlisted, `tap a dot that isn't in the list → its summary (${unlisted})`);
+  check(!first.includes('Lone Pine Golf Club'), 'Lone Pine isn’t in the first page of the list');
+  const lb = await page.locator('[data-testid="tb-map"] .pm-label', { hasText: 'Lone Pine' }).first().boundingBox();
+  if (lb) await page.touchscreen.tap(lb.x - 12, lb.y + 10);
+  await page.waitForTimeout(400);
+  const unlisted = (await tip.innerText({ timeout: 2000 }).catch(() => '')).split('\n')[0].trim() === 'Lone Pine Golf Club' ? 'Lone Pine Golf Club' : null;
+  check(!!unlisted, 'tap its dot → its summary');
   const act = tip.getByTestId('place-tip-action');
   check((await act.innerText().catch(() => '')) === '+ Put on the table', 'the summary has "+ Put on the table"');
   await page.screenshot({ path: `${SHOTS}/p-02-dot-summary.png` });
@@ -238,7 +236,7 @@ const rowNames = async (page, id = 'area-course') => (await page.getByTestId(id)
 
   // C. Show more, then search wider.
   await page.getByTestId('show-more').click(); await wait(400);
-  check((await rowNames(page)).length === 18, 'Show more: the rest of the 18');
+  check((await rowNames(page)).length === 19, 'Show more: the rest of the 19');
   const wider = page.getByTestId('search-wider');
   check((await wider.innerText()) === 'Search wider: within 40 min of Pokolbin and Cessnock → 45 min', `then it offers a longer drive (${await wider.innerText()})`);
   await wider.click(); await wait(900);
@@ -288,20 +286,22 @@ const rowNames = async (page, id = 'area-course') => (await page.getByTestId(id)
   await page.screenshot({ path: `${SHOTS}/l-01-laptop.png` });
   const map = page.locator('[data-testid="tb-map"]').first();
   const mb = await map.boundingBox();
-  // Drag the map left until Nelson Bay is in view (east of the Hunter).
-  for (let i = 0; i < 3; i++) {
-    await page.mouse.move(mb.x + mb.width * 0.8, mb.y + mb.height * 0.5);
+  // Drag the map so Nelson Bay (east of the Hunter) is in the middle: the scale from the Pokolbin and Cessnock pins.
+  const pinAt = async (n) => { const b = await map.locator('.tb-stay', { hasText: n }).first().boundingBox(); return { x: b.x + 14, y: b.y + 14 }; };
+  const pk = await pinAt('Pokolbin'); const ce = await pinAt('Cessnock');
+  const pxLng = (ce.x - pk.x) / (151.36 - 151.29); const pxLat = (ce.y - pk.y) / (-32.83 - -32.78);
+  const target = { x: pk.x + (152.13 - 151.29) * pxLng, y: pk.y + (-32.73 - -32.78) * pxLat };
+  const mid = { x: mb.x + mb.width / 2, y: mb.y + mb.height / 2 };
+  const dx = target.x - mid.x; const dy = target.y - mid.y;
+  const steps = Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / (mb.width * 0.6));
+  for (let i = 0; i < steps; i++) {
+    await page.mouse.move(mid.x, mid.y);
     await page.mouse.down();
-    await page.mouse.move(mb.x + mb.width * 0.3, mb.y + mb.height * 0.5, { steps: 12 });
+    await page.mouse.move(mid.x - dx / steps, mid.y - dy / steps, { steps: 12 });
     await page.mouse.up(); await wait(300);
-    if (await page.locator('[data-testid="tb-map"] .pm-label', { hasText: 'Nelson Bay' }).count()) {
-      const lb = await page.locator('[data-testid="tb-map"] .pm-label', { hasText: 'Nelson Bay' }).boundingBox();
-      if (lb && lb.x > mb.x + 40 && lb.x < mb.x + mb.width * 0.7) break;
-    }
   }
   await page.screenshot({ path: `${SHOTS}/l-01b-panned.png` });
   await page.getByTestId('search-here').click(); await wait(1000);
-  console.log('DEBUG box', JSON.stringify(libCalls.at(-1)));
   const view = page.getByTestId('area-view');
   check(await view.count() === 1, '🔍 Search this part of the map → the courses in view');
   const inView = (await view.getByTestId('view-course').allInnerTexts()).map((t) => t.split('\n')[0]);

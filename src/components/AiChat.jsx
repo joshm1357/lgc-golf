@@ -1,10 +1,10 @@
 // A chat with the AI helper (080): messages back and forth, each helper turn can carry a card (e.g. the trip draft)
 // and 1–3 questions with tappable quick answers. A quick answer ending in "…" opens the box to type instead.
 // Reusable: "Plan it with AI" uses it now; the Caddie can later. No maths here — see lib/planchat.js.
-// ov22 (Josh 23 Oct): a question the helper marks multi (regions, extras, weekends…) has toggle chips — tap several,
-// then "Send (3)" sends them together. One-answer questions (driving or flying, how many) still send on tap.
+// ov22 + v10.4 (Josh 23 Oct): every quick answer is a toggle — tap as many as you like across the questions, type
+// anything extra in the box, then one Send sends it all together. Nothing sends on a single tap.
 import React, { useEffect, useRef, useState } from 'react';
-import { quickChoice, togglePick, multiSend, multiOther, typesIt } from '../lib/planchat.js';
+import { togglePick, multiOther, typesIt, answersMessage, pickCount } from '../lib/planchat.js';
 import Thinking from './Thinking.jsx';
 import './planux.css';
 
@@ -26,16 +26,27 @@ export default function AiChat({ turns = [], onSend, busy = false, left = null, 
   const send = (t) => { const v = String(t || '').trim(); if (!v || busy) return; onSend(v); setText(''); };
   const openBox = (prefix) => { setText(prefix); setTimeout(() => { const el = box.current; if (!el) return; el.focus(); const n = el.value.length; el.setSelectionRange?.(n, n); }, 0); };
   const tapQuick = (q, quick) => {
-    if (q.multi) {
-      if (typesIt(quick)) { const c = multiOther(q, picks[q.id] || [], quick); if (c.send) send(c.send); else openBox(c.ask); return; }
-      setPicks((p) => ({ ...p, [q.id]: togglePick(p[q.id] || [], quick) }));
+    // "Other…": open the box (with what's picked for that question so far) — never sends.
+    // Its picks move into the box, so they're cleared here (not sent twice).
+    if (typesIt(quick)) {
+      const c = multiOther(q, picks[q.id] || [], quick);
+      const before = String(text || '').trim();
+      openBox(`${before ? `${before}\n` : ''}${c.ask || ''}`);
+      setPicks((p) => ({ ...p, [q.id]: [] }));
       return;
     }
-    const c = quickChoice(q, quick);
-    if (c.send) send(c.send);
-    else openBox(c.ask);
+    setPicks((p) => ({ ...p, [q.id]: togglePick(p[q.id] || [], quick) }));
   };
-  const sendPicks = (q) => { const c = multiSend(q, picks[q.id] || []); if (c) { send(c.send); setPicks((p) => ({ ...p, [q.id]: [] })); } };
+  const questions = last?.role === 'assistant' ? (last.questions || []) : [];
+  const picked = pickCount(picks);
+  // One send for the lot: the picks (per question) plus what's typed.
+  const sendAll = () => {
+    const typed = String(text || '').trim();
+    const msg = answersMessage(questions, picks, typed);
+    if (!msg) return;
+    send(msg);
+    setPicks({});
+  };
   const out = left != null && left <= 0;
   return (
     <div className="stack" style={{ gap: 10 }} data-testid="ai-chat">
@@ -52,12 +63,11 @@ export default function AiChat({ turns = [], onSend, busy = false, left = null, 
           {t === last && t.role === 'assistant' && (t.questions || []).map((q) => {
             const mine = picks[q.id] || [];
             return (
-              <div key={q.id} className="card pad stack" style={{ gap: 6 }} data-testid="chat-question" data-multi={q.multi ? 'yes' : undefined}>
+              <div key={q.id} className="card pad stack" style={{ gap: 6 }} data-testid="chat-question" data-multi="yes">
                 <span className="small" style={{ fontWeight: 700 }}>{q.text}</span>
-                {q.multi && <span className="small muted">Pick any, then send.</span>}
-                <div className="row" style={{ gap: 6, flexWrap: 'wrap' }} role={q.multi ? 'group' : undefined} aria-label={q.multi ? q.text : undefined}>
+                <div className="row" style={{ gap: 6, flexWrap: 'wrap' }} role="group" aria-label={q.text}>
                   {q.quick.map((x) => {
-                    const toggle = q.multi && !typesIt(x);
+                    const toggle = !typesIt(x);
                     const on = toggle && mine.includes(x);
                     return (
                       <button key={x} type="button" className="chip" style={{ minHeight: 40 }} disabled={busy || out}
@@ -65,24 +75,27 @@ export default function AiChat({ turns = [], onSend, busy = false, left = null, 
                     );
                   })}
                 </div>
-                {q.multi && (
-                  <button type="button" className="btn gold sm" style={{ alignSelf: 'flex-start', minHeight: 44 }} disabled={busy || out || !mine.length}
-                    onClick={() => sendPicks(q)} data-testid="chat-multi-send">{mine.length ? `Send (${mine.length})` : 'Send'}</button>
-                )}
               </div>
             );
           })}
+          {t === last && t.role === 'assistant' && questions.some((q) => q.quick.length) && (
+            <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button type="button" className="btn gold sm" style={{ minHeight: 44 }} disabled={busy || out || !picked}
+                onClick={sendAll} data-testid="chat-multi-send">{picked ? `Send ${picked} answer${picked === 1 ? '' : 's'}` : 'Send answers'}</button>
+              <span className="small muted">{picked ? 'Tap again to untick. Add anything else in the box.' : 'Tap as many as fit, then send.'}</span>
+            </div>
+          )}
           {t === last && t.role === 'assistant' && hint}
         </div>
       ))}
       {busy && <Thinking steps={thinkingSteps} />}
       <div ref={end} />
       {out ? <span className="small muted">That’s the most questions for one chat — use what you’ve got, or start again.</span> : (
-        <form className="row" style={{ gap: 6, alignItems: 'flex-end' }} onSubmit={(e) => { e.preventDefault(); send(text); }}>
+        <form className="row" style={{ gap: 6, alignItems: 'flex-end' }} onSubmit={(e) => { e.preventDefault(); sendAll(); }}>
           <textarea ref={box} className="textarea grow" rows={2} style={{ padding: 10 }} value={text} maxLength={maxLength} placeholder={placeholder}
             aria-label="Your message" disabled={busy} onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(text); } }} />
-          <button type="submit" className="btn gold" disabled={busy || text.trim().length < 2} style={{ minHeight: 48 }}>Send</button>
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAll(); } }} />
+          <button type="submit" className="btn gold" disabled={busy || (text.trim().length < 2 && !picked)} style={{ minHeight: 48 }}>Send</button>
         </form>
       )}
       {left != null && !out && <span className="small muted">{left} question{left === 1 ? '' : 's'} left in this chat</span>}

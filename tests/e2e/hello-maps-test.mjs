@@ -2,7 +2,8 @@
 //   A. Caddie says hello: not on the join screen; the first time in the app a speech bubble pops from the Caddie
 //      button (phone) / beside the docked tab (laptop); "Ask me something" opens the Caddie, whose empty chat starts with
 //      the same hello; never again after either button; still motion with reduced motion.
-//   B. ✨ Plan a trip: a pick-several question has toggle chips — tap two, "Send (2)" sends both; a one-answer question
+//   B. ✨ Plan a trip (v10.4): every quick answer toggles — tick across both questions, one Send sends it all; nothing sends on a tap.
+//      (was: a pick-several question had toggle chips; a one-answer question
 //      still sends on tap.
 //   C. Planning maps: the wheel zooms after a click (or with Ctrl), not before (a "Scroll to zoom" hint shows); the
 //      Club names switch hides / shows the labels and is remembered; hover a row → its pin lights up (and the map pans
@@ -264,33 +265,36 @@ const box = (loc) => loc.boundingBox();
   await page.getByTestId('caddie-plan-sheet').waitFor({ timeout: 10000 });
   await page.getByLabel('Your message').fill('Golf trip with the boys');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
-  const multi = page.locator('[data-testid="chat-question"][data-multi="yes"]');
+  const multi = page.getByTestId('chat-question').first();
+  const single = page.getByTestId('chat-question').nth(1);
   await multi.waitFor({ timeout: 10000 });
-  check((await multi.innerText()).includes('Pick any, then send'), 'a pick-several question says so');
-  const sendBtn = multi.getByTestId('chat-multi-send');
-  check(await sendBtn.isDisabled() && (await sendBtn.innerText()) === 'Send', 'Send waits until something is picked');
+  const sendBtn = page.getByTestId('chat-multi-send');
+  check((await sendBtn.count()) === 1, 'one Send for all the questions');
+  check(await sendBtn.isDisabled() && (await sendBtn.innerText()) === 'Send answers', 'Send waits until something is picked');
   const before = aiCalls.length;
   await multi.getByRole('button', { name: 'Hunter Valley' }).click();
   await multi.getByRole('button', { name: 'South Coast' }).click();
-  await wait(200);
-  check(aiCalls.length === before, 'tapping a chip doesn’t send it');
+  await single.getByRole('button', { name: 'Driving' }).click();
+  await single.getByRole('button', { name: 'Flying' }).click();
+  await wait(300);
+  check(aiCalls.length === before, 'tapping chips doesn’t send anything (either question)');
   check(await multi.getByRole('button', { name: /Hunter Valley/ }).getAttribute('aria-pressed') === 'true' && await multi.getByRole('button', { name: /Central West/ }).getAttribute('aria-pressed') === 'false', 'tapped chips are ticked (toggle)');
-  check((await sendBtn.innerText()) === 'Send (2)', `the button counts them: "${await sendBtn.innerText()}"`);
+  check((await sendBtn.innerText()) === 'Send 4 answers', `the button counts them: "${await sendBtn.innerText()}"`);
   await page.screenshot({ path: `${SHOTS}/b-01-multi-chips-phone.png` });
-  // Untick and tick again: still two.
   await multi.getByRole('button', { name: /South Coast/ }).click();
-  check((await sendBtn.innerText()) === 'Send (1)', 'tap again to untick');
+  check((await sendBtn.innerText()) === 'Send 3 answers', 'tap again to untick');
   await multi.getByRole('button', { name: /Central West/ }).click();
+  await page.getByLabel('Your message').fill('12 of us');
   await sendBtn.click();
   await page.getByText('Got it.').waitFor({ timeout: 8000 });
   const sent = aiCalls.filter((c) => c.mode === 'plan_chat').at(-1);
-  check(sent.text === 'Which areas appeal? → Hunter Valley, Central West', `Send (2) sends both together: "${sent.text}"`);
-  // One-answer question: sends on tap, as before.
-  const single = page.getByTestId('chat-question').last();
-  check(!(await single.getAttribute('data-multi')) && !(await single.getByTestId('chat-multi-send').count()), 'a one-answer question has no Send button');
-  await single.getByRole('button', { name: 'Driving' }).click();
+  check(aiCalls.filter((c) => c.mode === 'plan_chat').length === 2, 'one message sent for the lot');
+  check(sent.text === 'Which areas appeal? → Hunter Valley, Central West\nDriving or flying? → Driving, Flying\n12 of us', `picks + typed go together: "${sent.text}"`);
+  // The box's own Send also carries the picks.
+  await page.getByTestId('chat-question').last().getByRole('button', { name: 'Not sure' }).click();
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
   await wait(800);
-  check(aiCalls.filter((c) => c.mode === 'plan_chat').at(-1).text === 'Driving or flying? → Driving', 'a one-answer question still sends on tap');
+  check(aiCalls.filter((c) => c.mode === 'plan_chat').at(-1).text === 'Driving or flying? → Not sure', 'the box’s Send sends ticked answers too');
   await ctx.close();
 }
 

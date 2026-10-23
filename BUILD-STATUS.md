@@ -1692,3 +1692,230 @@ Merged with v10-int (ov28): "Your round" is mounted in Your weekend, and the mon
 - **Day screen**: the cups card under "Counts for". **Results**: each cup's standings, the hand-over, the real cup's photo; Trophy Room shows the photo and who has it.
 - **"Do you have a cup for this?"** Yes → photo + who has it; Not yet → run-up reminder + ComingSoon ("🛒 Get one: coming soon", "I'm interested" → one beta idea "Interested: trophy_shop (<cup>)").
 - **Tests:** src/lib/cups.test.js (23), supabase/tests/101_cups.sql (54 checks, run in PGlite with 001–100 + a 099 stand-in), tests/e2e/cups-test.mjs (29 checks). Existing cup, comps, runup, results, awards, awards-fines, day-screen, weekends-comps, your-round, own-comps, stage2 e2e and all vitest pass.
+
+## v10 wording pass and the full test run (23 Oct 2026, branch `v10-wording`, from `v10-final`, no database changes)
+
+**Job 1 — one word per thing (Josh's N1 option A).** Only words people see changed: labels, buttons, headings, toasts,
+notification and error text, Caddie text, help text. Component, route, test-id and database names are unchanged.
+
+| Thing | Now called | Notes |
+|---|---|---|
+| Planning area | **Plan the trip** | The trip page's tab is now "🧰 Plan the trip" (it was "Organise"). Changing it broke nothing — the tab's value is still `organise`, so links (`?view=organise`) work. The map screen (`/plan/:id/build`, was "Build the trip") is also headed "Plan the trip"; links to it say "Plan the trip on the map →" / "on the map". |
+| Person in charge | **organiser** | The Admin screen is now **Organiser tools** (More, the shortcut search, every "Admin → …" pointer). "Only the admin…" → "Only an organiser…". |
+| The helper | **the Caddie** | "Plan it with the Caddie", "Import with the Caddie", every "The AI helper …" message from the ai-helper function. The privacy page says "The Caddie (the AI helper)" so it's still clear it's AI. Messages *to* the model ("the AI company") left alone. |
+| Trophies and comps | **Trophies & cups** | Run-up part, Overview card, comps board title, setup-guide step, Caddie destination. |
+| Fines and awards | **Fines & awards** | Every screen, the share card, the feature name, the cup source name. |
+| Tasks | **Your jobs** | Run-up "Your to-dos" and Overview "Your bits" → "Your jobs"; "the to-do list" → "the jobs". The Plan the trip money step keeps its "📋 Jobs" tab (it's everyone's jobs, not yours). |
+| Governance | **Group rules** | Sidebar, More, hub title, "How we decide things" subtitle. Tabs stay Rulebook · Tribunal · Committees, with **Tribunal** now subtitled "Disputes". |
+| Step 6 | **The run-up** | `src/lib/tripsteps.js`; its blurb now "Trophies & cups, rules, handicaps, teams". |
+
+Also: "Tell Josh" → "Send feedback" (Josh's feedback screen); computer-style dates fixed in the Rulebook's round picker
+(`2026-10-31` → "Sat 31 Oct 2026") and the history import's "is in the future" message ("31 Oct 2026"). "You owes" was
+already fixed (`money.js` youLabel/theyLabel); none left. Not changed (database text, no DB changes in this job): the
+feature name inside `require_feature` errors (e.g. "Dinner Awards is switched off") — a later migration can rename it.
+
+**Job 2 — the full test run**
+- Vitest: 1,694 pass (1,692 + 2 new for the deposit fix).
+- Deno: notify / vote-link / _shared 30 pass; ai-helper + lgc-mcp 149 pass; notify and vote-link type-check. No
+  `node_modules` left in `supabase/functions`.
+- Migrations 092–101: every migration (001–101, 119 files) loads in order into PGlite; a name check finds nothing in
+  092–101 that uses a table, column or function made later (three hits were false alarms: `rules.proposed_by`,
+  `trips.cup_points`, the word "cups" in a comment). SQL tests 093–101 all give their expected results on the full chain
+  (094–097 with a stand-in for staging's test people). The 097 test was stale: its rounds had no course and its round
+  player no playing handicap (both required since 001) — fixed in the test.
+- e2e: **75 of 75 pass** — 68 on the default build, quick / start / stage9 on VITE_NEW_GROUPS=on, signin-first (72 checks, incl. the google,password,email build), signin-home (78), save-spot (88) on the sign-in builds at 127.0.0.1, beta (46) with this branch's own live-style build as its product build. (stage10 timed out once under load; passes on its own and in the full rerun.)
+
+**Merge bugs found and fixed (app)**
+- The organiser who collects the deposits was told "Pay Josh your $300 deposit" (to themselves) in the run-up's Your
+  jobs, the money line (no costs yet) and the 30/7-day countdown push. `myTodos` (collectorId), `myMoney` and notify now
+  skip the collector. Unit tests added.
+
+**Stale tests fixed (the app was right)**
+- late-job, ov26-votes: a locked-in trip's page is the run-up (ov25/ov27) — no Next step card or Overview glance; the
+  late warning is checked on Your jobs instead.
+- cups: Trophies & cups sits under "More about this trip" (ov27) — the test opens it first.
+- ai-helper-v2: a new organiser's three-step start (ov27 F1) hides Home's other "start a trip" buttons; the test puts the
+  start away first.
+- desktop, trips and 20 others: the new words.
+
+**Every string changed** (file, was, now):
+
+| File | Was | Now |
+|---|---|---|
+| `screens/Planner.jsx` | label: '🧰 Organise' | label: '🧰 Plan the trip' |
+| `screens/TripBuilder.jsx` | title="Build the trip" | title="Plan the trip" |
+| `components/TripBuilderCard.jsx` | 'Build the trip' | 'Plan the trip' |
+| `App.jsx` | label="The trip builder" | label="Plan the trip" |
+| `screens/OrganiseSteps.jsx` | 🗺️ Open the trip builder → | 🗺️ Plan the trip on the map → |
+| `screens/OrganiseSteps.jsx` | ⛳ Course options each day, in the trip builder → | ⛳ Course options each day, on the map → |
+| `screens/OrganiseSteps.jsx` | The tee times so far, in the trip builder → | The tee times so far, on the map → |
+| `screens/AiPlanner.jsx` | 'Couldn’t open the trip builder.' | 'Couldn’t open Plan the trip.' |
+| `screens/AiPlanner.jsx` | 🗺️ Open in the trip builder instead | 🗺️ Plan it on the map instead |
+| `lib/tripbuilder.js` | 'Then put the times in on the trip builder (Trip → Build the trip → Tee times). Nothing is booked yet.' | 'Then put the times in on the trip (Trip → Plan the trip → Call the courses). Nothing is booked yet.' |
+| `lib/tripjobs.js` | label: 'Build the trip' | label: 'Plan the trip' |
+| `lib/caddie.js` | 'Organise the trip' | 'Plan the trip' |
+| `fn/ai-helper/routes.ts` | 'Organise the trip' | 'Plan the trip' |
+| `components/ExtrasPanel.jsx` | Organise → Comps &amp; on the day. | Plan the trip → The run-up. |
+| `lib/tripsteps.js` | title: 'Comps & on the day', blurb: 'What’s up for grabs, rules, handicaps, teams' | title: 'The run-up', blurb: 'Trophies & cups, rules, handicaps, teams' |
+| `components/DrawCeremony.jsx` | 'admin clicks through' | 'organiser clicks through' |
+| `components/DrawCeremony.jsx` | Waiting for the admin to start it… | Waiting for the organiser to start it… |
+| `components/DrawCeremony.jsx` | Waiting for the admin to draw the next name… | Waiting for the organiser to draw the next name… |
+| `components/DrawCeremony.jsx` | Waiting for the admin to lock it in… | Waiting for the organiser to lock it in… |
+| `components/Distances.jsx` | only the admin can clear a pin. | only an organiser can clear a pin. |
+| `components/Distances.jsx` | ' Ask the admin to map them.' | ' Ask an organiser to map them.' |
+| `screens/GreenMapper.jsx` | Only the admin can map greens. | Only an organiser can map greens. |
+| `screens/Comps.jsx` | >Admin → Rounds< | >Organiser tools → Rounds< |
+| `screens/Trophies.jsx` | >Add trophies in Admin< | >Add trophies in Organiser tools< |
+| `screens/Planner.jsx` | ' The admin will put one up.' | ' An organiser will put one up.' |
+| `screens/Planner.jsx` | 'The admin or the trip’s organiser' : 'The admin' | 'A group organiser or the trip’s organiser' : 'An organiser' |
+| `screens/Planner.jsx` | <span className="label">Admin</span> | <span className="label">Organiser</span> |
+| `screens/Planner.jsx` | the admin decides whether it goes ahead. | an organiser decides whether it goes ahead. |
+| `screens/Planner.jsx` | 'Suggested — the admin has been told' | 'Suggested — the organisers have been told' |
+| `screens/DrawDemo.jsx` | 'View as admin' | 'View as organiser' |
+| `screens/Rulebook.jsx` | 'the admin' | 'an organiser' |
+| `screens/Rulebook.jsx` | It goes up for a vote; the admin decides. | It goes up for a vote; an organiser decides. |
+| `screens/Admin.jsx` | Only organisers can open Admin | Only organisers can open Organiser tools |
+| `screens/Admin.jsx` | title="Admin" | title="Organiser tools" |
+| `screens/Admin.jsx` | ['admin', 'The admin', 'Only admins pick winners (as now).'], ['admin_or_organiser', 'The admin or the trip’s organiser', | ['admin', 'The group’s organisers', 'Only the group’s organisers pick winners (as now).'], ['admin_or_organiser', 'The group’s organisers or the trip’s organise |
+| `screens/TripSetup.jsx` | add them in Admin. | add them in Organiser tools. |
+| `screens/TripSetup.jsx` | add it in Admin → Courses | add it in Organiser tools → Courses |
+| `screens/TripSetup.jsx` | Add it in Admin → Courses | Add it in Organiser tools → Courses |
+| `screens/TripSetup.jsx` | reopen it in Admin → Trips. | reopen it in Organiser tools → Trips. |
+| `screens/SetupGuide.jsx` | use <Link to="/admin">Admin</Link>. | use <Link to="/admin">Organiser tools</Link>. |
+| `screens/SetupGuide.jsx` | >Go to Admin< | >Go to Organiser tools< |
+| `screens/SetupGuide.jsx` | add it in Admin → Courses | add it in Organiser tools → Courses |
+| `screens/SetupGuide.jsx` | are set in Admin → Rounds &amp; teams | are set in Organiser tools → Rounds &amp; teams |
+| `screens/SetupGuide.jsx` | >Admin → Players< | >Organiser tools → Players< |
+| `screens/Start.jsx` | add a course and a trip in More → Admin. | add a course and a trip in More → Organiser tools. |
+| `screens/History.jsx` | only the admin or the Tribunal changes those. | only an organiser or the Tribunal changes those. |
+| `screens/Leaderboard.jsx` | >Pick the pairs in Admin< | >Pick the pairs in Organiser tools< |
+| `screens/Games.jsx` | An organiser adds them in Admin → Rounds | An organiser adds them in Organiser tools → Rounds |
+| `screens/Trips.jsx` | 'the admin locks it in' | 'an organiser locks it in' |
+| `screens/Trips.jsx` | 'The admin picks the winners and locks it in.' | 'An organiser picks the winners and locks it in.' |
+| `screens/Trips.jsx` | 'The admin locks it in.' | 'An organiser locks it in.' |
+| `screens/More.jsx` | label: 'Admin' | label: 'Organiser tools' |
+| `components/Shortcuts.jsx` | label: 'Admin' | label: 'Organiser tools' |
+| `fn/ai-helper/logic.ts` | add it by hand in Admin → Courses. | add it by hand in Organiser tools → Courses. |
+| `fn/notify/index.ts` | 'Admin only' | 'Organisers only' |
+| `fn/lgc-mcp/index.ts` | Reopen it in Admin first. | Reopen it in Organiser tools first. |
+| `fn/lgc-mcp/index.ts` | 'Post a message to the group feed (as the admin).' | 'Post a message to the group feed (as the organiser).' |
+| `fn/lgc-mcp/index.ts` | Push notifications go out when the admin opens votes from the app. | Push notifications go out when an organiser opens votes from the app. |
+| `App.jsx` | label="The AI helper" | label="The Caddie" |
+| `components/CaddiePlan.jsx` | Planning with the AI is switched off for this group. | Planning with the Caddie is switched off for this group. |
+| `components/CaddiePlan.jsx` | Only an organiser can plan a trip with the AI. | Only an organiser can plan a trip with the Caddie. |
+| `components/CaddiePlan.jsx` | Costs are rough AI estimates — check before booking. | Costs are the Caddie’s rough guesses — check before booking. |
+| `screens/AiPlanner.jsx` | Costs are rough AI estimates — check before booking. | Costs are the Caddie’s rough guesses — check before booking. |
+| `components/RuleLayers.jsx` | 'The AI helper didn’t answer — check your signal and try again.' | 'The Caddie didn’t answer — check your signal and try again.' |
+| `components/RuleLayers.jsx` | 'The AI found no clashes' | 'The Caddie found no clashes' |
+| `components/RuleLayers.jsx` | ' · the AI says' | ' · the Caddie says' |
+| `components/RuleLayers.jsx` | '✨ Check for clashes with AI' | '✨ Ask the Caddie to check for clashes' |
+| `components/RuleLayers.jsx` | The AI suggests (check it says the same thing): | The Caddie suggests (check it says the same thing): |
+| `components/RuleLayers.jsx` | '✨ The AI is drafting the rule change from the verdict…' | '✨ The Caddie is drafting the rule change from the verdict…' |
+| `components/RuleLayers.jsx` | '✨ AI drafted this from the verdict — check it' | '✨ The Caddie drafted this from the verdict — check it' |
+| `components/RuleLayers.jsx` | 'The AI couldn’t draft it — here’s the case’s own wording to start from.' | 'The Caddie couldn’t draft it — here’s the case’s own wording to start from.' |
+| `components/PlaceSheets.jsx` | 'Couldn’t reach the AI helper — try again' | 'Couldn’t reach the Caddie — try again' |
+| `components/ForgetJokes.jsx` | The AI starts fresh from today’s chat. | The Caddie starts fresh from today’s chat. |
+| `components/ForgetJokes.jsx` | The AI quietly picks up running jokes | The Caddie quietly picks up running jokes |
+| `components/AiUsage.jsx` | No AI helper questions yet. | No Caddie questions yet. |
+| `components/AiUsage.jsx` | "AI helper usage" | "Caddie usage" |
+| `components/AiUsage.jsx` | Which AI answered | Which model answered |
+| `lib/aiusage.js` | 'Plan it with AI' | 'Plan it with the Caddie' |
+| `lib/aiusage.js` | 'AI busy or down' | 'Caddie busy or down' |
+| `lib/aiusage.js` | 'AI refused the request' | 'Caddie refused the request' |
+| `lib/aiusage.js` | 'Couldn’t reach the AI' | 'Couldn’t reach the Caddie' |
+| `lib/caddie.js` | 'quick rounds don’t have the AI' | 'quick rounds don’t have the Caddie’s answers' |
+| `lib/caddie.js` | 'the AI is for the group’s players' | 'the Caddie’s answers are for the group’s players' |
+| `lib/caddie.js` | 'the AI is switched off for your group' | 'the Caddie is switched off for your group' |
+| `lib/caddie.js` | 'the AI isn’t switched on for your group' | 'the Caddie isn’t switched on for your group' |
+| `lib/caddie.js` | 'your group’s used up its AI questions for now' | 'your group’s used up its Caddie questions for now' |
+| `lib/features.js` | description: 'The AI quietly picks up running jokes | description: 'The Caddie quietly picks up running jokes |
+| `lib/features.js` | name: 'AI helper' | name: 'The Caddie' |
+| `screens/Legal.jsx` | <strong>The AI helper</strong> | <strong>The Caddie (the AI helper)</strong> |
+| `screens/Legal.jsx` | (with the AI helper), once a day the AI reads the | (with the Caddie), once a day the Caddie reads the |
+| `screens/More.jsx` | — or ✨ import with AI | — or ✨ import with the Caddie |
+| `screens/Wishes.jsx` | '✨ AI helper' | '✨ The Caddie' |
+| `screens/AiImport.jsx` | '✨ Import with AI' | '✨ Import with the Caddie' |
+| `screens/AiPlanner.jsx` | 'Plan it with AI' | 'Plan it with the Caddie' |
+| `screens/AiPlanner.jsx` | "✨ Plan it with AI" | "✨ Plan it with the Caddie" |
+| `screens/AiPlanner.jsx` | "Plan it with AI" | "Plan it with the Caddie" |
+| `fn/ai-helper/import.ts` | 'This AI model can’t read photos — paste the text instead.' | 'The Caddie can’t read photos on this setup — paste the text instead.' |
+| `fn/ai-helper/plan.ts` | (AI estimate — check before booking) | (the Caddie’s rough guess — check before booking) |
+| `fn/ai-helper/rules.ts` | 'Only an organiser can use the AI on the Rulebook.' | 'Only an organiser can use the Caddie on the Rulebook.' |
+| `fn/ai-helper/index.ts` | 'The AI helper | 'The Caddie |
+| `fn/ai-helper/import.ts` | 'The AI helper | 'The Caddie |
+| `fn/ai-helper/coursebook.ts` | 'The AI helper | 'The Caddie |
+| `fn/ai-helper/providers.ts` | 'The AI helper | 'The Caddie |
+| `fn/ai-helper/rules.ts` | 'The AI helper | 'The Caddie |
+| `fn/ai-helper/logic.ts` | 'The AI helper | 'The Caddie |
+| `fn/ai-helper/coursebook.ts` | 'The AI got | 'The Caddie got |
+| `fn/ai-helper/coursebook.ts` | 'The AI couldn’t | 'The Caddie couldn’t |
+| `fn/ai-helper/coursebook.ts` | 'The AI can’t | 'The Caddie can’t |
+| `fn/ai-helper/rules.ts` | 'The AI got | 'The Caddie got |
+| `fn/ai-helper/rules.ts` | 'The AI couldn’t | 'The Caddie couldn’t |
+| `fn/ai-helper/providers.ts` | Couldn’t reach the AI helper | Couldn’t reach the Caddie |
+| `components/Shortcuts.jsx` | 'What we’re playing for' | 'Trophies & cups' |
+| `components/TripStatus.jsx` | >What we’re playing for< | >Trophies &amp; cups< |
+| `components/RunUp.jsx` | 'what’s up for grabs' | 'trophies & cups' |
+| `components/RunUp.jsx` | title="What’s up for grabs" | title="Trophies & cups" |
+| `components/CompsOnTheDay.jsx` | <strong>🏆 What’s up for grabs</strong> | <strong>🏆 Trophies &amp; cups</strong> |
+| `components/CompsOnTheDay.jsx` | <>Usually up for grabs: <strong> | <>Usually played for: <strong> |
+| `lib/caddie.js` | D('comps_board', 'What we’re playing for', | D('comps_board', 'Trophies & cups', |
+| `lib/caddie.js` | words: ['playing for', 'prizes', | words: ['trophies', 'trophies & cups', 'playing for', 'prizes', |
+| `fn/ai-helper/routes.ts` | D('comps_board', 'What we’re playing for') | D('comps_board', 'Trophies & cups') |
+| `lib/beta.js` | its leaderboards, what you’re playing for and its posts. | its leaderboards, its trophies & cups and its posts. |
+| `lib/setupguide.js` | title: 'What are you playing for?' | title: 'Trophies & cups' |
+| `screens/CompPicker.jsx` | <strong>What are you playing for?</strong> | <strong>Trophies &amp; cups</strong> |
+| `screens/CompsBoard.jsx` | title="What we’re playing for" | title="Trophies & cups" |
+| `screens/CompsBoard.jsx` | '+ Pick what you’re playing for' | '+ Pick the trophies & cups' |
+| `screens/TripOverview.jsx` | "🎁 What’s up for grabs" | "🎁 Trophies & cups" |
+| `components/CupsUpForGrabs.jsx` | '${x.cup.name} is up for grabs' | '${x.cup.name} is on for this trip' |
+| `components/CupsUpForGrabs.jsx` | ' and put up for grabs' | ' and put on for this trip' |
+| `components/CupsUpForGrabs.jsx` | ' and put it up for grabs' | ' and put it on for this trip' |
+| `App.jsx` | label="Awards and fines" | label="Fines & awards" |
+| `components/AutoAwards.jsx` | "Awards and fines" | "Fines & awards" |
+| `components/AutoAwards.jsx` | 🌙 Nightly awards and fines | 🌙 Nightly fines &amp; awards |
+| `components/AutoAwards.jsx` | Points from awards and fines | Points from fines &amp; awards |
+| `components/runupSlots.jsx` | "🏷 Awards & fines" | "🏷 Fines & awards" |
+| `components/AwardsFines.jsx` | '🏷 Awards & fines for this trip' | '🏷 Fines & awards for this trip' |
+| `components/AwardsFines.jsx` | >Awards &amp; fines →< | >Fines &amp; awards →< |
+| `components/AwardsFines.jsx` | fines and awards belong to a trip. | fines &amp; awards belong to a trip. |
+| `components/RunUp.jsx` | 🍽️ Awards & fines for this trip | 🍽️ Fines & awards for this trip |
+| `lib/shareCard.js` | eyebrow: '🍽️ FINES AND DINNER AWARDS', title: d.title \|\| 'Dinner awards' | eyebrow: '🍽️ FINES & AWARDS', title: d.title \|\| 'Fines & awards' |
+| `lib/drives.js` | award: 'awards and fines' | award: 'fines & awards' |
+| `lib/cups.js` | name: 'Awards and fines' | name: 'Fines & awards' |
+| `lib/dinnerawards.js` | tripName \|\| 'Awards and fines' | tripName \|\| 'Fines & awards' |
+| `lib/features.js` | name: 'Awards and fines' | name: 'Fines & awards' |
+| `lib/features.js` | vote for the trip’s awards and fines, then | vote for the trip’s fines & awards, then |
+| `screens/DinnerAwards.jsx` | "Awards and fines" | "Fines & awards" |
+| `screens/DinnerAwards.jsx` | No trip yet — awards and fines belong to a trip. | No trip yet — fines &amp; awards belong to a trip. |
+| `screens/DinnerAwards.jsx` | — awards and fines' | — fines & awards' |
+| `screens/TripExtras.jsx` | 🍽️ Fines and dinner awards → | 🍽️ Fines &amp; awards → |
+| `screens/TripOverview.jsx` | 🏅 Awards &amp; fines | 🏅 Fines &amp; awards |
+| `screens/TripOverview.jsx` | <strong>🙋 Your bits</strong> | <strong>🙋 Your jobs</strong> |
+| `components/RunUp.jsx` | title="Your to-dos" | title="Your jobs" |
+| `components/RunUp.jsx` | Sign in to see your to-dos. | Sign in to see your jobs. |
+| `lib/lockin.js` | Then the to-do list is made and everyone’s told. | Then the jobs are made and everyone’s told. |
+| `lib/tripjobs.js` | . Then the to-do list is made. | . Then the jobs are made. |
+| `lib/tripjobs.js` | title: 'Make the to-do list' | title: 'Make the jobs' |
+| `screens/TripPlan.jsx` | 'Locked in — the votes are closed and the to-do list is ready' | 'Locked in — the votes are closed and the jobs are ready' |
+| `screens/Planner.jsx` | 'Locked in — the votes are closed and the to-do list is ready' | 'Locked in — the votes are closed and the jobs are ready' |
+| `screens/TripBuilder.jsx` | 'Locked in — the votes are closed and the to-do list is ready. Set the rounds up below.' | 'Locked in — the votes are closed and the jobs are ready. Set the rounds up below.' |
+| `screens/CompPicker.jsx` | (its to-do list takes you there) | (its jobs take you there) |
+| `lib/governance.js` | label: 'Governance change' | label: 'Group rules change' |
+| `screens/Cases.jsx` | <strong>Governance</strong> | <strong>Group rules</strong> |
+| `screens/Cases.jsx` | <Header back title="Governance" /><div className="section empty">Governance isn’t set up on this database yet. | <Header back title="Group rules" /><div className="section empty">Group rules aren’t set up on this database yet. |
+| `screens/Cases.jsx` | sub="Governance settings: who decides what" | sub="Group rules: who decides what" |
+| `screens/GovernanceHub.jsx` | title="⚖️ Governance" | title="⚖️ Group rules" |
+| `screens/GovernanceHub.jsx` | aria-label="Governance" | aria-label="Group rules" |
+| `screens/More.jsx` | label: '⚖️ Governance' | label: '⚖️ Group rules' |
+| `components/Sidebar.jsx` | label: 'Governance' | label: 'Group rules' |
+| `components/Shortcuts.jsx` | 'Governance' | 'Group rules' |
+| `screens/Josh.jsx` | From More → Tell Josh. | From Send feedback (More, or the sidebar). |
+| `screens/GovernanceHub.jsx` | { key: 'tribunal', label: 'Tribunal' }, | { key: 'tribunal', label: 'Tribunal', sub: 'Disputes' }, |
+| `screens/GovernanceHub.jsx` | data-testid={'gov-tab-${t.key}'}>{t.label} | data-testid={'gov-tab-${t.key}'}>{t.sub ? <span className="gov-tab-two">{t.label}<small>{t.sub}</small></span> : t.label} |
+| `components/Shortcuts.jsx` | words: ['elections', 'how we decide'] } | words: ['governance', 'elections', 'how we decide'] } |
+| `components/Shortcuts.jsx` | { label: 'Tribunal', to: '/governance/tribunal', kind: 'Screen' } | { label: 'Tribunal', to: '/governance/tribunal', kind: 'Screen', words: ['disputes', 'dispute'] } |
+| `components/Shortcuts.jsx` | { label: 'Organiser tools', to: '/admin', kind: 'Screen' } | { label: 'Organiser tools', to: '/admin', kind: 'Screen', words: ['admin', 'settings'] } |
+| `components/Shortcuts.jsx` | { label: 'Trophies & cups', to: '/comps-board', kind: 'Screen', words: ['comps', 'standings', 'side comps'] } | { label: 'Trophies & cups', to: '/comps-board', kind: 'Screen', words: ['comps', 'standings', 'side comps', 'playing for', 'up for grabs'] } |
+| `components/RuleLayers.jsx` | {r.play_date ? ' · ${r.play_date}' : ''} | {r.play_date ? ' · ${fmtRange(r.play_date)}' : ''} |
+| `lib/history.js` | problems.push('Line ${n}: ${date} is in the future') | problems.push('Line ${n}: ${shortDate(date)} is in the future') |

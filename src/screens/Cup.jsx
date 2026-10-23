@@ -205,6 +205,12 @@ export function CupMatch() {
   const coolUntil = useRef(0); // a quick second tap mustn't land on the next hole
   const [local, setLocal] = useState(null); // holes just saved, until the live copy catches up
   useEffect(() => { setLocal(null); }, [m?.updated_at]);
+  // ov28: before the early returns (it sat after them — opening a match straight from a link crashed with React #310).
+  useEffect(() => {
+    if (!saved) return undefined;
+    const t = setTimeout(() => setSaved(null), 4000);
+    return () => clearTimeout(t);
+  }, [saved]);
   if (!cup.ready) return <div className="page"><Header back title="Match" /><Loading /></div>;
   if (!m) return <div className="page"><Header back title="Match" /><Offline cup={cup} />{!cup.failed && <div className="empty">That match isn’t here any more.</div>}</div>;
   const match = local ? { ...m, holes: local } : m;
@@ -234,11 +240,6 @@ export function CupMatch() {
       setHole(h + 1);
     } else if (after.decided) toast(matchText({ ...match, holes }, n));
   };
-  useEffect(() => {
-    if (!saved) return undefined;
-    const t = setTimeout(() => setSaved(null), 4000);
-    return () => clearTimeout(t);
-  }, [saved]);
   // Once the match is decided, the buttons only come back for a hole that's tapped (to fix a mistake).
   const locked = s.decided && !res && !picked;
   const big = (side, label, colour) => (
@@ -589,6 +590,12 @@ function AddMatch({ cup, cupComp, people = null }) {
       <PlayerPick label={A.name} colour={A.colour} options={pool(A.id)} value={a} onChange={(v) => { setA(v); setHcp((h) => ({ ...h, a: '' })); }} max={max} statusOf={people?.statusOf} />
       <PlayerPick label={B.name} colour={B.colour} options={pool(B.id)} value={b} onChange={(v) => { setB(v); setHcp((h) => ({ ...h, b: '' })); }} max={max} statusOf={people?.statusOf} />
       <div className="row" style={{ gap: 8 }}>
+        <label className="field grow"><span>{A.name} hcp</span><input className="input" inputMode="decimal" value={hcp.a === '' ? String(aH) : hcp.a} onChange={(e) => setHcp({ ...hcp, a: e.target.value })} /></label>
+        <label className="field grow"><span>{B.name} hcp</span><input className="input" inputMode="decimal" value={hcp.b === '' ? String(bH) : hcp.b} onChange={(e) => setHcp({ ...hcp, b: e.target.value })} /></label>
+        <label className="field" style={{ width: 80 }}><span>Points</span><input className="input" inputMode="decimal" value={points} onChange={(e) => setPoints(e.target.value)} /></label>
+      </div>
+      <div className="small muted">{format === 'ambrose' ? 'Ambrose pairs: each pair’s handicap is their two handicaps added up ÷ 4.' : 'Singles: each player’s handicap.'} The higher side gets the difference as shots on the hardest holes. Change either number if you’ve agreed something else.</div>
+      <div className="row" style={{ gap: 8 }}>
         <label className="field grow"><span>Tee time (optional)</span>
           <input className="input" type="time" value={tee.time} onChange={(e) => setTee({ ...tee, time: e.target.value })} aria-label="Match tee time" data-testid="match-tee-time" />
         </label>
@@ -596,12 +603,6 @@ function AddMatch({ cup, cupComp, people = null }) {
           <input className="input" inputMode="numeric" placeholder="1" value={tee.hole} onChange={(e) => setTee({ ...tee, hole: e.target.value.replace(/[^0-9]/g, '').slice(0, 2) })} aria-label="Start hole" />
         </label>
       </div>
-      <div className="row" style={{ gap: 8 }}>
-        <label className="field grow"><span>{A.name} hcp</span><input className="input" inputMode="decimal" value={hcp.a === '' ? String(aH) : hcp.a} onChange={(e) => setHcp({ ...hcp, a: e.target.value })} /></label>
-        <label className="field grow"><span>{B.name} hcp</span><input className="input" inputMode="decimal" value={hcp.b === '' ? String(bH) : hcp.b} onChange={(e) => setHcp({ ...hcp, b: e.target.value })} /></label>
-        <label className="field" style={{ width: 80 }}><span>Points</span><input className="input" inputMode="decimal" value={points} onChange={(e) => setPoints(e.target.value)} /></label>
-      </div>
-      <div className="small muted">{format === 'ambrose' ? 'Ambrose pairs: each pair’s handicap is their two handicaps added up ÷ 4.' : 'Singles: each player’s handicap.'} The higher side gets the difference as shots on the hardest holes. Change either number if you’ve agreed something else.</div>
       <button type="button" className="btn gold" disabled={busy || !ok} onClick={add}>Add match</button>
     </div>
   );

@@ -60,7 +60,7 @@ function CupDay({ round, setup, trip }) {
     <div className="card" data-testid="cup-day" style={{ overflow: 'hidden' }}>
       <Link to="/cup" className="stack" style={{ gap: 2, padding: '12px 14px', textDecoration: 'none', color: 'inherit', textAlign: 'center' }}>
         <span className="label">⚔️ The Cup · {round.name}</span>
-        <span style={{ fontSize: 26, fontWeight: 800 }} data-testid="cup-day-score">
+        <span style={{ fontSize: 21, fontWeight: 800, lineHeight: 1.2 }} data-testid="cup-day-score">
           <span style={{ color: A.colour }}>{A.name} {pts(t.won.a)}</span> – <span style={{ color: B.colour }}>{pts(t.won.b)} {B.name}</span>
         </span>
         {moved && <span className="small muted" data-testid="cup-day-projected">If it finished now: {pts(t.projected.a)}–{pts(t.projected.b)}</span>}

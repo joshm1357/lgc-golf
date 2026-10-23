@@ -77,6 +77,15 @@ export function useTripResults(trip) {
         line: winner ? handoverLine({ trophyName: name, year, winner: winner.names, winnerIds: winner.ids, previous }) : null,
       };
     }).sort((a, b) => (ORDER[a.comp.kind] ?? 9) - (ORDER[b.comp.kind] ?? 9));
+    // Winners already on the honour board for this trip with no comp or trophy here (history, an engraved one-off).
+    const have = new Set(trophies.map((t) => t.name.toLowerCase()));
+    for (const h of (data.honour_board || []).filter((x) => x.trip_id === trip.id && !have.has(String(x.trophy_name).toLowerCase()))) {
+      have.add(String(h.trophy_name).toLowerCase());
+      const winner = { names: h.winner_names, ids: h.player_ids || [] };
+      const previous = previousHolder({ trophyName: h.trophy_name, tripId: trip.id, honourBoard: data.honour_board });
+      trophies.push({ comp: { id: `hb-${h.id}`, kind: 'manual' }, st: null, trophy: null, name: h.trophy_name, winner, engraved: true, previous,
+        line: handoverLine({ trophyName: h.trophy_name, year, winner: winner.names, winnerIds: winner.ids, previous }) });
+    }
     const hero = trophies.find((t) => t.winner && t.comp.kind !== 'manual') || trophies.find((t) => t.winner) || null;
     // The Cup's verdict (real match results — never "6½ to win" on a finished trip).
     const cupSt = standings.find(({ c }) => c.kind === 'cup')?.st || null;

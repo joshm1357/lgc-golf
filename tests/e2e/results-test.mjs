@@ -98,21 +98,23 @@ const board = await page.locator('.page').first().innerText();
 check(!/to win/.test(board), 'Cup board: no "to win" once it\'s over');
 check(!/10&2|won \d+&2/.test(board) && /won 10&8/.test(board), 'Cup board: "won 10&8", never "10&2"');
 
-// 5. The awards presentation: winners one by one.
+// 5. The presentation (ov33): running order, then the winners one by one, main trophy last.
 await page.goto(`${BASE}#/present/awards/${TRIP}`);
-await page.getByTestId('awards-slide').waitFor({ timeout: 15000 });
-await page.waitForTimeout(800);
-const titles = [];
-for (let i = 0; i < 12; i++) {
-  titles.push(await page.getByTestId('awards-slide-title').innerText());
-  if (await page.getByTestId('awards-next').isDisabled()) break;
-  await page.getByTestId('awards-next').click();
+await page.getByTestId('present-start').click({ timeout: 15000 });
+await page.getByTestId('pz-stage').waitFor();
+const keysSeen = [];
+for (let i = 0; i < 80; i++) {
+  const st = page.getByTestId('pz-stage');
+  const k = await st.getAttribute('data-key');
+  if (k === 'end') break;
+  if (!keysSeen.includes(k)) keysSeen.push(k);
+  await page.getByTestId('pz-skip').click().catch(() => {});
+  await page.getByTestId('pz-forward').click();
 }
-check(titles.includes('BD Trophy'), `presentation: the BD Trophy (${titles.join(' | ')})`);
-check(titles.some((x) => /Award: Shot of the trip/.test(x)), 'presentation: the group\'s awards');
-check(titles.some((x) => /fines tally/.test(x)), 'presentation: the fines tally');
-check(titles[titles.length - 1] === 'That’s a wrap', 'presentation: ends with "That\'s a wrap"');
-check(!titles.join(' ').toLowerCase().includes('dinner'), 'presentation: never "dinner"');
+check(keysSeen[keysSeen.length - 1] === 't-comp-bd', `presentation: the BD Trophy last (${keysSeen.join(' | ')})`);
+check(keysSeen.includes('a-aw-1') && keysSeen.includes('fines-tally'), 'presentation: the group\'s awards and the fines tally');
+check(/That’s a wrap/.test(await page.getByTestId('pz-title').innerText()), 'presentation: ends with "That\'s a wrap"');
+check(!(await page.locator('.pz').innerText()).toLowerCase().includes('dinner'), 'presentation: never "dinner"');
 await shot('2-presentation');
 
 // 6. The awards page says "Awards and fines" and has Present.

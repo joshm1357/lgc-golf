@@ -23,6 +23,9 @@ import { AskChip } from '../components/AskChip.jsx';
 import { RoundTools } from '../components/RoundTools.jsx';
 import { SaveSpotBanner } from '../components/SaveSpot.jsx';
 import { useRoundAdjustments, PenaltyLines } from '../components/LateJobs.jsx';
+import { useProjectedDrives, DriveTracker, DrivesRoundRule } from '../components/AmbroseDrives.jsx';
+import { PendingPenalties } from '../components/RulePenalty.jsx';
+import { penaltyBadgeWord, penaltyRowWords, projectedStrokes } from '../lib/drives.js';
 
 const DrawSetup = lazyScreen(() => import('../components/DrawSetup.jsx'), 'default', { inline: true });
 
@@ -64,7 +67,10 @@ export default function Leaderboard() {
   const tvOn = useFeature('clubhouse_tv');
   const scores = useScores(round?.id);
   const side = useSideEntriesState(round?.id);
-  const adjustments = useRoundAdjustments(round?.id);
+  const savedAdjustments = useRoundAdjustments(round?.id);
+  // 099: drive penalties still to come on a live Ambrose round — shown on the board as "projected", not counted.
+  const projectedDrives = useProjectedDrives(round, scores.index);
+  const adjustments = useMemo(() => (projectedDrives.length ? [...savedAdjustments, ...projectedDrives] : savedAdjustments), [savedAdjustments, projectedDrives]);
 
   // Null until everything the total needs is here (side comp bonus strokes included), so it never flickers.
   const rawBoard = useMemo(() => readyBoard({
@@ -215,6 +221,7 @@ export default function Leaderboard() {
         <div className="section"><div className="card pad small" style={{ lineHeight: 1.45 }}><strong><RuleTag testId="todays-rules" rule={{ table: 'rounds', id: round.id, field: 'rules', label: 'Today’s rules', value: round.rules, where: { round_id: round.id, trip_id: round.trip_id, path: '/' } }}
           explain={round.rules}>Today's rules:</RuleTag></strong> {round.rules}{status?.legacy && <> <a href="?guide" style={{ fontWeight: 700 }}>How it works</a></>}</div></div>
       )}
+      <DrivesRoundRule round={round} />
 
       {heads.length > 0 && round.status !== 'locked' && (
         <div className="heads">
@@ -268,7 +275,12 @@ export default function Leaderboard() {
                   <AvatarStack players={r.players} size={isTeams ? 26 : 22} />
                   {!!r.penalty && (
                     <span data-testid="lb-penalty" title={(r.penaltyLines || []).filter((l) => !l.waived).map((l) => l.label).join(', ')} style={{ marginLeft: 8, display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 999, background: r.penalty > 0 ? '#FDF1EF' : 'var(--gold-soft)', border: `1px solid ${r.penalty > 0 ? 'var(--under)' : 'var(--gold)'}`, color: r.penalty > 0 ? 'var(--under)' : 'var(--text)', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap' }}>
-                      {r.penalty > 0 ? '⚠️ +' : '🏆 −'}{Math.abs(r.penalty)} {(r.penaltyLines || []).every((l) => l.kind !== 'award') ? 'late job' : 'strokes'}
+                      {r.penalty > 0 ? '⚠️ +' : '🏆 −'}{Math.abs(r.penalty)} {penaltyBadgeWord(r.penaltyLines)}
+                    </span>
+                  )}
+                  {projectedStrokes(r.penaltyLines) > 0 && (
+                    <span data-testid="lb-projected-penalty" title={(r.penaltyLines || []).filter((l) => l.projected).map((l) => l.label).join(', ')} style={{ marginLeft: 8, display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 999, border: '1px dashed var(--under)', color: 'var(--under)', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap' }}>
+                      ⏳ +{projectedStrokes(r.penaltyLines)} drives
                     </span>
                   )}
                   {(r.bonusWins || []).map((w) => (
@@ -309,6 +321,7 @@ export default function Leaderboard() {
             ? `Net to par for the holes each team has played, so teams on different holes compare fairly.${round.comp_bonus ? ` Gold tags = side comp won (−${round.comp_bonus} strokes, already in the score).` : ''} Arrows show movement since you last looked. Tap a team for its card.`
             : 'Points, and +/− against the expected 2 points a hole, so players on different holes compare fairly. * = typed in from a paper card.'}
       </p>
+      <PendingPenalties round={round} />
       {!status?.quick && <RoundRecap round={round} board={board} course={course} />}
       {scores.pendingCount > 0 && <div className="sync">{scores.pendingCount} score{scores.pendingCount > 1 ? 's' : ''} waiting to sync — they'll send when signal's back.</div>}
 
@@ -343,6 +356,7 @@ export function Scorecard({ row, board, round }) {
       </div>
       {row.bonus ? <div className="card pad small" style={{ background: 'var(--gold-soft)', borderColor: 'var(--gold)' }}><strong>Side comp bonus −{row.bonus}</strong> · {row.bonusWins.join(', ')} (already taken off the score)</div> : null}
       <PenaltyLines lines={row.penaltyLines} round={round} names={(row.players || []).length > 1} />
+      {isA && round?.status === 'live' && <DriveTracker round={round} team={row} holes={holes} scores={row.scores || {}} />}
       {row.quick ? (
         <div className="card pad">Typed in from a paper card: <strong>{row.points} points</strong>.</div>
       ) : (
@@ -373,7 +387,7 @@ export function Scorecard({ row, board, round }) {
               })}
               {!!row.penalty && (
                 <tr data-testid="sc-penalty-row">
-                  <td colSpan={5}><strong>{row.penalty > 0 ? 'Penalty' : 'Strokes off'}</strong> <span className="muted">({(row.penaltyLines || []).every((l) => l.kind !== 'award') ? 'late job' : 'awards, fines and late jobs'})</span></td>
+                  <td colSpan={5}><strong>{row.penalty > 0 ? 'Penalty' : 'Strokes off'}</strong> <span className="muted">({penaltyRowWords(row.penaltyLines)})</span></td>
                   <td><strong>{(isNet ? row.penalty > 0 : row.penalty < 0) ? '+' : '−'}{Math.abs(row.penalty)}</strong></td>
                 </tr>
               )}

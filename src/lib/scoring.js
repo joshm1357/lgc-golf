@@ -222,9 +222,17 @@ export function formatToPar(n, dp = 0) {
  */
 export function penaltyFor(adjustments = [], playerIds = []) {
   const ids = new Set(playerIds);
+  // 099: rule breaches (kind 'rule_breach'), and strokes off (a negative row, e.g. an award "Latest out (−1)") — a
+  // bonus line, taken off the score. A projected row (drives still to come on a live round) is shown, not counted.
   const lines = (adjustments || []).filter((a) => ids.has(a.player_id))
-    .map((a) => ({ id: a.id, label: a.label, strokes: Number(a.strokes) || 0, waived: !!a.waived_at, rule_id: a.rule_id || null, player_id: a.player_id, kind: a.kind || 'late_job' }));
-  const strokes = lines.filter((l) => !l.waived).reduce((s, l) => s + l.strokes, 0);
+    .map((a) => {
+      const strokes = Number(a.strokes) || 0;
+      return {
+        id: a.id, label: a.label, strokes, waived: !!a.waived_at, rule_id: a.rule_id || null, player_id: a.player_id, kind: a.kind || 'late_job',
+        bonus: strokes < 0, projected: !!a.projected, applied_by: a.applied_by || null, proposed_by: a.proposed_by || null, hole: a.hole ?? null,
+      };
+    });
+  const strokes = lines.filter((l) => !l.waived && !l.projected).reduce((s, l) => s + l.strokes, 0);
   return { strokes, lines };
 }
 

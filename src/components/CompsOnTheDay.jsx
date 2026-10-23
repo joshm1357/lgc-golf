@@ -19,6 +19,7 @@ import { useData, useSession, useFeature, useRealtime, playerName } from '../lib
 import { toast } from './ui.jsx';
 import { useRun, must } from '../lib/run.js';
 import RuleTag, { useActiveRules, useOpenDisputes } from './RuleTag.jsx';
+import { TripPenaltyRules } from './RulePenalty.jsx';
 import { upForGrabs, usualComps, handicapRows, ruleDisputes, reviewDue } from '../lib/compsday.js';
 import { todayISO } from '../lib/plan.js';
 
@@ -137,6 +138,7 @@ function CompsDayFull({ pd, trip, isOrg }) {
       <section className="card pad stack" style={{ gap: 6 }} data-testid="comps-rules">
         <strong>📖 Rules for this trip</strong>
         <span className="small">{rules.length ? `${rules.length} rule${rules.length === 1 ? '' : 's'} in the Rulebook` : 'The Rulebook is empty — the standard rules apply.'}{rules.length ? `: ${rules.slice(0, 4).map((r) => r.title).join(', ')}${rules.length > 4 ? '…' : ''}` : ''}</span>
+        <TripPenaltyRules />{/* ov30 (099): the drives rule and rule penalties */}
         {proposed.length > 0 && <span className="small" data-testid="rules-proposed">🗳️ Up for a vote: {proposed.map((r) => r.title).join(', ')}</span>}
         {ruleCases.length > 0 && <span className="small" style={{ color: 'var(--under)', fontWeight: 700 }} data-testid="rules-disputed">⚖️ Under dispute: {ruleCases.map((c) => c.title).join(', ')}</span>}
         <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>

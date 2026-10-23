@@ -1,0 +1,61 @@
+Run on a local Postgres 16 with migrations 001–099 (Supabase stand-ins for auth/cron/storage), 23 Oct 2026. Everything rolled back. One line per result:
+every group has exactly one = 0 without
+L.G.C (legacy) drives rule = Minimum drives · 6 drives each in a three · 4 in a four · 6 in a pair · +2 a drive short
+L.G.C has no second drives rule = 1
+new group P has the rule = Ambrose minimum drives · 6 drives each in a three · 4 in a four · 6 in a pair · +2 a drive short · format · ambrose · 6/6/4 +2
+its wording = true
+seeding again adds nothing =  1
+needed: 18 holes, team of 2/3/4/5 = 6/6/4/3
+needed: 9 holes, team of 2/3/4 = 3/3/2
+needed: round says 6, team of 3/4 = 6/4
+needed: rule says 9 for a three (capped) = 6
+live shortfall (server) = Cy 1/2 +2
+player changes the drives = refused
+player's own rule made a standard one = no / none / penalty 9
+guest changes the penalty = refused
+organiser sets 3 in a four = 6/6/3 · 6 drives each in a three · 3 in a four · 6 in a pair · +2 a drive short
+a new version recorded = 1:added,2:changed
+organiser sets 10 drives = refused: new row for relation "rules" violates check constraint "rules_drives_3_check"
+organiser clears the standard key = ok ambrose_drives
+organiser deletes it = ok 0 rows
+a rule with a penalty = No mulligans +1 · value none · drives none
+organiser applies (default strokes) = ok applied
+it's on the card = No mulligans · hole 4 (+1) = 1 · rule_breach · by P Organiser · hole 4
+a rule with no penalty set needs strokes = refused: How many strokes?
+a retired rule = refused: Pick a rule from the Rulebook
+11 strokes = refused: Penalty strokes: a whole number from 1 to 10
+someone not in the round = refused: Pick someone playing this round
+a round still in set-up = refused: Penalties go on a round once it's started
+organiser writes an adjustment directly = refused: permission denied for table score_adjustments
+player proposes = ok proposed
+not on the card yet = 0
+player confirms his own = refused: Only an organiser can confirm a penalty
+player writes a proposal directly = refused: permission denied for table penalty_proposals
+player waives a penalty = refused: Only an organiser can waive a penalty
+guest applies = refused: Guests can't give penalties
+guest reads penalties / proposals = 1 / 1
+other group applies = refused: Round not found
+other group confirms = refused: Not found
+other group reads penalties / proposals = 0 / 0
+organiser confirms (3 strokes) = ok confirmed
+confirmed penalty = No mulligans · hole 7 (+3) = 3 · proposed by Al One · applied by P Organiser
+proposal now = confirmed by P Organiser
+confirm it again = refused: That one's already been decided
+drives after lock = Drives: Cy 1 of 2 (+2) = 2 · rule_breach · rule true
+team B (no drives recorded) = 0
+team A total penalty = 6
+re-locked, Cy has 2 now = 0
+round's own penalty (3) = Drives: Cy 0 of 2 (+6) = 6
+organiser waives the drives = ok waived
+drives penalty = Drives: Cy 0 of 2 (+6) · waived true by P Organiser
+still waived after re-lock = 6 waived true
+kind award (−1) = ok award
+kind made-up = refused: new row for relation "score_adjustments" violates check constraint "score_adjustments_kind_check"
+waive a non-rule penalty = refused: Waive this one where it's set
+disputes raised = rule:drives_3=6, setting:strokes=3
+guest disputes = refused: Guests can't raise cases
+apply verdict: drives = applied
+rule after verdict = 5 · 5 drives each in a three · 3 in a four · 6 in a pair · +2 a drive short
+apply verdict: penalty = applied
+penalty after verdict = No mulligans · hole 7 (+1) = 1
+an award's label follows its strokes = Latest out (−2)

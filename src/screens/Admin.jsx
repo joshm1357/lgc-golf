@@ -14,6 +14,7 @@ import { TeeGroupsCard } from './TeeGroups.jsx';
 import { RoundCompsCard, useScrollToRound } from './CompsBoard.jsx';
 import { CommentarySettings } from '../components/Commentary.jsx';
 import { isYearOnly, tripWhen } from '../lib/trips.js';
+import { drivesRule, drivesRoundLine } from '../lib/drives.js';
 
 async function run(fn, okMsg) {
   try {
@@ -295,12 +296,15 @@ function RoundRules({ round }) {
   const [rules, setRules] = useState(null);
   const [bonus, setBonus] = useState(String(round.comp_bonus ?? 0));
   const [drives, setDrives] = useState(String(round.min_drives ?? ''));
+  const [drivePen, setDrivePen] = useState(String(round.drive_penalty ?? '')); // 099: strokes per drive short, this round
   useEffect(() => {
     supabase.from('rules').select('*').eq('status', 'active').order('sort').then(({ data: r }) => setRules(r || []), () => setRules([]));
   }, []);
   const isA = round.format === 'ambrose';
   const s = roundSettingsFromRules(rules || [], round.format);
-  const changed = String(round.comp_bonus ?? 0) !== bonus || String(round.min_drives ?? '') !== drives;
+  const dr = drivesRule(rules || []);
+  const penChanged = String(round.drive_penalty ?? '') !== drivePen;
+  const changed = String(round.comp_bonus ?? 0) !== bonus || String(round.min_drives ?? '') !== drives || penChanged;
   const save = (patch, msg) => run(() => supabase.from('rounds').update(patch).eq('id', round.id), msg).then(data.reload);
   return (
     <details className="card pad" style={{ background: '#fff' }}>
@@ -311,10 +315,12 @@ function RoundRules({ round }) {
         {isA && (
           <div className="row">
             {bonusOn && <label className="field grow"><span>Side comp worth (strokes off)</span><input className="input" inputMode="numeric" value={bonus} onChange={(e) => setBonus(e.target.value.replace(/[^0-9]/g, ''))} /></label>}
-            <label className="field grow"><span>Minimum drives each</span><input className="input" inputMode="numeric" value={drives} onChange={(e) => setDrives(e.target.value.replace(/[^0-9]/g, ''))} placeholder="none" /></label>
+            <label className="field grow"><span>Minimum drives each</span><input className="input" inputMode="numeric" data-testid="round-min-drives" value={drives} onChange={(e) => setDrives(e.target.value.replace(/[^0-9]/g, ''))} placeholder={dr?.on ? 'by team size' : 'none'} /></label>
+            <label className="field grow"><span>Strokes per drive short</span><input className="input" inputMode="numeric" data-testid="round-drive-penalty" value={drivePen} onChange={(e) => setDrivePen(e.target.value.replace(/[^0-9]/g, ''))} placeholder={dr?.on ? `Rulebook: ${dr.strokes}` : 'none'} /></label>
           </div>
         )}
-        {changed && <button type="button" className="btn sm" onClick={() => save({ comp_bonus: bonusOn ? parseInt(bonus, 10) || 0 : 0, min_drives: drives ? Number(drives) : null }, 'Round settings saved')}>Save these settings</button>}
+        {isA && (dr?.on || drives) && <span className="small muted" data-testid="round-drives-line">{drivesRoundLine({ dr, round: { min_drives: drives === '' ? null : Number(drives), drive_penalty: drivePen === '' ? null : Number(drivePen) }, teamSizes: (data.teamsByRound?.[round.id] || []).map((t) => (t.players || []).filter(Boolean).length) }) || 'No minimum drives this round.'} Blank = the Rulebook’s numbers.</span>}
+        {changed && <button type="button" className="btn sm" onClick={() => save({ comp_bonus: bonusOn ? parseInt(bonus, 10) || 0 : 0, min_drives: drives ? Number(drives) : null, ...(penChanged ? { drive_penalty: drivePen === '' ? null : Math.min(10, Number(drivePen)) } : {}) }, 'Round settings saved')}>Save these settings</button>}
         {rules && s.applies.length > 0 && (
           <button type="button" className="btn ghost sm" onClick={() => {
             const patch = { rules: s.text };

@@ -24,3 +24,10 @@
 - A proposer can only take their game down (before the round), not change it — people opted in to what they saw.
 - House rules are optional; the 073 check on `custom_games.rules_text` is replaced by 0–1000 letters (the one non-additive change, agreed with Josh).
 - Opt-in games aren't copied by "Do it again" — they were someone's offer for that trip.
+## ov30 — rule penalties and Ambrose drives (23 Oct 2026)
+- Drives defaults on 18 holes: 6 each in a three, 4 in a four, 6 in a pair; five or more share the four's total (3 each); 9 holes = half, rounded down; never more than holes ÷ team size. +2 strokes a drive short.
+- A team that records no drives at all isn't tracked and gets no drives penalty (it wasn't tracked, not broken).
+- Drive penalties are added when the round locks; while live they show as "projected" and don't count.
+- A player's penalty is a proposal until an organiser confirms it; guests can't give penalties. Organisers' go straight on.
+- Rule penalties count on the team score in Ambrose and the player's score otherwise; negative strokes are bonus lines.
+- `score_adjustments.kind` widened to 'late_job', 'rule_breach', 'award' ('award' reserved for a later migration).

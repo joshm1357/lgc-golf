@@ -16,6 +16,8 @@ import { standardOptions, standardRule } from '../lib/standardrules.js';
 import { useRuleData, RulesFilterBar, RoundRules, TargetRules, RuleScopeFields, scopeRow, ScopeBadge } from '../components/RuleLayers.jsx';
 import { filterLocal, loadFilter, saveFilter, chipTarget, scopeFromValue } from '../lib/rulelayers.js';
 import { lateRulePatch, LATE_KEY } from '../lib/latejobs.js';
+import { DRIVES_KEY, drivesRule, drivesRulePatch } from '../lib/drives.js';
+import { DrivesTable } from '../components/RulePenalty.jsx';
 import { LEFTOVER, LEFTOVER_KEY, REWARD_TYPES, signedAmount } from '../lib/awardsfines.js';
 
 const CATS = [
@@ -134,7 +136,8 @@ export function Chips({ rule }) {
   return (
     <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
       {rule.value && <span className="small" style={{ padding: '2px 10px', borderRadius: 999, background: 'var(--gold-soft)', border: '1px solid var(--gold)', fontWeight: 800 }}>{rule.value}</span>}
-      {rule.applies_to.map((a) => <span key={a} className="small" style={{ padding: '2px 10px', borderRadius: 999, background: '#EEF1F5', fontWeight: 600 }}>{APPLY[a] || a}</span>)}
+      {rule.breach_strokes > 0 && !rule.system_key && <span className="small" data-testid="breach-chip" style={{ padding: '2px 10px', borderRadius: 999, background: '#FDF1EF', border: '1px solid var(--under)', fontWeight: 800 }}>⚖️ +{rule.breach_strokes} if broken</span>}
+      {(rule.applies_to || []).map((a) => <span key={a} className="small" style={{ padding: '2px 10px', borderRadius: 999, background: '#EEF1F5', fontWeight: 600 }}>{APPLY[a] || a}</span>)}
       {standardRule(rule.overrides) && <span className="small" data-testid="changes-standard" style={{ padding: '2px 10px', borderRadius: 999, border: '1px solid var(--line)', fontWeight: 600 }}>Changes: {standardRule(rule.overrides).title}</span>}
     </div>
   );
@@ -237,6 +240,8 @@ export function RuleSheet({ rule, start, onClose, onSaved, settings, localRules 
   const isLate = rule?.system_key === LATE_KEY; // the standard late job rule: two numbers instead of "Worth" 
   const isLeftover = rule?.system_key === LEFTOVER_KEY; // 093: the leftover kitty — a choice instead of "Worth"
   const isAward = !!rule?.award_kind; // 093: an award or fine — its worth comes from the reward
+  const isDrives = rule?.system_key === DRIVES_KEY; // 099: Ambrose minimum drives — drives each by team size + strokes
+  const canBreach = !isLate && !isLeftover && !isAward && !isDrives; // 099: any other rule can carry a penalty
   const [busy, run] = useRun();
   const f = (k) => ({ value: v[k] ?? '', onChange: (e) => set({ ...v, [k]: e.target.value }) });
   const toggle = (a) => {
@@ -265,6 +270,20 @@ export function RuleSheet({ rule, start, onClose, onSaved, settings, localRules 
       delete row.value; // the server writes "2 strokes · 5 days" from the numbers
       // Wording left as it was: the server rewrites it to the new numbers (it keeps an organiser's own wording).
       if (row.detail === (rule.detail || '').trim()) row.detail = rule.detail;
+    }
+    if (isDrives) {
+      const p = drivesRulePatch({ n2: v.drives_2 ?? 6, n3: v.drives_3 ?? 6, n4: v.drives_4 ?? 4, strokes: v.breach_strokes ?? 2 });
+      if (p.error) throw new Error(p.error);
+      Object.assign(row, p);
+      delete row.value; // the server writes "6 drives each in a three · …" from the numbers
+      if (row.detail === (rule.detail || '').trim()) row.detail = rule.detail;
+    }
+    if (canBreach && String(v.breach_strokes ?? '') !== String(rule?.breach_strokes ?? '')) {
+      // Only sent when it changes, so an older database (no column) still saves the rest.
+      const t = String(v.breach_strokes ?? '').trim();
+      const n = t === '' ? null : Number(t);
+      if (n != null && (!Number.isInteger(n) || n < 0 || n > 10)) throw new Error('Penalty strokes: a whole number from 0 to 10');
+      row.breach_strokes = n;
     }
     // Which standard rule it changes (073). Only sent when set (or being cleared), so an older database still works.
     if (v.overrides || rule?.overrides) row.overrides = v.overrides || null;
@@ -309,7 +328,23 @@ export function RuleSheet({ rule, start, onClose, onSaved, settings, localRules 
             )}
             <label className="field"><span>In words (optional)</span><input className="input" maxLength={80} value={v.reward_note || ''} onChange={(e) => set({ ...v, reward_note: e.target.value })} /></label>
           </div>
-        ) : <label className="field"><span>Worth / amount (optional)</span><input className="input" {...f('value')} placeholder="e.g. −1 stroke, +2 points, $5" /></label>}
+        ) : isDrives ? (
+          <div className="stack" style={{ gap: 6 }} data-testid="drive-rule-fields">
+            <span className="small muted">Drives each player needs over 18 holes (half on 9, and never more than a fair share of the holes).</span>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <label className="field"><span>Team of three</span><input className="input" inputMode="numeric" data-testid="drives-3" {...f('drives_3')} /></label>
+              <label className="field"><span>Team of four</span><input className="input" inputMode="numeric" data-testid="drives-4" {...f('drives_4')} /></label>
+              <label className="field"><span>Pair</span><input className="input" inputMode="numeric" data-testid="drives-2" {...f('drives_2')} /></label>
+              <label className="field"><span>Strokes per drive short</span><input className="input" inputMode="numeric" data-testid="drives-strokes" {...f('breach_strokes')} /></label>
+            </div>
+            <DrivesTable dr={drivesRule([{ ...rule, drives_2: v.drives_2, drives_3: v.drives_3, drives_4: v.drives_4 }])} />
+          </div>
+        ) : (
+          <>
+            <label className="field"><span>Worth / amount (optional)</span><input className="input" {...f('value')} placeholder="e.g. −1 stroke, +2 points, $5" /></label>
+            <label className="field"><span>Penalty for breaking it — strokes (optional)</span><input className="input" inputMode="numeric" data-testid="breach-strokes-input" {...f('breach_strokes')} placeholder="e.g. 2 — blank for none" /></label>
+          </>
+        )}
         <label className="field"><span>Details</span><textarea className="textarea" rows={4} style={{ padding: 12 }} {...f('detail')} placeholder="How it works, when it counts" /></label>
         <label className="field"><span>Type</span>
           <select className="select" {...f('category')}>{CATS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
@@ -338,7 +373,8 @@ export function RuleSheet({ rule, start, onClose, onSaved, settings, localRules 
         {rule && isAdmin && rule.status === 'active' && direct('scrap_rule') && <button type="button" className="btn ghost block" disabled={busy} onClick={() => save('retired')}>Retire this rule</button>}
         {rule && isAdmin && (rule.status === 'retired' || rule.status === 'rejected') && <button type="button" className="btn ghost block" disabled={busy} onClick={() => save('active')}>Bring it back</button>}
         {isLate && <span className="small muted">A standard rule — switch it off with 0 strokes (or retire it); it can’t be deleted.</span>}
-        {rule && !isLate && !isLeftover && (isAdmin || rule.status === 'proposed') && (
+        {isDrives && <span className="small muted">A standard rule — 0 strokes keeps the count with no penalty; retire it to stop tracking. It can’t be deleted. The organiser can change the numbers for one round in the round’s settings.</span>}
+        {rule && !isLate && !isLeftover && !isDrives && (isAdmin || rule.status === 'proposed') && (
           <button type="button" className="btn ghost block" onClick={() => { if (window.confirm('Delete this rule completely?')) run(async () => { await must(supabase.from('rules').delete().eq('id', rule.id)); onSaved(); onClose(); toast('Deleted'); }); }}>Delete</button>
         )}
       </div>

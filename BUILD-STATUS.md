@@ -1540,3 +1540,38 @@ opt-in" and "You need to fill in the house rules, but it should not be a compuls
   `side-games-test` (propose → opt in → settle-up counts only those in, Feed In/Out, day screen, take it down, house
   rules optional); games, runup (now checks the offer line), rulebook-v2, trip-overview, awards-fines pass.
 - **Deploy when convenient:** the notify function (new kind `game_proposed`). Apply 098 on staging, then live.
+## ov30 — Rule penalties and Ambrose drives (23 Oct 2026, branch `ov30-rule-penalties`, migration 099, not applied)
+Josh: "not taking 6 drives from each player is 2 strokes per drive under the requirement".
+- **Any rule can carry a penalty** (`rules.breach_strokes`, 0–10): set in the rule's edit sheet ("Penalty for breaking
+  it"), shown on the rule page and as "⚖️ +2 if broken" in the Rulebook; changed and disputed the usual Rulebook way
+  (in a group that changes rules by vote, an organiser can't just change it — the database refuses).
+- **Standard rule "Ambrose minimum drives"** in every group (`system_key 'ambrose_drives'`): 6 each in a three, 4 in a
+  four, 6 in a pair over 18 holes; fives share the four's total (3 each); half on 9; never more than a fair share of the
+  holes; +2 a drive short. L.G.C's own "6 drives" rule is turned into it (no duplicate). Rule page shows the numbers
+  (each disputable) and a table for pairs to fives, 18 and 9 holes. Organiser can change N and P for one round (Admin →
+  round → Rules for this round: "Minimum drives each" / "Strokes per drive short"; blank = the Rulebook's).
+- **Whose drive?** (`components/AmbroseDrives.jsx`, mounted on Ambrose score entry): one tap per player, saved per hole
+  with the score (`scores.tee_shot_player`, queues offline the same way), tracker "Drives: Al 3/6 · Bo 5/6 …", warning
+  "Cy needs 4 more in 3 holes: +2 strokes coming", "Cy needs one" on the next tee, a nudge when none is picked and a list
+  of holes saved without one.
+- **Applying penalties:** on lock the server writes each shortfall as a `score_adjustments` row on the team
+  ("Drives: Cy 4 of 6 (+4)", kind `rule_breach`, rule_id set); re-lock re-counts (a waived or verdict-settled row is
+  left alone). While live, the board shows "⏳ +2 drives" projected (shown, not counted) and the team card has the
+  tracker. "⚖️ Penalty" on score entry: pick the rule, who, strokes (default from the rule), hole, note — organisers
+  apply straight on; players propose and an organiser confirms or declines (on score entry and the leaderboard);
+  guests get no button. All writes through security-definer RPCs (`apply_rule_penalty`, `decide_rule_penalty`,
+  `waive_rule_penalty`). Ambrose → counts on the team; other formats → the player. Organiser waives a rule penalty in
+  one tap from the scorecard (stays, struck out). Anyone (not guests) disputes it via its RuleTag. Negative strokes show
+  as 🏆 bonus lines.
+- **Shown in:** the round's rules line on the leaderboard, Ambrose "How it works" (standard rules: "Our drives rule",
+  and the standard text now says 6/4 and +2), and "Rules for this trip" (run-up and comps on the day).
+- **Migration 099** (`099_rule_penalties.sql`): new nullable columns (`rules.breach_strokes/drives_2/3/4`,
+  `rounds.drive_penalty`, `score_adjustments.applied_by/proposed_by/hole/note/breach_key`), table `penalty_proposals`
+  (RLS: members read, server writes only, same group), RPCs above, lock trigger. **One check dropped and re-added,
+  widened:** `score_adjustments_kind_check` now allows 'late_job', 'rule_breach', 'award'. Also puts back 085's
+  late-job numbers in `dispute_value` / `apply_dispute_verdict` (087 had dropped them). Test:
+  `supabase/tests/099_rule_penalties.sql` (+ expected), run on a local Postgres 16 by the first builder.
+- **Tests:** Vitest all pass (new `drives.test.js`, 22). Browser: new `rule-penalty` (whose drive → warning → offline →
+  lock → +strokes → waive; Penalty sheet organiser/player/guest; Rulebook) passes; late-job, board-bonus, dispute,
+  rulebook, rulebook-v2, rulebook-v3, governance, desktop, your-round, runup, weekends-comps, awards-fines, stroke,
+  fourball, results, day-screen, replay, trip-overview, side-comp-library pass.

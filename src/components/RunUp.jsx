@@ -20,6 +20,7 @@ import { OverviewVotes } from './OverviewVotes.jsx';
 import { voteWords } from '../lib/governance.js';
 import { RUNUP_SLOTS } from './runupSlots.jsx';
 import SideGamesOnOffer from './SideGamesOnOffer.jsx'; // ov29 (098)
+import { TripPenaltyRules } from './RulePenalty.jsx';
 import {
   countdownHeader, runUpSections, myTodos, carsView, joinProblem, roomsView, activityMoney, activityWhen, cleanActivity,
   bringView, bringEmoji, bringAskText, bringAskLink, claimPostText, tippingState, tipResult, tipTally, formGuide, formLine,
@@ -48,7 +49,7 @@ export function useRunUp(pd, tripId) {
       rowsOr(supabase.from('trip_tips').select('*').eq('plan_id', planId)),
       roundIds.length ? rowsOr(supabase.from('tee_groups').select('round_id,tee_time,player_ids').in('round_id', roundIds)) : [],
       rowsOr(supabase.from('cases').select('id,kind,title,stage,status,closes_at,rule_id,created_at').eq('status', 'open').order('created_at', { ascending: false }).limit(20)),
-      rowsOr(supabase.from('rules').select('id,title,status,value,category,sort').in('status', ['active', 'proposed']).order('sort').limit(60)),
+      rowsOr(supabase.from('rules').select('*').in('status', ['active', 'proposed']).order('sort').limit(60)),
     ]);
     const ids = (activities || []).map((a) => a.id);
     const joins = ids.length ? await rowsOr(supabase.from('trip_activity_people').select('*').in('activity_id', ids)) : [];
@@ -351,6 +352,7 @@ function RulesPart({ ru, guest }) {
   return (
     <Part id="rules" icon="📜" title="Rules for this trip" count={active.length ? `${active.length} in force` : null}>
       {active.slice(0, 5).map((r) => <Link key={r.id} to={`/rules/${r.id}`} className="ru-rule">{r.title}</Link>)}
+      <TripPenaltyRules rules={active} />{/* ov30 (099): the drives rule and rule penalties */}
       {active.length > 5 && <Link to="/governance/rulebook" className="small" style={{ fontWeight: 700 }}>All {active.length} rules →</Link>}
       {(proposed.length > 0 || disputed.length > 0) && (
         <div className="stack" style={{ gap: 4 }}>

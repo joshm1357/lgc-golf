@@ -19,6 +19,7 @@ import { lateRulePatch, LATE_KEY } from '../lib/latejobs.js';
 import { DRIVES_KEY, drivesRule, drivesRulePatch } from '../lib/drives.js';
 import { DrivesTable } from '../components/RulePenalty.jsx';
 import { LEFTOVER, LEFTOVER_KEY, REWARD_TYPES, signedAmount } from '../lib/awardsfines.js';
+import { gate } from '../lib/savedgate.js';
 
 const CATS = [
   ['format', 'Format & scoring'], ['side_comp', 'Side comps'], ['bonus', 'Bonuses'], ['handicap', 'Handicaps'],
@@ -115,7 +116,7 @@ export default function Rulebook({ embedded = false }) {
         {active.filter((r) => !r.system_key).length === 0 && !showPicker && <div className="empty">No rules yet.{!status.is_admin && rb.rules.length === 0 ? ' Your organiser can start from a ready-made Rulebook.' : ''}</div>}
         </>}
 
-        {(status.is_admin || (votingOn && status.role !== 'guest')) && <button type="button" className="btn gold block" onClick={() => setEditing(newStart ? { start: newStart } : {})}>{votingOn ? '+ Propose a rule' : '+ Add a rule'}</button>}
+        {(status.is_admin || (votingOn && status.role !== 'guest')) && <button {...gate('propose_rule')} type="button" className="btn gold block" onClick={() => setEditing(newStart ? { start: newStart } : {})}>{votingOn ? '+ Propose a rule' : '+ Add a rule'}</button>}
         {(status.is_admin || (votingOn && status.role !== 'guest')) && <RuleIdeas localRules={rb.rules} onPropose={(r) => setEditing({ start: r })} />}
 
         {status.is_admin && <ImportLink label="✨ Import rules from a photo or text" about="rules" />}

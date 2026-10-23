@@ -14,6 +14,7 @@ import { GroupCrest } from '../components/Logo.jsx';
 import { savedLook, paintLook, DEFAULT_LOOK } from '../lib/theme.js';
 import { rememberSource } from '../lib/quick.js';
 import { NEW_GROUPS } from '../lib/beta.js';
+import { PHONE_ONLY_LABEL, PHONE_ONLY_HELP } from '../lib/savedgate.js';
 
 export async function ensureSignedIn() {
   const { data: { session } } = await supabase.auth.getSession();
@@ -156,7 +157,7 @@ export function LostLink({ light = false }) {
 function FrontDoor() {
   const { status } = useSession();
   const [inviteLook, setInviteLook] = useState(null);
-  const [phoneOnly, setPhoneOnly] = useState(null); // the link code they chose "Just this phone for now" for
+  const [phoneOnly, setPhoneOnly] = useState(null); // the link code they chose "Just this phone: scoring and voting only" for
   const signInOn = SIGN_IN.length > 0;
   const hash = window.location.hash;
   const code = inviteCode(hash);
@@ -167,8 +168,8 @@ function FrontDoor() {
   useEffect(() => { if (signInOn && !code && !savedLook()) paintLook(DEFAULT_LOOK, null); }, [code, signInOn]);
 
   if (code) {
-    // A link on a phone or laptop that isn't signed in: sign in first, as part of joining (ov13). "Just this phone
-    // for now" is the old phone-only way (they get Save your spot later).
+    // A link on a phone or laptop that isn't signed in: sign in first, as part of joining (ov13). "Just this phone:
+    // scoring and voting only" is the old phone-only way (they get Save your spot later).
     if (joinDoor({ signInOn, signedIn: !!status?.signed_in, phoneOnly: phoneOnly === code }) === 'sign-in') {
       return <JoinSignIn code={code} returnHash={`#/join/${code}${targetQuery(hash)}`} onPhone={() => { clearJoinAfterSignIn(); setPhoneOnly(code); }} />;
     }
@@ -214,7 +215,7 @@ function FrontDoor() {
 /**
  * The sign-in-first join screen (ov13): "Join <group> — sign in so it's you on any phone or laptop".
  * Continue with Google (Google's own button where it can, so no trip away), email + password (one form that works out
- * sign in or create), or "Just this phone for now". After signing in, InviteJoin uses the link as that account.
+ * sign in or create), or "Just this phone: scoring and voting only". After signing in, InviteJoin uses the link as that account.
  */
 function JoinSignIn({ code, returnHash, onPhone }) {
   const [info, setInfo] = useState(undefined); // undefined = checking; null = not a working link
@@ -286,9 +287,10 @@ function JoinSignIn({ code, returnHash, onPhone }) {
       {info && (
         <div className="stack" style={{ width: '100%', maxWidth: 340, gap: 6, borderTop: '1px solid rgba(255,255,255,.2)', paddingTop: 12 }}>
           <button type="button" className="btn ghost block" onClick={onPhone} data-testid="just-this-phone" style={ON_NAVY_GHOST}>
-            📱 Just this phone for now
+            📱 {PHONE_ONLY_LABEL}
           </button>
-          <span className="small" data-testid="just-this-phone-help" style={muted}>In straight away, but only on this phone — your name and scores won’t follow you to a laptop or new phone until you sign in.</span>
+          {/* v10.2 (Josh, option B): phone-only can look and play; organising, paying and proposing need a saved account. */}
+          <span className="small" data-testid="just-this-phone-help" style={muted}>{PHONE_ONLY_HELP}</span>
         </div>
       )}
     </div>

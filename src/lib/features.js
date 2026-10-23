@@ -52,6 +52,9 @@ export const FEATURES = [
   { key: 'commentary', name: 'Live commentary', description: 'A short line in the Feed (and the odd buzz) as the round goes on: lead changes, birdie runs, aces, the Cup — plus a round report.', parent: 'awards', newGroup: true },
   // ov28 (migration 097, walkthrough I9): bragging rights only — no money.
   { key: 'tipping', name: 'Tipping', description: 'Tip the Cup, a match, or who wins a round. Bragging rights only — no money in the app.', newGroup: true },
+  // v10.2 (migration 102, Josh's option B): phone-only accounts look and play; organising, money and proposing need a
+  // saved account (Google or email). On by default; a group can switch it off.
+  { key: 'phone_only_limited', name: 'Phone-only accounts: look and play only', description: 'Someone on “Just this phone” can follow along, vote and score. To organise, pay or propose things they save their spot (Google or email) first.', newGroup: true },
 ].map((f) => ({ parent: null, tier: 'free', ...f }));
 
 export const FEATURE_BY_KEY = Object.fromEntries(FEATURES.map((f) => [f.key, f]));
@@ -95,7 +98,7 @@ export const PRESETS = [
     key: 'just_scoring',
     name: 'Just scoring',
     blurb: 'Scores, the leaderboard and GPS distances. Nothing else to learn.',
-    switches: { ...ALL_OFF, gps: true, notifications: true },
+    switches: { ...ALL_OFF, gps: true, notifications: true, phone_only_limited: true },
   },
   {
     key: 'full_trip',

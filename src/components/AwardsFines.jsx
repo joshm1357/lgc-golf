@@ -17,6 +17,7 @@ import {
   REWARD_TYPES, PROOFS, BESTS, OPINIONS, IDEAS, LEFTOVER_KEY, rewardWords, proofNeeds, proofLabel, bestLabel, checkProposal,
   signedAmount, tripAwardList, chipText, claimWords, tallyOpinions, leftoverLine, leftoverWords, termsOf, worthOf,
 } from '../lib/awardsfines.js';
+import { gate } from '../lib/savedgate.js';
 
 const KIND_ICON = { award: '🏅', fine: '🏷' };
 
@@ -55,7 +56,7 @@ export function AwardsRunUp({ trip, title = '🏷 Fines & awards for this trip',
       <div className="card pad stack" style={{ gap: 6 }} data-testid="awards-runup">
         <strong>{title}</strong>
         <span className="small muted">No awards or fines yet. Got one in mind — latest out, wrong ball, air shot?</span>
-        <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={() => setProposing({})} data-testid="propose-award">+ Propose one</button>
+        <button {...gate('propose_award')} type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={() => setProposing({})} data-testid="propose-award">+ Propose one</button>
         {proposing && <ProposeSheet trip={trip} start={proposing} onClose={() => setProposing(null)} onSaved={ad.reload} />}
       </div>
     ) : null;
@@ -83,7 +84,7 @@ export function AwardsRunUp({ trip, title = '🏷 Fines & awards for this trip',
         <div className="small" data-testid="runup-leftover">💰 Leftover kitty: <strong><RuleTag rule={{ table: 'rules', id: ad.leftover.id, field: 'value', label: 'Leftover kitty', value: ad.leftover.value, rule_id: ad.leftover.id }}
           explain="What happens to money left in the kitty at the end of the trip. Words only — no money moves in the app.">{leftoverWords(ad.leftover.leftover, ad.leftover.leftover_note)}</RuleTag></strong></div>
       )}
-      {canPropose && <button type="button" className="btn gold sm" style={{ alignSelf: 'flex-start' }} onClick={() => setProposing({})} data-testid="propose-award">+ Propose one</button>}
+      {canPropose && <button {...gate('propose_award')} type="button" className="btn gold sm" style={{ alignSelf: 'flex-start' }} onClick={() => setProposing({})} data-testid="propose-award">+ Propose one</button>}
       {!overview && <span className="small muted">A week out, everyone’s asked “Any awards or fines to add?” — and the organiser hears what’s waiting.</span>}
       {proposing && <ProposeSheet trip={trip} start={proposing} onClose={() => setProposing(null)} onSaved={ad.reload} />}
     </div>

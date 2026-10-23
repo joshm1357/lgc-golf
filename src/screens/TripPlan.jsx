@@ -23,6 +23,7 @@ import { coursesDone as builderCoursesDone } from '../lib/tripsteps.js';
 import { CallVoteSheet } from '../components/CallVote.jsx';
 import { useLateJobs, LateBadge, WaiveButton } from '../components/LateJobs.jsx';
 import { lateJobs } from '../lib/latejobs.js';
+import { gate } from '../lib/savedgate.js';
 
 const RSVP_WORD = { in: 'In', maybe: 'Keen', out: 'Out' };
 
@@ -720,7 +721,7 @@ function PaySheet({ pd, onClose }) {
         </div>
         {st === 'paid' && <div className="card pad" style={{ background: 'var(--gold-soft)' }}>✅ Paid and ticked off. You’re locked in.</div>}
         {st === 'pending' && <div className="card pad">⏳ You said you’ve paid — waiting for the organiser to tick it off.</div>}
-        {st === 'unpaid' && <button type="button" className="btn gold block" disabled={busy || !deposit} onClick={paid}>I’ve paid {money(deposit)}</button>}
+        {st === 'unpaid' && <button {...gate('money')} type="button" className="btn gold block" disabled={busy || !deposit} onClick={paid}>I’ve paid {money(deposit)}</button>}
         <span className="small muted">No money goes through the app — pay the organiser directly.</span>
       </div>
     </Sheet>

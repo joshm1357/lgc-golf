@@ -4,6 +4,7 @@ import { supabase, friendlyError } from '../lib/supabase.js';
 import { useData, useScores, useSession, playerName } from '../lib/store.jsx';
 import { roundBoard } from '../lib/board.js';
 import { honourOrder, winnerNames } from '../lib/history.js';
+import { gate } from '../lib/savedgate.js';
 
 // "Sam" is on "Sam & Josh", but not on "Samuel".
 const namedIn = (winners, name) => winnerNames(winners).some((w) => w.toLowerCase() === String(name).toLowerCase());
@@ -249,7 +250,7 @@ function MyLinkCard() {
     <div className="card pad stack" style={{ gap: 6 }} data-testid="my-link">
       <strong>📱 Open the app on another device</strong>
       <span className="small muted">Your own link: open it on the other phone or computer and you’re straight in as you. It works once and lasts 14 days — don’t share it.</span>
-      <button type="button" className="btn ghost" disabled={busy} onClick={copy}>{busy ? 'Making your link…' : '🔗 Copy my link'}</button>
+      <button {...gate('invite')} type="button" className="btn ghost" disabled={busy} onClick={copy}>{busy ? 'Making your link…' : '🔗 Copy my link'}</button>
     </div>
   );
 }

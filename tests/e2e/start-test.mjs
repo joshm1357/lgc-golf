@@ -134,7 +134,7 @@ const check = (ok, msg) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${msg}`); if 
 const NEW = { is_member: true, is_admin: true, player_id: P1, group_name: 'The Mulligans', group_id: GROUP, legacy: false, role: 'organiser', signed_in: false,
   look: { short_name: 'MULL', crest_url: null, primary: '#1F4B33', accent: '#E0B84A', font: 'serif' }, groups: [{ id: GROUP, name: 'The Mulligans', slug: 'mull', role: 'organiser' }] };
 const NEWG = 'c0c0c0c0-0000-4000-8000-00000000000c';
-const MEMBER = { is_member: true, is_admin: true, player_id: 'p0000000-0000-4000-8000-0000000000ff', group_name: 'The Mulligans', group_id: NEWG, legacy: false, role: 'organiser', signed_in: false,
+const MEMBER = { is_member: true, is_admin: true, player_id: 'p0000000-0000-4000-8000-0000000000ff', group_name: 'The Mulligans', group_id: NEWG, legacy: false, role: 'organiser', signed_in: true,
   look: { short_name: null, crest_url: null, primary: '#1F4B33', accent: '#E0B84A', font: 'condensed' }, groups: [{ id: NEWG, name: 'The Mulligans', slug: 'the-mulligans', role: 'organiser' }] };
 STATUS.v = { is_member: false, is_admin: false, player_id: null, group_name: null, group_id: null, legacy: null, role: null, signed_in: false, look: null, groups: [] };
 const browser = await chromium.launch();
@@ -170,9 +170,16 @@ await page.screenshot({ path: `${SHOTS}/s1-start.png`, fullPage: true });
 await noScroll('Start page');
 await page.getByRole('link', { name: 'Start your group' }).click();
 
-// 1. Sign in (providers not switched on here): carry on.
+// 1. Sign in. v10.2 (Josh): whoever starts a group is its organiser, so a saved account (Google or email) first —
+// no "Carry on without signing in", no phone-only start. (Providers aren't switched on in this build: it says so.)
 await page.getByText('Step 1 of 7').waitFor({ timeout: 10000 });
-check(await page.getByText(/isn’t switched on yet/).isVisible(), 'step 1: says sign-in isn’t on yet, can carry on');
+check(await page.getByTestId('sign-in-to-continue').isVisible(), 'step 1 (phone-only): sign in first');
+check(await page.getByText(/isn’t switched on yet/).isVisible(), 'step 1: says sign-in isn’t on yet');
+check(!(await page.getByRole('button', { name: /Next|Carry on without signing in/ }).count()), 'step 1 (phone-only): no way past without signing in (v10.2)');
+// Signed in with Google or email now.
+STATUS.v = { ...STATUS.v, signed_in: true };
+await page.reload();
+await page.getByText(/You’re signed in/).waitFor({ timeout: 10000 });
 await page.getByRole('button', { name: 'Next' }).click();
 
 // 2. Name: makes the group with the Full trip switches, then the organiser's own player.

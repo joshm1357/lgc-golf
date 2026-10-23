@@ -14,7 +14,7 @@ export default function More() {
   const data = useData();
   const me = data.playersById[status.player_id];
   const pending = status.is_admin ? data.players.filter((p) => p.approved === false).length : 0;
-  const on = { location: useFeature('location'), rule_voting: useFeature('rule_voting'), trophies: useFeature('trophies'), tribunal: useFeature('tribunal'), notifications: useFeature('notifications'), committees: useFeature('committees'), }; // the AI helper's way in is the Caddie button now (components/Caddie.jsx)
+  const on = { location: useFeature('location'), rule_voting: useFeature('rule_voting'), trophies: useFeature('trophies'), games: useFeature('games'), awards: useFeature('dinner_awards'), tribunal: useFeature('tribunal'), notifications: useFeature('notifications'), committees: useFeature('committees'), }; // the AI helper's way in is the Caddie button now (components/Caddie.jsx)
   const manyGroups = (status.groups?.length || 0) > 1;
   const platformAdmin = usePlatformAdmin();
   const items = [
@@ -25,6 +25,9 @@ export default function More() {
     // ov19: one entry for the Rulebook, the Tribunal and Committees (tabs inside).
     { to: '/governance/rulebook', icon: Icon.gavel, label: '⚖️ Group rules', sub: [on.rule_voting ? 'Rules (and votes on them)' : 'Our rules', on.tribunal && 'the Tribunal', on.committees && 'committees and elections'].filter(Boolean).join(', ').replace(/, ([^,]*)$/, ' and $1') },
     // ov15: comps, the Cup and games live inside the trip now (This trip → What we're playing for).
+    // v10.1: side games and fines & awards had no way in unless a round already had games set up.
+    on.games && { to: '/games', icon: Icon.board, label: '🎲 Games & side bets', sub: 'Skins, Nassau and the like: how each works, and put one up' },
+    on.awards && { to: '/dinner', icon: Icon.trophy, label: '🏅 Fines & awards', sub: 'Propose one, nominate, and the presentation' },
     on.trophies && { to: '/trophies', icon: Icon.trophy, label: 'The Trophy Room', sub: status.legacy ? 'BD, Putt Buddies, Noodle Cup and the honour boards' : 'Trophies and the honour boards' },
     useFeature('stats') && { to: '/stats', icon: Icon.board, label: 'Stats & season ladder', sub: 'Order of merit, records and head-to-heads' },
     { to: '/courses', icon: Icon.map, label: 'Courses', sub: 'Every course and its history' },

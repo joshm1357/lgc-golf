@@ -22,6 +22,7 @@ import { useTripComps } from './CompsChip.jsx';
 import { useCups, useCapTipName, CupPhoto } from './CupStandings.jsx';
 import ComingSoon from './ComingSoon.jsx';
 import { Sheet } from './ui.jsx';
+import { gate } from '../lib/savedgate.js';
 
 const FORMAT_WORD = { stableford: 'Stableford', stroke: 'Stroke', ambrose: 'Ambrose', fourball: '4BBB' };
 const uuid = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () => Math.floor(Math.random() * 16).toString(16)));
@@ -76,7 +77,7 @@ export default function CupsUpForGrabs({ trip, isOrg }) {
           {x.on && <TrophyBits cup={x.cup} isOrg={isOrg} onSaved={reloadCups} />}
         </div>
       ))}
-      {isOrg && <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={() => setMaking(true)} data-testid="cups-new">+ New cup</button>}
+      {isOrg && <button {...gate('create_cup')} type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={() => setMaking(true)} data-testid="cups-new">+ New cup</button>}
       {making && <NewCupSheet trip={trip} cupOn={cupOn} onClose={() => setMaking(false)} onSaved={async () => { await Promise.all([reloadCups(), reloadComps()]); }} allComps={allComps} />}
       {editing && <SpecificsSheet trip={trip} cup={editing.cup} comp={editing.comp} onClose={() => setEditing(null)} onSaved={reloadComps} />}
     </div>

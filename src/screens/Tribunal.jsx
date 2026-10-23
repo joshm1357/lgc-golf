@@ -7,6 +7,7 @@ import { usePlayerHistory } from './Profile.jsx';
 import { Header, Avatar, Icon, Sheet, PhotoButtons, timeAgo, toast, Loading } from '../components/ui.jsx';
 import SharePicture from '../components/SharePicture.jsx';
 import { useGovernance, useRaisableKinds, CaseRowNew, RaiseCase } from './Cases.jsx';
+import { gate } from '../lib/savedgate.js';
 
 function fmtChange(n) {
   const v = Number(n);
@@ -54,7 +55,7 @@ export default function Tribunal({ embedded = false }) {
     <div className={embedded ? undefined : 'page'}>
       {!embedded && <Header court back title="The Tribunal" sub="Raise a case — serious or silly. The group decides." />}
       <div className="section stack">
-        {status?.role !== 'guest' && (kinds.length > 0 || !g?.ok) && <button type="button" className="btn gold block" onClick={raise}>{Icon.gavel(20)}<span>Raise a case</span></button>}
+        {status?.role !== 'guest' && (kinds.length > 0 || !g?.ok) && <button {...gate('dispute')} type="button" className="btn gold block" onClick={raise}>{Icon.gavel(20)}<span>Raise a case</span></button>}
         {open.length > 0 && <span className="label">Open cases</span>}
         {open.map((x) => x.el)}
         {closed.length > 0 && <span className="label">Past verdicts</span>}

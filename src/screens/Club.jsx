@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
-import { SIGN_IN, linkProvider, linkEmail } from '../lib/auth.js';
 import { useRun, must } from '../lib/run.js';
 import { uploadPhoto } from '../lib/images.js';
 import { parTotal } from '../lib/scoring.js';
@@ -8,18 +7,11 @@ import { GolfTripCrest } from '../components/Logo.jsx';
 import { Toaster, toast, Sheet } from '../components/ui.jsx';
 import { QrCard } from '../components/QrCard.jsx';
 import JoshPage from './Josh.jsx';
+import { SignInToContinue } from '../components/SavedGate.jsx';
 
 // Stage 8b: club partners. A club claims its course's page (Josh approves each claim by hand), then keeps its hole
 // data, logo, group-booking contact and offers up to date. A club never sees players' names, scores or locations.
 // Route #/club (works whether or not you're in a group). Josh's approval screen is #/club/claims.
-
-async function ensureSignedIn() {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) {
-    const { error } = await supabase.auth.signInAnonymously();
-    if (error) throw error;
-  }
-}
 
 function Top({ title, sub }) {
   return (
@@ -39,7 +31,9 @@ export default function Club() {
   const [me, setMe] = useState(undefined);
   const load = useCallback(async () => {
     try {
-      await ensureSignedIn();
+      // v10.2: no phone-only session for a club — signed out, it's the sign-in card (a club claim needs Google or email).
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { setMe(null); return; }
       const { data, error } = await supabase.rpc('my_club');
       if (error) throw error;
       setMe(data || null);
@@ -95,22 +89,7 @@ function ClaimStart({ me, reload }) {
 }
 
 function SignInFirst() {
-  const [busy, run] = useRun();
-  const [email, setEmail] = useState('');
-  return (
-    <div className="card pad stack" style={{ gap: 8, borderColor: 'var(--gold)' }}>
-      <strong>First, sign in</strong>
-      <span className="small">A club account needs a proper sign-in, so it stays yours on any device.</span>
-      {SIGN_IN.length === 0 && <span className="small muted">Signing in with Google or email isn’t switched on yet — check back soon.</span>}
-      {SIGN_IN.includes('google') && <button type="button" className="btn block" disabled={busy} onClick={() => run(() => linkProvider('google', '#/club'))}>Sign in with Google</button>}
-      {SIGN_IN.includes('email') && (
-        <form className="row" style={{ gap: 6 }} onSubmit={(e) => { e.preventDefault(); run(() => linkEmail(email, '#/club'), 'Check your email to confirm'); }}>
-          <input className="input grow" style={{ minWidth: 0 }} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Club email" />
-          <button className="btn" disabled={busy || !email.includes('@')}>Email me</button>
-        </form>
-      )}
-    </div>
-  );
+  return <SignInToContinue returnHash="#/club" why="A club account needs a proper sign-in (Google or email), so it stays yours on any device." />;
 }
 
 function PickCourse({ onPick }) {

@@ -10,6 +10,7 @@ import { Sheet } from './ui.jsx';
 import { Link } from 'react-router-dom';
 import RuleTag from './RuleTag.jsx';
 import { penaltyPower, ruleStrokes, penaltyArgs, breachLabel, DRIVES_KEY, drivesRule, drivesTable, drivesRoundLine, signed } from '../lib/drives.js';
+import { gate } from '../lib/savedgate.js';
 
 /** organiser → 'apply', player → 'propose', guest / viewing / no profile → null. */
 export function usePenaltyPower() {
@@ -52,7 +53,7 @@ export function PenaltyButton({ round, hole, who = '' }) {
   if (!power || !round || !['live', 'locked'].includes(round.status)) return null;
   return (
     <>
-      <button type="button" className="btn ghost sm" data-testid="penalty-button" onClick={() => setOpen(true)}>⚖️ Penalty</button>
+      <button {...gate('penalty')} type="button" className="btn ghost sm" data-testid="penalty-button" onClick={() => setOpen(true)}>⚖️ Penalty</button>
       {open && <PenaltySheet round={round} hole={hole} who={who} power={power} onClose={() => setOpen(false)} />}
     </>
   );
@@ -177,8 +178,8 @@ export function PendingPenalties({ round }) {
           </span>
           {power === 'apply' && (
             <div className="row" style={{ gap: 8 }}>
-              <button type="button" className="btn sm gold" disabled={busy} data-testid="penalty-confirm" onClick={() => decide(p.id, true)}>Confirm</button>
-              <button type="button" className="btn sm ghost" disabled={busy} data-testid="penalty-decline" onClick={() => decide(p.id, false)}>Decline</button>
+              <button {...gate('penalty')} type="button" className="btn sm gold" disabled={busy} data-testid="penalty-confirm" onClick={() => decide(p.id, true)}>Confirm</button>
+              <button {...gate('penalty')} type="button" className="btn sm ghost" disabled={busy} data-testid="penalty-decline" onClick={() => decide(p.id, false)}>Decline</button>
             </div>
           )}
         </div>
@@ -254,7 +255,7 @@ export function WaiveRulePenalty({ line, onDone }) {
   const organiser = !status?.viewing && (status?.role === 'organiser' || (!status?.role && status?.is_admin));
   if (!organiser || !line || line.kind !== 'rule_breach' || line.waived || line.projected) return null;
   return (
-    <button type="button" className="btn ghost sm" data-testid="waive-rule-penalty" disabled={busy} style={{ minHeight: 32, padding: '2px 10px' }}
+    <button {...gate('penalty')} type="button" className="btn ghost sm" data-testid="waive-rule-penalty" disabled={busy} style={{ minHeight: 32, padding: '2px 10px' }}
       onClick={(e) => { e.stopPropagation(); run(async () => {
         const { error } = await supabase.rpc('waive_rule_penalty', { p_adjustment: line.id });
         if (error) throw error;

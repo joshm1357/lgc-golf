@@ -8,7 +8,7 @@
 //   B2. Already signed in and already in the group: opening the link goes straight to the page.
 //   C. Google via the redirect keeps the link's code and page; back from Google it joins as that account and lands there.
 //   C2. Google's own button (an address Google knows): no trip away; joins as the Google account.
-//   D. "Just this phone for now" → the old join (a phone-only user) → Save your spot later.
+//   D. "Just this phone: scoring and voting only" → the old join (a phone-only user) → Save your spot later.
 //   E. Signed in, in no group → "You're signed in as … but not in a group yet" with the link box; paste → joins as
 //      this account.
 //   F. A used organiser link: "This link's already been used. If that was you, sign in below."
@@ -200,13 +200,14 @@ const LINK = `#/join/${INVITE}?to=%2Fcourses`;
   check(await page.getByText('Sign in so it’s you on any phone or laptop.').isVisible(), 'A: one screen first — "Join Test Group B — sign in so it’s you on any phone or laptop"');
   check(await page.getByRole('button', { name: /Continue with Google/ }).isVisible(), 'A: Continue with Google');
   check(await page.getByTestId('email-continue').isVisible(), 'A: email + password, one form');
-  check(await page.getByTestId('just-this-phone').isVisible(), 'A: "Just this phone for now"');
-  check(await page.getByTestId('just-this-phone').evaluate((b) => b.classList.contains('btn')), 'A: "Just this phone for now" is a proper button (F2)');
-  check(/only on this phone/.test(await page.getByTestId('just-this-phone-help').innerText().catch(() => '')), 'A: with one line on what it means (F2)');
+  check(await page.getByTestId('just-this-phone').isVisible(), 'A: "Just this phone: scoring and voting only"');
+  check(await page.getByTestId('just-this-phone').evaluate((b) => b.classList.contains('btn')), 'A: "Just this phone: scoring and voting only" is a proper button (F2)');
+  check(/Just this phone: scoring and voting only/.test(await page.getByTestId('just-this-phone').innerText().catch(() => '')), 'A: the label says it’s limited (v10.2)');
+  check((await page.getByTestId('just-this-phone-help').innerText().catch(() => '')).trim() === 'You can follow along, vote and score. To organise, pay or propose things, save your spot (Google or email).', 'A: with one line on what it means (v10.2)');
   check(await page.getByText(/go straight to what was shared/).isVisible(), 'A: says they’ll land on the shared page');
   check(!(await page.getByRole('button', { name: 'Join', exact: true }).isVisible().catch(() => false)), 'A: no Join button before signing in');
   await tapSize(page.getByRole('button', { name: /Continue with Google/ }), 'Continue with Google');
-  await tapSize(page.getByTestId('just-this-phone'), 'Just this phone for now');
+  await tapSize(page.getByTestId('just-this-phone'), 'Just this phone: scoring and voting only');
   await shot(page, '01-join-sign-in-first');
   await noSideScroll(page, 'Join sign-in screen');
   await page.getByLabel('Your email').fill('new@example.com');
@@ -326,7 +327,7 @@ const LINK = `#/join/${INVITE}?to=%2Fcourses`;
   await ctx.close();
 }
 
-// D. "Just this phone for now": the old phone-only join, then Save your spot later.
+// D. "Just this phone: scoring and voting only": the old phone-only join, then Save your spot later.
 {
   const S = server();
   const { ctx, page } = await phone(S, { notifyAsked: true });
@@ -428,7 +429,7 @@ if (CODE) {
   check(await page.getByLabel('Your email').isVisible(), 'I: an email box');
   check(!(await page.getByLabel('Password', { exact: true }).isVisible().catch(() => false)), 'I: no password on the join screen');
   check(!(await page.getByTestId('email-continue').isVisible().catch(() => false)), 'I: not the email + password form');
-  check(await page.getByTestId('just-this-phone').isVisible(), 'I: "Just this phone for now" button');
+  check(await page.getByTestId('just-this-phone').isVisible(), 'I: "Just this phone: scoring and voting only" button');
   await shot(page, '14-join-code-only');
   await noSideScroll(page, 'Join, code only');
   await page.getByLabel('Your email').fill('new@example.com');

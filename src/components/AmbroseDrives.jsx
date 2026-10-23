@@ -2,11 +2,12 @@
 // ("Drives: Al 3/6 · Bo 5/6 · Cy 2/6"), the warnings ("Cy needs 4 more in 3 holes: +2 strokes coming"), the
 // "needs one" hint on the tee, and a gentle reminder when a hole was saved without a drive. The maths is in
 // lib/drives.js; the server adds the strokes when the round is locked.
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
-import { useRealtime, playerName } from '../lib/store.jsx';
+import { useData, useRealtime, playerName } from '../lib/store.jsx';
+import { courseHoles } from '../lib/board.js';
 import RuleTag, { roundRef } from './RuleTag.jsx';
-import { DRIVES_KEY, drivesRule, minDrivesFor, drivePenaltyFor, driveStatus, signed } from '../lib/drives.js';
+import { DRIVES_KEY, drivesRule, minDrivesFor, drivePenaltyFor, driveStatus, projectedDrivePenalties, signed } from '../lib/drives.js';
 
 let cache = { at: 0, rows: null };
 
@@ -33,7 +34,7 @@ export function teamDrives({ dr, round, team, holes }) {
   const per = drivePenaltyFor({ dr, round });
   const field = { 2: 'drives_2', 3: 'drives_3' }[players.length] || 'drives_4';
   const ref = round?.min_drives != null || !dr?.rule
-    ? roundRef(round, 'min_drives', `Minimum ${need} drives each`, [])
+    ? { ...roundRef(round, 'min_drives', `Minimum ${need} drives each`, []), ...(dr?.rule?.id && dr.on ? { rule_id: dr.rule.id } : {}) }
     : { table: 'rules', id: dr.rule.id, field, label: `${need} drives each`, value: dr.rule[field], rule_id: dr.rule.id, where: { path: `/rules/${dr.rule.id}` } };
   return { need, per, players, ref };
 }
@@ -83,6 +84,19 @@ export default function AmbroseDrives({ round, team, holes, hole, scores = {}, p
       </div>
     </div>
   );
+}
+
+/** Drive penalties still to come on a live Ambrose round, as projected adjustment rows for the board ([] otherwise). */
+export function useProjectedDrives(round, scoresIndex) {
+  const data = useData();
+  const dr = useDrivesRule();
+  const live = round?.format === 'ambrose' && round?.status === 'live';
+  return useMemo(() => {
+    if (!live) return [];
+    const holes = courseHoles(data.coursesById?.[round.course_id]);
+    const teams = data.teamsByRound?.[round.id] || [];
+    return projectedDrivePenalties({ round, teams, holes, scoresIdx: scoresIndex?.[round.id] || {}, dr, nameOf: playerName });
+  }, [live, round, data, dr, scoresIndex]);
 }
 
 /** The tracker on a team's card (leaderboard): "Drives: Al 3/6 · Bo 5/6 · Cy 2/6", with any warning. */

@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase.js';
 import { useData, useFeature, useRealtime, useSession, playerName } from '../lib/store.jsx';
 import { useRun } from '../lib/run.js';
 import RuleTag from './RuleTag.jsx';
+import { WaiveRulePenalty } from './RulePenalty.jsx';
 import { lateRule, lateInfo, lateMessage, penaltyRef, lateRuleRefs } from '../lib/latejobs.js';
 
 async function rowsOr(q) {
@@ -84,25 +85,35 @@ export function useRoundAdjustments(roundIds) {
   return rows;
 }
 
-/** The penalty lines on a scorecard: "Late job: Book the bus (+2)", tap to see the rule or dispute it. */
+/** The penalty lines on a scorecard: "Late job: Book the bus (+2)", "Drives: Cy 4 of 6 (+4)", tap to see the rule or
+ *  dispute it. 099: rule penalties (an organiser can waive one in a tap), projected drives (shown, not counted yet) and
+ *  strokes off (negative, e.g. an award) as bonus lines. */
 export function PenaltyLines({ lines = [], round, names }) {
   const points = round && ['stableford', 'fourball'].includes(round.format); // a stroke costs a point there
   const data = useData();
   if (!lines.length) return null;
+  const allBonus = lines.every((l) => l.strokes < 0);
   return (
-    <div className="card pad small stack" data-testid="penalty-lines" style={{ gap: 4, background: '#FDF1EF', borderColor: 'var(--under)' }}>
+    <div className="card pad small stack" data-testid="penalty-lines" style={{ gap: 4, background: allBonus ? 'var(--gold-soft)' : '#FDF1EF', borderColor: allBonus ? 'var(--gold)' : 'var(--under)' }}>
       {lines.map((l) => (
-        <div key={l.id} className="row between" style={{ gap: 8, textDecoration: l.waived ? 'line-through' : 'none', opacity: l.waived ? 0.6 : 1 }}>
+        <div key={l.id} className="row between" data-testid={l.projected ? 'projected-penalty' : l.kind === 'rule_breach' ? 'rule-penalty-line' : undefined}
+          style={{ gap: 8, textDecoration: l.waived ? 'line-through' : 'none', opacity: l.waived ? 0.6 : 1, fontStyle: l.projected ? 'italic' : 'normal' }}>
           <span>
-            {l.kind === 'award' ? <span data-testid="award-stroke-line">{l.strokes < 0 ? '🏆 ' : '🏷 '}{l.label}</span> : (
-              <RuleTag testId="penalty-line" rule={penaltyRef(l, round)}
-                explain="A trip job given to this player was more than the set number of days overdue when the round started, so the Rulebook’s “Late organising job” rule added penalty strokes. An organiser can waive it.">
-                {l.label}
+            {l.kind === 'award' ? <span data-testid="award-stroke-line">{l.strokes < 0 ? '🏆 ' : '🏷 '}{l.label}</span>
+              : l.projected ? <span>⏳ {l.label}</span> : (
+              <RuleTag testId="penalty-line" rule={{ ...penaltyRef(l, round), ...(l.rule_id ? { rule_id: l.rule_id } : {}) }}
+                explain={l.kind === 'rule_breach'
+                  ? (l.strokes < 0 ? 'Strokes taken off under a Rulebook rule. Anyone can dispute it.' : 'Penalty strokes for breaking a Rulebook rule. An organiser can waive it; anyone can dispute it.')
+                  : 'A trip job given to this player was more than the set number of days overdue when the round started, so the Rulebook’s “Late organising job” rule added penalty strokes. An organiser can waive it.'}>
+                {l.strokes < 0 ? '🏆 ' : ''}{l.label}
               </RuleTag>
             )}
             {names && l.player_id && <span className="muted"> · {playerName(data.playersById[l.player_id])}</span>}
           </span>
-          <strong style={{ whiteSpace: 'nowrap' }}>{l.waived ? 'waived' : points ? `${l.strokes > 0 ? '−' : '+'}${Math.abs(l.strokes)} pts` : `${l.strokes < 0 ? '−' : '+'}${Math.abs(l.strokes)}`}</strong>
+          <span className="row" style={{ gap: 6, flex: 'none' }}>
+            <WaiveRulePenalty line={l} />
+            <strong style={{ whiteSpace: 'nowrap' }}>{l.waived ? 'waived' : l.projected ? 'projected' : points ? `${l.strokes > 0 ? '−' : '+'}${Math.abs(l.strokes)} pts` : `${l.strokes < 0 ? '−' : '+'}${Math.abs(l.strokes)}`}</strong>
+          </span>
         </div>
       ))}
     </div>

@@ -152,6 +152,22 @@ export function projectedDrivePenalties({ round, teams = [], holes = [], scoresI
   return out;
 }
 
+/** What a board row's strokes are for, in a word or two: 'late job', 'penalty', 'strokes' (mixed or awards). */
+export function penaltyBadgeWord(lines = []) {
+  const kinds = [...new Set((lines || []).filter((l) => !l.waived && !l.projected).map((l) => l.kind || 'late_job'))];
+  if (kinds.length === 1 && kinds[0] === 'late_job') return 'late job';
+  if (kinds.length === 1 && kinds[0] === 'rule_breach') return 'penalty';
+  return 'strokes';
+}
+/** "(late job)", "(rule penalties)", "(awards and fines, late job)" — the scorecard's penalty row. */
+export function penaltyRowWords(lines = []) {
+  const W = { late_job: 'late job', rule_breach: 'rule penalties', award: 'awards and fines' };
+  const kinds = [...new Set((lines || []).filter((l) => !l.waived && !l.projected).map((l) => l.kind || 'late_job'))];
+  return kinds.map((k) => W[k] || 'strokes').join(', ');
+}
+/** Projected strokes on a row's lines (drives still to come on a live round): shown, not counted. */
+export const projectedStrokes = (lines = []) => (lines || []).filter((l) => l.projected && !l.waived).reduce((s, l) => s + (Number(l.strokes) || 0), 0);
+
 // ------------------------------------------------------------------ the words (same as the database's)
 /** "6 drives each in a three · 4 in a four · 6 in a pair · +2 a drive short" (private.drives_value). */
 export function drivesValue(n2, n3, n4, strokes) {

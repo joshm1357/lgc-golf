@@ -8,9 +8,10 @@ import { courseHoles } from '../lib/board.js';
 import { strokesReceived, stablefordPoints, penaltyFor } from '../lib/scoring.js';
 import { Icon, Loading, toast, PhotoButtons } from '../components/ui.jsx';
 import Distances from '../components/Distances.jsx';
-import RuleTag, { roundRef, useActiveRules } from '../components/RuleTag.jsx';
 import { useRoundAdjustments, PenaltyLines } from '../components/LateJobs.jsx';
 import { FineSomeone } from '../components/FinesTicker.jsx';
+import AmbroseDrives from '../components/AmbroseDrives.jsx';
+import { PenaltyButton, PendingPenalties } from '../components/RulePenalty.jsx';
 import { notify } from '../lib/push.js';
 
 const MOMENTS = ['Chip-in', 'Bomb drive', 'Lost ball', 'Air shot', 'Three-putt', 'Tree hit', 'Sandy save'];
@@ -33,7 +34,6 @@ export default function ScoreEntry() {
   const holes = useMemo(() => courseHoles(course), [course]);
   const isA = round?.format === 'ambrose';
   const me = status?.player_id;
-  const rules = useActiveRules();
 
   const subjects = useMemo(() => {
     if (!round) return [];
@@ -108,19 +108,8 @@ export default function ScoreEntry() {
   const locked = round.status !== 'live' && !status?.is_admin;
   const compHere = (round.ctp_holes || []).includes(hole.n) ? { kind: 'ctp', label: 'Closest to pin' }
     : (round.ld_holes || []).includes(hole.n) ? { kind: 'ld', label: 'Longest drive' } : null;
-  // Ambrose minimum-drives rule.
-  // Never more than the round allows: 4 in a team on 18 holes can't all have 6 drives (18 ÷ 4 = 4 each at most).
-  const teamSize = (subject.players || []).filter(Boolean).length;
-  const minDrives = isA ? Math.min(round.min_drives || 0, teamSize ? Math.floor(holes.length / teamSize) : 0) : 0;
+  // Ambrose: whose drive on this hole (099: the tracker, warnings and hint are in components/AmbroseDrives.jsx).
   const driveBy = drive === '' ? null : drive ?? existing?.tee_shot_player ?? null;
-  const driveCounts = Object.fromEntries((subject.players || []).filter(Boolean).map((p) => [p.id, 0]));
-  for (const h of holes) {
-    const who = h.n === hole.n ? driveBy : myScores[h.n]?.tee_shot_player;
-    if (who && who in driveCounts) driveCounts[who] += 1;
-  }
-  const holesLeftAfter = holes.filter((h) => h.n !== hole.n && !myScores[h.n]).length;
-  const stillNeeded = Object.values(driveCounts).reduce((a, c) => a + Math.max(0, minDrives - c), 0);
-  const driveSqueeze = minDrives && stillNeeded > holesLeftAfter;
 
   async function save() {
     setBusy(true);
@@ -192,11 +181,14 @@ export default function ScoreEntry() {
       )}
       {locked && <div className="sync">This round isn't live — scores can't be changed.</div>}
       {/* ov28 (I12): one tap to fine someone from the hole you're on (ov24's fines; nothing when they're switched off). */}
-      {!locked && round.trip_id && (
-        <div className="section row" style={{ justifyContent: 'flex-end', paddingBottom: 0 }}>
-          <FineSomeone tripId={round.trip_id} />
+      {/* 099: "⚖️ Penalty" — a rule broken on the course (organisers apply it; players propose it; guests can't). */}
+      {!locked && (
+        <div className="section row" style={{ justifyContent: 'flex-end', paddingBottom: 0, gap: 8 }}>
+          <PenaltyButton round={round} hole={hole} />
+          {round.trip_id && <FineSomeone tripId={round.trip_id} />}
         </div>
       )}
+      <PendingPenalties round={round} />
       {compHere && sideCompsOn && (
         <div className="section">
           <a href={`#/comps?r=${round.id}&kind=${compHere.kind}&hole=${hole.n}`} className="card pad row" style={{ background: 'var(--gold-soft)', borderColor: 'var(--gold)', textDecoration: 'none', color: 'inherit' }}>
@@ -234,32 +226,8 @@ export default function ScoreEntry() {
         </div>
       </div>
 
-      {isA && minDrives > 0 && (
-        <div className="section">
-          <div className="card pad stack" style={{ gap: 8, borderColor: driveSqueeze ? 'var(--down)' : 'var(--line)' }}>
-            <div className="row between"><span className="label">Whose drive?</span><span className="small muted"><RuleTag testId="min-drives" rule={roundRef(round, 'min_drives', `Minimum ${round.min_drives} drives each`, rules)}
-              explain={`In Ambrose, each player’s drive must be used at least ${round.min_drives} times in the round.`}>min {minDrives} each</RuleTag></span></div>
-            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, (subject.players || []).length)}, minmax(0, 1fr))`, gap: 8 }}>
-              {(subject.players || []).filter(Boolean).map((p) => {
-                const c = driveCounts[p.id] || 0;
-                const done = c >= minDrives;
-                return (
-                  <button key={p.id} type="button" className="chip" aria-pressed={driveBy === p.id} onClick={() => { setHoleN(hole.n); setDrive(driveBy === p.id ? '' : p.id); }}
-                    style={{ minHeight: 52, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                    <span>{playerName(p)}</span>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: driveBy === p.id ? '#fff' : done ? 'var(--up)' : 'var(--down)' }}>{c}/{minDrives}{done ? ' ✓' : ''}</span>
-                  </button>
-                );
-              })}
-            </div>
-            {driveSqueeze ? (
-              <span className="err" style={{ fontSize: 13 }}>Careful — {Object.entries(driveCounts).filter(([, c]) => c < minDrives).map(([id, c]) => `${playerName(data.playersById[id])} needs ${minDrives - c} more`).join(', ')} with only {holesLeftAfter} holes left.</span>
-            ) : (
-              <span className="small muted">{Object.entries(driveCounts).filter(([, c]) => c < minDrives).map(([id, c]) => `${playerName(data.playersById[id])} needs ${minDrives - c} more`).join(' · ') || 'Drive rule done ✓'}</span>
-            )}
-          </div>
-        </div>
-      )}
+      {isA && <AmbroseDrives round={round} team={subject} holes={holes} hole={hole} scores={myScores} pick={driveBy}
+        onPick={(id) => { setHoleN(hole.n); setDrive(id); }} />}
 
       {feedOn && <div className="section stack">
         <span className="label">Moment (optional — goes to the feed)</span>

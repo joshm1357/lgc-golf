@@ -20,6 +20,8 @@ import { batchNonVoters, reminderGroups, batchMessage } from './batch.ts';
 import { weekOutMessage, dayBeforeMessage } from '../_shared/runup.js';
 // ov28: "your round" — the draw is out (I8), your tee time tomorrow (I11), swing alerts (I13).
 import { roundBits, drawOutFor, teeTomorrowFor, swingGap, matchSwing, pointsSwing } from './yourround.ts';
+// ov31: automatic awards — the proposed winner in the morning, confirmed, a dispute upheld.
+import { AUTO_AWARD_KINDS, AUTO_AWARD_IMPORTANT, autoAwardSends } from './autoawards.ts';
 
 // The app's web address for links in notifications. Set APP_URL in the function's secrets when the app moves
 // (e.g. https://app.thegolftrip.club/); until then it's the GitHub Pages address.
@@ -208,6 +210,29 @@ async function commentaryNow() {
   for (const w of fresh) if (on.get(w.group_id)) newest.set(`${w.group_id}|${w.user_id}`, w);
   for (const w of newest.values()) sent += await pushTo([w.user_id], { title: w.title, body: w.body || '', url: `${APP}#/feed`, tag: `commentary-${w.group_id}` });
   await db.from('notify_queue').update({ sent_at: new Date().toISOString() }).in('id', waiting.map((w) => w.id));
+  return sent;
+}
+
+// ------------------------------------------------------------------ ov31: automatic awards (migration 100)
+// The database's 5-minute job queues "🌙 Proposed — Latest out, last night: …", "✅ Confirmed — …" (to the winner) and
+// "⚖️ Dispute upheld — pick another claim" (to organisers) and calls this with the cron secret ({"type":"auto_awards"}).
+// "Straight away" people get them now; digest people at their hour (the hourly send); "only important" people get the
+// winner / organiser ones. They belong to Awards and fines (dinner_awards).
+for (const k of AUTO_AWARD_KINDS) KIND_FEATURE[k] = 'dinner_awards';
+for (const k of AUTO_AWARD_IMPORTANT) IMPORTANT.add(k);
+async function autoAwardsNow() {
+  const { data: waiting } = await db.from('notify_queue').select('id,group_id,user_id,kind,title,body,created_at')
+    .in('kind', AUTO_AWARD_KINDS).is('sent_at', null).order('created_at').limit(2000);
+  if (!waiting?.length) return 0;
+  const groups = [...new Set(waiting.map((w) => w.group_id))];
+  const { data: prefs } = await db.from('notify_prefs').select('group_id,user_id,mode').in('group_id', groups);
+  const on = new Map<string, boolean>();
+  for (const g of groups) on.set(g, (await featureOn(g, 'notifications')) && (await featureOn(g, 'dinner_awards')));
+  const { send, done } = autoAwardSends(waiting.filter((w) => on.get(w.group_id)), prefs || []);
+  let sent = 0;
+  for (const s of send) sent += await pushTo([s.user_id], { ...s.msg, url: `${APP}#/feed` });
+  const off = waiting.filter((w) => !on.get(w.group_id)).map((w) => w.id);
+  if (done.length || off.length) await db.from('notify_queue').update({ sent_at: new Date().toISOString() }).in('id', [...done, ...off]);
   return sent;
 }
 
@@ -460,9 +485,9 @@ Deno.serve(async (req) => {
     await loadKeys();
     const body = await req.json().catch(() => ({}));
 
-    if (body.type === 'daily' || body.type === 'digest' || body.type === 'commentary' || body.type === 'evening') {
+    if (body.type === 'daily' || body.type === 'digest' || body.type === 'commentary' || body.type === 'evening' || body.type === 'auto_awards') {
       if (!cronSecret || req.headers.get('x-cron-secret') !== cronSecret) return json({ error: 'Not allowed' }, 401);
-      return json({ sent: body.type === 'daily' ? await daily() : body.type === 'commentary' ? await commentaryNow() : body.type === 'evening' ? await evening() : await digest() });
+      return json({ sent: body.type === 'daily' ? await daily() : body.type === 'commentary' ? await commentaryNow() : body.type === 'evening' ? await evening() : body.type === 'auto_awards' ? await autoAwardsNow() : await digest() });
     }
 
     // Everyone else must be a signed-in member of the group.

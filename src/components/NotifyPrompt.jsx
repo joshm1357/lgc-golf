@@ -14,6 +14,7 @@ import { previewOf } from '../lib/preview.js';
 import { myPushState, enablePush } from '../lib/push.js';
 import { useRun } from '../lib/run.js';
 import { readPhone, setupPlan, shouldPrompt, promptLastShown, markPromptShown, whatYouGet } from '../lib/notifyhelp.js';
+import { noteVisit, popupThisVisit, notifyAskReady, takePopup, notifyNotNow } from '../lib/firstopen.js';
 import { Sheet } from './ui.jsx';
 
 const P = { fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' };
@@ -104,6 +105,8 @@ export function NotifyPrompt() {
       if (!live || decided.current) return;
       const plan = setupPlan(readPhone(), s, appName());
       if (plan.step === 'on' || plan.step === 'unsupported' || plan.step === 'update-ios' || plan.step === 'open-in-browser') { decided.current = true; return; }
+      // F1 (ov27): never on the first visit (the start card / welcome covers it), and only one pop-up a visit.
+      if (!notifyAskReady({ visits: noteVisit(), had: popupThisVisit() })) { decided.current = true; return; }
       const ask = { notificationsOn: true, step: plan.step, viewing, quick: !!status?.quick, offline, lastShown: promptLastShown() };
       // Shown in the last week: done for this visit.
       if (!shouldPrompt({ ...ask, path: '/' })) { decided.current = true; return; }
@@ -114,6 +117,7 @@ export function NotifyPrompt() {
       if (document.querySelector('.sheet-bg, [role="dialog"]')) { setTick((n) => n + 1); return; }
       decided.current = true;
       markPromptShown();
+      takePopup('notify');
       setState(s);
       setOpen(true);
     }, tick ? 5000 : 1800);
@@ -125,6 +129,7 @@ export function NotifyPrompt() {
 
   if (!open) return null;
   const close = () => { markPromptShown(); setOpen(false); };
+  const notNow = () => { notifyNotNow(); close(); }; // F1: the Home card stays away too
   const settings = () => { setOpen(false); nav('/notifications'); };
   const plan = setupPlan(readPhone(), state, appName());
   return (
@@ -151,7 +156,7 @@ export function NotifyPrompt() {
               <NotifySteps state={state} onTurnedOn={() => setDone(true)} />
             </div>
             <div className="row" style={{ gap: 8 }}>
-              <button type="button" className={plan.canTurnOn ? 'btn ghost grow' : 'btn grow'} onClick={close}>{plan.canTurnOn ? 'Not now' : 'Got it'}</button>
+              <button type="button" className={plan.canTurnOn ? 'btn ghost grow' : 'btn grow'} onClick={plan.canTurnOn ? notNow : close}>{plan.canTurnOn ? 'Not now' : 'Got it'}</button>
               <button type="button" className="btn ghost grow" onClick={settings}>Notification settings</button>
             </div>
           </>

@@ -44,3 +44,11 @@
 - Honourable mentions are 4th and beyond with a story (score, reason, claim or photo), at most 4; for one-winner awards, the nominations that missed out.
 - Ties share a place: "Joint 2nd" shows both and the next place is skipped.
 - Sharing an item to the Feed uses a fixed post id per trip + item, so it's only ever one post per item.
+## ov27 — trip page, money, guests, first open (23 Oct 2026)
+- A locked-in trip's page is Your weekend → Your to-dos → "More about this trip" (folded); nothing repeated above it.
+- Money paid in goes to the trip's organiser by name ("pay Josh"); the word "kitty" is gone from players' screens. The
+  trip's organiser can tick off money paid in for their own trip (096), not only the group's organisers.
+- One pop-up a visit. The notifications ask and Caddie's hello wait for the second visit.
+- One-step join is switched by `VITE_SIGN_IN`: listing `email` makes join links Google-or-code; live stays as it is
+  until Josh changes `sign_in.live`.
+- Countdown pushes: one thing each at 30 days, 7 days and the day before; nothing when there's nothing to do.

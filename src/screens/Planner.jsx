@@ -172,7 +172,9 @@ export function PlanDetail() {
   // A player's vote link (?tab=vote) lands on the Overview, where the votes are; organisers get Organise → Vote.
   const fromTab = tab ? (tab === 'vote' && !isAdmin ? 'overview' : 'organise') : null;
   const asked = params.get('view');
-  const view = stage === 'cancelled' ? 'organise'
+  // ov27 (R2): a guest has no Organise view — always the overview.
+  const guest = status.role === 'guest';
+  const view = guest && stage !== 'cancelled' ? 'overview' : stage === 'cancelled' ? 'organise'
     : asked === 'organise' || asked === 'overview' ? asked : fromTab || defaultView(stage, isAdmin);
   const sub = [plan.start_date ? `${fmtRange(plan.start_date, plan.end_date)} · ${countdown(plan.start_date)}` : 'Dates TBC', plan.location_name || 'Location TBC'].join(' · ');
   // Laptop + one of the trip's organisers: the slim status column down the right (was the Trip desk, 22 Oct).
@@ -183,7 +185,7 @@ export function PlanDetail() {
     <div className={'page' + (desk ? ' org-desk-page' : '')}>
       <Header back="Trips" title={plan.name} sub={sub}
         right={(isAdmin || (plan.proposed && plan.created_by === status.player_id)) && <button type="button" className="btn ghost sm" style={{ color: '#fff', background: 'transparent', borderColor: 'rgba(255,255,255,.45)' }} onClick={() => setEditing(true)}>Edit</button>}>
-        {plan.status !== 'cancelled' && (
+        {plan.status !== 'cancelled' && !guest && (
           <div className="chips" role="tablist" aria-label="View" style={{ margin: '4px -16px 0', padding: '0 16px' }}>
             {[{ value: 'overview', label: '⛳ Overview' }, { value: 'organise', label: '🧰 Organise' }].map((v) => (
               <button key={v.value} type="button" role="tab" className="chip" aria-selected={v.value === view} onClick={() => setView(v.value)}
@@ -195,7 +197,8 @@ export function PlanDetail() {
       {view === 'overview' ? (
         <>
           {/* A player's own next thing (a deposit, a job). Organisers get theirs on Organise; votes are below. */}
-          {!isAdmin && <NextStepCard pd={pd} stage={stage} onTab={setTab} hideVotes />}
+          {/* ov27 (R1): on a locked-in trip the run-up's own "Your to-dos" carry this, under Your weekend. */}
+          {!isAdmin && !showRunUp(stage) && <NextStepCard pd={pd} stage={stage} onTab={setTab} hideVotes />}
           <div className="section">
             {plan.proposed && !isAdmin && <div style={{ marginBottom: 12 }}><ProposalBanner plan={plan} reload={pd.reload} /></div>}
             <TripOverview trip={trip} plan={plan} rsvps={pd.rsvps} items={pd.items} stage={stage} onOrganise={(t) => setView('organise', t)}

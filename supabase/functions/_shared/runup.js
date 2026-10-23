@@ -66,8 +66,36 @@ export function dayBeforeLine({ car = null, room = null, tee = null, bring = [] 
   return parts.join(' · ');
 }
 
-/** The day-before reminder for one person → { title, body }. */
+/** The day-before reminder for one person → { title, body }. No lift sorted (ov27): that's the one thing it says. */
 export function dayBeforeMessage(planName, place, bits = {}) {
+  if (bits.lift === 'none' && !bits.car) {
+    return { title: `⛳ ${planName} is tomorrow`, body: 'No lift sorted yet — tap to hop in a car with a seat free, or say you need one.' };
+  }
   const line = dayBeforeLine(bits);
   return { title: `⛳ ${planName} is tomorrow`, body: line || [place, 'Check the details and what to bring.'].filter(Boolean).join(' · ') };
+}
+
+const money = (x) => `$${Number(x).toLocaleString('en-AU', { maximumFractionDigits: 2 })}`;
+
+/**
+ * I10 (ov27, walkthrough review): the countdown pushes — one per person at 30, 7 and 1 days out, each about ONE thing,
+ * and nothing at all when there's nothing to do (no flooding).
+ *   days: 30 | 7 (the day before is dayBeforeMessage)
+ *   info: { owes: dollars still to pay, payTo: "Josh", reply: hasn't said if they're in, handicap: not checked,
+ *           hcp: their handicap, lift: 'none' | 'asked' | 'car' | 'driving' }
+ *   30 days → pay (else: are you in?)        7 days → handicap (else pay, else lift)
+ * → { title, body, about: 'pay' | 'reply' | 'handicap' | 'lift' } or null
+ */
+export function countdownPush(days, planName, info = {}) {
+  const pay = Number(info.owes) > 0.5
+    ? { about: 'pay', body: `Pay ${info.payTo || 'the organiser'} your ${money(info.owes)} — tap for the payment details, then “I’ve paid”.` } : null;
+  const reply = info.reply ? { about: 'reply', body: 'Are you in? Tap to say — the organiser’s counting heads.' } : null;
+  const hcp = info.handicap ? { about: 'handicap', body: `Is your handicap${info.hcp != null ? ` (${info.hcp})` : ''} still right? One tap to confirm or fix it.` } : null;
+  const lift = info.lift === 'none' ? { about: 'lift', body: 'How are you getting there? Hop in a car, offer your seats or say you need a lift.' } : null;
+  let pick = null;
+  let when = '';
+  if (days >= 28) { pick = pay || reply; when = 'is a month away'; }
+  else if (days >= 5) { pick = hcp || pay || lift; when = 'is a week away'; }
+  if (!pick) return null;
+  return { title: `⛳ ${planName} ${when}`, body: pick.body, about: pick.about };
 }

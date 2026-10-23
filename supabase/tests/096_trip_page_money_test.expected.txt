@@ -1,0 +1,10 @@
+RESULTS: 1. mike ticks off money paid in to his trip (rows) → ok 1
+2. it is ticked off → ok true
+3. mike tries to change the amount (stays 200) → ok 200.00
+4. mike removes a payment that never came (rows) → ok 1
+5. mike ticks off josh's trip B payment (rows) → ok 0
+6. mike removes josh's trip B payment (rows) → ok 0
+7. mike records his own payment as confirmed → refused: new row violates row-level security policy for table "plan_transfers"
+8. josh ticks off trip B (rows) → ok 1
+9. other group ticks off (rows) → ok 0
+10. other group reads them → ok 0

@@ -140,7 +140,7 @@ for (const [hash, text, name] of [['#/', 'Saturday', 'leaderboard'], ['#/feed', 
 {
   const { ctx, page } = await newPage(375, 812, { phone: true });
   await page.goto(LIVE + '#/more');
-  await page.locator('.page').getByText('Tell Josh').first().waitFor({ timeout: 15000 });
+  await page.locator('.page').getByText('Send feedback').first().waitFor({ timeout: 15000 });
   check(!(await visible(page, '.side')), '375 px: no sidebar');
   check(await visible(page, '.tabs'), '375 px: bottom bar shows');
   check(await noSideScroll(page), '375 px: no sideways scroll on More');
@@ -211,21 +211,21 @@ for (const w of [768, 1280, 1920]) {
   const { ctx, page } = await newPage(1280, 900);
   await page.goto(LIVE + '#/plan');
   await page.getByText('Spring Trip').first().waitFor({ timeout: 15000 });
-  await page.locator('.side').getByText('Tell Josh').click();
-  await page.getByRole('dialog', { name: 'Tell Josh' }).waitFor();
+  await page.locator('.side').getByText('Send feedback').click();
+  await page.getByRole('dialog', { name: 'Send feedback' }).waitFor();
   await page.getByRole('button', { name: 'Something’s wrong' }).click();
   await page.locator('textarea').fill('ok');
-  await page.getByRole('button', { name: 'Send to Josh' }).click();
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
   check(await page.getByText('Type a few words first').isVisible(), 'feedback: too short is caught before sending');
   check(!rpcs.some((r) => r.name === 'send_feedback'), 'feedback: nothing sent yet');
   await page.locator('textarea').fill('The trip page jumped when I tapped In');
   await page.screenshot({ path: `${SHOTS}/1280-tell-josh.png` });
-  await page.getByRole('button', { name: 'Send to Josh' }).click();
-  await page.getByText('Sent to Josh. Thanks!').waitFor({ timeout: 5000 });
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await page.getByText('Sent. Thanks!').waitFor({ timeout: 5000 });
   const sent = rpcs.find((r) => r.name === 'send_feedback')?.body || {};
   check(sent.p_kind === 'problem' && sent.p_message === 'The trip page jumped when I tapped In' && sent.p_path === '#/plan' && !!sent.p_version,
     `feedback: sent problem / words / #/plan / version ${sent.p_version}`);
-  check(!(await page.getByRole('dialog', { name: 'Tell Josh' }).isVisible()), 'feedback: the sheet closes after sending');
+  check(!(await page.getByRole('dialog', { name: 'Send feedback' }).isVisible()), 'feedback: the sheet closes after sending');
   await ctx.close();
 }
 

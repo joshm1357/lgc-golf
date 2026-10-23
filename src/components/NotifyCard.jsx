@@ -7,6 +7,7 @@ import { useRun, must } from '../lib/run.js';
 import { notify, myPushState, enablePush, disablePush, isIOS } from '../lib/push.js';
 import { supabase } from '../lib/supabase.js';
 import { currentGroup } from '../lib/group.js';
+import { notifyCardHidden, notifyNotNow } from '../lib/firstopen.js';
 
 const MODES = [
   ['instant', 'Straight away', 'Each thing as it happens.'],
@@ -20,8 +21,11 @@ export function NotifyCard({ compact }) {
   const [state, setState] = useState(null);
   const [busy, run] = useRun();
   const refresh = useCallback(() => myPushState().then(setState), []);
+  const [away, setAway] = useState(() => compact && notifyCardHidden());
   useEffect(() => { refresh(); }, [refresh]);
   if (!state || (compact && state === 'on')) return null;
+  // F1 (ov27): on Home, "Not now" (here or on the pop-up) puts the card away for 30 days. More → Notifications keeps it.
+  if (compact && away) return null;
   const body = {
     'needs-home-screen': (
       <>
@@ -43,6 +47,7 @@ export function NotifyCard({ compact }) {
       <div className="row between"><strong>🔔 Notifications</strong><span className="small" style={{ fontWeight: 700, color: state === 'on' ? 'var(--navy)' : 'var(--muted)' }}>{state === 'on' ? 'On' : 'Off'}</span></div>
       <div className="small">{body}</div>
       {state === 'off' && <button type="button" className="btn gold" disabled={busy} onClick={() => run(enablePush, 'Notifications on — check for a test buzz').then(refresh)}>Turn on notifications</button>}
+      {compact && state !== 'on' && <button type="button" className="btn ghost sm" data-testid="notify-card-not-now" onClick={() => { notifyNotNow(); setAway(true); }}>Not now</button>}
       {state === 'on' && !compact && <WhenCard />}
       {state === 'on' && (
         <div className="row" style={{ gap: 8 }}>
@@ -77,7 +82,9 @@ export function WhenCard() {
       {MODES.map(([m, label, help]) => (
         <button key={m} type="button" className="chip" aria-pressed={pref.mode === m} disabled={busy}
           style={{ textAlign: 'left', whiteSpace: 'normal', minHeight: 48, display: 'block' }} onClick={() => save({ mode: m, digest_hour: pref.digest_hour })}>
-          <strong>{pref.mode === m ? '● ' : '○ '}{label}</strong><div className="small muted">{help}</div>
+          <strong>{pref.mode === m ? '● ' : '○ '}{label}</strong>
+          {/* The chosen one is white on navy: its second line stays light enough to read (walkthrough small fix). */}
+          <div className={pref.mode === m ? 'small' : 'small muted'} style={pref.mode === m ? { color: '#fff', opacity: 0.9 } : undefined} data-testid={`notify-mode-help-${m}`}>{help}</div>
         </button>
       ))}
       {pref.mode === 'digest' && (

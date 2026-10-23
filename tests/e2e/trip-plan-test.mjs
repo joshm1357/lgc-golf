@@ -245,25 +245,31 @@ check(notes.some((n) => n.type === 'deposit_ask'), 'everyone keen is notified');
 check(db.plan_items.find((j) => j.formula_key === 'deposit_ask').stage === 'done' && !!db.plan_items.find((j) => j.formula_key === 'chase_deposits').due, 'ask job done; chase deposits due in a week');
 await waitNext(/4 deposits to collect/, '4 deposits to collect');
 
-// 6. Mike (keen): confirm and pay.
+// 6. Mike (keen): ov27 (R1 + M1) — the locked-in trip opens on Your weekend, whose money line says who to pay and how.
+//    "I've paid" takes his seat (he's in) and then says "waiting for Josh to confirm" — no Pay button.
 who = P2;
-await open('overview');
-await waitNext(/Confirm you’re in and pay your \$150 deposit/, 'Mike: confirm and pay');
+await page.goto(`${BASE}#/plan/${PLAN}?view=overview`);
+await page.reload();
+await page.getByTestId('your-weekend').waitFor({ timeout: 15000 });
+await page.waitForTimeout(500);
+const money = () => page.getByTestId('money-line');
+check(/Deposit \$150 · still to pay \$150 to Josh/.test(await money().innerText()), `Mike: one money line — pay Josh $150 (${(await money().innerText()).replace(/\n/g, ' / ')})`);
+check(await money().getByText('PayID 0400 000 000 — Josh').isVisible(), 'the organiser’s payment details are shown');
+check(/Pay Josh your \$150 deposit/.test(await page.getByTestId('runup-todos').innerText()), 'Mike’s to-dos: pay Josh the deposit');
 await shot('tp7-player-pay');
-await card().getByRole('button', { name: 'Confirm and pay' }).click();
-check(await sheet().getByText('PayID 0400 000 000 — Josh').isVisible(), 'the organiser’s payment details are shown');
-await shot('tp8-pay-sheet');
-await sheet().getByRole('button', { name: 'I’ve paid $150' }).click();
-await page.waitForTimeout(600);
+await money().getByRole('button', { name: 'I’ve paid $150' }).click();
+await page.waitForTimeout(800);
 check(db.plan_rsvps.find((r) => r.player_id === P2).status === 'in', 'Mike is now in');
 check(db.plan_transfers.some((t) => t.from_id === P2 && !t.to_id && Number(t.amount) === 150 && !t.confirmed), 'his payment waits to be ticked off');
-await waitNext(/Deposit sent/, 'Mike: waiting for the tick');
+check(/\$150 waiting for Josh to confirm/.test(await money().innerText()) && !(await page.getByTestId('ive-paid').count()), 'Mike: waiting for Josh to confirm — no Pay button');
+check(!(await page.getByTestId('todo-deposit').count()), 'no deposit to-do (or Pay button) while it waits for a tick');
+await shot('tp8-waiting');
 
 // 7. The organiser ticks it off — on Organise (ov14: organiser-only things never show on the Overview).
 who = P1;
 await page.goto(`${BASE}#/plan/${PLAN}?view=overview`);
 await page.reload();
-await page.getByTestId('overview-glance').waitFor({ timeout: 15000 });
+await page.getByTestId('your-weekend').waitFor({ timeout: 15000 });
 check(!(await card().count()), 'the organiser’s Overview has no organiser Next step on it');
 await open('organise');
 check(await page.getByTestId('step-lockin').getAttribute('data-state') === 'current', 'deposits: the Lock in step is current');

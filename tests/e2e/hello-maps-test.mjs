@@ -157,7 +157,9 @@ async function fake(route) {
 const fails = [];
 const check = (ok, msg) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${msg}`); if (!ok) fails.push(msg); };
 const browser = await chromium.launch();
-const auth = ([uid, seen]) => {
+const auth = ([uid, seen, first]) => {
+  // ov27 (F1): the hello waits for the second visit — these phones have been here once before, unless the test says.
+  if (!first && !localStorage.getItem('tgt-visits')) localStorage.setItem('tgt-visits', '1');
   const exp = Math.floor(Date.now() / 1000) + 86400;
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
   const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated' })}.x`;
@@ -165,11 +167,11 @@ const auth = ([uid, seen]) => {
   localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-notify-prompt', String(Date.now()));
   if (seen && !sessionStorage.getItem('seeded')) { localStorage.setItem('tgt-caddie-hello', '1'); sessionStorage.setItem('seeded', '1'); }
 };
-async function context(opts, seen = false) {
+async function context(opts, seen = false, first = false) {
   const ctx = await browser.newContext(opts);
   await ctx.route('https://*.supabase.co/**', fake);
   await ctx.route('https://server.arcgisonline.com/**', (r) => r.fulfill({ status: 204, body: '' }));
-  await ctx.addInitScript(auth, ['99999999-9999-4999-8999-999999999999', seen]);
+  await ctx.addInitScript(auth, ['99999999-9999-4999-8999-999999999999', seen, first]);
   const page = await ctx.newPage();
   page.on('pageerror', (e) => fails.push(`page error: ${e}`));
   return { ctx, page };
@@ -177,6 +179,19 @@ async function context(opts, seen = false) {
 const PHONE = { viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
 const LAPTOP = { viewport: { width: 1280, height: 860 }, deviceScaleFactor: 1 };
 const box = (loc) => loc.boundingBox();
+
+// ---------------------------------------------------------------- A0. ov27 (F1): not on the first visit
+{
+  const { ctx, page } = await context(PHONE, false, true);
+  member = true;
+  await page.goto(`${BASE}#/`);
+  await page.waitForTimeout(5500);
+  check(!(await page.getByTestId('caddie-hello').count()), 'F1: no hello on the very first visit');
+  const again = await ctx.newPage(); // the app opened again: a second visit
+  await again.goto(`${BASE}#/`);
+  check(await again.getByTestId('caddie-hello').waitFor({ timeout: 12000 }).then(() => true, () => false), 'F1: the hello waits for the second visit');
+  await ctx.close();
+}
 
 // ---------------------------------------------------------------- A. Caddie says hello — phone
 {
@@ -244,7 +259,8 @@ const box = (loc) => loc.boundingBox();
   const { ctx, page } = await context(PHONE, true);
   const wait = (ms = 400) => page.waitForTimeout(ms);
   await page.goto(`${BASE}#/plan`);
-  await page.getByTestId('plan-with-ai').click();
+  // ov27 (F1): a brand-new group's organiser gets the three-step start, whose "Suggest the next trip" opens the planner.
+  await page.getByTestId('plan-with-ai').or(page.getByTestId('starter-suggest')).first().click();
   await page.getByTestId('caddie-plan-sheet').waitFor({ timeout: 10000 });
   await page.getByLabel('Your message').fill('Golf trip with the boys');
   await page.getByRole('button', { name: 'Send', exact: true }).click();

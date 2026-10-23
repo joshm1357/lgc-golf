@@ -163,3 +163,13 @@ describe('ids when the question doesn’t say', () => {
     expect(caddieIds({ plan_id: P }, { plan: { id: 'x' }, currentTrip: { id: T }, me: ME })).toEqual({ plan: P, trip: T, me: ME });
   });
 });
+
+describe('ov27: no "Who’s leading" when nothing is being played', () => {
+  it('swaps the scoring questions for trip ones', () => {
+    const idle = caddieSuggestions({ screen: 'trip_now' }, { playing: false });
+    expect(idle).toHaveLength(3);
+    expect(idle.join(' ')).not.toMatch(/leading|enter my score/i);
+    expect(caddieSuggestions({ screen: 'other' }, { playing: false }).join(' ')).not.toMatch(/leading|on today/i);
+    expect(caddieSuggestions({ screen: 'trip_now' }, { playing: true })[0]).toBe('Who’s leading today?');
+  });
+});

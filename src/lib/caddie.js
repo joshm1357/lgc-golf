@@ -128,8 +128,18 @@ export function caddieContext(pathname = '/', search = '', defaults = {}) {
   }
 }
 
-/** Three things to ask, by screen. `roundName` makes the leaderboard's about that round. */
-export function caddieSuggestions(ctx = {}, { isAdmin = false, roundName = '' } = {}) {
+/**
+ * Three things to ask, by screen. `roundName` makes the leaderboard's about that round. playing: false when no round is
+ * live or on today — then nothing about who's leading or entering scores (ov27, walkthrough small fix).
+ */
+export function caddieSuggestions(ctx = {}, { isAdmin = false, roundName = '', playing = true } = {}) {
+  const list = suggestionsFor(ctx, { isAdmin, roundName });
+  if (playing) return list;
+  const idle = ['What’s on our next trip?', isAdmin ? 'Plan a trip' : 'Who won our last trip?', 'Where are the rules?', 'Who’s won the most trips?'];
+  const kept = list.filter((q) => !/leading|enter my score|last few holes|on today/i.test(q));
+  return [...kept, ...idle.filter((q) => !kept.includes(q))].slice(0, 3);
+}
+function suggestionsFor(ctx = {}, { isAdmin = false, roundName = '' } = {}) {
   const r = roundName ? ` in ${roundName}` : '';
   switch (ctx.screen) {
     case 'trip_now': return ['Who’s leading today?', 'What’s on this trip?', isAdmin ? 'Set up the next round' : 'Where do I enter my score?'];

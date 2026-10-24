@@ -301,7 +301,7 @@ $$;
 -- p_now: for tests.
 create or replace function private.tribunal_tick(p_now timestamptz default now()) returns jsonb
 language plpgsql security definer set search_path = '' as $$
-declare c record; r record; v_closed int := 0; v_nudged int := 0; v_due int := 0; v_hit int; v_voted uuid[];
+declare c record; r record; v_closed int := 0; v_nudged int := 0; v_due int := 0; v_hit int; v_line text;
 begin
   -- Time's up.
   for c in select tc.*, coalesce(p.nickname, p.name) as who from public.tribunal_cases tc join public.players p on p.id = tc.accused_id
@@ -339,12 +339,19 @@ begin
       where not exists (select 1 from public.tribunal_votes v where v.case_id = m.id and v.voter_id = x)
     )
     select group_id, voter, min(closes_at) as first_close, (array_agg(id order by closes_at, who))[1] as first_case,
-           string_agg(case when n = 0 then 'no votes yet on ' || who
-                           else n || case when n = 1 then ' vote' else ' votes' end || ' so far on ' || who end, ', ' order by closes_at, who) as line
+           array_agg(n order by closes_at, who) as ns, array_agg(who order by closes_at, who) as whos
     from todo group by group_id, voter
   loop
+    -- "2 votes so far on Mike, 1 on Chris, none on Dave" (the first one in full).
+    v_line := '';
+    for i in 1 .. cardinality(r.ns) loop
+      v_line := v_line || case when i > 1 then ', ' else '' end ||
+        case when r.ns[i] = 0 then case when i = 1 then 'no votes yet' else 'none' end
+             else r.ns[i] || case when i = 1 then case when r.ns[i] = 1 then ' vote so far' else ' votes so far' end else '' end end
+        || ' on ' || r.whos[i];
+    end loop;
     perform private.tribunal_queue(r.group_id, array[r.voter], 'case_closing',
-      '⚖️ Verdicts ' || private.tribunal_when(r.first_close, p_now) || ' — ' || r.line || '. Have your say.',
+      '⚖️ Verdicts ' || private.tribunal_when(r.first_close, p_now) || ' — ' || v_line || '. Have your say.',
       'Guilty or not? Tap to vote.', r.first_case);
     v_nudged := v_nudged + 1;
   end loop;

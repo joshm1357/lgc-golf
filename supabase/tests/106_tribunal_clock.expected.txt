@@ -1,0 +1,56 @@
+1. phone-only Al lodges a case → refused: Save your spot first (Google or email) to do this
+2. Bo lodges against Mike (−4) → ok lodged
+3. closes 48 hours after lodging (the default) → 48
+4. lodged post (deadline masked) → 1 · ⚖️ Mike's in the dock: “Hit them far too well!” 30 → 26 if guilty. Guilty or not? Vote by <Dy time>.
+5. the case remembers its post → true
+6. Sam lodges against Chris (+2) → ok lodged
+7. with the group setting at 24 hours → 24
+8. lodged words with a fixed deadline → ⚖️ Mike's in the dock: “Hit them far too well!” 30 → 26 if guilty. Guilty or not? Vote by Sun 8pm.
+9. a long charge is trimmed → ⚖️ Chris's in the dock: “Shot 25 points and blamed the wind for two days. Two days! It was barely a breeze and he…” 27 → 29 if guilty. Guilty or not? Vote by Sun 8pm.
+10. Sam writes Mike's defence → refused: Only the accused can write the defence, while the case is open
+11. Mike writes his defence → ok 
+12. Mike changes it → ok 
+13. one defence post, updated (lodged post + defence; deadline masked) → 2 · ⚖️ Mike's in the dock: “Hit them far too well!” 30 → 26 if guilty. Guilty or not? Vote by <Dy time>. / 🗣️ Mike's defence: “This was a one-off, I got lucky. The greens were slow, the wind was behind me on every hole and I was hungover, which everyone knows helps…”
+14. Sam: guilty on Mike → ok 
+15. Sam: not guilty on Chris → ok 
+16. Kurt: guilty on Mike → ok 
+17. Kurt: guilty on Chris → ok 
+18. phone-only Al: not guilty on Mike → ok 
+19. nudge due? 2am, closing 8pm → false
+20. nudge due? 9am close: 7pm the evening before / 2am / 7am → true / false / false
+21. tick at 10am (too early) → {"chair": 0, "closed": 0, "nudged": 0}
+22. tick at 4:30pm → {"chair": 0, "closed": 0, "nudged": 6}
+23. nudges: not voters who voted on both, not the accused on their own, not guests, not the other group → Al: ⚖️ Verdicts at 8pm — 2 votes so far on Chris. Have your say. / Bo: ⚖️ Verdicts at 8pm — 2 votes so far on Chris, 3 on Mike. Have your say. / Chris: ⚖️ Verdicts at 8pm — 3 votes so far on Mike. Have your say. / Dan: ⚖️ Verdicts at 8pm — 2 votes so far on Chris, 3 on Mike. Have your say. / Mike: ⚖️ Verdicts at 8pm — 2 votes so far on Chris. Have your say. / So: ⚖️ Verdicts at 8pm — 2 votes so far on Chris, 3 on Mike. Have your say.
+24. tick again at 5:30pm (no second nudge) → {"chair": 0, "closed": 0, "nudged": 0}
+25. tick at 8:05pm → {"chair": 0, "closed": 2, "nudged": 0}
+26. Mike's case → closed · upheld · 2–1 · 30→26
+27. Mike's handicap → 26
+28. Mike's verdict post → ⚖️ GUILTY 2–1. Mike goes 30 → 26. The “This was a one-off” defence didn't wash.
+29. Chris's case (a 1–1 tie) → closed · dismissed · 1–1 · 27→27
+30. Chris's verdict post → ⚖️ NOT GUILTY 1–1. Chris walks free and stays on 27.
+31. verdict buzzes (count) → 18
+32. tick again (nothing left) → {"chair": 0, "closed": 0, "nudged": 0}
+33. words: guilty, no defence → ⚖️ GUILTY 3–1. Mike goes 30 → 26. No defence offered.
+34. words: not guilty with a defence → ⚖️ NOT GUILTY 1–2. Chris walks free and stays on 27. The “I was injured” defence did the trick.
+35. words: chair overrules, a long-winded defence → ⚖️ GUILTY 1–2. Bo goes 12.4 → 10.4. “The thing is that every single round I…” didn't wash. (Chair's ruling)
+36. Bo lodges against Dan → ok lodged
+37. player Bo moves the closing time → refused: Only an organiser can move the closing time
+38. another group's organiser moves it → refused: No such case
+39. So: five minutes away → refused: Pick a time at least 15 minutes away
+40. So: two months away → refused: Pick a time within 30 days
+41. So: Fri 8pm in two weeks → ok moved
+42. So: a closed case → refused: This case is closed
+43. the lodged post follows → ⚖️ Dan's in the dock: “Two birdies in a row” 25 → 22 if guilty. Guilty or not? Vote by Fri 8pm.
+44. organiser decides: tick after the close → {"chair": 1, "closed": 0, "nudged": 0}
+45. Dan's case stays open → open
+46. organisers told → So: ⚖️ Time's up on Dan's case — the chair closes it.
+47. tick again (told once) → {"chair": 0, "closed": 0, "nudged": 0}
+48. the chair closes it (overrules: guilty) → ok 
+49. Dan's verdict post → ⚖️ GUILTY 0–0. Dan goes 25 → 22. No defence offered. (Chair's ruling)
+50. another group reads the cases → ok 0
+51. clock words → Sun 8pm
+Sat 7:30am
+at 8pm
+tomorrow at 9am
+Fri 8pm
+52. handicap words → 30 12.4 -1

@@ -12,6 +12,8 @@ import { BringAsk } from '../components/BringAsk.jsx';
 import { bringAskPlan } from '../lib/runup.js';
 import { SideGameAsk, sideGameFromLink } from '../components/GamesChip.jsx'; // ov29 (098)
 import { CalloutCard, calloutFromLink } from '../components/CalloutCard.jsx'; // ov34 (103): reply on the post
+import { FeedVerdictShare } from '../components/VerdictShare.jsx'; // ov38 (106): share a handicap verdict
+import { handicapCaseFromLink, isVerdictPost } from '../lib/tribunalWords.js';
 import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
 
 const CapTipChip = lazyScreen(() => import('../components/CupStandings.jsx'), 'CapTipChip', { inline: true }); // ov32: 🧢 next to 🏷
@@ -144,6 +146,7 @@ function Post({ post, me, comments, reactions, onReact, onChanged, isAdmin, chip
         {bringAskPlan(post.link) && <BringAsk planId={bringAskPlan(post.link)} />}
         {sideGameFromLink(post.link) && <SideGameAsk gameId={sideGameFromLink(post.link)} />}
         {calloutFromLink(post.link) && <CalloutCard planId={calloutFromLink(post.link)} />}
+        {post.kind === 'tribunal' && isVerdictPost(post.body) && handicapCaseFromLink(post.link) && <FeedVerdictShare caseId={handicapCaseFromLink(post.link)} />}
         <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
           {counts.map((c) => (
             <button key={c.e} type="button" className="react" aria-pressed={c.mine} onClick={() => onReact(c.e)} aria-label={`React ${c.e}`}>

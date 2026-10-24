@@ -278,7 +278,8 @@ describe('wording', () => {
   });
   it('rule lines', () => {
     expect(ruleLine('change_rule', presetSettings('majority', 'change_rule'))).toBe('Majority of players · at least half must vote · closes after 2 days · from the next trip');
-    expect(ruleLine('handicap', presetSettings('lgc', 'handicap'))).toMatch(/closes once everyone has voted/);
+    expect(ruleLine('handicap', presetSettings('lgc', 'handicap'))).toMatch(/closes after 2 days, or once everyone has voted/);
+    expect(ruleLine('handicap', { ...presetSettings('lgc', 'handicap'), close_hours: 24 })).toMatch(/closes after 1 day,/);
     expect(ruleLine('other', { ...presetSettings('club', 'handicap'), committee_id: 'c1' }, [{ id: 'c1', name: 'Handicap Committee' }])).toMatch(/^Handicap Committee/);
     expect(ruleLine('trip_decision', { decides: 'trip_organiser' })).toMatch(/trip’s organiser/);
   });

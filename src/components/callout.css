@@ -1,0 +1,35 @@
+/* ov34 — "Who's up for a hit?" (components/CalloutSheet.jsx, screens/RoundCallout.jsx, components/CalloutCard.jsx). */
+.co-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.co-chips .chip { min-height: 44px; }
+.co-step { display: flex; flex-direction: column; gap: 8px; }
+.co-step > .label { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.co-opts { display: flex; flex-direction: column; gap: 6px; }
+.co-opt { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 4px 4px 4px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+.co-opt strong { flex: 1; min-width: 0; }
+.co-x { width: 44px; height: 44px; border: 0; background: transparent; font-size: 18px; color: var(--muted); border-radius: 8px; }
+.co-x:hover { background: var(--line-soft); }
+.co-who { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.co-who label { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); font-weight: 600; }
+.co-who input { width: 20px; height: 20px; }
+.co-reply { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.co-reply button { min-height: 48px; border-radius: 10px; border: 1px solid #B9C2CC; background: #fff; font-weight: 700; font-size: 15px; color: var(--text); }
+.co-reply button[aria-pressed="true"].yes { background: var(--up); border-color: var(--up); color: #fff; }
+.co-reply button[aria-pressed="true"].maybe { background: var(--gold); border-color: var(--gold); color: var(--text); }
+.co-reply button[aria-pressed="true"].no { background: var(--navy-2); border-color: var(--navy-2); color: #fff; }
+.co-tick { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.co-tick .co-reply { grid-template-columns: repeat(3, 48px); }
+.co-tick .co-reply button { min-height: 44px; font-size: 18px; }
+.co-tick.best { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold-soft); }
+.co-people { display: flex; flex-direction: column; gap: 4px; }
+.co-people .row { gap: 8px; min-height: 32px; }
+.co-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 700; background: var(--line-soft); color: var(--text); white-space: nowrap; }
+.co-pill.in { background: #E3F2EA; color: var(--up); }
+.co-pill.reserve { background: var(--gold-soft); color: #7A5A00; }
+.co-card { border-left: 4px solid var(--gold); }
+.co-card .co-head { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; text-decoration: none; color: inherit; }
+.co-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.co-extra { border-top: 1px solid var(--line-soft); padding-top: 10px; }
+details.co-more > summary { cursor: pointer; font-weight: 700; min-height: 44px; display: flex; align-items: center; list-style: none; }
+details.co-more > summary::-webkit-details-marker { display: none; }
+details.co-more > summary::after { content: '▾'; margin-left: 6px; color: var(--muted); }
+details.co-more[open] > summary::after { content: '▴'; }

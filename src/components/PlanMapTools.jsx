@@ -136,14 +136,16 @@ export function Declutter({ dep = '' }) {
   return null;
 }
 
-/** Inside a MapContainer: pans to a point when it's off-screen (the course pointed at in the list). */
-export function PanTo({ point }) {
+/** Inside a MapContainer: brings a point into view — pans if it's off-screen, and with `zoom` zooms in to at least that
+ *  (v10.5: a click on a list row zooms to it). */
+export function PanTo({ point, zoom = null }) {
   const map = useMap();
   const key = point ? `${point.lat},${point.lng}` : '';
   useEffect(() => {
     if (!point || point.lat == null) return;
     const ll = L.latLng(point.lat, point.lng);
-    if (!map.getBounds().pad(-0.08).contains(ll)) map.panTo(ll, { animate: false });
+    if (zoom && map.getZoom() < zoom) map.setView(ll, zoom, { animate: false });
+    else if (!map.getBounds().pad(-0.08).contains(ll)) map.panTo(ll, { animate: false });
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
   return null;
 }
@@ -192,15 +194,19 @@ export function useHot() {
 
 // ------------------------------------------------------------------ the summary card
 
-/** tip: { name, lines }. onMore: open the details (a "More →" button). hint: a quiet line instead (mouse, beside a row). */
-export function TipCard({ tip, onMore, onEnter, onLeave, hint = '' }) {
+/** tip: { name, lines }. onMore: open the details (a "More →" button). hint: a quiet line instead (mouse, beside a row).
+ *  action (ov36): { label, onClick } — e.g. "+ Put on the table", so any dot on the map can be picked from its summary. */
+export function TipCard({ tip, onMore, onEnter, onLeave, hint = '', action = null }) {
   if (!tip) return null;
   return (
     <div className="pm-tip-card" data-testid="place-tip" onMouseEnter={onEnter} onMouseLeave={onLeave}>
       <strong>{tip.name}</strong>
       {tip.lines.map((l) => <span key={l} className="pm-tip-line">{l}</span>)}
-      {hint ? <span className="pm-tip-hint">{hint}</span> : onMore && (
-        <button type="button" className="pm-tip-more" onClick={(e) => { e.stopPropagation(); onMore(); }} data-testid="place-tip-more">More →</button>
+      {hint ? <span className="pm-tip-hint">{hint}</span> : (onMore || action) && (
+        <span className="pm-tip-btns">
+          {action && <button type="button" className={`pm-tip-act${action.on ? ' on' : ''}`} onClick={(e) => { e.stopPropagation(); action.onClick(); }} data-testid="place-tip-action">{action.label}</button>}
+          {onMore && <button type="button" className="pm-tip-more" onClick={(e) => { e.stopPropagation(); onMore(); }} data-testid="place-tip-more">More →</button>}
+        </span>
       )}
     </div>
   );
@@ -252,8 +258,9 @@ export function usePlaceInfo({ onOpen = null } = {}) {
     onMouseLeave: () => { if (!touchNow()) hot.hoverOut(); },
   } : { 'data-place': key });
   /** how: this row's own way to open its details (e.g. a day's course), else onOpen. */
+  // v10.5: a click on a row (mouse or finger) first zooms the map to it with its summary; a second click opens it all.
   const tapRow = (key, el, how = null) => {
-    if (tapAction({ key, hotKey: hot.from === 'row' ? hot.hot : null, canHover: mouse() }) === 'open') open(key, how);
+    if (tapAction({ key, hotKey: hot.from === 'row' && hot.via === 'tap' ? hot.hot : null, canHover: false }) === 'open') open(key, how);
     else { hot.pick(key, 'row'); setAnchor({ key, el }); }
   };
   const tapPin = (key) => {

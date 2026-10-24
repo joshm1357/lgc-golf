@@ -1,0 +1,41 @@
+RESULTS: 1. organiser names Hamish on the March trip → ok true
+2. organiser names the guest → refused: A guest can't be a co-organiser
+3. organiser names another group's player → refused: That belongs to another group
+4. tom names himself → refused: new row violates row-level security policy for table "plan_coorganisers"
+5. tom sees the co-organisers → ok 1
+6. tom writes the trip builder → refused: new row violates row-level security policy for table "trip_builds"
+7. tom renames the trip (rows) → ok 0
+8. tom can decide → ok false
+9. hamish writes the trip builder → ok Hunter Valley
+10. hamish changes it → ok South Coast
+11. hamish calls a When? vote card → ok When?
+12. hamish adds its vote → ok open
+13. hamish adds two weekends → ok 2
+14. hamish can decide → ok true
+15. hamish closes it with a winner → ok closed
+16. hamish renames an organiser's option → ok Fri 12 – Mon 15 Mar
+17. hamish edits the organiser's job (not claimed) → ok Book the minibus / owner nobody
+18. hamish hands the job to Tom → ok true
+19. hamish adds a formula job → ok reserve_stay
+20. hamish logs a cost paid by the organiser → ok 500.00
+21. hamish sets Tom as in → ok in
+22. hamish sets the dates and place → ok Hunter Valley / shape kept true
+23. hamish makes himself the organiser → ok true
+24. hamish names Tom too → refused: new row violates row-level security policy for table "plan_coorganisers"
+25. hamish writes the Spring trip builder → refused: new row violates row-level security policy for table "trip_builds"
+26. hamish renames the Spring trip (rows) → ok 0
+27. hamish can decide on Spring → ok false
+28. hamish locks it in → ok confirmed / trip made true
+29. hamish calls it off → ok 
+30. hamish brings it back → ok 
+31. status after → ok confirmed
+32. organiser names Tom → ok 1
+33. organiser names Hamish on Spring → ok 1
+34. organiser names himself on Spring → ok 1
+35. a fourth co-organiser → refused: Up to 3 co-organisers a trip
+36. tom removes Hamish (rows) → ok 0
+37. tom steps down (rows) → ok 1
+38. tom writes the Spring builder after stepping down → refused: new row violates row-level security policy for table "trip_builds"
+39. other group sees the co-organisers → ok 0
+40. other group names one → refused: That belongs to another group
+41. nobody calls the patch helper → refused: permission denied for function ov35_patch

@@ -71,3 +71,49 @@
 - Feature `phone_only_limited`, on by default (every preset), so a group can switch it off. Quick rounds never ask.
 - Phone-only accounts only come from joining an existing group by its link (or a personal link). Starting a group, a quick round, a club claiming its course page and a group-booking enquiry need Google or email first; the database refuses them for phone-only whatever the switch. No anonymous sign-in left on Start, Club or course pages.
 - Searching the course library (#/c) needs a session (search_courses refuses signed-out callers, which stops scraping), so signed out it's a sign-in card; a course's own page still opens for anyone.
+## ov35 — two votes, co-organisers, several drafts (23 Oct 2026, Josh's picks)
+- The start vote is two cards, 📅 When? (weekends, How long?) and 📍 Where? (areas, and optionally their courses / places to stay). Call either first, or "Call both" (one batch, one message, title "Where and when?"); each card's polls close on their own. Which card a poll belongs to is worked out from its kind / option keys (lib/votecards.js), so a shared batch splits cleanly.
+- Choosing the area never settles the weekend, and settling the weekend never chooses the area. Course calls unlock once both are decided (or skipped), as before.
+- Any button that closes a vote says so: "Close the vote and go with …", with "This closes the … vote now and posts the result in the Feed" under it. Choosing an area from the area page while the Where? vote is out asks first ("That closes the Where? vote now and posts the result").
+- One Feed post per card ("📅 … the weekend's decided … Still to decide: where." / "📍 … we're going to … Next: ringing the courses"), once per vote; no post when there was no vote.
+- Old trips with the combined vote (state.votes.v1 and no when/where) keep the old screen untouched.
+- The Where? card's "went into the detail" count is out of the people who answered Where? (no longer everyone who answered anything).
+- Co-organisers: 1–3 players per trip, named by a group organiser or the trip's own organiser. On that trip they can do everything an organiser can (builder, votes, jobs, money, rooms & cars, lock in, call off); not who organises it or its link to the app's trip. A co-organiser can step down. Guests can't be one. Enforced in the database (104); the app gives them the organiser's view of that trip only (PlanRole).
+- "Suggestions from anyone" (optional) not built.
+- The Caddie's ✨ planning chat stays organisers-only (the AI helper only plans for organisers); a co-organiser plans on the trip screen.
+- Planning chats are kept per trip on the phone for 90 days (the not-yet-a-trip chat a week). The Caddie's Plan tab has a "Planning:" picker; "Start a new plan" keeps the trip's chat.
+- AI-made drafts were never hidden: they're planning trips (proposed = false) and show under "Being organised". "My draft trips" lists every planning trip an organiser can change (all non-proposed ones + their own proposals), or the ones a player co-organises.
+## ov36 — the trip map's courses (23 Oct 2026, Josh picked all four)
+- The map and the list show the same courses: every course within the drive (after the filters) is a dot; the list shows them 12 at a time ("All 19 are on the map"), and always shows what's on the table, even when a filter or the drive would hide it ("on the table (outside the filters)" / "(further out)").
+- Any dot can be picked from its summary card: "+ Put on the table" (and "✓ On the table — take off"). Organisers only.
+- Filters: Either / Not played / Played before; ★ rating minimum (ours, else other groups'); type (from the course research "style" words: links, parkland, resort, heathland, sandbelt, coastal, bush, country, hills, lakes & water — only the types some course has are offered); longest drive; sort Suggested / Best rated / Closest / Top ranked (from the research "rankings", lowest # first). A filter with no data is hidden. Saved on the trip (builder state `courseFilters`, one set for the trip); a player's view keeps its own, not saved.
+- Search wider: "Show N more" first, then "Search wider: within 40 min of Pokolbin and Cessnock → 45 min", steps 20/30/40/45/60/75/90/120 min. Saved per area (`courseReach`). It's separate from the trip's `stayMax` (which still drives day building and "x of the courses within 40 min").
+- Your own part of the map: "🔍 Search this part of the map" lists the courses in view (refuses more than 3° × 4° of map: "Zoom in a bit first"). "Save as an area" names it "Custom: around <nearest town within 60 km>" (else "my area"), keeps its box (`customAreas`) and puts a 🏠 pin in the middle; its course list is the courses inside the box. With an area already chosen, saving goes back to a list of options (like "+ Add another area").
+- On the way: straight line from each starting point (trip_start_points, else the "Coming from" centre) to the middle of where you'd stay; courses up to 10/20/30/45 min off that drive (default 20, saved as `onWayDetour`), not within 25 min of home, not further from the area than the start, not already in the area's list. Shown as "On the way up or back" (no direction yet — the same line both ways). Ticking one puts it on the area's table; it doesn't go into stay days automatically.
+## ov34 — Round call-outs (23 Oct 2026, Josh: "plan a round too and ask the guys … not being a cup")
+- One engine: a call-out is a plan (kind 'round', callout = true) using the dates vote, In/Maybe/Out, lock-in and the feed; lock-in makes ONE round on a trip made by 025's guard. No parallel tables except `plan_invites` (who's asked).
+- Time: one option = a set time (In / Maybe / Can't); 2–8 options = ✓ / ? / ✗ per option. Part of the day stored per option (`plan_options.part`, `tee_time`); labels stay human ("Fri 30 Oct · arvo").
+- The quick ranges are rolling from tomorrow — "Next 7 days", "Week after", "Next 2 weeks", "Next 4 weeks" — so they're never empty late in the week. In the type-it box, "this fri" = Friday this week (or the coming one if gone), "next fri" = Friday of next week (Mon–Sun weeks), a bare "fri" = the coming one (today if it's Friday).
+- Spots: a cap with a reserve list, or no cap, chosen before sending. Order = when you FIRST said in / ticked ✓ (stamped by the database; editing nothing moves you; going to maybe or can't and back puts you at the back).
+- Who's asked: whole group by default (approved, not guests); a list gets buzzes only (no Feed post). Only the people asked (plus whoever put it out and organisers) can reply — the database refuses others.
+- Who can put one out: anyone in the group with a saved account (102); phone-only and guests can reply only. Lock / change / call off: whoever put it out, the plan's organiser, or a group organiser.
+- After lock-in the round's players follow the In list automatically until the round goes live; then only an organiser changes it.
+- "Didn't get a spot this time" goes to people who said maybe when it locked full; everyone who said ✓ past the cap is a reserve.
+- The day-before buzz is the call-out's own (5pm Sydney onwards); the trip countdown skips call-outs. No new weather API: the round screen shows the existing Open-Meteo forecast after lock-in.
+- A locked call-out has a trip (025 makes one) — so it can show as "Next trip" on Home until it's played. Accepted: it's what's on next.
+- Josh 23 Oct 9:39pm, "hide any of those things as standard, maybe allow some to be included as options": the round screen hides all trip machinery; "➕ Add to this round" (collapsed, on the sheet and in Change) switches on, per round, stored in `plans.extras`: vote on the course (the plan's 'location' vote), side games (Games, after lock), fines & awards (the trip's, after lock), cars (the plan's cars list), kitty (the plan's kitty), drinks/lunch after (a line). Not included: a comp or trophy (cups/comps need the Cup set-up and a trip's comps — not a clean per-round switch; set up from the Cup screen as now).
+- The old "⛳ One-day round" in Suggest and "Same time next year?" open the new sheet. The AI planner (CaddiePlan / AiPlanner) can still draft a kind 'round' trip-style plan — left as is.
+- Repeating call-outs ("every Saturday 7:30 at Moore Park"): extension point only (REPEAT_LATER, end of 103).
+## ov38 — the Handicap Tribunal clock and posts (24 Oct 2026, Josh agreed the five items)
+- Closing time per case = the group's Handicap "Voting closes after" (default 48 h); an organiser can move it per case.
+  Existing open cases when 106 runs: 8pm Sydney on the first evening ≥ 18 h away (= Sun 25 Oct 8pm for L.G.C's three
+  if run on Sat 24 Oct), not a hard-coded date, so a later run still gives people a fair go.
+- At the closing time the case closes itself through finalise_case (majority; a tie → not guilty), the same path as the
+  last vote or the chair. Exception: groups where the chair (organiser) decides handicap cases — never auto-closed;
+  organisers get one "time's up" buzz.
+- One nudge per case, only to people who can vote and haven't: 4 h before (8am–9pm Sydney) or from 6pm the evening
+  before for a morning close. Several cases → one buzz per person. Sent through notify_queue and the hourly send, so
+  it can land up to an hour after it's due (fine for a 4-hour heads-up).
+- The verdict's "colour" comes from the defence without AI: its first clause if short ("The “one-off” defence didn't
+  wash."), else its opening words in quotes. No defence → "No defence offered." (guilty) / nothing (not guilty).
+- Phone-only accounts still can't lodge (102) — unchanged; tap count noted in REPORT-ov38.md for Josh.

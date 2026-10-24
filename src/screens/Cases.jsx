@@ -792,6 +792,14 @@ function SettingSheet({ kind, g, direct, onClose, onPropose }) {
                 <option value="players">Any player</option><option value="organisers">Organisers only</option>
               </select>
             </label>
+            {kind === 'handicap' && s.decides !== 'organiser' && (
+              <label className="field"><span>Voting closes after</span>
+                <select className="select" value={s.close_hours} onChange={(e) => set('close_hours', Number(e.target.value))}>
+                  {[6, 12, 24, 48, 72, 168].map((h) => <option key={h} value={h}>{h < 24 ? `${h} hours` : `${h / 24} day${h === 24 ? '' : 's'}`}</option>)}
+                </select>
+                <span className="small muted">Each case closes itself then and goes with the vote. An organiser can move it on the case.</span>
+              </label>
+            )}
             {kind !== 'handicap' && s.decides !== 'organiser' && (
               <>
                 <label className="field"><span>Voting closes after</span>

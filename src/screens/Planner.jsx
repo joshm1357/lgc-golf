@@ -37,6 +37,9 @@ import { HowItGoesOut } from '../components/CallVote.jsx';
 import { defaultCloses } from '../lib/callvote.js';
 import { useDesktop } from '../components/Sidebar.jsx';
 import { gate } from '../lib/savedgate.js';
+import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
+// ov34: a round call-out (plans.callout) gets its own slim screen — no place votes, organise steps, run-up or kitty.
+const RoundCallout = lazyScreen(() => import('./RoundCallout.jsx'));
 
 export { NotifyCard };
 
@@ -167,6 +170,8 @@ export function PlanDetail() {
   if (!pd) return <div className="page"><Header back="Trips" title="Loading…" /><Loading /></div>;
   if (!pd.plan) return <div className="page"><Header back="Trips" title="Not found" /><div className="empty">This trip has been removed.</div></div>;
   const { plan } = pd;
+  // ov34: a call-out opens its own screen (?full=1 still shows the trip planner, for anything the extras don't cover).
+  if (plan.callout && params.get('full') !== '1') return <LazyArea resetKey={plan.id} fallback={<Loading />}><RoundCallout pd={pd} /></LazyArea>;
   const trip = plan.trip_id ? data.trips.find((t) => t.id === plan.trip_id) : null;
   const stage = tripStage(plan, trip);
   const isAdmin = !!status.is_admin;

@@ -67,3 +67,17 @@ path.pm-ring { transform-box: fill-box; transform-origin: center; animation: pm-
 .pm-row-tip.passive { pointer-events: none; }
 .pm-tip-hint { color: var(--muted, #5B6675); font-size: 12px; margin-top: 2px; }
 .pm-row-tip .pm-tip-card { max-width: none; width: 100%; }
+/* ov36: "+ Put on the table" beside "More →" on a course's summary card, and the map's "Search this part of the map". */
+.pm-tip-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.pm-tip-btns .pm-tip-more { margin-top: 0; }
+.pm-tip-act {
+  min-height: 36px; padding: 4px 12px; border-radius: 999px; border: 1px solid #0E9F8E; background: #0E9F8E; color: #fff;
+  font-weight: 700; font-size: 13px; cursor: pointer;
+}
+.pm-tip-act.on { background: #fff; color: #15202E; border-color: #15202E; }
+.pm-search-here {
+  position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 500; min-height: 40px; padding: 6px 14px;
+  border-radius: 999px; border: 1px solid #15202E; background: #fff; color: #15202E; font-weight: 700; font-size: 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .3); cursor: pointer; white-space: nowrap;
+}
+.pm-search-here:disabled { opacity: .7; cursor: default; }

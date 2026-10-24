@@ -18,6 +18,10 @@ import { AwardCards } from '../components/Awards.jsx';
 import TripStatus from '../components/TripStatus.jsx';
 import { MoneyLine } from '../components/MoneyLine.jsx'; // ov27 (I15): Settle up on the results
 import Memories from '../components/Memories.jsx';
+// ov34: open round call-outs (with reply buttons) and "⛳ Put a round out" in the coming-up area.
+import { CalloutStrip } from '../components/CalloutCard.jsx';
+import { openCallout } from '../lib/calloutopen.js';
+import { gate } from '../lib/savedgate.js';
 
 /** The group's plans (id, trip, status) — for "Trip page →" and to leave called-off trips out of Next / Last. */
 export function usePlans(on) {
@@ -72,6 +76,11 @@ export default function TripNow({ menu: given }) {
       <div className="section stack" style={{ gap: 12, paddingBottom: 24 }}>
         {/* ov28 (I16): "this time last year" and, six months after the last trip, a nudge to suggest the next. */}
         {!tripId && <Memories plans={menu.plans} />}
+        {!tripId && plannerOn && !status?.quick && (
+          <CalloutStrip onPutOut={(
+            <button {...gate('propose_trip')} type="button" className="btn ghost block" onClick={() => openCallout({})} data-testid="home-put-round-out">⛳ Put a round out</button>
+          )} />
+        )}
         {trip ? (
           <>
             <Link to={tripPath(trip, menu.plans)} className="card pad row" data-testid="this-trip"

@@ -1,4 +1,4 @@
-// ai-helper — "📺 The Weekend Recap" (ov37, migration 105). Organisers only.
+// ai-helper — "📺 The Weekend Recap" (ov37, migration 107). Organisers only.
 //   { mode: 'trip_recap', trip_id, facts } → the trip's recap script, checked and saved (trip_recaps), and handed back.
 //
 // The app works out the facts (src/lib/recap.js — the results page's own sums, the honour board, posts, Tribunal

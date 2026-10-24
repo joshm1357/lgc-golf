@@ -1,4 +1,4 @@
-// The Weekend Recap (ov37, migration 105): the trip's facts for the two commentators, the "missing cards" nudge, and
+// The Weekend Recap (ov37, migration 107): the trip's facts for the two commentators, the "missing cards" nudge, and
 // reading the script out in two voices. Pure functions (tested in recap.test.js); the screen is screens/Recap.jsx and
 // the words (voices, the script check, the no-AI script) are shared with the server in
 // supabase/functions/_shared/recap.js.

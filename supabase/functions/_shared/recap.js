@@ -1,4 +1,4 @@
-// The Weekend Recap (ov37, migration 105) — the words side, shared by the ai-helper function (Deno) and the app
+// The Weekend Recap (ov37, migration 107) — the words side, shared by the ai-helper function (Deno) and the app
 // (src/lib/recap.js, screens/Recap.jsx and their tests). Plain JavaScript, no imports.
 //
 // Josh, 24 Oct: "some sort of commentary recap of the weekend… that includes all the historical stuff… Try make it

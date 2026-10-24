@@ -1,4 +1,4 @@
-// 📺 The Weekend Recap (ov37, migration 105) — /recap/:tripId. A short two-voice commentary of the trip (Rex Fairway
+// 📺 The Weekend Recap (ov37, migration 107) — /recap/:tripId. A short two-voice commentary of the trip (Rex Fairway
 // on play-by-play, Bev Divot on colour — our own characters), read out on the phone, shared to the group chat.
 //
 //   * Organisers: "✍️ Write the recap" (the ai-helper's trip_recap mode writes it from the facts below — the AI if

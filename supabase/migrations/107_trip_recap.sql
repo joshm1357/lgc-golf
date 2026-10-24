@@ -1,4 +1,4 @@
--- 105 — The Weekend Recap (ov37, 24 Oct 2026). Additive only. Josh: "some sort of commentary recap of the
+-- 107 — The Weekend Recap (ov37, 24 Oct 2026). Additive only. Josh: "some sort of commentary recap of the
 -- weekend… that includes all the historical stuff… Try make it funny."
 --
 -- A finished trip gets a short two-voice script (our own commentators, Rex Fairway and Bev Divot), read out on the

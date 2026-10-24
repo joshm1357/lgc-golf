@@ -23,7 +23,7 @@ export function FeedVerdictShare({ caseId }) {
   useEffect(() => {
     let live = true;
     supabase.from('tribunal_cases').select('id,accused_id,status,verdict,old_handicap,new_handicap,guilty_votes,not_guilty_votes,overruled')
-      .eq('id', caseId).maybeSingle().then(({ data: row }) => { if (live) setC(row || null); });
+      .eq('id', caseId).limit(1).then(({ data: rows }) => { if (live) setC(rows?.[0] || null); });
     return () => { live = false; };
   }, [caseId]);
   if (!c || c.status !== 'closed' || !c.verdict) return null;

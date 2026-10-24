@@ -127,7 +127,7 @@ function Post({ post, me, comments, reactions, onReact, onChanged, isAdmin, chip
             {post.hole ? `Hole ${post.hole} · ` : ''}{timeAgo(post.created_at)}
           </div>
         </div>
-        {post.link && <Link to={post.link} className="btn sm">{post.kind === 'tribunal' ? 'Case' : 'Open'}</Link>}
+        {post.link && <Link to={post.link} className="btn sm">{post.kind === 'tribunal' ? 'Case' : String(post.link).startsWith('/recap/') ? '▶️ Listen' : 'Open'}</Link>}
         {!auto && (post.player_id === me || isAdmin) && (
           <button type="button" className="btn ghost sm" aria-label="Delete post" onClick={async () => {
             if (!window.confirm('Delete this post?')) return;

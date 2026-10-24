@@ -152,6 +152,7 @@ export default function TripResults({ trip, moneyLine = null }) {
   const awardsOn = useFeature('dinner_awards');
   const plannerOn = useFeature('planner');
   const trophiesOn = useFeature('trophies');
+  const recapOn = useFeature('commentary'); // ov37: 📺 The Weekend Recap
   const res = useTripResults(trip);
   const [busy, setBusy] = useState(false);
   if (!trip || !res || !tripFinished(trip, data.rounds, todayISO())) return null;
@@ -273,6 +274,7 @@ export default function TripResults({ trip, moneyLine = null }) {
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
         <button type="button" className="btn ghost sm" onClick={share} data-testid="share-results">Share the results</button>
         <Link to={`/present/awards/${trip.id}`} className="btn ghost sm" data-testid="present-awards">🎤 The presentation</Link>
+        {recapOn && <Link to={`/recap/${trip.id}`} className="btn ghost sm" data-testid="results-recap">📺 The Weekend Recap</Link>}
         {awardsOn && <Link to={`/dinner/${trip.id}`} className="btn ghost sm" data-testid="results-awards-link">🏅 Fines &amp; awards</Link>}
       </div>
       {/* Only after all of that: the next trip. */}

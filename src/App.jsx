@@ -84,6 +84,7 @@ const CardPicker = lazyScreen(() => import('./screens/PaperCard.jsx'), 'CardPick
 const PaperCard = lazyScreen(() => import('./screens/PaperCard.jsx'), 'PaperCard');
 const PrintRound = lazyScreen(() => import('./screens/PaperCard.jsx'), 'PrintRound');
 const Present = lazyScreen(() => import('./screens/Present.jsx'), 'Present');
+const Recap = lazyScreen(() => import('./screens/Recap.jsx')); // ov37: 📺 The Weekend Recap
 const AwardsShow = lazyScreen(() => import('./screens/AwardsShow.jsx')); // ov28 (I14): the awards presentation
 const TripFinder = lazyScreen(() => import('./screens/TripFinder.jsx'));
 const TripBuilder = lazyScreen(() => import('./screens/TripBuilder.jsx'));
@@ -349,6 +350,7 @@ function Inside() {
         <Route path="/round/:roundId/present" element={<Present />} />
         <Route path="/present" element={<Present />} />
         <Route path="/present/awards/:tripId?" element={<AwardsShow />} />
+        <Route path="/recap/:tripId" element={<FeatureRoute feature="commentary" label="The Weekend Recap"><Recap /></FeatureRoute>} />
         <Route path="/desk/*" element={<DeskForward />} />
         <Route path="*" element={<Home />} />
       </Routes>

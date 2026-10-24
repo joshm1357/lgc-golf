@@ -30,7 +30,7 @@ export const FILM_WORDS = [
 // Off limits (Josh: friendly, never mean — nothing about looks, weight, money or families).
 export const OFF_LIMITS = /\b(fat|obese|weight|belly|beer gut|bald|ugly|looks like|wife|missus|husband|girlfriend|boyfriend|kids?|children|divorce|mum|mother|dad|father|money|cash|broke|salary|wages|debt|mortgage|dollars?|bucks)\b|\$\s?\d/i;
 
-const toText = (v, max) => String(v ?? '').replace(/[<>]/g, ' ').replace(/[\u0000-\u001f\u007f  ]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
+const toText = (v, max) => String(v ?? '').replace(/[<>]/g, ' ').replace(/[\u0000-\u001f\u007f\u2028\u2029]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const list = (a) => { const x = (a || []).filter(Boolean); return x.length <= 1 ? (x[0] || '') : `${x.slice(0, -1).join(', ')} and ${x[x.length - 1]}`; };
 const ord = (n) => { const s = ['th', 'st', 'nd', 'rd']; const v = n % 100; return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`; };

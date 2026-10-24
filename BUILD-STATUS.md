@@ -2068,3 +2068,37 @@ Deno `notify/callout.test.ts` (5) + autoawards/sidegames still pass; `deno check
 e2e `tests/e2e/round-callout-test.mjs` (phone + laptop, 25 checks) passes; trips, calloff, plan-ux, caddie, nav,
 side-games, trip-plan, trip-builder, desktop, phone, wishes, runup, your-round, trip-overview, trip-page, tripfinder,
 games, awards-fines pass; saved-gate passes on the email-code build.
+
+## ov37 — 📺 The Weekend Recap: a two-voice commentary of the trip, read out loud (24 Oct 2026, branch `ov37-recap`, from `v10-6-release`, migration 107, not applied anywhere)
+
+**Built**
+- **The facts** (`src/lib/recap.js`, pure, `recap.test.js`): the trophy winner and hand-over line, round winners and podiums
+  (from `useTripResults`), honour-board history (who held it before, streaks, first win, total wins), the Cup verdict,
+  side comps, moments people tagged on the score screen (bomb drive, three-putt, chip-in… from the Feed posts), the
+  biggest number on a hole and most birdies, Tribunal cases from around the trip's dates (old handicap cases and the
+  newer `cases`, with charge, defence = the accused's reply, verdict), fines tally, awards/fines winners, and cards
+  in / missing per round (Ambrose counts team cards). Never money.
+- **The words** (`supabase/functions/_shared/recap.js`, shared by the app and the server): the commentators — Rex
+  Fairway (play-by-play) and Bev Divot (colour) — our own characters; `factLines` (the facts as sentences);
+  `checkScript` (8–14 lines, both voices, never three in a row, ≤240 characters a line, ≤1700 in all, only people in
+  the trip or named in the facts, no film names, nothing about looks/weight/money/families, no number that isn't in
+  the facts); `templateScript` (the house script from the facts, no AI); `scriptText` (the group-chat transcript).
+- **ai-helper `trip_recap` mode** (`recap.ts`, Deno tests `recap.test.ts`): organisers only, guests refused,
+  `commentary` switch on, the trip must be the group's. Facts cleaned and sent as data; one tool; checked; one retry
+  with the problems; then the house script. AI only if set up + `ai_helper` on + under the cap (one question, logged
+  as job `trip_recap`). Saved with the organiser's own sign-in.
+- **Migration 107** `trip_recaps` (one per trip; RLS like 071: members read, organisers write, same group, feature
+  `commentary`; the table checks the script's shape) and `publish_trip_recap(trip)` (organisers; one Feed post
+  "📺 The Weekend Recap is out: <title> — ▶️ have a listen", updated on re-publish). SQL test `supabase/tests/107_trip_recap.sql`.
+- **The screen** `/recap/:tripId` (`screens/Recap.jsx`): from the results page ("📺 The Weekend Recap") and the Feed
+  post ("▶️ Listen"). Title, two-voice transcript, ▶️ Play it (two phone voices, different accents where available,
+  different pitch always; the line lights up; Pause / Keep going / Stop; tap a line to start there), "your phone can't
+  read this out" fallback, 📤 Share (share sheet / copy), what the commentators had to go on (folded), the missing-cards
+  nudge with a button, organiser Write / Write it again / Post / Update the Feed post, "N new cards since" when stale.
+  `recordedAudio(recap)` in lib/recap.js is the named extension point for a real recorded voice (null today).
+
+**Tested:** vitest 1826 passing (16 new); Deno recap + coursebook tests; e2e `tests/e2e/recap-test.mjs` (41 checks),
+plus results, presentation, commentary, stage2. Screenshots `shots-ov37/`.
+
+**Not done / next:** migration not applied anywhere; AI tone only judged from my own examples (no live AI run);
+money side games left out on purpose.

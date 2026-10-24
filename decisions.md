@@ -104,3 +104,13 @@
 - Josh 23 Oct 9:39pm, "hide any of those things as standard, maybe allow some to be included as options": the round screen hides all trip machinery; "➕ Add to this round" (collapsed, on the sheet and in Change) switches on, per round, stored in `plans.extras`: vote on the course (the plan's 'location' vote), side games (Games, after lock), fines & awards (the trip's, after lock), cars (the plan's cars list), kitty (the plan's kitty), drinks/lunch after (a line). Not included: a comp or trophy (cups/comps need the Cup set-up and a trip's comps — not a clean per-round switch; set up from the Cup screen as now).
 - The old "⛳ One-day round" in Suggest and "Same time next year?" open the new sheet. The AI planner (CaddiePlan / AiPlanner) can still draft a kind 'round' trip-style plan — left as is.
 - Repeating call-outs ("every Saturday 7:30 at Moore Park"): extension point only (REPEAT_LATER, end of 103).
+
+## ov37 — The Weekend Recap (24 Oct 2026)
+- Part of the existing `commentary` feature (no new switch). The `commentary` table didn't fit (round-scoped keys), so a small `trip_recaps` table in 107 (105 left unused, per the coordinator).
+- The app works out the facts (it already has the results maths); the server cleans them, checks the trip is the group's, uses the trip's real name and checks the script against the trip's players from the database. An organiser could in theory send made-up facts — accepted: organisers can already write anything in the group.
+- Commentators are our own: Rex Fairway (play-by-play) and Bev Divot (colour). Film names (and other sports-comedy film names) are blocked by the checker.
+- People not on the trip can be mentioned only if the facts name them (e.g. last year's trophy holder from the honour board).
+- A number in the script must appear in the facts (stops invented scores). Years are fine if in the facts.
+- No AI / AI off / over the cap / script fails twice → the house script from the facts, and the screen says so. There's always a recap.
+- Money is never in the facts (side-game winnings left out on purpose, per the tone rules).
+- "Add your card": score screen while a round is open; once locked, organisers get Paper cards, players are told to send it to the organiser.

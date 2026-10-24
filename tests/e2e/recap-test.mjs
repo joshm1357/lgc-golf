@@ -124,7 +124,7 @@ check(/South Coast/.test(titleText), `title: ${titleText}`);
 const r0 = db.trip_recaps[0];
 const r0check = checkScript(r0, { tripNames: ['Mo', 'Bo', 'Kurt', 'Al', 'Cy', 'Di', 'Lou', 'Ed'], otherNames: ['Mike', 'Fin'], facts: r0.facts });
 check(r0check.ok, `the saved script passes the checks ${r0check.problems.join(' ')}`);
-check(/house script/.test(await page.getByTestId('recap-organiser').innerText()), 'says how it was written (house script, no AI)');
+check(/house ones/.test(await page.getByTestId('recap-organiser').innerText()), 'says how it was written (from the facts, no AI)');
 await shot('2-written');
 await noSideScroll('recap');
 

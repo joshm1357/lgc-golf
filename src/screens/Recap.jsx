@@ -23,6 +23,7 @@ import {
 
 const rowsOr = async (q) => { try { const { data, error } = await q; return error ? [] : data || []; } catch { return []; } };
 const VOICE_COLOUR = { A: 'var(--gold)', B: 'var(--up)' };
+const ON_NAVY = { background: 'transparent', color: '#fff', borderColor: 'var(--on-navy-muted)' };
 
 /** The trip's posts, Tribunal cases and its saved recap (each one empty on an older database). */
 function useRecapRows(tripId) {
@@ -131,7 +132,7 @@ export default function Recap() {
               )}
               {recap?.published_at && !unposted && <span className="small muted" style={{ alignSelf: 'center' }} data-testid="recap-posted">✓ In the Feed</span>}
             </div>
-            {recap && <span className="small muted">{recap.written_by === 'ai' ? 'Written by the Caddie from the facts below.' : 'Written from the facts below (the house script — no AI).'}</span>}
+            {recap && !note && <span className="small muted">{recap.written_by === 'ai' ? 'Written by the Caddie from the facts below.' : 'Written from the facts below (the house script — no AI).'}</span>}
           </div>
         )}
         {!organiser && stale && <div className="note small">More cards have come in since this was written — the organiser can update it.</div>}
@@ -198,8 +199,8 @@ function Player({ recap, onShare }) {
         <div className="row" style={{ gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
           {!playing && <button type="button" className="btn gold" onClick={() => play(paused && at >= 0 ? at : 0)} data-testid="recap-play">{paused && at >= 0 ? '▶️ Keep going' : '▶️ Play it'}</button>}
           {playing && <button type="button" className="btn gold" onClick={pause} data-testid="recap-pause">⏸ Pause</button>}
-          {at >= 0 && <button type="button" className="btn ghost" style={{ color: '#fff', borderColor: 'var(--on-navy-muted)' }} onClick={stop} data-testid="recap-stop">⏹ Stop</button>}
-          <button type="button" className="btn ghost" style={{ color: '#fff', borderColor: 'var(--on-navy-muted)' }} onClick={onShare} data-testid="recap-share">📤 Share to the group chat</button>
+          {at >= 0 && <button type="button" className="btn ghost" style={ON_NAVY} onClick={stop} data-testid="recap-stop">⏹ Stop</button>}
+          <button type="button" className="btn ghost" style={ON_NAVY} onClick={onShare} data-testid="recap-share">📤 Share to the group chat</button>
         </div>
         {noVoice && <span className="small" style={{ color: 'var(--on-navy-muted)' }} data-testid="recap-novoice">Your phone can’t read this out — here’s the script.</span>}
         {!noVoice && v?.A && <span className="small" style={{ color: 'var(--on-navy-muted)' }}>Voices: {VOICES.A.short} — {v.A.name}{v.distinct ? ` · ${VOICES.B.short} — ${v.B.name}` : ` (${VOICES.B.short} in a higher voice)`}</span>}

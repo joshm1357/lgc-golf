@@ -183,6 +183,15 @@ describe('the script with no AI', () => {
     expect(all).toMatch(/Mo wins the BD Trophy 2026/);
     expect(all).toMatch(/only 2 of 8 cards are in/);
   });
+  it('lots of data: still 14 lines at most, taking turns, under the length limit', () => {
+    const lots = { ...FACTS, rounds: [{ name: 'Friday', winners: 'Bo', score: '38 pts' }, { name: 'Saturday', winners: 'Kurt', score: '40 pts' }],
+      comps: [{ label: 'Saturday LD 7', name: 'Kurt' }], fines: [{ name: 'Mo', count: 2, titles: [] }], missing: [{ round: 'Saturday', have: 2, of: 8 }] };
+    const s = templateScript(lots);
+    const r = checkScript(s, { ...opts, facts: lots });
+    expect(r.problems).toEqual([]);
+    expect(s.lines.at(-1).text).toBe('Same time next trip.');
+    expect(s.lines.map((l) => l.text).join(' ')).toMatch(/only 2 of 8 cards/);
+  });
   it('thin data still makes a full, honest script', () => {
     const s = templateScript({ trip: { name: 'Quiet Weekend', rounds: 1 }, players: ['Al'] });
     expect(checkScript(s, { tripNames: ['Al'], facts: { trip: { name: 'Quiet Weekend', rounds: 1 } } }).problems).toEqual([]);

@@ -126,58 +126,70 @@ export function checkScript(raw, { tripNames = [], otherNames = [], facts = null
 export function templateScript(facts = {}) {
   const f = facts || {};
   const trip = f.trip?.name || 'the trip';
+  // Each line has a keep-order: 1 always stays; when it runs long, the highest numbers go first.
   const lines = [];
-  const A = (text) => lines.push({ who: 'A', text });
-  const B = (text) => lines.push({ who: 'B', text });
-  A(`Good evening and welcome to The Weekend Recap — ${trip}. I’m Rex Fairway, and I have not slept.`);
-  B(`I’m Bev Divot. ${f.trip?.rounds ? `${plural(f.trip.rounds, 'round')} of golf, ` : ''}and Rex has called every one of them a classic.`);
+  const A = (text, keep = 5) => lines.push({ who: 'A', text, keep });
+  const B = (text, keep = 5) => lines.push({ who: 'B', text, keep });
+  A(`Good evening and welcome to The Weekend Recap — ${trip}. I’m Rex Fairway, and I have not slept.`, 1);
+  B(`I’m Bev Divot. ${f.trip?.rounds ? `${plural(f.trip.rounds, 'round')} of golf, ` : ''}and Rex has called every one of them a classic.`, 1);
   if (f.winner?.line) {
-    A(`The headline, Bev: ${f.winner.line}${f.winner.score ? `, on ${f.winner.score}` : ''}! Unbelievable scenes!`);
-    B('Very believable, Rex. It’s on the scorecard.');
+    A(`The headline, Bev: ${f.winner.line}${f.winner.score ? `, on ${f.winner.score}` : ''}! Unbelievable scenes!`, 1);
+    B('Very believable, Rex. It’s on the scorecard.', 2);
   } else {
-    A('No trophy decided yet, Bev, and the tension is unbearable.');
-    B('It’s mostly paperwork, Rex.');
+    A('No trophy decided yet, Bev, and the tension is unbearable.', 1);
+    B('It’s mostly paperwork, Rex.', 2);
   }
-  for (const h of (f.history || []).filter((x) => !OFF_LIMITS.test(x)).slice(0, 1)) B(`For the history books: ${h.replace(/\.$/, '')}.`);
-  for (const r of (f.rounds || []).filter((x) => x.winners).slice(0, 2)) A(`${r.name} went to ${r.winners}${r.score ? ` with ${r.score}` : ''}. Pure theatre!`);
+  for (const h of (f.history || []).filter((x) => !OFF_LIMITS.test(x)).slice(0, 1)) B(`For the history books: ${h.replace(/\.$/, '')}.`, 3);
+  (f.rounds || []).filter((x) => x.winners).slice(0, 2).forEach((r, i) => A(`${r.name} went to ${r.winners}${r.score ? ` with ${r.score}` : ''}. Pure theatre!`, i ? 7 : 4));
   const big = (f.big || [])[0];
-  if (big) B(`Meanwhile ${big.name} made a ${big.strokes} on the par-${big.par} ${ord(big.hole)}. We’ll call that character building.`);
+  if (big) B(`Meanwhile ${big.name} made a ${big.strokes} on the par-${big.par} ${ord(big.hole)}. We’ll call that character building.`, 3);
   const m = (f.moments || [])[0];
-  if (m) A(`And the Feed tells me ${m.name} posted a ${String(m.kind).toLowerCase()} on the ${ord(m.hole)}! I need a moment!`);
+  if (m) A(`And the Feed tells me ${m.name} posted a ${String(m.kind).toLowerCase()} on the ${ord(m.hole)}! I need a moment!`, 3);
   const c = (f.tribunal || []).find((x) => !OFF_LIMITS.test(`${x.title} ${x.defence || ''} ${x.verdict || ''}`));
   if (c) {
-    B(`The Tribunal sat${c.accused ? `, with ${c.accused} in the dock` : ''}: “${toText(c.title, 60)}”.${c.verdict ? ` Verdict: ${toText(c.verdict, 40)}.` : ' Still deliberating.'}`);
-    if (c.defence) A(`The defence? “${toText(c.defence, 80)}” Bold. Legally fascinating.`);
+    B(`The Tribunal sat${c.accused ? `, with ${c.accused} in the dock` : ''}: “${toText(c.title, 60)}”.${c.verdict ? ` Verdict: ${toText(c.verdict, 40)}.` : ' Still deliberating.'}`, 3);
+    if (c.defence) A(`The defence? “${toText(c.defence, 80)}” Bold. Legally fascinating.`, 4);
   }
   const fine = (f.fines || [])[0];
-  if (fine) B(`Fines tally leader: ${fine.name}, with ${plural(fine.count, 'fine')}. A proud record.`);
+  if (fine) B(`Fines tally leader: ${fine.name}, with ${plural(fine.count, 'fine')}. A proud record.`, 6);
   const comp = (f.comps || [])[0];
-  if (comp && lines.length < LIMITS.maxLines - 3) A(`${comp.label}: ${comp.name}. Take a bow!`);
+  if (comp) A(`${comp.label}: ${comp.name}. Take a bow!`, 8);
   const gap = (f.missing || []).filter((x) => x.of > x.have);
   if (gap.length) {
     const g = gap[0];
-    A(`But Bev — ${g.round}, only ${g.have} of ${g.of} cards are in. Where are the rest?`);
-    B(`Hiding, Rex. Add your card and you’re in the next recap. Until then, legally, you were never there.`);
+    A(`But Bev — ${g.round}, only ${g.have} of ${g.of} cards are in. Where are the rest?`, 1);
+    B('Hiding, Rex. Add your card and you’re in the next recap. Until then, legally, you were never there.', 1);
   }
-  A(`That’s The Weekend Recap. For Bev Divot, I’m Rex Fairway.`);
-  B('Same time next trip.');
+  A('That’s The Weekend Recap. For Bev Divot, I’m Rex Fairway.', 1);
+  B('Same time next trip.', 1);
   // Fill up to the minimum without making anything up.
   const pad = [
-    { who: 'B', text: 'Every shot on this trip has happened, Rex. I checked.' },
-    { who: 'A', text: 'Golf, Bev! Glorious, ridiculous golf!' },
-    { who: 'B', text: 'Plenty more where that came from. Mostly in the trees.' },
+    { who: 'B', text: 'Every shot on this trip has happened, Rex. I checked.', keep: 1 },
+    { who: 'A', text: 'Golf, Bev! Glorious, ridiculous golf!', keep: 1 },
+    { who: 'B', text: 'Plenty more where that came from. Mostly in the trees.', keep: 1 },
   ];
   while (lines.length < LIMITS.minLines && pad.length) lines.splice(Math.max(2, lines.length - 2), 0, pad.shift());
-  // No three-in-a-row: swap in a short reply from the other voice where it happens.
-  const fixed = [];
-  for (const l of lines) {
-    const n = fixed.length;
-    if (n >= 2 && fixed[n - 1].who === l.who && fixed[n - 2].who === l.who) fixed.push({ who: l.who === 'A' ? 'B' : 'A', text: l.who === 'A' ? 'Go on, Rex.' : 'Over to you, Bev.' });
-    fixed.push(l);
+  // No three in a row: a short reply from the other voice where it happens.
+  const turns = (list) => {
+    const out = [];
+    for (const l of list) {
+      const n = out.length;
+      if (n >= 2 && out[n - 1].who === l.who && out[n - 2].who === l.who) out.push({ who: l.who === 'A' ? 'B' : 'A', text: l.who === 'A' ? 'Go on, Rex.' : 'Over to you, Bev.', keep: 1 });
+      out.push(l);
+    }
+    return out;
+  };
+  let out = turns(lines);
+  const size = (x) => x.reduce((n, l) => n + toText(l.text, LIMITS.lineChars).length, 0);
+  // Too long: drop the least important line (the latest of them) and try again.
+  while ((out.length > LIMITS.maxLines || size(out) > LIMITS.totalChars) && lines.some((l) => l.keep > 1)) {
+    const worst = Math.max(...lines.map((l) => l.keep));
+    let i = -1;
+    lines.forEach((l, j) => { if (l.keep === worst) i = j; });
+    lines.splice(i, 1);
+    out = turns(lines);
   }
-  // Keep it to the limit: the first lines (the story) and the sign-off.
-  const out = fixed.length > LIMITS.maxLines ? [...fixed.slice(0, LIMITS.maxLines - 2), ...fixed.slice(-2)] : fixed;
-  return { title: `The Weekend Recap: ${toText(trip, 50)}`, lines: out.map((l) => ({ who: l.who, text: toText(l.text, LIMITS.lineChars) })) };
+  return { title: `The Weekend Recap: ${toText(trip, 50)}`, lines: out.slice(0, LIMITS.maxLines).map((l) => ({ who: l.who, text: toText(l.text, LIMITS.lineChars) })) };
 }
 
 /** The transcript for the group chat: the title, each line with its speaker, and the link to have a listen. */

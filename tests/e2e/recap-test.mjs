@@ -81,6 +81,8 @@ await ctx.addInitScript(() => {
   }
   window.__shared = [];
   Object.defineProperty(navigator, 'share', { value: async (d) => { window.__shared.push(d); }, configurable: true });
+  // A computer copies instead (lib/push.js shareText): catch that too.
+  try { Object.defineProperty(navigator, 'clipboard', { value: { writeText: async (text) => { window.__shared.push({ text, copied: true }); } }, configurable: true }); } catch { /* fine */ }
 });
 
 // 1. The finished trip's results have the way in.

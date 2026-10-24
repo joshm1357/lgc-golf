@@ -2068,3 +2068,31 @@ Deno `notify/callout.test.ts` (5) + autoawards/sidegames still pass; `deno check
 e2e `tests/e2e/round-callout-test.mjs` (phone + laptop, 25 checks) passes; trips, calloff, plan-ux, caddie, nav,
 side-games, trip-plan, trip-builder, desktop, phone, wishes, runup, your-round, trip-overview, trip-page, tripfinder,
 games, awards-fines pass; saved-gate passes on the email-code build.
+
+## ov38 — The Handicap Tribunal: posts worth tapping, a closing time, a verdict worth sharing (24 Oct 2026, branch `ov38-tribunal`, from `v10-6-release`, migration 106, not applied anywhere)
+- **Lodged post** (database): "⚖️ Mike's in the dock: “Hit them far too well!” 30 → 26 if guilty. Guilty or not? Vote by
+  Sun 8pm." The charge is tidied and trimmed (90 characters, on a word); the exhibit photo stays on the post.
+- **Defence post**: written or changed → one "🗣️ Mike's defence: “…”" post (140 characters), updated in place, removed
+  if the defence is cleared. A trigger on `tribunal_cases`; `set_defence` is untouched.
+- **Closing time**: `tribunal_cases.closes_at` (new, nullable). A new case gets the group's Handicap "Voting closes
+  after" (governance_settings.close_hours, default 48 h) — now shown in Governance → settings for handicap cases. The
+  chair's sheet has "Or move the closing time" (`set_case_closing`, organisers, 15 min–30 days). Open cases on the day
+  106 runs: 8pm Sydney on the first evening at least 18 h away (Sun 25 Oct 8pm if run on Sat 24 Oct).
+- **The clock**: `lgc-tribunal` every 10 min → `private.tribunal_tick`: closes due cases through `finalise_case`
+  (majority; tie → not guilty; the chair can still close early or overrule). Groups where the chair decides handicap
+  cases are never auto-closed — organisers get one "⚖️ Time's up on Dan's case — the chair closes it." One nudge per
+  case (4 h before, 8am–9pm; or the evening before from 6pm for a morning close) to everyone who can vote and hasn't,
+  one buzz per person: "⚖️ Verdicts at 8pm — 2 votes so far on Chris, 3 on Mike. Have your say." Buzzes go into
+  `notify_queue` (case_closing / case_verdict / case_fallback, already known to notify) and the hourly send delivers
+  them by each person's straight away / digest / only important choice. No edge-function change.
+- **Verdict post**: "⚖️ GUILTY 3–1. Mike goes 30 → 26. The “one-off” defence didn't wash." / "⚖️ NOT GUILTY 2–1.
+  Chris walks free and stays on 27." (+ "The “…” defence did the trick." when there was one; "(Chair's ruling)").
+- **Share**: "📤 Share the verdict" (the existing verdict card) on the case page and, one tap, on the Feed verdict post
+  (`components/VerdictShare.jsx`, its own file so the Feed doesn't load the Tribunal screen).
+- App: case list and case page say when voting closes (`lib/tribunalWords.js`); handicap ruleLine says
+  "closes after 2 days, or once everyone has voted".
+
+Tests: `src/lib/tribunalWords.test.js` (5) + governance.test.js updated; whole vitest 1815 pass.
+`supabase/tests/106_tribunal_clock.sql` (52 checks, local Postgres 16 with 001–106, expected file; 106 re-runs
+cleanly). e2e `tests/e2e/tribunal-clock-test.mjs` (12 checks) passes; governance, governance-hub, dispute,
+rulebook-v3, stage10 pass.

@@ -104,3 +104,16 @@
 - Josh 23 Oct 9:39pm, "hide any of those things as standard, maybe allow some to be included as options": the round screen hides all trip machinery; "➕ Add to this round" (collapsed, on the sheet and in Change) switches on, per round, stored in `plans.extras`: vote on the course (the plan's 'location' vote), side games (Games, after lock), fines & awards (the trip's, after lock), cars (the plan's cars list), kitty (the plan's kitty), drinks/lunch after (a line). Not included: a comp or trophy (cups/comps need the Cup set-up and a trip's comps — not a clean per-round switch; set up from the Cup screen as now).
 - The old "⛳ One-day round" in Suggest and "Same time next year?" open the new sheet. The AI planner (CaddiePlan / AiPlanner) can still draft a kind 'round' trip-style plan — left as is.
 - Repeating call-outs ("every Saturday 7:30 at Moore Park"): extension point only (REPEAT_LATER, end of 103).
+## ov38 — the Handicap Tribunal clock and posts (24 Oct 2026, Josh agreed the five items)
+- Closing time per case = the group's Handicap "Voting closes after" (default 48 h); an organiser can move it per case.
+  Existing open cases when 106 runs: 8pm Sydney on the first evening ≥ 18 h away (= Sun 25 Oct 8pm for L.G.C's three
+  if run on Sat 24 Oct), not a hard-coded date, so a later run still gives people a fair go.
+- At the closing time the case closes itself through finalise_case (majority; a tie → not guilty), the same path as the
+  last vote or the chair. Exception: groups where the chair (organiser) decides handicap cases — never auto-closed;
+  organisers get one "time's up" buzz.
+- One nudge per case, only to people who can vote and haven't: 4 h before (8am–9pm Sydney) or from 6pm the evening
+  before for a morning close. Several cases → one buzz per person. Sent through notify_queue and the hourly send, so
+  it can land up to an hour after it's due (fine for a 4-hour heads-up).
+- The verdict's "colour" comes from the defence without AI: its first clause if short ("The “one-off” defence didn't
+  wash."), else its opening words in quotes. No defence → "No defence offered." (guilty) / nothing (not guilty).
+- Phone-only accounts still can't lodge (102) — unchanged; tap count noted in REPORT-ov38.md for Josh.

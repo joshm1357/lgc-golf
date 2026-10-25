@@ -154,6 +154,37 @@ export const dayRounds = (d) => ({ none: 0, 9: 1, 18: 1, 36: 2 }[dayGolf(d)]);
 /** The day's role: its slot ('way' / 'home' on the first and last day) unless the organiser said it isn't a travel
  *  day (d.travel === false → a stay day, e.g. they drive up the night before). */
 export const dayLeg = (d) => (d?.leg !== 'stay' && d?.travel === false ? 'stay' : d?.leg || 'stay');
+// How much golf (Josh 25 Oct; the same words as plan_wishes.golf_per_day): 'max' (as much as possible) | 'daily' (a
+// round a day) | 'spare_day' (leave a spare day) | 'any' (not fussed).
+export const GOLF_AMOUNTS = [
+  { value: 'daily', label: 'A round a day' }, { value: 'max', label: 'As much as possible' },
+  { value: 'spare_day', label: 'Leave a spare day' }, { value: 'any', label: 'Not fussed' },
+];
+/**
+ * Each day's golf from how much golf the group wants. 'max': 36 on stay days where daylight allows (twoFits(day) says
+ * so), else 18; 'spare_day': one day with no golf — the middle stay day (a 2-day trip: the last day); otherwise 18 a
+ * day. Days are the builder's st.days rows; their courses are kept.
+ */
+export function golfForAmount(days = [], amount = 'daily', { twoFits = () => false } = {}) {
+  const sorted = [...days].sort((a, b) => a.index - b.index);
+  const stayDays = sorted.filter((d) => dayLeg(d) === 'stay');
+  let spare = null;
+  if (amount === 'spare_day' && sorted.length >= 2) spare = (stayDays.length ? stayDays[Math.floor((stayDays.length - 1) / 2)] : sorted[sorted.length - 1]).index;
+  return sorted.map((d) => {
+    let golf = '18';
+    if (d.index === spare) golf = 'none';
+    else if (amount === 'max' && dayLeg(d) === 'stay' && twoFits(d)) golf = '36';
+    return { ...d, golf };
+  });
+}
+/** The group's most common answer (leaving out "not fussed"), else 'daily'. */
+export function golfAmountFromWishes(wishes = []) {
+  const c = {};
+  for (const w of wishes) if (w?.golf_per_day && w.golf_per_day !== 'any') c[w.golf_per_day] = (c[w.golf_per_day] || 0) + 1;
+  return Object.entries(c).sort((a, b) => b[1] - a[1] || (a[0] === 'daily' ? -1 : 1))[0]?.[0] || 'daily';
+}
+/** Are they flying? (the trip idea's travel, or the day plan's own setting) */
+export const isFly = (st = {}) => (st.dayPlan?.travel?.mode || st.travel) === 'fly';
 /** "On the way there · 18 holes" */
 export function dayRoleLine(d) {
   const leg = dayLeg(d);
@@ -426,13 +457,14 @@ export function callJobs({ days = [], weekends = [], courses = {}, needed = 1, o
  * Ranked: fewest gaps, then (total drive − 10 × votes), then the earliest weekend.
  */
 export function buildConfigurations({ weekends = [], stays = [], days = [], courses = {}, origin = null, tees = [], needed = 1,
-  stayMax = DEFAULT_STAY_MAX, detourMax = DEFAULT_DETOUR_MAX, votes = {}, limit = 30 } = {}) {
+  stayMax = DEFAULT_STAY_MAX, detourMax = DEFAULT_DETOUR_MAX, votes = {}, limit = 30, fly = false } = {}) {
   const teeAt = new Map(tees.map((t) => [`${String(t.play_date).slice(0, 10)}|${t.course_id}`, t.times || []]));
   const out = [];
   for (const w of weekends) {
     for (const s of stays) {
       const perDay = days.filter((d) => dayGolf(d) !== 'none').map((d0) => {
-        const d = { ...d0, leg: dayLeg(d0) };
+        // ov40: flying, the first and last days are played near where we stay (the airport end), not off a drive.
+        const d = { ...d0, leg: fly ? 'stay' : dayLeg(d0) };
         const date = dayDate(w, d.index);
         const choices = [];
         for (const id of d.options || []) {
@@ -457,17 +489,21 @@ export function buildConfigurations({ weekends = [], stays = [], days = [], cour
       for (const rounds of combos) {
         const golf = rounds.filter((r) => r.course_id);
         if (!golf.length) continue;
-        if (new Set(golf.map((r) => r.course_id)).size < golf.length) continue; // the same course twice: not a trip
+        // ov40: the same course twice is allowed only when there aren't enough courses to go round (a 6-day trip with 5
+        // courses) — and ranked after every way that doesn't repeat.
+        const repeats = golf.length - new Set(golf.map((r) => r.course_id)).size;
+        const distinct = new Set(perDay.flatMap((ch) => ch.map((x) => x.course_id).filter(Boolean))).size;
+        if (repeats && distinct >= golf.length) continue;
         const gaps = rounds.filter((r) => !r.course_id && r.gap).length;
         const totalDrive = golf.reduce((n, r) => n + (r.drive || 0), 0);
         const v = (Number(votes[`weekend:${w.start}`]) || 0) + (Number(votes[`stay:${s.key || s.name}`]) || 0)
           + golf.reduce((n, r) => n + (Number(votes[`course:${r.index}:${r.course_id}`]) || 0), 0);
-        const c = { key: `${w.start}|${s.key || s.name}|${rounds.map((r) => r.course_id || '-').join(',')}`, weekend: w, stay: s, rounds, gaps, totalDrive, votes: v };
+        const c = { key: `${w.start}|${s.key || s.name}|${rounds.map((r) => r.course_id || '-').join(',')}`, weekend: w, stay: s, rounds, gaps, repeats, totalDrive, votes: v };
         out.push({ ...c, text: configText(c) });
       }
     }
   }
-  return out.sort((a, b) => a.gaps - b.gaps || (a.totalDrive - 10 * a.votes) - (b.totalDrive - 10 * b.votes)
+  return out.sort((a, b) => a.gaps - b.gaps || a.repeats - b.repeats || (a.totalDrive - 10 * a.votes) - (b.totalDrive - 10 * b.votes)
     || String(a.weekend.start).localeCompare(String(b.weekend.start)) || a.key.localeCompare(b.key)).slice(0, limit);
 }
 /**
@@ -688,7 +724,8 @@ export function toggleId(list = [], id, max = MAX_AREA_COURSES) {
  * ov40: before this, the way there / home days were left empty, so a 2-night trip (Blue Mountains, March 2027) only
  * ever had golf on the Saturday — one round.
  */
-export function prefillStayDays(days = [], courseIds = [], courseMap = {}, { stays = [], stayMax = DEFAULT_STAY_MAX, origin = null, detourMax = DEFAULT_DETOUR_MAX } = {}) {
+export function prefillStayDays(days = [], courseIds = [], courseMap = {}, { stays = [], stayMax = DEFAULT_STAY_MAX, origin = null, detourMax = DEFAULT_DETOUR_MAX, fly = false } = {}) {
+  if (fly) origin = null; // flying: every day's courses are near where we stay
   const list = courseIds.map((id) => courseMap[id]).filter(Boolean);
   const ranked = (leg) => list
     .map((c) => {

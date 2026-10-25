@@ -83,9 +83,13 @@ describe('one day built', () => {
     expect(cess.fitLine).toBe('Doesn’t fit: too early to make it');
     expect(b.plan.blocks[0].kind).toBe('travel');
   });
-  it('unknown times say "ring to check"', () => {
+  it('unknown times: what’s usual for clubs, shown as unconfirmed (never blank)', () => {
     const b = buildDay(planDays(st)[0], { st, courseMap, starts: startPoints(st), stays: [stay], people, nameOf });
-    expect(b.rows.find((r) => r.id === 'kurri').times).toBe('ring to check');
+    const k = b.rows.find((r) => r.id === 'kurri');
+    expect(k.times).toBe('about after 7am — unconfirmed'); // a Friday
+    expect(k.guess).toBe(true);
+    expect(k.maxGroup).toBe('most clubs take groups of 12–20 — unconfirmed');
+    expect(k.fitLine).toMatch(/times unconfirmed$/);
   });
   it('a pick shows on the timeline', () => {
     const s2 = { ...st, dayPlan: { ...st.dayPlan, picks: { 1: { course_id: 'vint', tee: '12:30' } } } };

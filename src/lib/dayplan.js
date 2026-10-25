@@ -9,8 +9,9 @@
 // using the course's visitor / social times for that weekday and the per-day wishes.
 import * as TB from './tripbuilder.js';
 import { weekday } from './tripfinder.js';
-import { courseWindows, windowsText, golfLength, dayPlan, dayPrefs, slotLine, hm, dur, FLY_DEFAULTS } from './daytiming.js';
-import { fitOption, notForLine } from './tripfit.js';
+import { courseWindows, windowsText, golfLength, dayPlan, dayPrefs, slotLine, hm, dur, FLY_DEFAULTS, USUAL_GROUP } from './daytiming.js';
+import { fitOption, notForLine, scheduleCheck } from './tripfit.js';
+import { sunTimes, DEFAULT_LEAVE_STAY } from './daytiming.js';
 
 export const MAX_COMPARE = 6;
 export const BOOK_WORDS = { phone: 'Phone', online: 'Online', email: 'Email' };
@@ -101,7 +102,7 @@ export function buildDay(day, ctx = {}) {
       id: c.id, name: c.name, onDay, driveText: drive.text,
       driveFromStay: stayAt ? Math.min(...stays.map((s) => TB.driveBetween(s, c))) : 0,
       driveFromHome: fromHome, driveHome: starts.length ? Math.max(...Object.values(fromHome)) : 0,
-      windows: w.windows, known: w.known, source: w.source, text: w.text,
+      windows: w.windows, known: w.known, guess: !!w.guess, source: w.source, text: w.text,
     };
   });
   const pick = st.dayPlan?.picks?.[day.index] || null;
@@ -144,16 +145,19 @@ function compareRow(c, { day, date, golf, prefs, people, wishes, nameOf, booking
     style: research?.details?.style || null,
     fee: fee != null ? `about $${fee}` : null,
     drive: c.driveText,
-    times: c.known ? windowsText(c.windows) : 'ring to check',
-    timesSource: c.known ? c.source : null,
+    // Josh: "guess, shown as unconfirmed" — never blank, never shown as fact.
+    times: c.known ? windowsText(c.windows) : c.guess && c.windows.length ? `about ${windowsText(c.windows)} — unconfirmed` : 'ring to check',
+    timesSource: c.source,
+    guess: !c.known,
     fits: c.fit.fits.map((w) => `${hm(w.from)}–${hm(w.to)}`).join(', ') || null,
     reason: c.fit.reason,
-    maxGroup: booking?.max_group ? `up to ${booking.max_group}` : null,
+    maxGroup: booking?.max_group ? `up to ${booking.max_group}` : `${USUAL_GROUP} — unconfirmed`,
     book: [book, booking?.phone || research?.phone || null].filter(Boolean).join(' · ') || null,
     bookUrl: booking?.booking_url || research?.booking_url || null,
     best, bestLine: best ? slotLine(best) : null,
     slots: c.fit.slots,
-    fitLine: fit?.line || (c.fit.reason ? `Doesn’t fit: ${c.fit.reason}` : ''),
+    fitLine: [fit?.line || (c.fit.reason ? `Doesn’t fit: ${c.fit.reason}` : ''), !c.known && fit ? 'times unconfirmed' : null].filter(Boolean).join(' · '),
+    notForCount: fit?.notFor.length || 0,
     notFor: fit?.notFor || [], notForLine: fit ? notForLine(fit.notFor) : '',
     canArrive: c.canArrive, golfTotal: golf.total,
   };
@@ -206,5 +210,32 @@ export function setDay(st = {}, day, patch = {}) {
     return x;
   });
   return { ...st, days: clean.sort((a, b) => a.index - b.index) };
+}
+/**
+ * "How much golf" for the trip → each day's golf (tripbuilder.golfForAmount). For 'max', 36 goes on a stay day only
+ * when two rounds and lunch fit between leaving where we stay (7 am + 30 min) and dusk on that date.
+ * → the new state (st.golfAmount kept too).
+ */
+export function applyGolfAmount(st = {}, amount = 'daily', { players = 8 } = {}) {
+  const days = planDays(st);
+  const at = centreOf(st.stays || []);
+  const twoFits = (row) => {
+    const d = days.find((x) => x.index === row.index);
+    if (!d?.date || !at) return false;
+    const sun = sunTimes(d.date, at.lat, at.lng);
+    const two = dayGolfLength(st, { ...d, golf: '36' }, players).total;
+    return !!sun && DEFAULT_LEAVE_STAY + 30 + two <= sun.sunset;
+  };
+  const rows = days.map((d) => ({ ...(st.days || []).find((x) => x.index === d.index && x.leg === d.slot), index: d.index, leg: d.slot, options: d.options }));
+  const next = TB.golfForAmount(rows, amount, { twoFits });
+  return { ...st, golfAmount: amount, days: next.map((d) => { const x = { ...d }; if (x.travel !== false) delete x.travel; return x; }) };
+}
+/** The trip's golf in one line, with who it doesn't suit (names for the organiser; counts for everyone else). */
+export function scheduleLine(st = {}, { people = [], wishes = [], nameOf = (id) => id, names = false } = {}) {
+  const days = planDays(st);
+  const r = scheduleCheck(days.map((d) => d.rounds), { people, wishes });
+  const no = r.no.map((n) => ({ ...n, name: nameOf(n.id) }));
+  const tail = !no.length ? '' : names ? ` · Not for: ${no.map((n) => `${n.name} (${n.why})`).join(', ')}` : ` · not for ${no.length}`;
+  return `${r.line}${tail}`;
 }
 export { dur };

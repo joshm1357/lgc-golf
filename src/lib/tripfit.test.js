@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { cleanWishes, fridayOf, peopleFor, datesCheck, driveCheck, flyCheck, golfCheck, teeCheck, costCheck, duskCheck, fitOption, notForLine, rankByFit, wishesSummary } from './tripfit.js';
+import { cleanWishes, fridayOf, peopleFor, datesCheck, driveCheck, flyCheck, golfCheck, scheduleCheck, teeCheck, costCheck, duskCheck, fitOption, notForLine, rankByFit, wishesSummary } from './tripfit.js';
 
 const names = { a: 'Al', b: 'Bo', c: 'Cy', d: 'Di', e: 'Ed' };
 const people = Object.entries(names).map(([id, name]) => ({ id, name }));
@@ -9,13 +9,13 @@ const at = (h, m = 0) => h * 60 + m;
 describe('reading plan_wishes defensively', () => {
   it('keeps the known values, drops the rest, newest row per person wins', () => {
     const w = cleanWishes([
-      { player_id: 'a', travel: 'fly', spend_band: 'lt500', cant_dates: ['2027-03-12', 'junk'], max_drive_min: '180', day_prefs: { fri: 'late', sat: 'morning_free', xyz: 'early', sun: 'junk' }, home_by: '18:00:00', golf_per_day: 'one', wish: '  beers  ' },
+      { player_id: 'a', travel: 'fly', spend_band: 'lt500', cant_dates: ['2027-03-12', 'junk'], max_drive_min: '180', day_prefs: { fri: 'late', sat: 'morning_free', xyz: 'early', sun: 'junk' }, home_by: '18:00:00', golf_per_day: 'spare_day', wish: '  beers  ' },
       { player_id: 'b', travel: 'boat', spend_band: 'lots', max_drive_min: -5 },
       { player_id: 'b', travel: 'drive' },
       null, { travel: 'fly' },
     ]);
     expect(w).toHaveLength(2);
-    expect(w[0]).toMatchObject({ travel: 'fly', spend_band: 'lt500', cant_dates: ['2027-03-12'], max_drive_min: 180, day_prefs: { fri: 'late', sat: 'morning_free' }, home_by: '18:00', golf_per_day: 'one', wish: 'beers' });
+    expect(w[0]).toMatchObject({ travel: 'fly', spend_band: 'lt500', cant_dates: ['2027-03-12'], max_drive_min: 180, day_prefs: { fri: 'late', sat: 'morning_free' }, home_by: '18:00', golf_per_day: 'spare_day', wish: 'beers' });
     expect(w[1]).toMatchObject({ travel: 'drive', spend_band: null, max_drive_min: null, day_prefs: {}, home_by: null });
     expect(cleanWishes([{ player_id: 'z', day_prefs: '{"sun":"early"}' }])[0].day_prefs).toEqual({ sun: 'early' });
     expect(cleanWishes(undefined)).toEqual([]);
@@ -44,7 +44,7 @@ describe('the weekend', () => {
 
 describe('the checks', () => {
   const wishes = cleanWishes([
-    { player_id: 'a', max_drive_min: 120, travel: 'drive', golf_per_day: 'one', day_prefs: { sat: 'morning_free' }, spend_band: 'lt500' },
+    { player_id: 'a', max_drive_min: 120, travel: 'drive', golf_per_day: 'daily', day_prefs: { sat: 'morning_free' }, spend_band: 'lt500' },
     { player_id: 'b', max_drive_min: 240, travel: 'fly', day_prefs: { sat: 'midday' }, spend_band: '800_1200' },
     { player_id: 'c', travel: 'either', day_prefs: { sat: 'early' } },
   ]);
@@ -59,9 +59,14 @@ describe('the checks', () => {
     expect(flyCheck({ people, wishes }).no).toEqual([{ id: 'a', why: 'would rather drive' }]);
     expect(flyCheck({ people, wishes: cleanWishes([{ player_id: 'a', travel: 'drive' }, { player_id: 'b', travel: 'drive' }, { player_id: 'c', travel: 'fly' }]) }).allowed).toBe(false);
   });
-  it('36 holes in a day vs one round a day', () => {
-    expect(golfCheck(2, { people, wishes }).no.map((x) => x.id)).toEqual(['a']);
+  it('36 holes in a day vs a round a day', () => {
+    expect(golfCheck(2, { people, wishes }).no).toEqual([{ id: 'a', why: 'a round a day' }]);
     expect(golfCheck(1, { people, wishes }).line).toBe(null);
+  });
+  it('the whole trip: spare day vs as much as possible', () => {
+    const w = cleanWishes([{ player_id: 'a', golf_per_day: 'spare_day' }, { player_id: 'b', golf_per_day: 'max' }, { player_id: 'c', golf_per_day: 'any' }]);
+    expect(scheduleCheck([1, 1, 1], { people, wishes: w })).toMatchObject({ no: [{ id: 'a', why: 'wants a spare day' }], line: '3 rounds in 3 days — suits 4' });
+    expect(scheduleCheck([1, 0, 1], { people, wishes: w }).no).toEqual([{ id: 'b', why: 'wants as much golf as possible' }]);
   });
   it('tee times vs the day wishes', () => {
     const prefs = wishes.map((w) => ({ who: w.player_id, pref: w.day_prefs.sat }));
@@ -104,7 +109,7 @@ describe('the fit line', () => {
   });
   it('sums up what the group said', () => {
     expect(wishesSummary([], people)).toBe('Nobody’s said what they’d like yet.');
-    const s = wishesSummary(cleanWishes([{ player_id: 'a', travel: 'fly', day_prefs: { fri: 'late', sun: 'early' }, max_drive_min: 180, home_by: '18:00' }, { player_id: 'b', golf_per_day: 'one', max_drive_min: 240, day_prefs: { fri: 'late' } }]), people);
-    expect(s).toBe('2 of 5 have said what they’d like · 1 happy to fly · longest drive mostly about 3 h · 1 want one round a day · Friday: 2 later · Sunday: 1 early · 1 want to be home by about 6pm on the last day');
+    const s = wishesSummary(cleanWishes([{ player_id: 'a', travel: 'fly', day_prefs: { fri: 'late', sun: 'early' }, max_drive_min: 180, home_by: '18:00' }, { player_id: 'b', golf_per_day: 'spare_day', max_drive_min: 240, day_prefs: { fri: 'late' } }]), people);
+    expect(s).toBe('2 of 5 have said what they’d like · 1 happy to fly · longest drive mostly about 3 h · 1 want a spare day · Friday: 2 later · Sunday: 1 early · 1 want to be home by about 6pm on the last day');
   });
 });

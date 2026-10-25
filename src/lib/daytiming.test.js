@@ -109,12 +109,19 @@ describe('reading the usual social / visitor times', () => {
     expect(windowsFor('', 6).known).toBe(false);
     expect(windowsFor('ask Dave', 6).known).toBe(false);
   });
+  it('nothing known → what’s usual for clubs that day, as a guess', () => {
+    const sat = courseWindows(6, {});
+    expect(sat).toMatchObject({ known: false, guess: true, source: 'usual for clubs', windows: [{ from: at(12, 30), to: null }] });
+    expect(courseWindows(5, { social: { weekdays: 'ask Dave' } })).toMatchObject({ guess: true, text: 'ask Dave', windows: [{ from: at(7), to: null }] });
+    expect(courseWindows(3, {}).windows).toEqual([{ from: at(11), to: null }]);
+  });
   it('picks the best source: our notes, then the club, then research', () => {
     const social = { weekdays: 'after 11', weekends: 'Sat after 2' };
     expect(courseWindows(6, { social, booking: { visitor_times: 'Sat 7:00-12:00' } })).toMatchObject({ source: 'our notes', known: true, windows: [{ from: at(14), to: null }] });
     expect(courseWindows(6, { social: { weekdays: 'after 11' }, booking: { visitor_times: 'Sat 7:00-12:00' } })).toMatchObject({ source: 'the club’s visitor times' });
     expect(courseWindows(0, { research: { details: { visitor_times: 'Sat after 12pm; Sun after 11am' } } })).toMatchObject({ source: 'course research', windows: [{ from: at(11), to: null }] });
     expect(courseWindows(0, {}).known).toBe(false);
+    expect(courseWindows(0, {}).guess).toBe(true);
   });
   it('says the windows in words', () => {
     expect(windowsText([{ from: at(11), to: null }])).toBe('after 11am');
@@ -144,7 +151,8 @@ describe('travel', () => {
     const c = travelChain({ mode: 'fly', leave: at(5, 30), fly: { toAirportMin: 30, checkInMin: 60, flightMin: 115, pickupMin: 30, fromAirportMin: 25 } });
     expect(c.arrive).toBe(at(5, 30) + 30 + 60 + 115 + 30 + 25);
     expect(c.legs.map((l) => l.kind)).toEqual(['drive', 'wait', 'fly', 'wait', 'drive']);
-    expect(c.legs[2].label).toMatch(/a guess/);
+    expect(c.legs[2].label).toMatch(/first flights about 6am/);
+    expect(c.legs[2].label).not.toMatch(/\$/); // no fare guesses
   });
   it('works back from an arrival time', () => {
     expect(leaveBy(at(9), { mode: 'drive', driveMin: 150 }).leave).toBe(at(6, 30));
@@ -192,10 +200,33 @@ describe('fitting a tee time', () => {
   it('no visitors that day', () => {
     expect(courseFit({ date: '2026-12-12', place: SYD, windows: [], known: true }).reason).toBe('no visitors that day');
   });
-  it('unknown times are treated as open (ring to check) but kept as unknown', () => {
+  it('a guess is used for the times but kept as unconfirmed', () => {
+    const f = courseFit({ date: '2026-12-12', place: SYD, canArrive: at(8), windows: [{ from: at(12, 30), to: null }], known: false });
+    expect(f.fits[0].from).toBe(at(12, 30));
+    expect(f.guess).toBe(true);
+  });
+  it('unknown times with no guess are treated as open but kept as unknown', () => {
     const f = courseFit({ date: '2026-12-12', place: SYD, canArrive: at(8), windows: [], known: false });
     expect(f.fits.length).toBe(1);
     expect(f.known).toBe(false);
+  });
+});
+
+describe('flights: first out about 6am, last back about 9pm', () => {
+  it('never leaves for a flight before the first of the day', () => {
+    const c = travelChain({ mode: 'fly', leave: at(4), fly: { toAirportMin: 30, checkInMin: 60, flightMin: 95 } });
+    expect(c.legs.find((l) => l.kind === 'fly').from).toBe(at(6));
+    expect(c.leave).toBe(at(4, 30));
+  });
+  it('the last day flying home: the golf has to finish in time for the last flight', () => {
+    const golf = golfLength({ players: 8 });
+    const courses = [{ id: 'a', name: 'Moonah Links', driveFromStay: 20, driveHome: 0, windows: [{ from: at(7), to: null }], known: true }];
+    const p = dayPlan({ leg: 'home', date: '2026-12-13', place: { lat: -38.4, lng: 144.9 }, travel: { mode: 'fly', fly: { fromAirportMin: 75, checkInMin: 60, flightMin: 95 } }, courses, golf });
+    const fit = p.courses[0].fit;
+    // Last flight 9pm − check in 60 − car 20 − drive 75 = 6:05pm finish at the latest.
+    expect(fit.latestTee).toBe(at(21) - 60 - 20 - 75 - golf.total);
+    const late = dayPlan({ leg: 'home', date: '2026-12-13', place: { lat: -38.4, lng: 144.9 }, travel: { mode: 'fly', fly: { fromAirportMin: 75 } }, courses, golf, pick: { course: 'a', tee: '15:30' } });
+    expect(late.blocks.some((b) => /after the last flights/.test(b.label))).toBe(true);
   });
 });
 

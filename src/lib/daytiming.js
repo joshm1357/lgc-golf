@@ -20,6 +20,16 @@ import { toMin, ampm, teeGroupSizes, DEFAULT_INTERVAL, ARRIVE_BEFORE } from './t
 
 export const ROUND_LENGTH = { stableford: 270, stroke: 270, ambrose: 240, fourball: 255, nine: 135 };
 export const FLY_DEFAULTS = { toAirportMin: 40, checkInMin: 60, flightMin: 90, pickupMin: 30, fromAirportMin: 45 };
+// Josh 25 Oct: no fare guesses — just the flight time and a rough first / last flight of the day.
+export const FIRST_FLIGHT = 6 * 60;   // first flights out about 6 am
+export const LAST_FLIGHT = 21 * 60;   // last flights back about 9 pm
+// When we don't know a course's times (Josh: "guess, shown as unconfirmed"): what's usual at Australian clubs —
+// members' comps on Saturday and midweek mornings, Sunday mornings busy, Monday and Friday mostly open.
+export const USUAL_WINDOWS = {
+  0: [{ from: 11 * 60, to: null }], 1: [{ from: 7 * 60, to: null }], 2: [{ from: 11 * 60, to: null }], 3: [{ from: 11 * 60, to: null }],
+  4: [{ from: 11 * 60, to: null }], 5: [{ from: 7 * 60, to: null }], 6: [{ from: 12 * 60 + 30, to: null }],
+};
+export const USUAL_GROUP = 'most clubs take groups of 12–20';
 export const DEFAULT_LEAVE_HOME = 6 * 60;      // leave home 6:00 am on the way there
 export const DEFAULT_LEAVE_STAY = 7 * 60;      // up and away from where we stay by 7:00 am at the earliest
 export const DINNER_FROM = 18 * 60 + 30;       // dinner / evening from 6:30 pm
@@ -249,7 +259,7 @@ function merge(ws) {
 /**
  * The course's usual times for a day of the week, from what's known, best source first: the group's own social times
  * (course_social_times: weekdays / weekends text), the booking info's visitor times, the course research's visitor
- * times. → { windows, source, text, known }  (known false = "ring to check")
+ * times. → { windows, source, text, known, guess }  (known false = a guess from what's usual: "unconfirmed — about")
  */
 export function courseWindows(dow, { social = null, booking = null, research = null } = {}) {
   const weekend = dow === 0 || dow === 6;
@@ -262,7 +272,8 @@ export function courseWindows(dow, { social = null, booking = null, research = n
     const w = windowsFor(text, dow);
     if (w.known) return { windows: w.windows, source, text, known: true };
   }
-  return { windows: [], source: null, text: tries[0]?.[0] || null, known: false };
+  // Nothing readable: what's usual for clubs that day — a guess, shown as unconfirmed (it updates when real times come in).
+  return { windows: dow == null ? [] : USUAL_WINDOWS[dow].map((w) => ({ ...w })), source: 'usual for clubs', text: tries[0]?.[0] || null, known: false, guess: true };
 }
 /** "after 11am", "7–8:30am", "no visitors" — one line for the windows. */
 export function windowsText(ws = []) {
@@ -292,25 +303,28 @@ export function golfLength({ format = 'stableford', players = 4, holes = 18, int
  *   mode 'fly':   { leave, fly: { toAirportMin, checkInMin, flightMin, pickupMin, fromAirportMin } }
  * leave: minutes (or 'HH:MM'). → { legs: [{ kind: 'drive' | 'wait' | 'fly', from, to, label }], leave, arrive, minutes }
  */
-export function travelChain({ mode = 'drive', leave = DEFAULT_LEAVE_HOME, driveMin = 0, from = 'home', fly = {} } = {}) {
-  const start = anyClock(leave) ?? DEFAULT_LEAVE_HOME;
+export function travelChain({ mode = 'drive', leave = DEFAULT_LEAVE_HOME, driveMin = 0, from = 'home', fly = {}, back = false } = {}) {
+  let start = anyClock(leave) ?? DEFAULT_LEAVE_HOME;
   const legs = [];
   let t = start;
   const add = (kind, min, label) => { const m = Math.max(0, Math.round(Number(min) || 0)); if (!m) return; legs.push({ kind, from: t, to: t + m, label }); t += m; };
   if (mode === 'fly') {
     const f = { ...FLY_DEFAULTS, ...Object.fromEntries(Object.entries(fly || {}).filter(([, v]) => v != null && v !== '')) };
+    // No flight before the first of the day (about 6 am): leave later rather than wait at the airport.
+    if (!back && t + (Number(f.toAirportMin) || 0) + (Number(f.checkInMin) || 0) < FIRST_FLIGHT) t = FIRST_FLIGHT - (Number(f.toAirportMin) || 0) - (Number(f.checkInMin) || 0);
     add('drive', f.toAirportMin, `Drive to the airport (about ${dur(f.toAirportMin)})`);
     add('wait', f.checkInMin, `Check in and wait (about ${dur(f.checkInMin)})`);
-    add('fly', f.flightMin, `Flight (about ${dur(f.flightMin)} — a guess)`);
+    add('fly', f.flightMin, `Flight (about ${dur(f.flightMin)}${back ? '' : '; first flights about 6am'})`);
     add('wait', f.pickupMin, `Bags and the hire car (about ${dur(f.pickupMin)})`);
     add('drive', f.fromAirportMin, `Drive from the airport (about ${dur(f.fromAirportMin)})`);
   } else add('drive', driveMin, `Drive from ${from} (about ${dur(driveMin)})`);
+  start = legs.length ? legs[0].from : t;
   return { legs, leave: start, arrive: t, minutes: t - start };
 }
 /** The same chain, worked back from when you need to be there: { leave, ...chain }. */
 export function leaveBy(arriveBy, opts = {}) {
   const there = anyClock(arriveBy);
-  const c = travelChain({ ...opts, leave: 0 });
+  const c = travelChain({ ...opts, leave: 12 * 60 });
   return travelChain({ ...opts, leave: there - c.minutes });
 }
 
@@ -347,17 +361,20 @@ export function suits(pref, tee, { finish = null, homeBy = null, driveHome = 0 }
  *   windows / known: from courseWindows, golf: from golfLength, step: minutes between suggestions (default 30)
  * → { sun, earliestTee, latestTee, fits: [{ from, to }], slots: [{ tee, finish, flag }], reason, known }
  */
-export function courseFit({ date, place, canArrive = null, windows = [], known = true, golf = golfLength(), step = 30, sun = null } = {}) {
+export function courseFit({ date, place, canArrive = null, windows = [], known = true, golf = golfLength(), step = 30, sun = null, latestFinish = null } = {}) {
   const s = sun || (place ? sunTimes(date, place.lat, place.lng) : null);
   const earliest = Math.max(EARLIEST_TEE, canArrive == null ? 0 : canArrive + ARRIVE_BEFORE, s ? s.sunrise - 10 : 0);
-  const latest = Math.min(LATEST_TEE, s ? s.sunset - golf.total : LATEST_TEE);
-  const ws = known ? windows : [{ from: EARLIEST_TEE, to: null }];
+  // latestFinish: e.g. the last flight home (about 9 pm) less getting to the airport.
+  const latest = Math.min(LATEST_TEE, s ? s.sunset - golf.total : LATEST_TEE, latestFinish != null ? latestFinish - golf.total : Infinity);
+  // Unknown times: the usual ones for clubs that day (a guess) if given, else open.
+  const ws = known || windows.length ? windows : [{ from: EARLIEST_TEE, to: null }];
   const fits = ws.map((w) => ({ from: Math.max(w.from, earliest), to: Math.min(w.to ?? latest, latest) })).filter((w) => w.to >= w.from);
   let reason = null;
   if (known && !windows.length) reason = 'no visitors that day';
   else if (!fits.length) {
     const maxTo = Math.max(...ws.map((w) => w.to ?? latest));
     if (maxTo < earliest) reason = 'too early to make it';
+    else if (latestFinish != null && s && latestFinish < s.sunset && latestFinish - golf.total < earliest) reason = 'no time before the last flight home';
     else reason = 'not enough daylight left';
   }
   const slots = [];
@@ -368,7 +385,7 @@ export function courseFit({ date, place, canArrive = null, windows = [], known =
     if (lastSlot >= first && !slots.some((x) => x.tee === lastSlot)) slots.push(slotAt(lastSlot, golf, s, latest));
   }
   slots.sort((a, b) => a.tee - b.tee);
-  return { sun: s, earliestTee: earliest, latestTee: latest, fits, slots, reason, known };
+  return { sun: s, earliestTee: earliest, latestTee: latest, fits, slots, reason, known, guess: !known };
 }
 function slotAt(tee, golf, s, latest) {
   const finish = tee + golf.total;
@@ -407,7 +424,9 @@ export function dayPlan({ leg = 'stay', date, place = null, travel = {}, pick = 
       canArrive = travel.mode === 'fly' ? flyArrive + (Number(c.driveFromStay) || 0)
         : Math.max(...starts.map((s) => (anyClock(s.leave) ?? DEFAULT_LEAVE_HOME) + homeDrive(c, s)));
     } else canArrive = leaveStay + (Number(c.driveFromStay) || 0);
-    const fit = courseFit({ date, sun, canArrive, windows: c.windows || [], known: c.known !== false, golf });
+    const f = { ...FLY_DEFAULTS, ...(travel.fly || {}) };
+    const latestFinish = leg === 'home' && travel.mode === 'fly' ? LAST_FLIGHT - f.checkInMin - 20 - f.fromAirportMin : null;
+    const fit = courseFit({ date, sun, canArrive, windows: c.windows || [], known: c.known !== false, golf, latestFinish });
     const slots = fit.slots.map((sl) => ({ ...sl, suitsN: prefs.filter((p) => suits(p.pref, sl.tee, { finish: sl.finish, homeBy: p.homeBy, driveHome: leg === 'home' ? c.driveHome : 0 })).length }));
     const top = Math.max(0, ...slots.map((x) => x.suitsN));
     return { ...c, canArrive, fit: { ...fit, slots: slots.map((x) => ({ ...x, best: prefs.length > 0 && x.suitsN === top && top > 0 })) } };
@@ -472,8 +491,10 @@ function golfBlocks(add, course, tee, golf) {
 }
 function travelChainBack(from, travel) {
   const f = { ...FLY_DEFAULTS, ...(travel.fly || {}) };
-  const c = travelChain({ mode: 'fly', leave: from, fly: { toAirportMin: f.fromAirportMin, checkInMin: f.checkInMin, flightMin: f.flightMin, pickupMin: 20, fromAirportMin: f.toAirportMin } });
-  return { legs: c.legs.map((l, i) => ({ ...l, label: ['Drive to the airport', 'Return the car, check in', 'Flight home (a guess)', 'Bags', 'Drive home'][i] || l.label })) };
+  const c = travelChain({ mode: 'fly', back: true, leave: from, fly: { toAirportMin: f.fromAirportMin, checkInMin: f.checkInMin + 20, flightMin: f.flightMin, pickupMin: 20, fromAirportMin: f.toAirportMin } });
+  const takeoff = c.legs.find((l) => l.kind === 'fly')?.from ?? null;
+  const late = takeoff != null && takeoff > LAST_FLIGHT;
+  return { late, legs: c.legs.map((l, i) => ({ ...l, label: [`Drive to the airport (about ${dur(f.fromAirportMin)})`, 'Return the car, check in', late ? `Flight home — after the last flights (about ${hm(LAST_FLIGHT)}): tee off earlier` : `Flight home (about ${dur(f.flightMin)})`, 'Bags', `Drive home (about ${dur(f.toAirportMin)})`][i] || l.label })) };
 }
 
 // ------------------------------------------------------------------ wishes for a day (comments + plan_wishes)

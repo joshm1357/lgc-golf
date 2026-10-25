@@ -7,7 +7,7 @@
 //
 //   plan_wishes (108, one row per person per plan): { plan_id, player_id, cant_dates: date[] (Fridays of weekends they
 //   can't do), spend_band: 'lt500' | '500_800' | '800_1200' | 'any' | null, travel: 'drive' | 'fly' | 'either' | null,
-//   max_drive_min: int | null, golf_per_day: 'one' | '36_ok' | 'mix' | null, day_prefs: jsonb keyed by weekday
+//   max_drive_min: int | null, golf_per_day: 'max' | 'daily' | 'spare_day' | 'any' | null, day_prefs: jsonb keyed by weekday
 //   ('fri', 'sat', 'sun', 'mon') → 'early' | 'midday' | 'late' | 'morning_free' | 'any', home_by: time (the last day),
 //   wish: text | null, updated_at }
 //   Read defensively (cleanWishes): the table may not be there yet, rows may be partial.
@@ -18,7 +18,7 @@ export const SPEND_MAX = { lt500: 500, '500_800': 800, '800_1200': 1200, any: In
 export const SPEND_LABEL = { lt500: 'under $500', '500_800': '$500–800', '800_1200': '$800–1,200', any: 'any spend' };
 const SPENDS = Object.keys(SPEND_MAX);
 const TRAVELS = ['drive', 'fly', 'either'];
-const GOLFS = ['one', '36_ok', 'mix'];
+const GOLFS = ['max', 'daily', 'spare_day', 'any'];
 const DAYPREFS = ['early', 'midday', 'late', 'morning_free', 'any'];
 const WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 export const FLY_SHARE = 0.5; // flying is on the table when at least half of those who said said fly or either
@@ -110,13 +110,24 @@ export function flyCheck({ people = [], wishes = [] } = {}) {
   const allowed = !said.length || keen.length / said.length >= FLY_SHARE;
   return { ...finish(people, no, () => `${keen.length} of ${said.length || people.length} happy to fly`), allowed };
 }
-/** 36 holes in a day vs "one round a day" people. rounds: rounds that day. */
+/** 36 holes in a day: not for the "a round a day" people. rounds: rounds that day. */
 export function golfCheck(rounds, { people = [], wishes = [] } = {}) {
   const w = byId(wishes);
   if ((Number(rounds) || 0) < 2) return { ok: people.map((p) => p.id), no: [], line: null };
-  const no = people.filter((p) => w[p.id]?.golf_per_day === 'one').map((p) => ({ id: p.id, why: 'one round a day' }));
+  const no = people.filter((p) => w[p.id]?.golf_per_day === 'daily').map((p) => ({ id: p.id, why: 'a round a day' }));
   return finish(people, no, (ok) => `36 holes OK for ${ok}`);
 }
+/** The whole trip's golf: no spare day → not for "leave a spare day"; a day off → not for "as much as possible".
+ *  golfDays: each day's rounds (0, 1, 2). */
+export function scheduleCheck(golfDays = [], { people = [], wishes = [] } = {}) {
+  const w = byId(wishes);
+  const spare = golfDays.some((r) => !r);
+  const no = people.filter((p) => (w[p.id]?.golf_per_day === 'spare_day' && !spare && golfDays.length > 1) || (w[p.id]?.golf_per_day === 'max' && spare))
+    .map((p) => ({ id: p.id, why: w[p.id].golf_per_day === 'max' ? 'wants as much golf as possible' : 'wants a spare day' }));
+  const rounds = golfDays.reduce((a, r) => a + (Number(r) || 0), 0);
+  return finish(people, no, (ok) => `${rounds} round${rounds === 1 ? '' : 's'} in ${golfDays.length} day${golfDays.length === 1 ? '' : 's'} — suits ${ok}`);
+}
+
 /** A tee time against people's day wishes. prefs: [{ who, pref, homeBy }] (daytiming.dayPrefs). */
 export function teeCheck(tee, { people = [], prefs = [], finish: fin = null, driveHome = 0 } = {}) {
   const ids = new Set(people.map((p) => p.id));
@@ -191,7 +202,9 @@ export function wishesSummary(wishes = [], people = []) {
     `${wishes.length} of ${people.length || wishes.length} have said what they’d like`,
     n((w) => w.travel === 'fly' || w.travel === 'either') ? `${n((w) => w.travel === 'fly' || w.travel === 'either')} happy to fly` : null,
     n((w) => w.max_drive_min) ? `longest drive mostly about ${dur(roundDrive(median(wishes.map((w) => w.max_drive_min).filter(Boolean))))}` : null,
-    n((w) => w.golf_per_day === 'one') ? `${n((w) => w.golf_per_day === 'one')} want one round a day` : null,
+    n((w) => w.golf_per_day === 'max') ? `${n((w) => w.golf_per_day === 'max')} want as much golf as possible` : null,
+    n((w) => w.golf_per_day === 'daily') ? `${n((w) => w.golf_per_day === 'daily')} want a round a day` : null,
+    n((w) => w.golf_per_day === 'spare_day') ? `${n((w) => w.golf_per_day === 'spare_day')} want a spare day` : null,
     ...['fri', 'sat', 'sun', 'mon'].map((d) => dayWishLine(d, wishes)),
     n((w) => w.home_by) ? `${n((w) => w.home_by)} want to be home by about ${hm(Math.min(...wishes.filter((w) => w.home_by).map((w) => toMinutes(w.home_by))))} on the last day` : null,
   ].filter(Boolean);

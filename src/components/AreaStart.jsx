@@ -213,7 +213,7 @@ export default function AreaStart({ plan, st, save, org, areas, history, accom =
   function chooseArea(r) {
     if (onChoose) { onChoose(r, courseMap); return; } // ov23: the builder picks it with the vote's favourites ticked
     const stays = ((st.areaStays || {})[r] || []).slice(0, TB.MAX_STAYS);
-    const days = TB.prefillStayDays(st.days, (st.areaCourses || {})[r] || [], { ...courseMap, ...(st.courses || {}) }, { stays, stayMax: st.stayMax, origin, detourMax: st.detourMax });
+    const days = TB.prefillStayDays(st.days, (st.areaCourses || {})[r] || [], { ...courseMap, ...(st.courses || {}) }, { stays, stayMax: st.stayMax, origin, detourMax: st.detourMax, fly: TB.isFly(st) });
     save({ ...st, region: r, regionOptions: [r], stays, days });
   }
   const goingHere = () => chooseArea(area);

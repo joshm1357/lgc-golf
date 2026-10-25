@@ -202,18 +202,19 @@ export default function TripBuilder() {
     if (!lib || !stays.length) return [];
     const w = st.weekends[0];
     const dow = w ? weekday(TB.dayDate(w, d.index)) : null;
+    const leg = TB.isFly(st) ? 'stay' : TB.dayLeg(d); // ov40: flying, or not a travel day → near where we stay
     const cands = lib.filter((c) => c.lat != null).map((c) => {
-      const drive = TB.legDrive(d.leg, c, { origin, stays });
+      const drive = TB.legDrive(leg, c, { origin, stays });
       return { course: c, drive, booking: booking[c.id], history: history(c.id), facts: pickFacts(c.facts) };
-    }).filter((c) => TB.fitsLeg(d.leg, c.drive, st) && (d.leg === 'stay' || origin));
-    return TB.rankCandidates(cands, { leg: d.leg, dow, votes: TB.dayVotes(points, d.index), filters });
+    }).filter((c) => TB.fitsLeg(leg, c.drive, st) && (leg === 'stay' || origin));
+    return TB.rankCandidates(cands, { leg, dow, votes: TB.dayVotes(points, d.index), filters });
   }, [lib, stays, st, origin, booking, history, points, filters]);
 
   // Configurations (organisers work them out; everyone sees the saved ones).
   const configs = useMemo(() => {
     if (!org || !st) return st?.configs || [];
     return TB.buildConfigurations({ weekends: st.weekends, stays, days: st.days, courses: courseMap, origin, tees: tees.map((t) => ({ ...t, times: slotsFor(t) })), needed: need.needed || 1,
-      stayMax: st.stayMax, detourMax: st.detourMax, votes: points, limit: 12 });
+      stayMax: st.stayMax, detourMax: st.detourMax, votes: points, limit: 12, fly: TB.isFly(st) });
   }, [org, st, stays, courseMap, origin, tees, need.needed, points]);
 
   // ov40: trips saved before golf-each-day had their first and last days left empty (so only one round came out, as
@@ -221,7 +222,7 @@ export default function TripBuilder() {
   useEffect(() => {
     if (!org || !st || !row || st.daysFilled || !st.region || !stays.length || !lib?.length || !TB.daysNeedFilling(st.days)) return;
     const ids = [...new Set([...((st.areaCourses || {})[st.region] || []), ...st.days.flatMap((d) => d.options || [])])];
-    const filled = TB.prefillStayDays(st.days, ids, courseMap, { stays, stayMax: st.stayMax, origin, detourMax: st.detourMax });
+    const filled = TB.prefillStayDays(st.days, ids, courseMap, { stays, stayMax: st.stayMax, origin, detourMax: st.detourMax, fly: TB.isFly(st) });
     save({ ...st, days: filled, daysFilled: 1, courses: { ...(st.courses || {}), ...Object.fromEntries(filled.flatMap((d) => d.options).filter((id) => courseMap[id] && !st.courses?.[id]).map((id) => [id, slim(courseMap[id])])) } });
   }, [org, row, lib, stays.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -246,7 +247,7 @@ export default function TripBuilder() {
       ...st,
       courses: { ...st.courses, [c.id]: slim(c) },
       days: days.map(({ name, ...x }) => ({ ...x, options: x.index === d.index ? (has ? x.options.filter((id) => id !== c.id) : [...x.options, c.id]) : x.options })),
-      info: { ...(st.info || {}), [`${d.index}:${c.id}`]: TB.legDrive(d.leg, c, { origin, stays }).text },
+      info: { ...(st.info || {}), [`${d.index}:${c.id}`]: TB.legDrive(TB.isFly(st) ? 'stay' : TB.dayLeg(d), c, { origin, stays }).text },
     });
   };
   const toggleStay = (s) => {

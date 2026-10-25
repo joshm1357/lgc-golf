@@ -2132,6 +2132,6 @@ rulebook-v3, stage10 pass.
   109 re-runs cleanly).
 
 Tests: vitest 1906 pass (new: daytiming 40, tripfit 14, dayplan 22, tripdays 6, tripdays.long 9; planux, tripbuilder
-updated for the new rules). e2e `tests/e2e/day-plan-test.mjs` (48 checks) passes; trip-builder (updated: travel days
+updated for the new rules). e2e `tests/e2e/day-plan-test.mjs` (50 checks) passes; trip-builder (updated: travel days
 now start filled), plan-ux, tripfinder, trips, votes-coorg, trip-plan, weekends-comps, trip-page, trip-overview pass;
 round-callout 24/25 — the one failure ("sat or sun morning") is date-dependent (today is a Sunday) and not touched here.

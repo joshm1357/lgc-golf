@@ -216,6 +216,15 @@ export default function TripBuilder() {
       stayMax: st.stayMax, detourMax: st.detourMax, votes: points, limit: 12 });
   }, [org, st, stays, courseMap, origin, tees, need.needed, points]);
 
+  // ov40: trips saved before golf-each-day had their first and last days left empty (so only one round came out, as
+  // with the Blue Mountains idea). Once, for the organiser: fill those days from the area's courses that fit them.
+  useEffect(() => {
+    if (!org || !st || !row || st.daysFilled || !st.region || !stays.length || !lib?.length || !TB.daysNeedFilling(st.days)) return;
+    const ids = [...new Set([...((st.areaCourses || {})[st.region] || []), ...st.days.flatMap((d) => d.options || [])])];
+    const filled = TB.prefillStayDays(st.days, ids, courseMap, { stays, stayMax: st.stayMax, origin, detourMax: st.detourMax });
+    save({ ...st, days: filled, daysFilled: 1, courses: { ...(st.courses || {}), ...Object.fromEntries(filled.flatMap((d) => d.options).filter((id) => courseMap[id] && !st.courses?.[id]).map((id) => [id, slim(courseMap[id])])) } });
+  }, [org, row, lib, stays.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!pd || !st || row === undefined) return <div className="page"><Header back="Trip" title="Plan the trip" /><Loading /></div>;
   if (!plan) return <div className="page"><Header back="Trip" title="Plan the trip" /><div className="empty">This trip has been removed.</div></div>;
   if (!org && !row) return <div className="page"><Header back="Trip" title="Plan the trip" sub={plan.name} /><div className="empty">The organiser hasn’t started building this trip yet.</div></div>;
@@ -654,10 +663,12 @@ export default function TripBuilder() {
       </div>
       <div className="tb-chips">{FILTERS.map(([k, l]) => <button key={k} type="button" className="chip" aria-pressed={!!filters[k]} onClick={() => setFilters({ ...filters, [k]: !filters[k] })}>{l}</button>)}</div>
       {!stays.length && <span className="small muted">Pick where you’ll stay first — then each day’s courses show up.</span>}
+      {stays.length > 0 && <Link to={`/plan/${planId}/days`} className="btn ghost block" data-testid="tb-day-plan">🕒 Day plan — timing, golf each day, which tee times fit</Link>}
       {stays.length > 0 && days.map((d) => (
         <DayCard key={d.index} d={d} active={focusDay.index === d.index} onFocus={() => setFocus(d.index)} dates={weekendDates(d.index)}
           cands={focusDay.index === d.index ? cands : []} courseMap={courseMap} info={st.info || {}} org={org} booking={booking} history={history} research={research}
-          votes={TB.dayVotes(points, d.index)} onToggle={(c) => toggleOption(d, c)} onOpen={(id) => setOpen({ id, day: d })} pi={pi} />
+          votes={TB.dayVotes(points, d.index)} onToggle={(c) => toggleOption(d, c)} onOpen={(id) => setOpen({ id, day: d })} pi={pi}
+          dayPlanLink={`/plan/${planId}/days?day=${d.index}`} picked={st.dayPlan?.picks?.[d.index] ? courseMap[st.dayPlan.picks[d.index].course_id]?.name || null : null} />
       ))}
       {/* ov23: where to stay — ideas and search links with the real head count — live here now, not in step 1. */}
       <StayIdeas plan={plan} st={st} save={save} org={org} accom={accom} reloadAccom={loadAccom} head={head} />
@@ -991,13 +1002,14 @@ function VoteLink({ planId, title }) {
 }
 
 // ---------------------------------------------------------------- one day: its options and suggestions
-function DayCard({ d, active, onFocus, dates, cands, courseMap, info, org, booking, history, votes, onToggle, onOpen, research = {}, pi }) {
+function DayCard({ d, active, onFocus, dates, cands, courseMap, info, org, booking, history, votes, onToggle, onOpen, research = {}, pi, dayPlanLink = null, picked = null }) {
   return (
     <div className="card" data-testid="tb-day" data-leg={d.leg} style={{ overflow: 'hidden', borderColor: active ? 'var(--navy)' : undefined }}>
       <button type="button" onClick={onFocus} className="row between" style={{ width: '100%', padding: '10px 12px', background: active ? 'var(--gold-soft)' : 'none', border: 0, textAlign: 'left', color: 'inherit', font: 'inherit' }}>
-        <span><strong>{LEG_ICON[d.leg]} {d.name}</strong>{dates && <div className="small muted">{dates}</div>}</span>
-        <span className="small muted">{d.options.length ? `${d.options.length} option${d.options.length === 1 ? '' : 's'}` : 'No golf yet'}</span>
+        <span><strong>{LEG_ICON[TB.dayLeg(d)]} {d.name}</strong>{dates && <div className="small muted">{dates}</div>}<div className="small muted" data-testid="tb-day-role">{TB.dayRoleLine(d)}</div></span>
+        <span className="small muted">{TB.dayGolf(d) === 'none' ? 'No golf' : d.options.length ? `${d.options.length} option${d.options.length === 1 ? '' : 's'}` : 'No golf yet'}</span>
       </button>
+      {dayPlanLink && <Link to={dayPlanLink} className="small" style={{ display: 'block', padding: '0 12px 8px', color: 'var(--navy)' }} data-testid="tb-day-timing">🕒 Timing for this day{picked ? ` · picked ${picked}` : ''}</Link>}
       {d.options.map((id) => {
         const c = courseMap[id];
         if (!c) return null;

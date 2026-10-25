@@ -127,3 +127,26 @@ describe('ov42: the preview says what is asked, and by when', async () => {
     expect(odd.body).toContain('A golf trip idea');
   });
 });
+
+describe('ov42: the app works out the same stage (share picture, summary)', async () => {
+  const { previewFromPlan, pictureWords } = await import('./ideapreview.js');
+  const now = new Date('2026-10-25T23:00:00Z');
+  const plan = { id: 'p1', name: 'Hunter trip', status: 'planning', idea_when: 'March', idea_where: 'Hunter Valley', idea_fixed: {}, idea_answer_by: '2026-10-29T07:00:00Z' };
+  it('collecting → the picture says have your say by', () => {
+    const p = previewFromPlan({ plan, by: 'Chris', wishes: [{ spend_band: 'any' }, { spend_band: 'lt500' }] });
+    expect(p.stage).toBe('collecting');
+    expect(p.answered).toBe(2);
+    expect(pictureWords(p, { now })).toEqual({ eyebrow: '💡 TRIP IDEA', title: 'Hunter trip', line: 'March · Hunter Valley', cta: 'Have your say by Thu 6pm', sub: 'from Chris' });
+  });
+  it('a When? / Where? vote open → vote by its closing day', () => {
+    const polls = [{ id: 'q1', plan_id: 'p1', kind: 'dates', status: 'open', closes_on: '2026-10-29' }, { id: 'q2', plan_id: 'p1', kind: 'other', status: 'open' }];
+    const p = previewFromPlan({ plan: { ...plan, idea_sent_at: '2026-10-26T00:00:00Z' }, polls, votes: [{ poll_id: 'q1', player_id: 'a' }, { poll_id: 'q2', player_id: 'b' }] });
+    expect([p.stage, p.vote_open.join(), p.voted, p.vote_closes]).toEqual(['vote', 'dates', 1, '2026-10-29']);
+    expect(pictureWords(p, { now }).cta).toBe('Vote by Thu');
+  });
+  it('locked in → It’s on', () => {
+    const p = previewFromPlan({ plan: { ...plan, status: 'confirmed', location_name: 'Cessnock', start_date: '2027-03-20', end_date: '2027-03-22' }, rsvps: [{ player_id: 'a', status: 'in' }, { player_id: 'b', status: 'out' }] });
+    expect([p.stage, p.in_count]).toEqual(['decided', 1]);
+    expect(pictureWords(p, { now })).toMatchObject({ eyebrow: '✅ IT’S ON', title: 'Cessnock, 20–22 Mar', cta: 'Say if you’re in' });
+  });
+});

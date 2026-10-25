@@ -4,6 +4,18 @@ Live app: https://joshm1357.github.io/lgc-golf/
 Safe copy of the first working version (Stage 1 only): branch `ambrose-ready`.
 Database: Supabase project `lgc-golf` (Sydney), migrations in `supabase/migrations/`.
 
+## ov42 — link preview says the ask + deadline (26 Oct, branch `ov42-preview-ask`, off v10.7.1-preview; NOT live)
+- **110_idea_ask.sql** (additive): plans.idea_answer_by, plans.idea_nudged_at; idea_set_answer_by(plan, at);
+  private.idea_answer_tick + pg_cron 'lgc-idea-answer-nudge' (evening-before buzz); idea_preview(token) replaced with
+  the same signature — adds stage, answer_by, answered, people, vote_open/vote_closes/voted, decided_*, in_count.
+- **src/lib/ideapreview.js**: ideaAsk / previewWords by stage (titles ≤ ~65, lines ≤ 150, Sydney time "Thu 6pm"),
+  previewFromPlan + pictureWords (the share picture), defaultAnswerBy; previewResponse waits ≤ 1.5 s (withTimeout)
+  and caches the fallback 60 s. **functions/i/[token].js**: one AbortController covers both lookups; never fails.
+- **TripIdea.jsx**: 📣 Share it shows "⏰ Have your say by …" with Change; the picture and message carry it; the
+  idea's summary shows it. **ideas.js**: shareMessage takes an optional deadline line.
+- Tested: vitest all pass (new ideapreview tests incl. the slow-database path); supabase/tests/110_idea_ask.sql on
+  local Postgres 16 (001–110); trip-ideas e2e passes with the new deadline checks.
+
 ## Done
 - **Database:** full data model for all stages, Row Level Security, PIN-checked join/admin, handicap guard
   (only admin or Tribunal can change a handicap; every change logged), birdie auto-posts, Tribunal functions,

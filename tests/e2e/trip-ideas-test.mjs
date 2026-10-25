@@ -70,6 +70,7 @@ function rpc(name, body) {
     if (body.p_card_url) p.card_url = body.p_card_url;
     return p.share_token;
   }
+  if (name === 'idea_set_answer_by') { planOf(body.p_plan).idea_answer_by = body.p_at; return body.p_at; }
   if (name === 'idea_set_fixed') { planOf(body.p_plan).idea_fixed = body.p_fixed; return body.p_fixed; }
   if (name === 'idea_review') {
     const i = db.plan_idea_items.find((x) => x.id === body.p_item);
@@ -276,6 +277,22 @@ check(notifyCalls.some((n) => n.type === 'idea_shared' && n.plan_id === idea.id)
 const msg = await page.getByTestId('share-message').innerText();
 check(/March away/.test(msg) && /4 quick taps/.test(msg) && /#\/(join\/[A-Z0-9]+\?to=%2Fidea%2F|idea\/)/.test(msg), `the chat message has the link (${msg})`);
 check(await page.getByTestId('share-card').isVisible(), 'the share picture shows');
+// ov42: "Have your say by" — 4 days on at 6pm Sydney by default, saved with the share, in the message; changeable.
+const byCall = rpcCalls.find((c) => c.name === 'idea_set_answer_by');
+const byHour = byCall && new Intl.DateTimeFormat('en-GB', { timeZone: 'Australia/Sydney', hour: 'numeric', hourCycle: 'h23' }).format(new Date(byCall.body.p_at));
+const byDays = byCall && Math.round((new Date(byCall.body.p_at) - Date.now()) / 86400e3);
+check(byCall && byHour === '18' && byDays >= 3 && byDays <= 5, `the deadline defaults to 4 days on, 6pm Sydney (${byCall?.body.p_at})`);
+const byText = await page.getByTestId('share-answer-by').innerText();
+check(/^⏰ Have your say by (Mon|Tue|Wed|Thu|Fri|Sat|Sun) 6pm$/.test(byText), `the share step shows it (${byText})`);
+check(/Have your say by \w{3} 6pm\./.test(msg), 'and the chat message carries it');
+await page.getByTestId('answer-by-change').click();
+const later = new Date(Date.now() + 6 * 86400e3); later.setHours(19, 30, 0, 0);
+const pad = (n) => String(n).padStart(2, '0');
+await page.getByTestId('answer-by-input').fill(`${later.getFullYear()}-${pad(later.getMonth() + 1)}-${pad(later.getDate())}T19:30`);
+await page.getByTestId('answer-by-save').click();
+await page.getByTestId('share-out').waitFor({ timeout: 15000 }); await wait(500);
+check(idea.idea_answer_by && Math.abs(new Date(idea.idea_answer_by) - later) < 60e3, `the organiser moves it (${idea.idea_answer_by})`);
+check(rpcCalls.filter((c) => c.name === 'share_idea').length >= 2, 'and the picture is made again');
 await shot('02-share-it');
 await page.keyboard.press('Escape'); await wait(300);
 
@@ -284,6 +301,8 @@ await as(AL, `#/idea/${idea.id}`);
 await page.getByTestId('wish-taps').waitFor({ timeout: 10000 });
 check((await page.getByTestId('trip-idea').getAttribute('data-view')) === 'summary', 'Al lands on the quick summary, not the organising screen');
 check(await page.getByTestId('organiser-panel').count() === 0, 'no organising tools for Al');
+const alBy = await page.getByTestId('answer-by').innerText().catch(() => '');
+check(/^⏰ Have your say by .*7:30pm$/.test(alBy), `the quick summary says when to answer by (${alBy})`);
 await shot('03-summary-al');
 const josWeekend0 = db.plan_idea_items.find((i) => i.plan_id === idea.id && i.kind === 'date' && i.added_by === JOSH);
 const offered = await page.getByTestId('cant-calendar').getByRole('button').count();

@@ -124,6 +124,37 @@ export function ideaAsk(p, { now = new Date() } = {}) {
   return { stage, ...t, deadline, line: cut(line, LINE_MAX) };
 }
 
+/** The same answer idea_preview gives, worked out in the app from what it has loaded (for the share picture and the
+ *  idea's quick summary). polls/votes/rsvps as loaded by usePlanData; wishes: the 4-tap answers (any shape). */
+export function previewFromPlan({ plan = {}, by = '', polls = [], votes = [], rsvps = [], wishes = [], people = null } = {}) {
+  const vp = (polls || []).filter((q) => q.plan_id === plan.id || q.plan_id == null).filter((q) => q.kind === 'dates' || q.kind === 'location');
+  const open = vp.filter((q) => q.status === 'open');
+  const won = vp.filter((q) => q.status === 'closed' && q.winner_option_id);
+  const stage = plan.status === 'confirmed' ? 'decided' : open.length ? 'vote' : plan.idea_sent_at && won.length ? 'decided' : 'collecting';
+  const openIds = new Set(open.map((q) => q.id));
+  const closes = open.map((q) => q.closes_on).filter(Boolean).sort()[0] || null;
+  const answered = new Set([...(wishes || []).map((w, i) => w.player_id || `w${i}`), ...(rsvps || []).map((r) => r.player_id)]).size;
+  return {
+    name: plan.name, when: plan.idea_when, where: plan.idea_where, fixed: plan.idea_fixed || {}, by, stage,
+    answer_by: plan.idea_answer_by || null, answered, people,
+    vote_open: [...new Set(open.map((q) => q.kind))].sort(), vote_closes: closes,
+    voted: new Set((votes || []).filter((v) => openIds.has(v.poll_id)).map((v) => v.player_id)).size,
+    decided_where: plan.location_name || plan.idea_fixed?.area || plan.idea_where || null,
+    decided_start: plan.start_date || null, decided_end: plan.end_date || null,
+    in_count: (rsvps || []).filter((r) => r.status === 'in').length,
+  };
+}
+
+/** What goes on the 1200 × 630 share picture (shareCard.js 'idea'): the headline and the deadline. */
+export function pictureWords(p, { now = new Date() } = {}) {
+  const a = ideaAsk(p, { now });
+  const fx = p?.fixed || {};
+  const shape = [fx.weekend?.start ? shortDates(fx.weekend.start, fx.weekend.end) : p?.when, fx.area || p?.where].filter(Boolean).join(' · ');
+  if (a.stage === 'vote') return { eyebrow: '🗳️ THE VOTE IS OPEN', title: cut(p.name, 40), line: cut(a.line.replace(/ · .*$/, ''), 60), cta: a.deadline ? `Vote by ${a.deadline}` : 'Vote now — one tap each', sub: p?.by ? `from ${cut(p.by, 30)}` : '' };
+  if (a.stage === 'decided') return { eyebrow: '✅ IT’S ON', title: cut(a.headline.replace(/^It’s on: /, ''), 40), line: cut(p.name, 60), cta: 'Say if you’re in', sub: p?.by ? `from ${cut(p.by, 30)}` : '' };
+  return { eyebrow: '💡 TRIP IDEA', title: cut(p?.name || 'Trip idea', 40), line: cut(shape, 60) || 'When and where: up to you lot', cta: a.deadline ? `Have your say by ${a.deadline}` : 'Have your say — 4 quick taps', sub: p?.by ? `from ${cut(p.by, 30)}` : '' };
+}
+
 /** The words for the preview. p: idea_preview's answer (or null). */
 export function previewWords(p, { now = new Date() } = {}) {
   if (!p || !p.name) {

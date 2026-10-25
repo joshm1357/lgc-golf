@@ -472,9 +472,9 @@ export function feedLine(plan = {}, by = 'Someone') {
 }
 
 /** The message for the group chat, with the link. */
-export function shareMessage(plan = {}, by = 'Someone', link = '') {
+export function shareMessage(plan = {}, by = 'Someone', link = '', deadline = '') {
   const shape = ideaShape(plan);
-  return `💡 ${plan.name}${shape ? ` (${shape})` : ''} — ${by}'s trip idea. Help plan it: 4 quick taps — your dates, budget, how you'd get there and what golf you're after. ${link}`.trim();
+  return `💡 ${plan.name}${shape ? ` (${shape})` : ''} — ${by}'s trip idea. Help plan it: 4 quick taps — your dates, budget, how you'd get there and what golf you're after.${deadline ? ` ${deadline}` : ''} ${link}`.trim();
 }
 
 /** What goes on the share card (shareCard.js 'idea'). */

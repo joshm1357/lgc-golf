@@ -86,6 +86,8 @@ const filterRows = (rows, params) => rows.filter((r) => {
 function rpc(name) {
   if (name === 'my_status') return { is_member: true, is_admin: !asPlayer, player_id: asPlayer ? pid(1) : K, group_name: 'Test Golfers', group_id: GROUP, role: asPlayer ? 'player' : 'organiser', legacy: false, groups: [{ id: GROUP, name: 'Test Golfers', slug: 'test', role: asPlayer ? 'player' : 'organiser' }] };
   if (name === 'trip_finder_courses') return library;
+  // 108: a player gets the group's answers without names (the organiser reads plan_wishes directly).
+  if (name === 'idea_wish_answers') return (db.plan_wishes || []).map(({ player_id: _p, plan_id: _q, ...w }) => w);
   return null;
 }
 async function fake(route) {

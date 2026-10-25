@@ -111,7 +111,13 @@ export default function DayPlan() {
 
   const nameOf = (id) => (data.playersById[id] ? playerName(data.playersById[id]) : 'Someone');
   const wishes = cleanWishes(wishRows);
-  const people = peopleFor({ rsvps: pd.rsvps, wishes, players: data.players, nameOf });
+  const everyone = peopleFor({ rsvps: pd.rsvps, wishes, players: data.players, nameOf });
+  // A player only has the group's answers without names (idea_wish_answers): count those answers as people, plus
+  // however many others are going, so "suits 7 of 8" matches what the organiser sees (names stay with the organiser).
+  const people = org ? everyone : [
+    ...wishes.map((w) => ({ id: w.player_id, name: 'Someone' })),
+    ...everyone.slice(0, Math.max(0, everyone.length - wishes.length)).map((_, i) => ({ id: `rest:${i}`, name: 'Someone' })),
+  ];
   const need = TB.teeTimesNeeded({ rsvps: pd.rsvps, override: st.headcount, overrideBy: st.headcountBy, players: data.players || [] });
   const sp = startPoints(st, null);
   const pickIndex = Math.max(0, Math.min(days.length - 1, Number(params.get('day')) || 0));

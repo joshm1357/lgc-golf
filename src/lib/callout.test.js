@@ -275,3 +275,21 @@ describe('a name when none is typed', () => {
     expect(defaultName({ options: [makeOption('2026-10-31', null, '07:30')] })).toBe('Sat hit');
   });
 });
+
+describe('v10.7: a part of today that has already gone rolls to next week', () => {
+  it('"sat or sun morning" on a Sunday evening → this Saturday and NEXT Sunday', async () => {
+    const { parseWhen } = await import('./callout.js');
+    const sundayEvening = new Date('2026-10-25T09:00:00Z'); // 8pm Sydney, Sun 25 Oct
+    const r = parseWhen('sat or sun morning', '2026-10-25', sundayEvening);
+    expect(r.options.map((o) => o.date)).toEqual(['2026-10-31', '2026-11-01']);
+  });
+  it('"sun arvo" on a Sunday morning still means today', async () => {
+    const { parseWhen } = await import('./callout.js');
+    const sundayMorning = new Date('2026-10-24T22:00:00Z'); // 9am Sydney, Sun 25 Oct
+    expect(parseWhen('sun arvo', '2026-10-25', sundayMorning).options[0].date).toBe('2026-10-25');
+  });
+  it('without "now" it behaves as before', async () => {
+    const { parseWhen } = await import('./callout.js');
+    expect(parseWhen('sun morning', '2026-10-25').options[0].date).toBe('2026-10-25');
+  });
+});

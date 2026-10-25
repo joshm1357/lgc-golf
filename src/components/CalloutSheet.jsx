@@ -79,7 +79,7 @@ export function CalloutSheet({ prefill = {}, onClose, onSaved }) {
   const [finding, setFinding] = useState(false);
 
   // ---- when
-  const typedFirst = prefill.text ? parseWhen(prefill.text, today) : null;
+  const typedFirst = prefill.text ? parseWhen(prefill.text, today, new Date()) : null;
   const [mode, setMode] = useState(prefill.date ? 'fixed' : 'options');
   const [fixedDate, setFixedDate] = useState(prefill.date && prefill.date >= today ? prefill.date : '');
   const [fixedTime, setFixedTime] = useState('');
@@ -90,7 +90,7 @@ export function CalloutSheet({ prefill = {}, onClose, onSaved }) {
   const [moreDays, setMoreDays] = useState(false);
   const [typed, setTyped] = useState(() => (typedFirst?.understood ? prefill.text : ''));
   const [removed, setRemoved] = useState(() => new Set());
-  const parsed = useMemo(() => (typed.trim() ? parseWhen(typed, today) : null), [typed, today]);
+  const parsed = useMemo(() => (typed.trim() ? parseWhen(typed, today, new Date()) : null), [typed, today]);
   const built = useMemo(() => {
     if (mode === 'fixed') {
       if (!fixedDate) return { options: [], cut: 0 };

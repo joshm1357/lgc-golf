@@ -209,7 +209,7 @@ const mondayOf = (ymd) => addDays(ymd, -((dowOf(ymd) + 6) % 7));
  * call-outs are a later extension, see REPEAT_LATER).
  * → { options, cut, repeat, understood, hint }
  */
-export function parseWhen(text, today) {
+export function parseWhen(text, today, now = null) {
   const toks = tokens(text);
   const items = []; // { kind: 'dow'|'date', dow?, date?, mod, part, time, count }
   let mod = null; let weeks = null; let month = null; let lastPart = null; let lastTime = null; let pendingPart = null; let pendingTime = null;
@@ -290,8 +290,12 @@ export function parseWhen(text, today) {
     if (weeks) { const end = addDays(today, 7 * weeks); for (let d = ahead(tomorrow); d <= end; d = addDays(d, 7)) add(d); continue; }
     if (x.mod === 'every') { let d = ahead(tomorrow); for (let n = 0; n < 4; n++, d = addDays(d, 7)) add(d); continue; }
     if (x.mod === 'next') { add(ahead(addDays(mondayOf(today), 7))); continue; }
-    if (x.mod === 'this') { const d = ahead(mondayOf(today)); add(d >= today ? d : ahead(today)); continue; }
-    add(ahead(today));
+    // v10.7: a bare day that's today, when that part of today has already gone ("sun morning" on a Sunday evening),
+    // means next week's ("now" is only known when the sheet passes it in).
+    const gone = (d) => !!now && d === today && sydneyToUtc(d, startOf(makeOption(d, x.part, x.time))).getTime() <= now.getTime();
+    const soonest = (d) => (gone(d) ? addDays(d, 7) : d);
+    if (x.mod === 'this') { const d = ahead(mondayOf(today)); add(soonest(d >= today ? d : ahead(today))); continue; }
+    add(soonest(ahead(today)));
   }
   const { options, cut } = tidyOptions(dates, today);
   const understood = options.length > 0;

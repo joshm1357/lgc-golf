@@ -205,6 +205,21 @@ function PlanChat({ planId0, onGo, onSwitch, picker, canNew }) {
     try { r = await ask(before, mine, await readPage().catch(() => null)); } catch { setBusy(false); setErr('The helper didn’t answer — try again.'); return; }
     await land(r, before, mine);
   };
+  // ov39: "✨ Pull it together" on a trip idea opens this trip's chat with a message ready to go (lib/chatwanted.js).
+  useEffect(() => {
+    if (!chatWanted.say || chatWanted.sayFor !== (planId0 || null)) return;
+    const t = chatWanted.say; chatWanted.say = null; chatWanted.sayFor = undefined;
+    send(t);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const f = () => {
+      if (!chatWanted.say || chatWanted.sayFor !== (planId0 || null)) return;
+      const t = chatWanted.say; chatWanted.say = null; chatWanted.sayFor = undefined;
+      send(t);
+    };
+    window.addEventListener('planchat:say', f);
+    return () => window.removeEventListener('planchat:say', f);
+  });
   const create = async () => {
     setBusy(true);
     const r = await askHelper({ mode: 'plan_apply', plan: draftToPlan(draft) });

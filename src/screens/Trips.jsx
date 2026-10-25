@@ -28,6 +28,8 @@ import { MyDraftTrips } from '../components/DraftTrips.jsx';
 // ov34: "⛳ Put a round out" — a round call-out on the same plans engine (components/CalloutCard.jsx, CalloutSheet.jsx).
 import { openCallout } from '../lib/calloutopen.js';
 import { CalloutStrip } from '../components/CalloutCard.jsx';
+// ov39: trip ideas you can share (screens/TripIdea.jsx).
+import IdeaSheet, { FutureIdeas } from '../components/IdeaSheet.jsx';
 
 const TABLES = ['plans', 'plan_rsvps', 'plan_polls', 'plan_options'];
 
@@ -53,7 +55,8 @@ export default function Trips() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const notifyOn = useFeature('notifications');
   const aiOn = useFeature('ai_helper');
-  const [firstCard, setFirstCard] = useState(null); // 'starter' | 'welcome' | null (F1)
+  const [firstCard, setFirstCard] = useState(null);
+  const [idea, setIdea] = useState(false); // ov39: "💡 Trip idea" (components/IdeaSheet.jsx) // 'starter' | 'welcome' | null (F1)
   const votesOn = useFeature('planner_tasks');
   const trophiesOn = useFeature('trophies');
   const load = useCallback(async () => {
@@ -80,7 +83,9 @@ export default function Trips() {
 
   const today = todayISO();
   // Trips added in Admin → Trips (no plan behind them) still belong in the list.
-  const sorted = useMemo(() => (rows ? sortTrips([...rows.plans, ...tripsWithoutPlan(data.trips, rows.plans)], data.trips, today) : null), [rows, data.trips, today]);
+  // ov39: parked ideas (💭 Future trip ideas) have their own strip, not a place in the stages.
+  const sorted = useMemo(() => (rows ? sortTrips([...rows.plans.filter((p) => !p.idea_pool), ...tripsWithoutPlan(data.trips, rows.plans)], data.trips, today) : null), [rows, data.trips, today]);
+  const parked = useMemo(() => (rows?.plans || []).filter((p) => p.idea_pool && p.status === 'planning'), [rows]);
   const photos = usePastPhotos(sorted?.past);
   // ov21: which trip is on right now (a round live or today) — the same pick as the sidebar's sub-items.
   const menu = useMemo(() => tripsMenu({ trips: data.trips, rounds: data.rounds, plans: rows?.plans || [], today }), [data.trips, data.rounds, rows, today]);
@@ -105,7 +110,8 @@ export default function Trips() {
   const starterOn = starting || firstCard === 'starter';
   const suggestButton = (
     <>
-      <button {...gate('propose_trip')} type="button" className="btn gold block" style={{ minHeight: 56 }} onClick={() => setSuggesting(true)}>💡 Suggest a trip or round</button>
+      <button {...gate('propose_trip')} type="button" className="btn gold block" style={{ minHeight: 56 }} onClick={() => setIdea(true)} data-testid="propose-idea">✨ Put out a trip idea <span className="small" style={{ fontWeight: 500 }}>— the group adds to it</span></button>
+      <button {...gate('propose_trip')} type="button" className="btn ghost block" onClick={() => setSuggesting(true)}>💡 Suggest a trip or round</button>
       <span className="small muted" style={{ textAlign: 'center' }}>{votesOn ? 'Everyone votes on when and where; ' : 'Everyone says if they’re in; '}{status.is_admin ? 'you lock it in' : 'an organiser locks it in'}.</span>
     </>
   );
@@ -163,6 +169,7 @@ export default function Trips() {
             {suggestButton}
           </div>
         )}
+        {parked.length > 0 && <FutureIdeas plans={parked} />}
         {!starting && <TripsAi />}
 
         {offList.length > 0 && (
@@ -176,6 +183,7 @@ export default function Trips() {
           </details>
         )}
       </div>
+      {idea && <IdeaSheet onClose={() => setIdea(false)} onSaved={(p) => nav(`/idea/${p.id}`)} />}
       {suggesting && <SuggestSheet initial={typeof suggesting === 'object' ? suggesting : null} onClose={() => setSuggesting(false)} onSaved={(p) => nav(`/plan/${p.id}`)} />}
     </div>
   );
@@ -217,10 +225,10 @@ function StageCard({ x, first, rsvps, me, polls = [], options = [], today, photo
   const ins = rsvps.filter((r) => r.status === 'in');
   const mine = rsvps.find((r) => r.player_id === me);
   const tag = stageTag({ stage, plan, polls, rsvps, today, dayWords: stage === 'on' && trip ? tripDayWords(trip, data.rounds) : null });
-  const to = stage === 'on' && trip ? tripNowPath(trip) : plan.tripOnly ? `/trip/${plan.trip_id}` : `/plan/${plan.id}`;
+  const to = stage === 'on' && trip ? tripNowPath(trip) : plan.tripOnly ? `/trip/${plan.trip_id}` : plan.idea && !plan.idea_sent_at ? `/idea/${plan.id}` : `/plan/${plan.id}`;
   const early = stage === 'idea' || stage === 'deciding';
-  const when = plan.start_date ? tripWhen(plan.tripOnly ? { ...plan, status: plan.trip_status } : plan) : (early ? 'When: to be voted on' : 'Dates to come');
-  const where = plan.location_name || (early ? 'Where: to be voted on' : null);
+  const when = plan.start_date ? tripWhen(plan.tripOnly ? { ...plan, status: plan.trip_status } : plan) : plan.idea && (plan.idea_fixed?.when || plan.idea_when) ? (plan.idea_fixed?.when || plan.idea_when) : (early ? 'When: to be voted on' : 'Dates to come');
+  const where = plan.location_name || (plan.idea && (plan.idea_fixed?.area || plan.idea_where)) || (early ? 'Where: to be voted on' : null);
   const decide = early ? stillToDecide(plan, polls, options, today) : [];
   const who = stage === 'idea' ? data.playersById[plan.organiser_id || plan.created_by] : stage === 'deciding' ? data.playersById[plan.organiser_id] : null;
   // Previous: the main trophy's winner first, then up to two more (the rest are in the Trophy Room).

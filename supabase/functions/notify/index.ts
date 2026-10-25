@@ -73,7 +73,7 @@ const NOT_IN_DIGEST = new Set(['swing']);
 const KIND_FEATURE: Record<string, string> = {
   poll_open: 'planner_tasks', poll_decided: 'planner_tasks', poll_closing: 'planner_tasks', nudge_votes: 'planner_tasks',
   job_assigned: 'planner_tasks', job_due: 'planner_tasks',
-  plan_new: 'planner', plan_proposed: 'planner', idea_shared: 'planner', coorganiser_added: 'planner', trip_locked: 'planner', rsvp_locked: 'planner', rsvp_deadline: 'planner',
+  plan_new: 'planner', plan_proposed: 'planner', idea_shared: 'planner', idea_parked: 'planner', organiser_handover: 'planner', coorganiser_added: 'planner', trip_locked: 'planner', rsvp_locked: 'planner', rsvp_deadline: 'planner',
   nudge_rsvp: 'planner', trip_week: 'planner', trip_tomorrow: 'planner', comment: 'planner',
   nudge_kitty: 'planner_costs', payment_recorded: 'planner_costs', groups_set: 'planner_rooms',
   deposit_ask: 'planner_costs', nudge_deposit: 'planner_costs',

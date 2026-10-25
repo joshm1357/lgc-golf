@@ -28,11 +28,18 @@ export const MAX_DRIVE = [
   { value: 180, label: '3 h' },
   { value: 240, label: '4+ h' },
 ];
+// How much golf (Josh 19:34) — a person's wish and the organiser's setting.
 export const GOLF = [
-  { value: 'one', label: 'One round a day' },
-  { value: '36_ok', label: '36 is fine' },
-  { value: 'mix', label: 'A mix' },
+  { value: 'max', label: 'As much as possible' },
+  { value: 'daily', label: 'A round a day' },
+  { value: 'spare_day', label: 'Leave a spare day' },
+  { value: 'any', label: 'Not fussed' },
 ];
+/** Trips are 1–6 days (nights 0–5). */
+export const DAYS = [1, 2, 3, 4, 5, 6];
+export const daysWord = (nights) => { const d = Number(nights) + 1; return d === 1 ? 'A day trip' : `${d} days`; };
+/** The parts of "the definition" the organiser can set, and can mark "Set" (vs "Open to ideas"). */
+export const DEF_PARTS = ['weekend', 'area', 'nights', 'travel', 'golf'];
 export const DAY_PREF = [
   { value: 'early', label: 'Early' },
   { value: 'midday', label: 'Midday' },
@@ -81,8 +88,43 @@ export function tripDayKeys(fixed = {}) {
     }
     if (out.length) return out;
   }
-  const n = Number(fixed?.nights) || 2;
-  return n >= 3 ? ['fri', 'sat', 'sun', 'mon'] : n === 1 ? ['sat', 'sun'] : ['fri', 'sat', 'sun'];
+  const n = fixed?.nights == null ? 2 : Number(fixed.nights);
+  return n <= 0 ? ['sat'] : n === 1 ? ['sat', 'sun'] : n === 2 ? ['fri', 'sat', 'sun'] : n === 3 ? ['fri', 'sat', 'sun', 'mon'] : ['thu', 'fri', 'sat', 'sun', 'mon'];
+}
+
+/** Is this part of the definition "Set" (people say in / out; other suggestions queue) rather than open to ideas? */
+export const isSet = (fixed, key) => Array.isArray(fixed?.set) && fixed.set.includes(key);
+
+/** The definition as lines to show: [{ key, label, set }] — only the parts the organiser has said anything about. */
+export function defLines(fixed = {}) {
+  const f = fixed || {};
+  const out = [];
+  const when = f.weekend?.start ? weekendLabel({ start: f.weekend.start, end: f.weekend.end || f.weekend.start }) : f.when;
+  if (when) out.push({ key: 'weekend', label: `📅 ${when}`, set: isSet(f, 'weekend') });
+  const where = [f.area, f.within_min ? `within ${hours(f.within_min)}${f.from ? ` of ${f.from}` : ''}` : (f.from ? `from ${f.from}` : '')].filter(Boolean).join(', ');
+  if (where) out.push({ key: 'area', label: `📍 ${where}`, set: isSet(f, 'area') && !!f.area });
+  if (f.nights != null) out.push({ key: 'nights', label: `🛏️ ${daysWord(f.nights)}`, set: isSet(f, 'nights') });
+  if (f.travel) out.push({ key: 'travel', label: f.travel === 'fly' ? '✈️ Flying' : f.travel === 'drive' ? '🚗 Driving' : '🚗✈️ Drive or fly', set: isSet(f, 'travel') });
+  if (f.golf) out.push({ key: 'golf', label: `⛳ ${label(GOLF, f.golf)}`, set: isSet(f, 'golf') });
+  return out;
+}
+
+/** What to send to idea_set_fixed from the organiser's form. */
+export function defPayload(form = {}) {
+  const out = {};
+  if (form.weekendStart) {
+    const n = form.nights == null || form.nights === '' ? 2 : Number(form.nights);
+    out.weekend = { start: form.weekendStart, end: addDays(form.weekendStart, Math.max(0, n)) };
+  }
+  if (String(form.when || '').trim()) out.when = String(form.when).trim().slice(0, 60);
+  if (String(form.area || '').trim()) out.area = String(form.area).trim().slice(0, 80);
+  if (String(form.from || '').trim()) out.from = String(form.from).trim().slice(0, 60);
+  if (Number(form.within_min) >= 30) out.within_min = Math.min(720, Math.round(Number(form.within_min)));
+  if (['drive', 'fly', 'either'].includes(form.travel)) out.travel = form.travel;
+  if (form.nights !== '' && form.nights != null && Number(form.nights) >= 0 && Number(form.nights) <= 5) out.nights = Number(form.nights);
+  if (GOLF.some((g) => g.value === form.golf)) out.golf = form.golf;
+  out.set = DEF_PARTS.filter((k) => form.set?.[k] && (k === 'weekend' ? (out.weekend || out.when) : out[k] != null));
+  return out;
 }
 
 /** Toggle one Friday in the "can't do" list. */
@@ -125,6 +167,8 @@ const median = (nums) => {
   return s.length ? s[Math.floor((s.length - 1) / 2)] : null;
 };
 const label = (list, v) => list.find((o) => o.value === v)?.label || '';
+/** "2½ h" with no cap (flights). */
+export const dur = (min) => `${Math.round((min / 60) * 2) / 2} h`.replace('.5 h', '½ h').replace(/^0½/, '½');
 export const hours = (min) => (min >= 240 ? '4+ h' : `${Math.round((min / 60) * 2) / 2} h`.replace('.5 h', '½ h'));
 
 /**
@@ -148,7 +192,7 @@ export function summariseWishes(wishes = [], { rsvps = [], fixed = {} } = {}) {
   const homeBy = rows.map((w) => w.home_by).filter(Boolean).map((t) => String(t).slice(0, 5)).sort()[0] || null;
   const wishList = rows.map((w) => w.wish).filter(Boolean);
   const parts = [];
-  const weekendFixed = !!fixed?.weekend?.start;
+  const weekendFixed = isSet(fixed, 'weekend') && !!fixed?.weekend?.start;
   if (weekendFixed) {
     const ins = (rsvps || []).filter((r) => r.status === 'in').length;
     const cants = (rsvps || []).filter((r) => r.status === 'out').length;
@@ -190,13 +234,14 @@ export function spendFit(costEach, wishes = []) {
   return { fits: rows.filter((w) => costEach <= max(w)).length, of: rows.length };
 }
 
-/** "fits 9 of 11 · within 3 h · about $750 each" (only the parts known). */
+/** "suits 9 of 11 · within 3 h · about $750 each" (only the parts known). Counts only — names are the organiser's. */
 export function fitLine({ fit = null, driveMin = null, fly = null, costEach = null } = {}) {
   const parts = [];
-  if (fit && fit.of) parts.push(`fits ${fit.can ?? fit.fits} of ${fit.of}`);
-  if (fly) parts.push(fly.flightMin ? `${hours(fly.flightMin)} flight` : 'a flight');
+  if (fit && fit.of) parts.push(`suits ${fit.can ?? fit.fits} of ${fit.of}`);
+  if (fly) parts.push(fly.flightMin ? `${dur(fly.flightMin)} flight` : 'a flight');
   else if (driveMin != null) parts.push(`within ${hours(Math.ceil(driveMin / 30) * 30)}`);
-  if (costEach > 0) parts.push(`about $${Math.round(costEach / 10) * 10} each${fly ? ' (a guess)' : ''}`);
+  // Josh 19:34: no fare guesses — a cost line only for driving ideas (stay and golf).
+  if (costEach > 0 && !fly) parts.push(`about $${Math.round(costEach / 10) * 10} each`);
   return parts.join(' · ');
 }
 
@@ -228,6 +273,28 @@ export function itemFit(item, { wishes = [], stayAreas = [], base = null } = {})
     return fly || driveMin != null ? fitLine({ fit: tf, driveMin, fly, costEach: item.detail?.cost_each || null }) : '';
   }
   return '';
+}
+
+/** For the organiser only (Josh 19:34): who a weekend doesn't suit, by name. rows: plan_wishes with player_id. */
+export function whoCant(item, rows = [], nameOf = (id) => id) {
+  const fri = fridayOf(item?.start_date);
+  return (rows || []).filter((w) => w.player_id && (w.cant_dates || []).includes(fri)).map((w) => nameOf(w.player_id)).filter(Boolean);
+}
+
+/** A flight's line: "about 3 h · first flights about 6am, last back about 9pm". */
+export function flightLine(fly = {}) {
+  if (!fly) return '';
+  const t = fly.flight_min ? `about ${dur(fly.flight_min)} flight` : '';
+  const times = [fly.first_out ? `first flights about ${fly.first_out}` : '', fly.last_back ? `last back about ${fly.last_back}` : ''].filter(Boolean).join(', ');
+  return [fly.from && fly.to ? `${fly.from}–${fly.to}` : '', t, times].filter(Boolean).join(' · ');
+}
+
+/** A pre-filled flight search (Google Flights) — the app never books or prices flights. */
+export function flightSearchLink({ from = 'SYD', to = '', depart = null, back = null } = {}) {
+  const dest = String(to || '').trim();
+  if (!dest) return null;
+  const q = [`Flights from ${from || 'SYD'} to ${dest}`, depart ? `on ${depart}` : '', back ? `returning ${back}` : ''].filter(Boolean).join(' ');
+  return `https://www.google.com/travel/flights?q=${encodeURIComponent(q)}`;
 }
 
 // ------------------------------------------------------------------ the lists
@@ -267,9 +334,9 @@ export function lists(items = [], reactions = [], me = null) {
 
 /** Would this go to the organiser's queue (outside the definition)? The database decides; this says so first. */
 export function outsideDefinition(item, fixed = {}) {
-  if (item.kind === 'date') return !!fixed?.weekend?.start;
+  if (item.kind === 'date') return isSet(fixed, 'weekend');
   const a = String(fixed?.area || '').trim().toLowerCase();
-  if (!a) return false;
+  if (!a || !isSet(fixed, 'area')) return false;
   if (item.kind === 'area') return String(item.label || '').trim().toLowerCase() !== a;
   if (item.kind === 'course') return !!item.area && String(item.area).trim().toLowerCase() !== a;
   return false;
@@ -295,7 +362,7 @@ export function itemsFromIdea(card = {}) {
   const out = [];
   const fly = card.fly && typeof card.fly === 'object' ? card.fly : null;
   const detail = {
-    ...(fly ? { fly: { from: fly.from || null, flight_min: Number(fly.flight_min) || null, fare: fly.fare || null } } : {}),
+    ...(fly ? { fly: { from: fly.from || null, to: fly.to || null, flight_min: Number(fly.flight_min) || null, first_out: fly.first_out || null, last_back: fly.last_back || null } } : {}),
     ...(card.cost_each ? { cost_each: Number(card.cost_each) } : {}),
     ...(card.why ? { why: String(card.why).slice(0, 160) } : {}),
   };
@@ -330,7 +397,7 @@ export function builderFromPicks(state = {}, items = [], { stayAreas = [], fits 
     if (!key) continue;
     areaCourses[key] = [...new Set([...(areaCourses[key] || []), c.library_course_id])];
   }
-  const nights = Number(fixed?.nights) || (dates[0] ? Math.max(1, Math.round((dateOf(dates[0].end_date) - dateOf(dates[0].start_date)) / 86400000)) : state.nights || 2);
+  const nights = fixed?.nights != null ? Number(fixed.nights) : (dates[0] ? Math.max(1, Math.round((dateOf(dates[0].end_date) - dateOf(dates[0].start_date)) / 86400000)) : state.nights || 2);
   const fitNotes = {};
   for (const d of dates) if (fits[d.id]) fitNotes[`weekend:${d.start_date}`] = fits[d.id];
   for (const a of picked.filter((i) => i.kind === 'area')) if (fits[a.id]) fitNotes[`area:${regionName(a.label)}`] = fits[a.id];
@@ -359,15 +426,17 @@ export function leftovers(items = []) {
 /** "March · somewhere we fly to · flying" — the idea's rough shape so far. */
 export function ideaShape(plan = {}) {
   const f = plan.idea_fixed || {};
-  const when = f.weekend?.start ? weekendLabel({ start: f.weekend.start, end: f.weekend.end }) : plan.idea_when;
-  const where = f.area || plan.idea_where;
-  const how = plan.idea_travel === 'fly' ? 'flying' : plan.idea_travel === 'drive' ? 'driving' : plan.idea_travel === 'either' ? 'drive or fly' : '';
+  const when = f.weekend?.start ? weekendLabel({ start: f.weekend.start, end: f.weekend.end }) : (f.when || plan.idea_when);
+  const where = f.area || (f.within_min ? `within ${hours(f.within_min)}${f.from ? ` of ${f.from}` : ''}` : '') || plan.idea_where;
+  const tr = f.travel || plan.idea_travel;
+  const how = tr === 'fly' ? 'flying' : tr === 'drive' ? 'driving' : tr === 'either' ? 'drive or fly' : '';
   return [when, where, how && !(where && /fly/i.test(where) && how === 'flying') ? how : ''].filter(Boolean).join(' · ');
 }
 
 /** The Feed post and buzz line: "💡 Chris has a trip idea: March, somewhere we fly to. Add your ideas". */
 export function feedLine(plan = {}, by = 'Someone') {
-  const shape = [plan.idea_fixed?.weekend?.start ? weekendLabel({ start: plan.idea_fixed.weekend.start, end: plan.idea_fixed.weekend.end }) : plan.idea_when, plan.idea_fixed?.area || plan.idea_where].filter(Boolean).join(', ');
+  const f = plan.idea_fixed || {};
+  const shape = [f.weekend?.start ? weekendLabel({ start: f.weekend.start, end: f.weekend.end }) : (f.when || plan.idea_when), f.area || plan.idea_where].filter(Boolean).join(', ');
   return `💡 ${by} has a trip idea: ${shape || plan.name}. Add your ideas — 4 quick taps.`;
 }
 
@@ -417,11 +486,12 @@ export function pullTogetherText({ plan = {}, lists: l = { date: [], area: [], c
   const f = plan.idea_fixed || {};
   return [
     `Pull together a draft for our trip idea "${plan.name}" from what the group's added.`,
-    f.weekend?.start ? `The weekend is fixed: ${weekendLabel({ start: f.weekend.start, end: f.weekend.end })}.` : (l.date.length ? `Weekends: ${top(l.date)}.` : plan.idea_when ? `Roughly: ${plan.idea_when}.` : ''),
-    f.area ? `The area is fixed: ${f.area}.` : (l.area.length ? `Areas: ${top(l.area)}.` : plan.idea_where ? `Where: ${plan.idea_where}.` : ''),
+    f.weekend?.start ? `The weekend${isSet(f, 'weekend') ? ' is set' : ' we’re thinking of'}: ${weekendLabel({ start: f.weekend.start, end: f.weekend.end })}.` : f.when ? `When: ${f.when}.` : (l.date.length ? `Weekends: ${top(l.date)}.` : plan.idea_when ? `Roughly: ${plan.idea_when}.` : ''),
+    f.area ? `The area${isSet(f, 'area') ? ' is set' : ' we’re thinking of'}: ${f.area}.` : f.within_min ? `Within ${hours(f.within_min)}${f.from ? ` of ${f.from}` : ''}.` : (l.area.length ? `Areas: ${top(l.area)}.` : plan.idea_where ? `Where: ${plan.idea_where}.` : ''),
     l.course.length ? `Courses: ${top(l.course, 8)}.` : '',
-    f.nights ? `${f.nights} nights.` : '',
-    plan.idea_travel === 'fly' ? 'We’d fly to one place.' : '',
+    f.nights != null ? `${daysWord(f.nights)}${f.nights ? ` (${f.nights} night${f.nights === 1 ? '' : 's'})` : ''}.` : '',
+    f.golf ? `Golf: ${label(GOLF, f.golf).toLowerCase()}.` : '',
+    (f.travel || plan.idea_travel) === 'fly' ? 'We’d fly to one place.' : '',
     summary?.answered ? `The group's answers: ${summary.line}.` : '',
     'Plan it now.',
   ].filter(Boolean).join(' ').slice(0, 590);

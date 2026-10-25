@@ -1,0 +1,57 @@
+RESULTS: 1. chris proposes an idea → ok true
+2. chris sets his own share token → refused: Share the idea with the 📣 Share it button
+3. chris adds an area before sharing → ok true
+4. tom adds before it is shared → refused: new row violates row-level security policy for table "plan_idea_items"
+5. tom shares chris's idea → refused: Only whoever proposed it, or an organiser, can share it
+6. chris shares with a picture not from the app → refused: That picture isn't one of the app's
+7. chris shares it → ok true
+8. sharing again keeps the link → ok true
+9. tom adds a weekend → ok 1
+10. tom adds a second weekend → ok 1
+11. tom adds a weekend that has gone → refused: That weekend has been and gone
+12. tom adds a 10-day "weekend" → refused: new row for relation "plan_idea_items" violates check constraint "plan_idea_items_check"
+13. tom adds a course → ok 1
+14. tom adds Port Douglas again → refused: duplicate key value violates unique constraint "plan_idea_items_once"
+15. tom adds as chris → refused: new row violates row-level security policy for table "plan_idea_items"
+16. tom adds one already ticked → refused: new row violates row-level security policy for table "plan_idea_items"
+17. tom ticks one himself → ok
+18. tom thumbs up the first weekend → ok true
+19. tom changes it to thumbs down → ok -1
+20. tom reacts as chris → refused: new row violates row-level security policy for table "plan_idea_reactions"
+21. tom answers the 4 taps → ok 2 late 16:00:00 Please no 6am tee times
+22. tom wants "brunch" on Saturday → refused: new row for relation "plan_wishes" violates check constraint "plan_wishes_day_prefs_check"
+23. tom fixes the weekend himself → refused: Only an organiser can fix parts of the idea
+24. tom says a Saturday he can't do → refused: new row for relation "plan_wishes" violates check constraint "plan_wishes_cant_dates_check"
+25. tom spends "heaps" → refused: new row for relation "plan_wishes" violates check constraint "plan_wishes_spend_band_check"
+26. tom answers for chris → refused: new row violates row-level security policy for table "plan_wishes"
+27. tom removes chris's area → ok
+28. tom tidies the idea → refused: Only an organiser can tidy it up
+29. tom spins off the leftovers → refused: Only an organiser can start another idea from these
+30. the guest adds a course idea → ok true
+31. organiser fixes a 9-night "weekend" → refused: That weekend isn't right
+32. organiser fixes the area and 2 nights → ok {"area": "Port Douglas", "nights": 2}
+33. organiser adds an area outside it (straight in) → ok in
+34. tom suggests another area (queued) → ok queued
+35. tom adds a course in the area (straight in) → ok in
+36. tom accepts his own suggestion → refused: Only an organiser can look at suggestions
+37. tom sets the definition column by hand → ok
+38. organiser declines it with a note → ok declined
+39. organiser looks at it twice → refused: That one's already been looked at
+40. the declined one can't be ticked → ok 0
+41. organiser sends nothing to the vote → refused: Tick at least one thing for the vote
+42. organiser ticks two and sends → ok 2
+43. the idea is marked sent → ok true
+44. organiser can't set sent by hand on another plan → refused: Share the idea with the 📣 Share it button
+45. organiser spins off the leftovers → ok true
+46. the new idea came from the old one → ok true true true
+47. leftovers keep who added and the ✨ → ok Fri 19 – Sun 21 Mar:Tom:false, Mirage Country Club:Gus:true, Noosa:Ao:false, Palmer Sea Reef:Tom:false, Port Douglas:Chris:false
+48. organiser removes tom's weekend → ok 1
+49. preview by token → ok March fly trip · March · Chris · Test Group A108 · true
+50. preview with a made-up token → ok nothing
+51. anon reads the plans table → ok 0
+52. anon reads the lists → refused: permission denied for table plan_idea_items
+53. other group sees the lists → ok 0
+54. other group sees the wishes → ok 0
+55. other group adds to the idea → refused: That belongs to another group
+56. other group shares it → refused: Trip not found
+57. other group tidies it → refused: Trip not found

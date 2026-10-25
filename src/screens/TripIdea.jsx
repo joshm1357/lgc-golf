@@ -116,7 +116,7 @@ function Hero({ plan, fixed, summary, isOrg, me }) {
   const shape = I.ideaShape(plan);
   return (
     <div className="card pad stack" style={{ gap: 8, borderColor: 'var(--gold)', borderWidth: 2 }} data-testid="idea-hero">
-      {plan.card_url && <img src={plan.card_url} alt="" style={{ width: '100%', borderRadius: 10, aspectRatio: '1200 / 630', objectFit: 'cover' }} />}
+      {plan.card_url && <img src={plan.card_url} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} style={{ width: '100%', borderRadius: 10, aspectRatio: '1200 / 630', objectFit: 'cover' }} />}
       {!lines.length && <span>{shape || 'When and where: up to you lot'}</span>}
       {lines.map((d) => (
         <div key={d.key} className="row between" style={{ gap: 8 }} data-testid="def-line">

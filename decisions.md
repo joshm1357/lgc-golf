@@ -117,3 +117,40 @@
 - The verdict's "colour" comes from the defence without AI: its first clause if short ("The “one-off” defence didn't
   wash."), else its opening words in quotes. No defence → "No defence offered." (guilty) / nothing (not guilty).
 - Phone-only accounts still can't lodge (102) — unchanged; tap count noted in REPORT-ov38.md for Josh.
+## ov39 — Trip ideas you can share (25 Oct 2026, Josh's messages 25 Oct, 19:14–19:41)
+- An idea is a plan in the existing engine (kind 'trip', planning; proposed unless an organiser put it out) with
+  plans.idea = true. Discussion can stay in WhatsApp / Messenger; the app holds the lists.
+- COLLECT → SHAPE → DECIDE (then the existing book / pay steps). The share link lands on a quick summary first (what's
+  set, what's open, the group's answers, the picture) with one-tap feedback — not the organising screen.
+- "Help plan — 4 quick taps" is one row per person per plan: plan_wishes { plan_id, player_id, cant_dates (Fridays),
+  spend_band lt500 | 500_800 | 800_1200 | any, travel drive | fly | either, max_drive_min, golf_per_day max | daily |
+  spare_day | any, day_prefs { thu..mon: early | midday | late | morning_free | any }, home_by, wish, updated_at }.
+  ov40 reads it. A set weekend is answered with In / Maybe / Can't (plan_rsvps), not cant_dates.
+- The definition: whatever the organiser knows, any mix (a weekend or rough words, an area or "within 3 h of Sydney",
+  1–6 days, drive / fly, how much golf). Each part is "Set" (people say in / out; other suggestions go to the
+  organiser's queue: accept, or decline with a note) or "Open to ideas" (suggestions go straight on the lists).
+- One organiser for now: the idea's organiser (whoever proposed it, until "Hand over organising") or a group organiser.
+  v10.6's co-organisers aren't used in the idea flow. Plumbing: a player organising an idea gets the trip's
+  co-organiser row behind the scenes when it's sent to the vote or handed to them, so the v10.6 builder and votes work
+  for them (plans.idea_organiser holds who organises it; 025's guard keeps plans.organiser_id for group organisers).
+- Anyone in the group can comment and suggest once it's shared, phone-only accounts too (like comments and votes).
+- Fit lines are counts for everyone ("suits 9 of 11"); names (who can't) for the organiser only — plan_wishes rows are
+  read by their owner and the organiser; everyone else gets them without names (idea_wish_answers).
+- Flights: no fare guesses — flight time, roughly the first and last flights of the day, and a pre-filled Google Flights
+  search link. One destination only; several stops "coming soon". The planning chat's "Don't plan flights" rule is
+  replaced by the same single-destination rule.
+- Two models: AI_FAST_MODEL (same provider / key, light thinking) for the idea chat; AI_MODEL for "✨ Pull it together"
+  (the planning chat), planning and course research. Not set: the usual model. Logged per call in helper_log.model.
+  Streaming isn't used: the reply is one short tool call (cards need the whole JSON); aim < 10 s by size instead.
+- Paste the chat: the organiser pastes text in; the Caddie suggests what to add; each needs the organiser's tap. No
+  chat app is read automatically. "✨ Ideas from the comments" does the same with the idea's comments and queue.
+- Leftovers (19:41): when a vote is sent (or suggestions declined) the Caddie groups what was dropped into 1–3 named
+  parked ideas; the organiser OKs / edits / discards each. A parked idea is its own plan (idea_pool) in 💭 Future trip
+  ideas; anyone can add to it. Its main item's suggester has 48 hours first refusal (told at parking and ~6 h before
+  the end), then it's open (a Feed post) and anyone can "Claim it" and organise it. The 48 h is a stored claim_until,
+  checked exactly when someone claims; the reminder and the "it's open" post come from a job every 15 minutes
+  (pg_cron 'lgc-idea-claims'). "Or start another trip idea now" stays as a direct option.
+- Tagging people in comments inside organising: named extension point only (IDEA_TAGS_LATER in lib/ideas.js).
+- Link previews: a Cloudflare Pages function at /i/<token> (deployed by the existing `wrangler pages deploy`); the build
+  writes /preview-db.json (the public database address and publishable key) for it. GitHub Pages can't: there the
+  picture + message with the plain link are the fallback.

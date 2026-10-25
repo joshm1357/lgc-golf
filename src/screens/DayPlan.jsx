@@ -18,7 +18,7 @@ import * as TB from '../lib/tripbuilder.js';
 import { pickFacts } from '../lib/tripfinder.js';
 import { PREFS, hm, dur, FLY_DEFAULTS, prefsLine, duskFlag, anyClock } from '../lib/daytiming.js';
 import { cleanWishes, peopleFor, wishesSummary } from '../lib/tripfit.js';
-import { planDays, startPoints, snapStarts, buildDay, applyPick, setDay, pickLine, travelOf, dayFormat, applyGolfAmount, scheduleLine } from '../lib/dayplan.js';
+import { planDays, startPoints, snapStarts, buildDay, applyPick, setDay, pickLine, travelOf, dayFormat, applyGolfAmount, scheduleLine, suggestPlan, applySuggestion, cardLine } from '../lib/dayplan.js';
 
 const GOLF_OPTS = TB.GOLF_CHOICES.map((g) => ({ value: g.value, label: g.value === 'none' ? 'None' : g.value === '36' ? '36' : g.value }));
 const FORMAT_OPTS = [{ value: 'stableford', label: 'Stableford' }, { value: 'ambrose', label: 'Ambrose' }];
@@ -110,7 +110,11 @@ export default function DayPlan() {
   const pickIndex = Math.max(0, Math.min(days.length - 1, Number(params.get('day')) || 0));
   const day = days[pickIndex];
   const dayComments = (pd.comments || []).filter((c) => c.day_date);
-  const built = day ? buildDay(day, { st, courseMap, booking, social, research, history, starts: sp, stays, comments: dayComments, wishes, people, nameOf, players: need.people || people.length || 4 }) : null;
+  const dayCtx = { st, courseMap, booking, social, research, history, starts: sp, stays, comments: dayComments, wishes, people, nameOf, players: need.people || people.length || 4 };
+  // The suggested plan: every day's best-fitting course and time at once (the organiser's starting point).
+  const suggestion = days.length && stays.length ? suggestPlan(days, dayCtx) : null;
+  const sugDay = suggestion?.days.find((x) => x.index === day?.index && x.course_id);
+  const built = day ? buildDay(day, { ...dayCtx, suggest: sugDay ? { course_id: sugDay.course_id, tee: sugDay.tee } : null }) : null;
   const travel = travelOf(st);
   const pick = st.dayPlan?.picks?.[day?.index];
   const noDates = !st.weekends?.length;
@@ -128,12 +132,38 @@ export default function DayPlan() {
     return `Picked for ${day.name}: ${course.name}${tee ? `, about ${hm(slot.tee)}` : ''}`;
   }).then((m) => m && toast(m));
   const clearPick = () => run(async () => { await save(applyPick(st, day, { course: null }).state); });
+  const useSuggestion = () => run(async () => {
+    const r = applySuggestion(st, suggestion, { courseMap });
+    await save(r.state);
+    return r.full.length ? `Picked — but ${r.full.join(', ')} already had ${TB.MAX_OPTIONS_PER_DAY} courses; change those days by hand` : 'Picked for every day — still “about”. Change any day below.';
+  }).then((m) => m && toast(m));
+  const goDay = (i) => setParams((p) => { const n = new URLSearchParams(p); n.set('day', String(i)); return n; }, { replace: true });
+  const allPicked = suggestion && suggestion.days.filter((x) => x.course_id).every((x) => { const p = st.dayPlan?.picks?.[x.index]; return p && p.course_id === x.course_id && p.tee === x.tee; });
 
   return (
     <div className="page dp-wide">
       <Header back="Plan the trip" title="Day plan" sub={plan.name} />
       <div className="section stack" style={{ gap: 12, paddingBottom: 40 }} data-testid="day-plan">
         <div className="small muted">Rough timing for each day — when you’d leave, which course times fit, and dusk. Every time is <strong>about</strong>: it’s for talking it through, not a booking.</div>
+        {suggestion && (
+          <div className="card pad stack" style={{ gap: 6, borderColor: 'var(--navy)', borderWidth: 2 }} data-testid="dp-suggested">
+            <span className="small muted" style={{ fontWeight: 800 }}>SUGGESTED PLAN — ROUGHLY</span>
+            {suggestion.days.map((x) => {
+              const i = days.findIndex((d) => d.index === x.index);
+              return (
+                <div key={x.index} className="row between small" style={{ gap: 8, alignItems: 'flex-start' }} data-testid="dp-suggested-day">
+                  <span>{x.line}</span>
+                  <button type="button" className="small" style={{ border: 0, background: 'none', padding: 0, color: 'var(--navy)', textDecoration: 'underline', whiteSpace: 'nowrap' }} onClick={() => goDay(i)} data-testid="dp-change-day">Change {x.day}</button>
+                </div>
+              );
+            })}
+            {suggestion.notFor.length > 0 && <span className="small" data-testid="dp-suggested-notfor">{org ? `Doesn’t suit: ${suggestion.notFor.map((n) => `${n.name} (${n.why.join('; ')})`).join(', ')}` : `Doesn’t suit ${suggestion.notFor.length} of ${people.length}`}</span>}
+            {suggestion.notFor.length === 0 && people.length > 0 && <span className="small">Suits everyone who’s said what they’d like.</span>}
+            {org && (allPicked
+              ? <span className="small" style={{ fontWeight: 700 }} data-testid="dp-plan-used">✅ This is the plan — still “about”. Change any day below.</span>
+              : <button type="button" className="btn gold block" disabled={busy || !suggestion.days.some((x) => x.course_id)} onClick={useSuggestion} data-testid="dp-use-plan">Use this plan</button>)}
+          </div>
+        )}
         {wishes.length > 0 && <div className="card pad small" data-testid="dp-wishes"><strong>What the group said:</strong> {wishesSummary(wishes, people)}</div>}
         {noDates && <div className="card pad small">No dates yet — times use the first weekend on the shortlist once there is one. <Link to={`/plan/${planId}/build`}>Plan the trip</Link></div>}
 
@@ -172,7 +202,7 @@ export default function DayPlan() {
         <div className="dp-days" role="tablist" aria-label="Days">
           {days.map((d, i) => (
             <button key={d.index} type="button" role="tab" className="chip" aria-pressed={i === pickIndex} aria-selected={i === pickIndex} data-testid="dp-day-tab"
-              onClick={() => setParams((p) => { const n = new URLSearchParams(p); n.set('day', String(i)); return n; }, { replace: true })}>
+              onClick={() => goDay(i)}>
               <span>{d.date ? TB.dayLabel(d.date) : d.name}</span><small>{d.role}</small>
             </button>
           ))}
@@ -218,7 +248,8 @@ export default function DayPlan() {
                 <span className="small muted">{built.golf.two ? `36 holes: two rounds and about 45 min for lunch` : `${day.golf === '9' ? '9 holes' : dayFormat(st, day) === 'ambrose' ? 'Ambrose, about 4 h a group (the usual — unconfirmed)' : 'Stableford, about 4 h 30 a 4-ball (the usual — unconfirmed)'}`}{built.golf.groups > 1 ? `, ${built.golf.groups} groups ${built.golf.interval} min apart` : ''} — about {dur(built.golf.total)} from the first tee to the last group in.</span>
               </div>
 
-              {day.golf !== 'none' && <Compare built={built} day={day} org={org} busy={busy} pick={pick} onPick={doPick} planId={planId} />}
+              {built.suggested && sugDay && <div className="small muted" data-testid="dp-suggested-note">The timeline shows the suggested time ({sugDay.name}, about {hm(sugDay.teeMin)}) until one’s picked.</div>}
+              {day.golf !== 'none' && <Compare key={day.index} built={built} day={day} org={org} busy={busy} pick={pick} onPick={doPick} planId={planId} of={people.length} />}
               {travel.mode === 'fly' && <span className="small muted">✈️ Flight times are about: first flights out about 6am, last back about 9pm — check the airline.</span>}
               {day.golf === 'none' && <div className="small muted">No golf this day.</div>}
             </div>
@@ -232,9 +263,13 @@ export default function DayPlan() {
 }
 
 /** The course comparison for a day: side by side on a laptop, one card each on a phone. */
-function Compare({ built, day, org, busy, pick, onPick, planId }) {
-  const rows = built.rows;
-  if (!rows.length) return <div className="card pad small muted" data-testid="dp-compare-empty">No courses for {day.name} yet. <Link to={`/plan/${planId}/build`}>Add some in Plan the trip</Link>.</div>;
+function Compare({ built, day, org, busy, pick, onPick, planId, of = 0 }) {
+  const [more, setMore] = useState(false);
+  const [open, setOpen] = useState(() => new Set());
+  const allRows = built.rows;
+  const rows = more ? allRows : allRows.slice(0, 3);
+  const toggle = (id) => setOpen((o) => { const n = new Set(o); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  if (!allRows.length) return <div className="card pad small muted" data-testid="dp-compare-empty">No courses for {day.name} yet. <Link to={`/plan/${planId}/build`}>Add some in Plan the trip</Link>.</div>;
   const slotChips = (r) => (
     <div className="dp-slots">
       {r.slots.slice(0, 8).map((s) => (
@@ -250,8 +285,13 @@ function Compare({ built, day, org, busy, pick, onPick, planId }) {
       <div className="row between"><strong>Courses for {day.name}</strong><span className="small muted">★ = suits the most wishes</span></div>
       <div className="dp-cmp dp-cmp-cards">
         {rows.map((r) => (
-          <div key={r.id} className={`dp-row${r.onDay ? ' on' : ''}${pick?.course_id === r.id ? ' picked' : ''}`} data-testid="dp-course" data-course={r.id}>
-            <div className="row between" style={{ gap: 8 }}><strong>{r.name}</strong><span className="small muted">{r.onDay ? 'on the list' : '✨ also fits'}</span></div>
+          <div key={r.id} className={`dp-row${r.onDay ? ' on' : ''}${pick?.course_id === r.id ? ' picked' : ''}`} data-testid="dp-course" data-course={r.id} data-open={open.has(r.id) ? '1' : '0'}>
+            <button type="button" className="dp-row-head" aria-expanded={open.has(r.id)} onClick={() => toggle(r.id)} data-testid="dp-course-line">
+              <span className={r.best ? '' : 'dp-fit no'}>{cardLine(r, of)}{pick?.course_id === r.id ? ' · ✅ picked' : ''}</span>
+              <span aria-hidden="true">{open.has(r.id) ? '▴' : '▾'}</span>
+            </button>
+            {open.has(r.id) && <>
+            <div className="row between" style={{ gap: 8 }}><span className="small muted">{r.onDay ? 'on the list' : '✨ also fits'}</span></div>
             <dl className="dp-facts">
               <dt>Known</dt><dd>{r.known}</dd>
               {r.style && <><dt>Style</dt><dd>{r.style}</dd></>}
@@ -265,6 +305,7 @@ function Compare({ built, day, org, busy, pick, onPick, planId }) {
             {r.bestLine && <div className="small" data-testid="dp-best-line">{r.bestLine}</div>}
             {r.notForCount > 0 && <div className="dp-notfor" data-testid="dp-notfor">{org ? r.notForLine : `Not for ${r.notForCount} of the group`}</div>}
             {r.slots.length > 0 && slotChips(r)}
+            </>}
           </div>
         ))}
       </div>
@@ -278,6 +319,8 @@ function Compare({ built, day, org, busy, pick, onPick, planId }) {
           <tr><th scope="row">Tee times</th>{rows.map((r) => <td key={r.id}>{r.bestLine && <div className="small">{r.bestLine}</div>}{slotChips(r)}</td>)}</tr>
         </tbody>
       </table>
+      {allRows.length > 3 && <button type="button" className="btn ghost sm" onClick={() => setMore(!more)} data-testid="dp-more-courses">{more ? 'Show fewer' : `Show ${allRows.length - 3} more`}</button>}
+
     </div>
   );
 }

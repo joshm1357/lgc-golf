@@ -55,3 +55,5 @@
   .dp-wide .dp-table { display: table; }
   .dp-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
 }
+.dp-row-head { display: flex; justify-content: space-between; gap: 8px; width: 100%; padding: 0; border: 0; background: none; text-align: left; font: inherit; font-size: 14px; font-weight: 700; color: inherit; min-height: 32px; align-items: center; }
+.dp-row-head .dp-fit.no { color: var(--down); font-size: 14px; }

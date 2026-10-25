@@ -105,14 +105,17 @@ export function buildDay(day, ctx = {}) {
       windows: w.windows, known: w.known, guess: !!w.guess, source: w.source, text: w.text,
     };
   });
-  const pick = st.dayPlan?.picks?.[day.index] || null;
+  // A pick, else (coordinator 25 Oct: "leave time follows the tee time") the suggested plan's time for this day.
+  const pick = st.dayPlan?.picks?.[day.index] || ctx.suggest || null;
+  const suggested = !st.dayPlan?.picks?.[day.index] && !!ctx.suggest;
   const plan = dayPlan({
     leg: day.leg, date, place: stayAt || courses[0] && courseMap[courses[0].id] || centreOf(starts),
     travel: { mode: travel.mode, fly: travel.fly, starts: starts.map((s) => ({ label: s.label, leave: s.leave || travel.leave, driveMin: stayAt ? TB.driveBetween(s, stayAt) : 0 })) },
     pick: pick ? { course: pick.course_id, tee: pick.tee } : null, courses, golf, prefs,
   });
+  if (suggested) plan.blocks = plan.blocks.map((b) => (b.kind === 'golf' ? { ...b, label: `Suggested — ${b.label}` } : b));
   const rows = plan.courses.map((c) => compareRow(c, { day, date, golf, prefs, people, wishes, nameOf, booking: booking[c.id], research: research[c.id], course: courseMap[c.id], history: history(c.id), sunset: plan.sun?.sunset, travel }));
-  return { day, date, plan, prefs, rows: rankRows(rows), golf, travel };
+  return { day, date, plan, prefs, rows: rankRows(rows), golf, travel, suggested };
 }
 
 /** The best time to suggest at a course: the one that suits the most wishes, then the first that's clear of dusk. */
@@ -149,7 +152,7 @@ function compareRow(c, { day, date, golf, prefs, people, wishes, nameOf, booking
     times: c.known ? windowsText(c.windows) : c.guess && c.windows.length ? `about ${windowsText(c.windows)} — unconfirmed` : 'ring to check',
     timesSource: c.source,
     guess: !c.known,
-    fits: c.fit.fits.map((w) => `${hm(w.from)}–${hm(w.to)}`).join(', ') || null,
+    fits: c.fit.fits.map((w) => `${hm(Math.ceil(w.from / 5) * 5)}–${hm(Math.floor(w.to / 5) * 5)}`).join(", ") || null,
     reason: c.fit.reason,
     maxGroup: booking?.max_group ? `up to ${booking.max_group}` : `${USUAL_GROUP} — unconfirmed`,
     book: [book, booking?.phone || research?.phone || null].filter(Boolean).join(' · ') || null,
@@ -237,6 +240,72 @@ export function scheduleLine(st = {}, { people = [], wishes = [], nameOf = (id) 
   const no = r.no.map((n) => ({ ...n, name: nameOf(n.id) }));
   const tail = !no.length ? '' : names ? ` · Not for: ${no.map((n) => `${n.name} (${n.why})`).join(', ')}` : ` · not for ${no.length}`;
   return `${r.line}${tail}`;
+}
+// ------------------------------------------------------------------ the suggested plan (one line per day)
+
+const shortDay = (d) => (d.date ? TB.dayLabel(d.date).split(' ')[0] : d.name);
+const ROLE_WORD = { way: 'on the way', stay: 'near the stay', home: 'on the way home' };
+/**
+ * The weekend in one go: for each golf day the best-fitting course and time — suits the most wishes, clear of dusk,
+ * the day's own courses first, never the same course twice unless there's nothing else. Days with the fewest choices
+ * are filled first. ctx: as buildDay (all days share it).
+ * → { days: [{ index, day, course_id, name, tee, finish, margin, homeAt, line, repeat, notFor }], line, notFor, none: [day names] }
+ */
+export function suggestPlan(days = [], ctx = {}) {
+  const golfDays = days.filter((d) => d.golf !== 'none');
+  const per = golfDays.map((d) => {
+    const b = buildDay(d, ctx);
+    const cands = b.rows.filter((r) => r.best).map((r) => {
+      const s = r.best;
+      const homeAt = d.leg === 'home' ? s.finish + (b.plan.courses.find((c) => c.id === r.id)?.driveHome || 0) : null;
+      const score = (s.suitsN || 0) * 10 + (s.flag?.tone === 'ok' ? 6 : 0) + (r.onDay ? 3 : 0) - r.notForCount * 3 - (r.guess ? 1 : 0)
+        - (d.leg === 'home' ? s.finish / 120 : 0);
+      return { r, s, homeAt, score, sunset: b.plan.sun?.sunset ?? null };
+    }).sort((a, c) => c.score - a.score);
+    return { d, b, cands };
+  });
+  const used = new Set();
+  const chosen = new Map();
+  for (const x of [...per].sort((a, b) => a.cands.length - b.cands.length || a.d.index - b.d.index)) {
+    const fresh = x.cands.find((c) => !used.has(c.r.id));
+    const c = fresh || x.cands[0];
+    if (!c) continue;
+    used.add(c.r.id);
+    chosen.set(x.d.index, { ...c, repeat: !fresh });
+  }
+  const notFor = new Map();
+  const out = per.map(({ d }) => {
+    const c = chosen.get(d.index);
+    if (!c) return { index: d.index, day: shortDay(d), course_id: null, line: `${shortDay(d)}: nothing fits — see the day` };
+    for (const n of c.r.notFor) notFor.set(n.id, { ...n, why: [...new Set([...(notFor.get(n.id)?.why || []), ...n.why.map((w) => `${w} (${shortDay(d)})`)])] });
+    const margin = c.sunset != null ? c.sunset - c.s.finish : null;
+    const bits = [ROLE_WORD[d.leg], `done ~${hm(Math.round(c.s.finish / 5) * 5)}`, margin != null ? (margin >= 0 ? `${dur(Math.round(margin / 5) * 5)} before dusk` : 'after dusk!') : null,
+      c.repeat ? 'played twice' : null, c.r.guess ? 'times unconfirmed' : null].filter(Boolean);
+    const tee = `${String(Math.floor(c.s.tee / 60)).padStart(2, '0')}:${String(c.s.tee % 60).padStart(2, '0')}`;
+    return {
+      index: d.index, day: shortDay(d), course_id: c.r.id, name: c.r.name, tee, teeMin: c.s.tee, finish: c.s.finish, margin, homeAt: c.homeAt, repeat: c.repeat,
+      notFor: c.r.notFor, line: `${shortDay(d)}: ${c.r.name} ${hm(c.s.tee)} (${bits.join(', ')})${c.homeAt != null ? ` · home by ~${hm(Math.round(c.homeAt / 15) * 15)}` : ''}`,
+    };
+  });
+  // A day with no golf still says so, in its place.
+  const all = days.map((d) => out.find((x) => x.index === d.index) || { index: d.index, day: shortDay(d), course_id: null, line: `${shortDay(d)}: no golf`, off: true });
+  return { days: all, line: all.map((x) => x.line).join(' · '), notFor: [...notFor.values()], none: all.filter((x) => !x.course_id && !x.off).map((x) => x.day) };
+}
+/** "Use this plan": every suggested day picked at once (still "about"). → { state, full: [day names that were full] } */
+export function applySuggestion(st = {}, suggestion, { courseMap = {} } = {}) {
+  let next = st;
+  const full = [];
+  for (const x of suggestion?.days || []) {
+    if (!x.course_id) continue;
+    const day = planDays(next).find((d) => d.index === x.index);
+    const r = applyPick(next, day, { course: courseMap[x.course_id] || { id: x.course_id, name: x.name }, tee: x.tee });
+    if (r.full) full.push(x.day); else next = r.state;
+  }
+  return { state: next, full };
+}
+/** One line for a collapsed course card: "The Vintage · 15 min off the way · 10am–1:30pm fit · suits 7 of 8 ★" */
+export function cardLine(r, of = 0) {
+  return [r.name, r.drive, r.fits ? `${r.fits} fit` : r.reason || 'no times fit', r.best ? `suits ${Math.max(0, of - r.notForCount)} of ${of}` : null].filter(Boolean).join(' · ') + (r.best?.best ? ' ★' : '');
 }
 export { dur };
 

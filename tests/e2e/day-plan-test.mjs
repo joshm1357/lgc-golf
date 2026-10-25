@@ -151,6 +151,12 @@ page.on('pageerror', (e) => fails.push(`page error: ${e}`));
 const wait = (ms = 500) => page.waitForTimeout(ms);
 const tab = (i) => page.getByTestId('dp-day-tab').nth(i);
 const course = (name) => page.locator('.dp-cmp-cards [data-testid="dp-course"]').filter({ hasText: name });
+// Course cards are one line until tapped (coordinator review); the best 3 show, "Show N more" for the rest.
+async function openCourse(name) {
+  if (!(await course(name).count()) && await page.getByTestId('dp-more-courses').count()) { await page.getByTestId('dp-more-courses').click(); await wait(200); }
+  if ((await course(name).getAttribute('data-open')) !== '1') { await course(name).getByTestId('dp-course-line').click(); await wait(200); }
+  return course(name);
+}
 
 // 1. Golf on each day: the old trip's empty Friday and Sunday get courses when the organiser opens Plan the trip.
 await page.goto(`${BASE}#/plan/${PLAN}/build`);
@@ -172,12 +178,26 @@ check((await tab(0).innerText()).includes('Fri 12 Mar') && (await tab(0).innerTe
 check((await page.getByTestId('dp-starts').innerText()).includes('Inner West'), 'from the Inner West');
 check(JSON.stringify(state().dayPlan?.starts || []).includes('Inner West'), 'the starting point is kept in the plan (rounded) for everyone');
 const blocks = page.getByTestId('day-blocks');
+// The suggested plan comes first: one line a day, each with "Change".
+const sugg = page.getByTestId('dp-suggested');
+check(await sugg.isVisible() && (await page.getByTestId('dp-suggested-day').count()) === 3, 'a suggested plan at the top, one line per day');
+const sugLines = await page.getByTestId('dp-suggested-day').allInnerTexts();
+check(/^Fri: .+ \d{1,2}(:\d\d)?[ap]m \(on the way, done ~/.test(sugLines[0]) && /home by ~/.test(sugLines[2]), `the lines read right (${sugLines.map((l) => l.replace(/\s*Change \w+$/, '')).join(' | ')})`);
+const sugCourses = sugLines.map((l) => l.split(':')[1].trim().replace(/ \d.*$/, ''));
+check(new Set(sugCourses).size === 3, `a different course each day (${sugCourses.join(', ')})`);
+// Leave time follows the tee time: Friday's drive isn't at 6am for a late-morning tee.
+const firstBlock = (await blocks.locator('li').first().innerText());
+check(/Drive from Inner West/.test(firstBlock) && !/^6am/.test(firstBlock), `Friday’s drive follows the suggested tee (${firstBlock})`);
+check(await page.getByTestId('dp-suggested-note').isVisible(), 'the timeline says it shows the suggested time');
+// Course cards: one line each, the best 3, "Show N more".
+check((await page.locator('.dp-cmp-cards [data-testid="dp-course"]').count()) === 3 && (await page.locator('.dp-cmp-cards [data-testid="dp-course"][data-open="1"]').count()) === 0, 'three course cards, folded to one line');
+check(/suits \d+ of 8/.test((await page.getByTestId('dp-course-line').first().innerText())), `a card’s one line (${await page.getByTestId('dp-course-line').first().innerText()})`);
 check(/Drive from Inner West/.test(await blocks.innerText()), 'Friday starts with the drive from home');
 check(/dusk \(sunset\) about 7:1\dpm/.test(await blocks.innerText()), `dusk is about 7:1x pm (${(await blocks.innerText()).split('\n').pop()})`);
-check((await course('Cessnock GC').getByTestId('dp-fit-line').innerText()).includes('too early to make it'), 'Cessnock on a Friday (7–8am only): too early to make it from Sydney');
-check(/^after 10am$/.test(await course('The Vintage').getByTestId('dp-times').innerText()), 'The Vintage: our notes say after 10 on weekdays');
-check(/unconfirmed/.test(await course('Kurri Kurri GC').getByTestId('dp-times').innerText()), `no times known → the usual, unconfirmed (${await course('Kurri Kurri GC').getByTestId('dp-times').innerText()})`);
-const friSlots = await course('The Vintage').getByTestId('dp-slot').count();
+check((await (await openCourse('Cessnock GC')).getByTestId('dp-fit-line').innerText()).includes('too early to make it'), 'Cessnock on a Friday (7–8am only): too early to make it from Sydney');
+check(/^after 10am$/.test(await (await openCourse('The Vintage')).getByTestId('dp-times').innerText()), 'The Vintage: our notes say after 10 on weekdays');
+check(/unconfirmed/.test(await (await openCourse('Kurri Kurri GC')).getByTestId('dp-times').innerText()), `no times known → the usual, unconfirmed (${await (await openCourse('Kurri Kurri GC')).getByTestId('dp-times').innerText()})`);
+const friSlots = await (await openCourse('The Vintage')).getByTestId('dp-slot').count();
 check(friSlots > 3, `The Vintage has several Friday times (${friSlots})`);
 await page.screenshot({ path: `${SHOTS}/1-friday-drive.png`, fullPage: true });
 
@@ -186,15 +206,16 @@ await page.getByTestId('dp-travel').getByRole('button', { name: '✈️ Fly' }).
 await page.getByTestId('fly-flightMin').fill('180'); await wait(800);
 check(state().dayPlan?.travel?.mode === 'fly' && state().dayPlan.travel.fly.flightMin === 180, 'flying, with the flight time typed in');
 check(/Flight \(about 3 h; first flights about 6am\)/.test(await blocks.innerText()), 'the flight is on the timeline (no fare)');
-const flySlots = await course('The Vintage').getByTestId('dp-slot').count();
+const flySlots = await (await openCourse('The Vintage')).getByTestId('dp-slot').count();
 check(flySlots < friSlots, `flying, fewer Friday times fit (${flySlots} < ${friSlots})`);
 await page.screenshot({ path: `${SHOTS}/2-friday-fly.png`, fullPage: true });
 await page.getByTestId('dp-travel').getByRole('button', { name: '🚗 Drive' }).click(); await wait(600);
 
 // 4. Saturday: Cy wants to play early (wishes). Then Al (a player) says "morning free".
 await tab(1).click(); await wait(600);
+check(/Show 1 more/.test(await page.getByTestId('dp-more-courses').innerText()) && (await page.locator('.dp-cmp-cards [data-testid="dp-course"]').count()) === 3, 'Saturday: the best 3 courses, "Show 1 more" for the rest');
 check((await page.getByTestId('dp-prefs-line').innerText()).includes('1 want to play early'), 'Cy’s wish (play early) shows for Saturday');
-const vintageBest0 = await course('The Vintage').locator('[data-testid="dp-slot"].best').count();
+const vintageBest0 = await (await openCourse('The Vintage')).locator('[data-testid="dp-slot"].best').count();
 check(vintageBest0 === 0, 'The Vintage (after 11 on Saturdays) has no time that suits "play early"');
 asPlayer = true;
 await page.reload();
@@ -208,9 +229,9 @@ check(note && note.day_pref === 'morning_free' && note.body.includes('morning fr
 check(notifyCalls.some((n) => n.type === 'comment_added'), 'the trip’s people are told (comment_added)');
 check(await page.getByTestId('dp-note').count() === 1 && (await page.getByTestId('dp-note-pref').innerText()).includes('Morning free'), 'the note shows with its wish');
 await wait(400);
-const best = await course('The Vintage').locator('[data-testid="dp-slot"].best').evaluateAll((els) => els.map((e) => Number(e.dataset.tee)));
+const best = await (await openCourse('The Vintage')).locator('[data-testid="dp-slot"].best').evaluateAll((els) => els.map((e) => Number(e.dataset.tee)));
 check(best.length > 0 && best.every((t) => t >= 11 * 60 + 30), `now the starred Saturday times suit "morning free" (from 11:30: ${best.map((t) => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`).join(', ')})`);
-check(/Not for 1 of the group/.test(await course('The Vintage').getByTestId('dp-notfor').innerText()), 'a player sees counts, not names');
+check(/Not for 1 of the group/.test(await (await openCourse('The Vintage')).getByTestId('dp-notfor').innerText()), 'a player sees counts, not names');
 check(await page.locator('[data-testid="day-wish-markers"]').isVisible(), 'the wishes sit on the timeline as markers');
 await page.screenshot({ path: `${SHOTS}/3-saturday-player-note.png`, fullPage: true });
 
@@ -218,8 +239,8 @@ await page.screenshot({ path: `${SHOTS}/3-saturday-player-note.png`, fullPage: t
 asPlayer = false;
 await page.reload();
 await page.getByTestId('day-plan').waitFor({ timeout: 10000 }); await wait(800);
-check(/Not for: Cy \(wanted “play early”\)/.test(await course('The Vintage').getByTestId('dp-notfor').innerText()), 'the organiser sees who it doesn’t suit, by name');
-await course('The Vintage').locator('[data-testid="dp-slot"].best').first().click(); await wait(800);
+check(/Not for: Cy \(wanted “play early”\)/.test(await (await openCourse('The Vintage')).getByTestId('dp-notfor').innerText()), 'the organiser sees who it doesn’t suit, by name');
+await (await openCourse('The Vintage')).locator('[data-testid="dp-slot"].best').first().click(); await wait(800);
 const pick = state().dayPlan?.picks?.[1];
 check(pick && pick.course_id === L(2) && /^1[12]:\d0$/.test(pick.tee || ''), `picked The Vintage about ${pick?.tee}`);
 check(state().days.find((d) => d.index === 1).options.includes(L(2)), 'it’s on Saturday’s courses (the builder’s days)');
@@ -234,6 +255,11 @@ check(state().days[1].options.length > 0, 'Saturday’s courses are kept');
 check((await page.getByTestId('dp-schedule-line').innerText()) === 'Fri 18 holes · Sat no golf · Sun 18 holes', 'the line says Saturday has no golf');
 await page.getByTestId('dp-golf-amount').getByRole('button', { name: 'A round a day' }).click(); await wait(800);
 check(state().days.every((d) => (d.golf || '18') === '18'), 'back to a round a day');
+// "Use this plan": every day picked at once.
+await page.getByTestId('dp-use-plan').click(); await wait(900);
+const picks = state().dayPlan?.picks || {};
+check(['0', '1', '2'].every((k) => picks[k]?.course_id && picks[k]?.tee), `"Use this plan" picks every day (${Object.entries(picks).map(([k, v]) => `${k}:${v.tee}`).join(', ')})`);
+check(await page.getByTestId('dp-plan-used').isVisible(), 'and says it’s the plan');
 // A single day's golf: 36 on Saturday.
 await page.getByTestId('dp-day-controls').getByRole('button', { name: '36' }).click(); await wait(600);
 check(state().days[1].golf === '36' && /two rounds/.test(await page.getByTestId('dp-day').innerText()), 'Saturday set to 36 (two rounds)');

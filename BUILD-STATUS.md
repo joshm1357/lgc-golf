@@ -2124,11 +2124,14 @@ rulebook-v3, stage10 pass.
   how to book, the fit line and the tee times that fit (★ = suits most wishes; organiser taps to pick), and notes on the
   day with a wish. Names of who it doesn't suit: organiser only. `components/CalloutDayPlan.jsx` on a one-day round
   call-out: each time on offer → leave home, tee, in, dusk.
+- **Review fixes (same day):** a **Suggested plan** card first (one line a day, "Use this plan" picks every day,
+  "Change <day>"; `suggestPlan` / `applySuggestion`), each day's travel follows the suggested or picked tee time (no
+  6am drive for a 10am tee), course cards folded to one line with the best 3 shown and "Show N more" (`cardLine`).
 - **Migration 109** (additive): plan_comments.day_date / day_pref / home_by + checks + an index. No policy changes,
   nothing dropped. `supabase/tests/109_day_plan.sql` (14 checks, run on local Postgres 16 with 001–109; expected file;
   109 re-runs cleanly).
 
-Tests: vitest 1901 pass (new: daytiming 40, tripfit 14, dayplan 17, tripdays 6, tripdays.long 9; planux, tripbuilder
-updated for the new rules). e2e `tests/e2e/day-plan-test.mjs` (38 checks) passes; trip-builder (updated: travel days
+Tests: vitest 1906 pass (new: daytiming 40, tripfit 14, dayplan 22, tripdays 6, tripdays.long 9; planux, tripbuilder
+updated for the new rules). e2e `tests/e2e/day-plan-test.mjs` (48 checks) passes; trip-builder (updated: travel days
 now start filled), plan-ux, tripfinder, trips, votes-coorg, trip-plan, weekends-comps, trip-page, trip-overview pass;
 round-callout 24/25 — the one failure ("sat or sun morning") is date-dependent (today is a Sunday) and not touched here.

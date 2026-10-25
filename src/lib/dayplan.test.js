@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planDays, startPoints, snapStarts, buildDay, applyPick, setDay, bestSlot, feeFor, pickLine, dayGolfLength, travelOf, dayCourses, calloutTimes } from './dayplan.js';
+import { planDays, startPoints, snapStarts, buildDay, applyPick, setDay, bestSlot, feeFor, pickLine, dayGolfLength, travelOf, dayCourses, calloutTimes, suggestPlan, applySuggestion, cardLine } from './dayplan.js';
 import { cleanWishes } from './tripfit.js';
 
 const stay = { key: 'Cessnock', name: 'Cessnock', lat: -32.83, lng: 151.36 };
@@ -156,5 +156,51 @@ describe('a one-day round (call-out)', () => {
     expect(t).toHaveLength(1);
     expect(t[0].date).toBe('2026-11-07');
     expect(t[0].tee).toBe(8 * 60 + 10);
+  });
+});
+
+describe('the suggested plan', () => {
+  const social = { vint: { weekdays: 'after 10', weekends: 'Sat after 11' }, cess: { weekdays: '7-8am', weekends: 'Sat after 1' }, kurri: { weekdays: 'after 11', weekends: 'after 9' } };
+  const s3 = { ...st, days: [{ index: 0, leg: 'way', options: ['vint', 'cess'] }, { index: 1, leg: 'stay', options: ['vint', 'cess'] }, { index: 2, leg: 'home', options: ['kurri', 'vint'] }] };
+  const ctx = (extra = {}) => ({ st: s3, courseMap, social, starts: startPoints(s3), stays: [stay], people, nameOf, players: 8, ...extra });
+  it('one line per day, a different course each day, the leave time follows the tee', () => {
+    const sp = suggestPlan(planDays(s3), ctx());
+    expect(sp.days.map((d) => d.course_id)).toEqual(['vint', 'cess', 'kurri']); // Cessnock can't be reached Fri morning; Vintage once only
+    expect(sp.days[0].line).toMatch(/^Fri: The Vintage 10am \(on the way, done ~2:40pm, \d h( \d\d)? before dusk\)$/);
+    expect(sp.days[2].line).toMatch(/· home by ~/);
+    expect(new Set(sp.days.map((d) => d.course_id)).size).toBe(3);
+    // Friday's travel now ends 30 min before the suggested tee, not at 6am.
+    const fri = buildDay(planDays(s3)[0], ctx({ suggest: { course_id: 'vint', tee: sp.days[0].tee } }));
+    const drive = fri.plan.blocks.find((b) => b.kind === 'travel');
+    expect(drive.to).toBe(10 * 60 - 30);
+    expect(drive.from).toBeGreaterThan(6 * 60);
+    expect(fri.suggested).toBe(true);
+    expect(fri.plan.blocks.find((b) => b.kind === 'golf').label).toMatch(/^Suggested — /);
+  });
+  it('suits the wishes, and says who it doesn’t suit', () => {
+    const wishes = cleanWishes([{ player_id: 'a', day_prefs: { sat: 'early' } }, { player_id: 'b', day_prefs: { sat: 'morning_free' } }, { player_id: 'c', day_prefs: { sat: 'morning_free' } }]);
+    const sp = suggestPlan(planDays(s3), ctx({ wishes }));
+    expect(sp.days[1].teeMin).toBeGreaterThanOrEqual(11 * 60 + 30);
+    expect(sp.notFor.map((n) => n.name)).toEqual(['Al']);
+    expect(sp.notFor[0].why[0]).toMatch(/\(Sat\)$/);
+  });
+  it('a course twice only when nothing else fits, and no-golf days keep their place', () => {
+    const one = { ...s3, areaCourses: {}, courses: { vint: courseMap.vint }, days: [{ index: 0, leg: 'way', options: ['vint'] }, { index: 1, leg: 'stay', options: ['vint'], golf: 'none' }, { index: 2, leg: 'home', options: ['vint'] }] };
+    const sp = suggestPlan(planDays(one), { ...ctx(), st: one, courseMap: { vint: courseMap.vint } });
+    expect(sp.days.map((d) => d.course_id)).toEqual(['vint', null, 'vint']);
+    expect(sp.days[1].line).toBe('Sat: no golf');
+    expect(sp.days.filter((d) => d.repeat)).toHaveLength(1);
+    expect(sp.line).toMatch(/played twice/);
+  });
+  it('"Use this plan" picks every day at once', () => {
+    const sp = suggestPlan(planDays(s3), ctx());
+    const { state, full } = applySuggestion(s3, sp, { courseMap });
+    expect(full).toEqual([]);
+    expect(Object.keys(state.dayPlan.picks)).toEqual(['0', '1', '2']);
+    expect(state.dayPlan.picks[0]).toEqual({ course_id: 'vint', tee: sp.days[0].tee });
+  });
+  it('a collapsed card in one line', () => {
+    expect(cardLine({ name: 'The Vintage', drive: '15 min off the way', fits: '10am–1:30pm', best: { best: true }, notForCount: 1 }, 8)).toBe('The Vintage · 15 min off the way · 10am–1:30pm fit · suits 7 of 8 ★');
+    expect(cardLine({ name: 'Cessnock GC', drive: '1 min', fits: null, reason: 'too early to make it', best: null, notForCount: 0 }, 8)).toBe('Cessnock GC · 1 min · too early to make it');
   });
 });

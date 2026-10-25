@@ -16,7 +16,10 @@
 --   * plans: idea (boolean, default false), idea_when, idea_where, idea_travel ('drive' | 'fly' | 'either'),
 --     share_token (the unguessable part of the share link), shared_at, card_url (the share picture), idea_from (the
 --     idea this one was started from — "Start another trip idea from these"), idea_sent_at (sent to the vote),
---     idea_fixed (the definition: { weekend: { start, end } | null, area: text | null, nights: int | null }).
+--     idea_fixed (the definition — whatever the organiser knows, any mix: { weekend: { start, end }, when (rough words,
+--     e.g. "the 4-day long weekend"), area, from (e.g. "Sydney"), within_min (e.g. 180 = "within 3 h"), travel, nights
+--     (0–5: trips of 1–6 days), golf, set: [the parts marked "Set" — weekend / area / nights / travel / golf] }. A part
+--     not in `set` is "Open to ideas").
 --   * plan_idea_items — the idea's lists: dates (a weekend), areas, courses. Anyone the idea is shared with adds;
 --     by_ai marks the Caddie's ✨ ones; picked = ticked by the organiser for the vote; status 'in' (on the list),
 --     'queued' (a suggestion outside the definition, waiting for the organiser) or 'declined' (with decline_note).
@@ -24,7 +27,7 @@
 --   * plan_idea_reactions — 👍 / 👎 on an item, one per person.
 --   * plan_wishes — "Help plan — 4 quick taps", one row per person per plan (ov40 reads it for the day schedule):
 --     { plan_id, player_id, cant_dates (Fridays of weekends they can't do), spend_band, travel, max_drive_min,
---       golf_per_day, day_prefs (jsonb by weekday 'thu'|'fri'|'sat'|'sun'|'mon' → 'early'|'midday'|'late'|
+--       golf_per_day ('max' as much as possible | 'daily' a round a day | 'spare_day' leave a spare day | 'any'), day_prefs (jsonb by weekday 'thu'|'fri'|'sat'|'sun'|'mon' → 'early'|'midday'|'late'|
 --       'morning_free'|'any'), home_by (time, the last day), wish, updated_at } (+ group_id, like every table).
 --     A fixed weekend is answered with the existing In / Maybe / Can't (plan_rsvps), not cant_dates.
 --   * Functions: share_idea (who can share; makes the token), idea_tidy (organiser ticks; optionally marks it sent to
@@ -51,6 +54,9 @@ alter table public.plans add column if not exists shared_at timestamptz;
 alter table public.plans add column if not exists card_url text check (card_url is null or (char_length(card_url) <= 500 and card_url ~ '^https://'));
 alter table public.plans add column if not exists idea_from uuid references public.plans(id) on delete set null;
 alter table public.plans add column if not exists idea_sent_at timestamptz;
+alter table public.plans add column if not exists idea_pool boolean not null default false;
+alter table public.plans add column if not exists idea_organiser uuid references public.players(id) on delete set null;
+create index if not exists plans_idea_organiser_idx on public.plans (idea_organiser);
 alter table public.plans add column if not exists idea_fixed jsonb not null default '{}'::jsonb check (jsonb_typeof(idea_fixed) = 'object' and pg_column_size(idea_fixed) <= 600);
 create unique index if not exists plans_share_token_idx on public.plans (share_token) where share_token is not null;
 create index if not exists plans_idea_from_idx on public.plans (idea_from);
@@ -62,14 +68,15 @@ begin
   if auth.uid() is null or current_setting('tgt.idea_ok', true) = 'on' then return new; end if; -- functions below, jobs
   if tg_op = 'INSERT' then
     if new.share_token is not null or new.shared_at is not null or new.card_url is not null or new.idea_sent_at is not null
-       or coalesce(new.idea_fixed, '{}'::jsonb) <> '{}'::jsonb then
+       or coalesce(new.idea_fixed, '{}'::jsonb) <> '{}'::jsonb or new.idea_organiser is not null or new.idea_pool then
       raise exception 'Share the idea with the 📣 Share it button';
     end if;
     return new;
   end if;
   if new.share_token is distinct from old.share_token or new.shared_at is distinct from old.shared_at
      or new.card_url is distinct from old.card_url or new.idea_sent_at is distinct from old.idea_sent_at
-     or new.idea_fixed is distinct from old.idea_fixed then
+     or new.idea_fixed is distinct from old.idea_fixed or new.idea_organiser is distinct from old.idea_organiser
+     or new.idea_pool is distinct from old.idea_pool then
     raise exception 'Share the idea with the 📣 Share it button';
   end if;
   return new;
@@ -80,15 +87,16 @@ create trigger ai_idea_guard before insert or update on public.plans
   for each row execute function private.plans_idea_guard();
 
 -- =================================================================================================== helpers
--- Can I tidy this idea (tick for the vote, spin off)? A group organiser, the trip's organiser, a co-organiser.
+-- Can I organise this idea (tick for the vote, spin off, the definition, the queue)? ONE organiser (Josh 19:34): the
+-- trip's organiser — plans.idea_organiser once it's been handed over, else plans.organiser_id (whoever proposed it) —
+-- or a group organiser.
 create or replace function private.idea_can_tidy(p_plan uuid) returns boolean
 language sql stable security definer set search_path = '' as $$
   select exists (
     select 1 from public.plans p
     where p.id = p_plan and private.is_group_member(p.group_id)
       and (private.is_group_organiser(p.group_id)
-           or (p.organiser_id is not null and p.organiser_id = private.my_player_id(p.group_id))
-           or private.is_plan_coorganiser(p.id))
+           or coalesce(p.idea_organiser, p.organiser_id) = private.my_player_id(p.group_id))
   )
 $$;
 revoke all on function private.idea_can_tidy(uuid) from public, anon;
@@ -140,6 +148,7 @@ create table if not exists public.plan_idea_items (
   picked boolean not null default false,
   status text not null default 'in' check (status in ('in', 'queued', 'declined')),
   decline_note text check (decline_note is null or char_length(decline_note) <= 200),
+  leftover text check (leftover is null or leftover in ('given_back', 'parked', 'spun_off', 'started')),
   added_by uuid references public.players(id) on delete set null default public.my_player_id(),
   created_at timestamptz not null default now(),
   check (kind <> 'date' or (start_date is not null and end_date is not null and end_date >= start_date and end_date - start_date <= 6))
@@ -162,7 +171,7 @@ create policy "members read" on public.plan_idea_items for select to authenticat
   using (group_id = any ((select private.my_group_ids())::uuid[]));
 drop policy if exists "add as me" on public.plan_idea_items;
 create policy "add as me" on public.plan_idea_items for insert to authenticated
-  with check (added_by = private.my_player_id(group_id) and not picked and status in ('in', 'queued') and decline_note is null
+  with check (added_by = private.my_player_id(group_id) and not picked and status in ('in', 'queued') and decline_note is null and leftover is null
               and private.idea_can_add(plan_id));
 drop policy if exists "remove mine or tidy" on public.plan_idea_items;
 create policy "remove mine or tidy" on public.plan_idea_items for delete to authenticated
@@ -188,10 +197,13 @@ begin
   -- organisers adding it (or the copying in idea_spin_off).
   if new.status = 'in' and current_setting('tgt.idea_ok', true) is distinct from 'on' and auth.uid() is not null
      and not private.idea_can_tidy(new.plan_id) then
+    -- Only what the organiser marked "Set" (idea_fixed.set); "Open to ideas" parts take suggestions straight in.
     select case
-      when new.kind = 'date' and p.idea_fixed ? 'weekend' and jsonb_typeof(p.idea_fixed->'weekend') = 'object' then 'queued'
-      when new.kind = 'area' and coalesce(p.idea_fixed->>'area', '') <> '' and lower(btrim(new.label)) <> lower(btrim(p.idea_fixed->>'area')) then 'queued'
-      when new.kind = 'course' and coalesce(p.idea_fixed->>'area', '') <> '' and new.area is not null and lower(btrim(new.area)) <> lower(btrim(p.idea_fixed->>'area')) then 'queued'
+      when new.kind = 'date' and coalesce(p.idea_fixed->'set', '[]') ? 'weekend' then 'queued'
+      when new.kind = 'area' and coalesce(p.idea_fixed->'set', '[]') ? 'area' and coalesce(p.idea_fixed->>'area', '') <> ''
+           and lower(btrim(new.label)) <> lower(btrim(p.idea_fixed->>'area')) then 'queued'
+      when new.kind = 'course' and coalesce(p.idea_fixed->'set', '[]') ? 'area' and coalesce(p.idea_fixed->>'area', '') <> ''
+           and new.area is not null and lower(btrim(new.area)) <> lower(btrim(p.idea_fixed->>'area')) then 'queued'
       else 'in' end
     into new.status from public.plans p where p.id = new.plan_id;
   end if;
@@ -252,7 +264,7 @@ create table if not exists public.plan_wishes (
   spend_band text check (spend_band is null or spend_band in ('lt500', '500_800', '800_1200', 'any')),
   travel text check (travel is null or travel in ('drive', 'fly', 'either')),
   max_drive_min int check (max_drive_min is null or max_drive_min between 30 and 720),
-  golf_per_day text check (golf_per_day is null or golf_per_day in ('one', '36_ok', 'mix')),
+  golf_per_day text check (golf_per_day is null or golf_per_day in ('max', 'daily', 'spare_day', 'any')),
   day_prefs jsonb not null default '{}'::jsonb check (private.day_prefs_ok(day_prefs)),
   home_by time,
   wish text check (wish is null or char_length(wish) <= 300),
@@ -277,9 +289,12 @@ $$;
 revoke all on function private.wishes_open(uuid) from public, anon;
 grant execute on function private.wishes_open(uuid) to authenticated;
 
-drop policy if exists "members read" on public.plan_wishes;
-create policy "members read" on public.plan_wishes for select to authenticated
-  using (group_id = any ((select private.my_group_ids())::uuid[]));
+-- Names stay with the organiser: you read your own row; the trip's organiser and group organisers read everyone's.
+-- Everyone else gets the answers without names from idea_wish_answers().
+drop policy if exists "mine or the organiser's" on public.plan_wishes;
+create policy "mine or the organiser's" on public.plan_wishes for select to authenticated
+  using (player_id = private.my_player_id(group_id) or private.is_group_organiser(group_id)
+         or exists (select 1 from public.plans p where p.id = plan_id and coalesce(p.idea_organiser, p.organiser_id) = private.my_player_id(p.group_id)));
 drop policy if exists "answer as me" on public.plan_wishes;
 create policy "answer as me" on public.plan_wishes for insert to authenticated
   with check (player_id = private.my_player_id(group_id) and private.wishes_open(plan_id));
@@ -372,76 +387,231 @@ begin
     perform set_config('tgt.idea_ok', 'on', true);
     update public.plans set idea_sent_at = now() where id = v.id;
     perform set_config('tgt.idea_ok', 'off', true);
+    perform private.idea_organiser_can_run(v.id);
   end if;
   return n;
 end $$;
 revoke all on function public.idea_tidy(uuid, uuid[], boolean) from public, anon;
 grant execute on function public.idea_tidy(uuid, uuid[], boolean) to authenticated;
 
--- "Start another trip idea from these": a new idea with the dates, areas and courses NOT ticked for the vote (who added
--- each, and the ✨ marks, kept). Organisers (as idea_tidy). Returns the new plan's id.
-create or replace function public.idea_spin_off(p_plan uuid, p_name text default null) returns uuid
+-- ------------------------------------------------------------------ the leftovers (Josh 19:37)
+-- Anything not sent to the vote, and declined suggestions. Per item (or all at once) the organiser can:
+--   (a) give it back to whoever suggested it — they're told, with "Start my own idea from it" (idea_start_from);
+--   (b) park it in the group's "💭 Future trip ideas" pool — one shared idea per group (plans.idea_pool) that anyone
+--       can see and add to, with the same lists; anyone can later "Make it a trip idea" from it (idea_start_from);
+--   (c) start another trip idea now (idea_spin_off).
+-- plan_idea_items.leftover says what happened to it.
+
+-- A new trip idea (planning, kind 'trip'), organised by me. Proposed unless I'm a group organiser.
+create or replace function private.idea_new(p_group uuid, p_name text, p_travel text, p_from uuid) returns uuid
 language plpgsql security definer set search_path = '' as $$
-declare v public.plans; me uuid; nid uuid; nm text;
+declare me uuid := private.my_player_id(p_group); nid uuid;
 begin
-  if auth.uid() is null then raise exception 'Sign in first'; end if;
-  select * into v from public.plans where id = p_plan;
-  if v.id is null or not private.is_group_member(v.group_id) then raise exception 'Trip not found'; end if;
-  if not v.idea then raise exception 'Only a trip idea can be split this way'; end if;
-  if not private.idea_can_tidy(v.id) then raise exception 'Only an organiser can start another idea from these'; end if;
-  if not private.is_saved_user() then raise exception 'Save your spot first (Google or email) to do this' using errcode = '42501', hint = 'save_spot'; end if;
-  if not public.feature_on(v.group_id, 'planner') then raise exception 'The Trips planner is switched off for this group'; end if;
-  if not exists (select 1 from public.plan_idea_items where plan_id = v.id and not picked and status = 'in') then
-    raise exception 'Nothing left over — everything went to the vote';
-  end if;
-  me := private.my_player_id(v.group_id);
-  nm := left(coalesce(nullif(btrim(p_name), ''), v.name || ' — another idea'), 80);
-  insert into public.plans (group_id, kind, name, status, proposed, created_by, organiser_id, idea, idea_travel, idea_from, brief)
-  values (v.group_id, 'trip', nm, 'planning', false, me, me, true, v.idea_travel, v.id, null)
+  insert into public.plans (group_id, kind, name, status, proposed, created_by, organiser_id, idea, idea_travel, idea_from)
+  values (p_group, 'trip', left(p_name, 80), 'planning', not private.is_group_organiser(p_group), me, me, true, p_travel, p_from)
   returning id into nid;
-  perform set_config('tgt.idea_ok', 'on', true);
-  insert into public.plan_idea_items (plan_id, group_id, kind, label, start_date, end_date, area, library_course_id, note, fit, detail, by_ai, added_by, created_at)
-  select nid, v.group_id, i.kind, i.label, i.start_date, i.end_date, i.area, i.library_course_id, i.note, i.fit, i.detail, i.by_ai, i.added_by, i.created_at
-  from public.plan_idea_items i
-  where i.plan_id = v.id and not i.picked and i.status = 'in' and (i.kind <> 'date' or i.end_date >= (now() at time zone 'Australia/Sydney')::date)
-  order by i.created_at;
-  perform set_config('tgt.idea_ok', 'off', true);
   if me is not null then
     insert into public.plan_rsvps (plan_id, player_id, status) values (nid, me, 'in') on conflict do nothing;
   end if;
   return nid;
 end $$;
-revoke all on function public.idea_spin_off(uuid, text) from public, anon;
-grant execute on function public.idea_spin_off(uuid, text) to authenticated;
+revoke all on function private.idea_new(uuid, text, text, uuid) from public, anon, authenticated;
+
+-- Copy items onto another idea (who added each, and the ✨ marks, kept). Weekends that have gone are left behind.
+create or replace function private.idea_copy_items(p_to uuid, p_items uuid[]) returns int
+language plpgsql security definer set search_path = '' as $$
+declare n int;
+begin
+  perform set_config('tgt.idea_ok', 'on', true);
+  insert into public.plan_idea_items (plan_id, group_id, kind, label, start_date, end_date, area, library_course_id, note, fit, detail, by_ai, added_by, created_at)
+  select p_to, t.group_id, i.kind, i.label, i.start_date, i.end_date, i.area, i.library_course_id, i.note, i.fit, i.detail, i.by_ai, i.added_by, i.created_at
+  from public.plan_idea_items i join public.plans t on t.id = p_to
+  where i.id = any (p_items) and i.group_id = t.group_id and (i.kind <> 'date' or i.end_date >= (now() at time zone 'Australia/Sydney')::date)
+  order by i.created_at
+  on conflict do nothing;
+  get diagnostics n = row_count;
+  perform set_config('tgt.idea_ok', 'off', true);
+  return n;
+end $$;
+revoke all on function private.idea_copy_items(uuid, uuid[]) from public, anon, authenticated;
+
+-- The leftovers the organiser may act on: not ticked, on the list or declined, from this idea.
+create or replace function private.idea_leftovers(p_plan uuid, p_items uuid[]) returns uuid[]
+language sql stable security definer set search_path = '' as $$
+  select coalesce(array_agg(i.id order by i.created_at), '{}'::uuid[]) from public.plan_idea_items i
+  where i.plan_id = p_plan and not i.picked and i.status in ('in', 'declined') and i.leftover is null
+    and (p_items is null or i.id = any (p_items))
+$$;
+revoke all on function private.idea_leftovers(uuid, uuid[]) from public, anon, authenticated;
+
+create or replace function private.idea_organise_check(p_plan uuid) returns public.plans
+language plpgsql security definer set search_path = '' as $$
+declare v public.plans;
+begin
+  if auth.uid() is null then raise exception 'Sign in first'; end if;
+  select * into v from public.plans where id = p_plan;
+  if v.id is null or not private.is_group_member(v.group_id) then raise exception 'Trip not found'; end if;
+  if not v.idea then raise exception 'Only a trip idea has leftovers'; end if;
+  if not private.idea_can_tidy(v.id) then raise exception 'Only the organiser can do that'; end if;
+  if not private.is_saved_user() then raise exception 'Save your spot first (Google or email) to do this' using errcode = '42501', hint = 'save_spot'; end if;
+  if not public.feature_on(v.group_id, 'planner') then raise exception 'The Trips planner is switched off for this group'; end if;
+  return v;
+end $$;
+revoke all on function private.idea_organise_check(uuid) from public, anon, authenticated;
+
+-- (c) "Start another trip idea now": a new idea with these leftovers (null = all of them). Returns its id.
+create or replace function public.idea_spin_off(p_plan uuid, p_name text default null, p_items uuid[] default null) returns uuid
+language plpgsql security definer set search_path = '' as $$
+declare v public.plans; ids uuid[]; nid uuid;
+begin
+  v := private.idea_organise_check(p_plan);
+  ids := private.idea_leftovers(v.id, p_items);
+  if cardinality(ids) = 0 then raise exception 'Nothing left over — everything went to the vote'; end if;
+  nid := private.idea_new(v.group_id, coalesce(nullif(btrim(p_name), ''), v.name || ' — another idea'), v.idea_travel, v.id);
+  perform private.idea_copy_items(nid, ids);
+  perform set_config('tgt.idea_ok', 'on', true);
+  update public.plan_idea_items set leftover = 'spun_off' where id = any (ids);
+  perform set_config('tgt.idea_ok', 'off', true);
+  return nid;
+end $$;
+revoke all on function public.idea_spin_off(uuid, text, uuid[]) from public, anon;
+grant execute on function public.idea_spin_off(uuid, text, uuid[]) to authenticated;
+
+-- (a) "Give it back to <suggester>": each one's suggester is told ("Your Tasmania idea didn't make this vote — start it
+-- as your own trip idea?"). The organiser's own items, and ones added by nobody (the ✨ Caddie's added by them), are
+-- skipped. Returns how many were given back.
+create or replace function public.idea_give_back(p_plan uuid, p_items uuid[] default null) returns int
+language plpgsql security definer set search_path = '' as $$
+declare v public.plans; ids uuid[]; me uuid; n int;
+begin
+  v := private.idea_organise_check(p_plan);
+  me := private.my_player_id(v.group_id);
+  select coalesce(array_agg(i.id), '{}'::uuid[]) into ids from public.plan_idea_items i
+  where i.id = any (private.idea_leftovers(v.id, p_items)) and i.added_by is not null and i.added_by is distinct from me;
+  if cardinality(ids) = 0 then raise exception 'Nothing to give back — those are yours'; end if;
+  perform set_config('tgt.idea_ok', 'on', true);
+  update public.plan_idea_items set leftover = 'given_back' where id = any (ids);
+  perform set_config('tgt.idea_ok', 'off', true);
+  insert into public.notify_queue (group_id, user_id, kind, title, body, url)
+  select v.group_id, gm.user_id, 'idea_given_back',
+         '💡 Your ' || left(i.label, 40) || ' idea didn’t make this vote',
+         'Start it as your own trip idea? One tap.', '#/idea/' || v.id || '?mine=' || i.id
+  from public.plan_idea_items i join public.group_members gm on gm.group_id = v.group_id and gm.player_id = i.added_by and gm.user_id is not null
+  where i.id = any (ids);
+  get diagnostics n = row_count;
+  return cardinality(ids);
+end $$;
+revoke all on function public.idea_give_back(uuid, uuid[]) from public, anon;
+grant execute on function public.idea_give_back(uuid, uuid[]) to authenticated;
+
+-- The group's "💭 Future trip ideas" pool: one shared idea per group, made the first time something's parked.
+create or replace function private.idea_pool_of(p_group uuid) returns uuid
+language plpgsql security definer set search_path = '' as $$
+declare pid uuid;
+begin
+  select id into pid from public.plans where group_id = p_group and idea_pool and status = 'planning' order by created_at limit 1;
+  if pid is null then
+    perform set_config('tgt.idea_ok', 'on', true);
+    insert into public.plans (group_id, kind, name, status, proposed, created_by, organiser_id, idea, idea_pool, shared_at)
+    values (p_group, 'trip', 'Future trip ideas', 'planning', false, private.my_player_id(p_group), null, true, true, now())
+    returning id into pid;
+    perform set_config('tgt.idea_ok', 'off', true);
+  end if;
+  return pid;
+end $$;
+revoke all on function private.idea_pool_of(uuid) from public, anon, authenticated;
+
+-- (b) "Park it as a future trip idea": copies them into the pool. Returns the pool's id.
+create or replace function public.idea_park(p_plan uuid, p_items uuid[] default null) returns uuid
+language plpgsql security definer set search_path = '' as $$
+declare v public.plans; ids uuid[]; pid uuid;
+begin
+  v := private.idea_organise_check(p_plan);
+  if v.idea_pool then raise exception 'That''s already the future ideas'; end if;
+  ids := private.idea_leftovers(v.id, p_items);
+  if cardinality(ids) = 0 then raise exception 'Nothing left over to park'; end if;
+  pid := private.idea_pool_of(v.group_id);
+  perform private.idea_copy_items(pid, ids);
+  perform set_config('tgt.idea_ok', 'on', true);
+  update public.plan_idea_items set leftover = 'parked' where id = any (ids);
+  perform set_config('tgt.idea_ok', 'off', true);
+  return pid;
+end $$;
+revoke all on function public.idea_park(uuid, uuid[]) from public, anon;
+grant execute on function public.idea_park(uuid, uuid[]) to authenticated;
+
+-- "Start my own idea from it" (an item given back to me) / "Make it a trip idea" (anything in the future ideas pool,
+-- anyone in the group). A new idea organised by me, named after it, with it on its list. Returns the new id.
+create or replace function public.idea_start_from(p_item uuid) returns uuid
+language plpgsql security definer set search_path = '' as $$
+declare i public.plan_idea_items; v public.plans; me uuid; nid uuid;
+begin
+  if auth.uid() is null then raise exception 'Sign in first'; end if;
+  select * into i from public.plan_idea_items where id = p_item;
+  if i.id is null or not private.is_group_member(i.group_id) then raise exception 'That idea isn''t there any more'; end if;
+  select * into v from public.plans where id = i.plan_id;
+  me := private.my_player_id(i.group_id);
+  if not (v.idea_pool or (i.leftover = 'given_back' and i.added_by = me)) then raise exception 'That one isn''t yours to start'; end if;
+  if exists (select 1 from public.group_members where group_id = i.group_id and player_id = me and role = 'guest') then raise exception 'Guests can''t start a trip idea'; end if;
+  if not private.is_saved_user() then raise exception 'Save your spot first (Google or email) to do this' using errcode = '42501', hint = 'save_spot'; end if;
+  if not public.feature_on(i.group_id, 'planner') then raise exception 'The Trips planner is switched off for this group'; end if;
+  nid := private.idea_new(i.group_id, case when i.kind = 'date' then 'Trip: ' || i.label else i.label || ' trip' end,
+                          case when i.detail ? 'fly' then 'fly' else null end, v.id);
+  perform private.idea_copy_items(nid, array[i.id]);
+  perform set_config('tgt.idea_ok', 'on', true);
+  update public.plan_idea_items set leftover = 'started' where id = i.id;
+  perform set_config('tgt.idea_ok', 'off', true);
+  return nid;
+end $$;
+revoke all on function public.idea_start_from(uuid) from public, anon;
+grant execute on function public.idea_start_from(uuid) to authenticated;
 
 -- The definition: what the organiser has fixed — { weekend: { start, end } } (a weekend of up to 6 nights), { area },
 -- { nights } (1–6). Pass {} to open it all up again. Organisers and co-organisers. Returns what's stored.
 create or replace function public.idea_set_fixed(p_plan uuid, p_fixed jsonb) returns jsonb
 language plpgsql security definer set search_path = '' as $$
-declare v public.plans; f jsonb := '{}'::jsonb; s date; e date; n int;
+declare v public.plans; f jsonb := '{}'::jsonb; s date; e date; n int; k text; sets text[] := '{}';
 begin
   if auth.uid() is null then raise exception 'Sign in first'; end if;
   select * into v from public.plans where id = p_plan for update;
   if v.id is null or not private.is_group_member(v.group_id) then raise exception 'Trip not found'; end if;
   if not v.idea then raise exception 'Only a trip idea has this'; end if;
   if v.status <> 'planning' then raise exception 'This trip isn''t being planned any more'; end if;
-  if not private.idea_can_tidy(v.id) then raise exception 'Only an organiser can fix parts of the idea'; end if;
+  if not private.idea_can_tidy(v.id) then raise exception 'Only the organiser can set parts of the idea'; end if;
   if not private.is_saved_user() then raise exception 'Save your spot first (Google or email) to do this' using errcode = '42501', hint = 'save_spot'; end if;
-  if p_fixed is null or jsonb_typeof(p_fixed) <> 'object' then raise exception 'Nothing to fix'; end if;
+  if p_fixed is null or jsonb_typeof(p_fixed) <> 'object' then raise exception 'Nothing to set'; end if;
   if jsonb_typeof(p_fixed->'weekend') = 'object' then
     begin
       s := (p_fixed->'weekend'->>'start')::date; e := coalesce((p_fixed->'weekend'->>'end')::date, s);
     exception when others then raise exception 'That weekend isn''t a date';
     end;
-    if s is null or e < s or e - s > 6 then raise exception 'That weekend isn''t right'; end if;
+    if s is null or e < s or e - s > 5 then raise exception 'That weekend isn''t right (1 to 6 days)'; end if;
     f := f || jsonb_build_object('weekend', jsonb_build_object('start', s, 'end', e));
   end if;
+  if coalesce(btrim(p_fixed->>'when'), '') <> '' then f := f || jsonb_build_object('when', left(btrim(p_fixed->>'when'), 60)); end if;
   if coalesce(btrim(p_fixed->>'area'), '') <> '' then f := f || jsonb_build_object('area', left(btrim(p_fixed->>'area'), 80)); end if;
-  if p_fixed ? 'nights' and jsonb_typeof(p_fixed->'nights') = 'number' then
+  if coalesce(btrim(p_fixed->>'from'), '') <> '' then f := f || jsonb_build_object('from', left(btrim(p_fixed->>'from'), 60)); end if;
+  if jsonb_typeof(p_fixed->'within_min') = 'number' then
+    n := (p_fixed->>'within_min')::int;
+    if n < 30 or n > 720 then raise exception 'Half an hour to 12 hours'; end if;
+    f := f || jsonb_build_object('within_min', n);
+  end if;
+  if p_fixed->>'travel' in ('drive', 'fly', 'either') then f := f || jsonb_build_object('travel', p_fixed->>'travel'); end if;
+  if jsonb_typeof(p_fixed->'nights') = 'number' then
     n := (p_fixed->>'nights')::int;
-    if n < 1 or n > 6 then raise exception 'One to six nights'; end if;
+    if n < 0 or n > 5 then raise exception 'Trips are 1 to 6 days'; end if;
     f := f || jsonb_build_object('nights', n);
   end if;
+  if p_fixed->>'golf' in ('max', 'daily', 'spare_day', 'any') then f := f || jsonb_build_object('golf', p_fixed->>'golf'); end if;
+  -- "Set" (people say in / out; other suggestions go to the queue) — only for parts that have a value.
+  if jsonb_typeof(p_fixed->'set') = 'array' then
+    for k in select jsonb_array_elements_text(p_fixed->'set') loop
+      if k in ('weekend', 'area', 'nights', 'travel', 'golf') and (f ? k or (k = 'weekend' and f ? 'when')) and not k = any (sets) then
+        sets := sets || k;
+      end if;
+    end loop;
+  end if;
+  f := f || jsonb_build_object('set', to_jsonb(sets));
   perform set_config('tgt.idea_ok', 'on', true);
   update public.plans set idea_fixed = f where id = v.id;
   perform set_config('tgt.idea_ok', 'off', true);
@@ -467,6 +637,70 @@ begin
 end $$;
 revoke all on function public.idea_review(uuid, boolean, text) from public, anon;
 grant execute on function public.idea_review(uuid, boolean, text) to authenticated;
+
+-- "Hand over organising" (Josh 19:34): the idea's organiser (or a group organiser) makes another player its organiser.
+-- They're told (notify_queue, kind 'organiser_handover'). Not a guest; someone in the group. Returns their player id.
+create or replace function public.hand_over_idea(p_plan uuid, p_player uuid) returns uuid
+language plpgsql security definer set search_path = '' as $$
+declare v public.plans; me uuid;
+begin
+  if auth.uid() is null then raise exception 'Sign in first'; end if;
+  select * into v from public.plans where id = p_plan for update;
+  if v.id is null or not private.is_group_member(v.group_id) then raise exception 'Trip not found'; end if;
+  if v.status not in ('planning', 'confirmed') then raise exception 'This trip is finished'; end if;
+  if not private.idea_can_tidy(v.id) then raise exception 'Only the organiser can hand it over'; end if;
+  if not private.is_saved_user() then raise exception 'Save your spot first (Google or email) to do this' using errcode = '42501', hint = 'save_spot'; end if;
+  if not exists (select 1 from public.players where id = p_player and group_id = v.group_id) then raise exception 'That player isn''t in this group'; end if;
+  if exists (select 1 from public.group_members where group_id = v.group_id and player_id = p_player and role = 'guest') then
+    raise exception 'A guest can''t organise a trip';
+  end if;
+  if p_player = coalesce(v.idea_organiser, v.organiser_id) then return p_player; end if;
+  me := private.my_player_id(v.group_id);
+  -- idea_organiser is who organises it from now on. plans.organiser_id (025) follows only when a group organiser hands
+  -- over — 025's guard keeps it for everyone else, which is fine: the idea screens read idea_organiser first.
+  perform set_config('tgt.idea_ok', 'on', true);
+  update public.plans set idea_organiser = p_player, organiser_id = p_player where id = v.id;
+  perform set_config('tgt.idea_ok', 'off', true);
+  perform private.idea_organiser_can_run(v.id);
+  insert into public.notify_queue (group_id, user_id, kind, title, body, url)
+  select v.group_id, gm.user_id, 'organiser_handover', '🧭 You’re organising ' || left(v.name, 60),
+         coalesce(private.callout_first(me), 'Someone') || ' handed it over to you — tidy it up and send it to the vote when it’s ready.',
+         '#/idea/' || v.id
+  from public.group_members gm where gm.group_id = v.group_id and gm.player_id = p_player and gm.user_id is not null;
+  return p_player;
+end $$;
+revoke all on function public.hand_over_idea(uuid, uuid) from public, anon;
+grant execute on function public.hand_over_idea(uuid, uuid) to authenticated;
+
+-- The v10.6 trip builder and votes are for group organisers (and a trip's co-organisers, 104). An idea's organiser who
+-- is a plain player gets that trip's co-organiser row behind the scenes, so "Send to the vote" works for them. One
+-- organiser in the app's words; 104's table is only the plumbing (Josh 19:34: co-organisers unused here).
+create or replace function private.idea_organiser_can_run(p_plan uuid) returns void
+language plpgsql security definer set search_path = '' as $$
+declare v public.plans; who uuid;
+begin
+  select * into v from public.plans where id = p_plan;
+  who := coalesce(v.idea_organiser, v.organiser_id);
+  if who is null then return; end if;
+  if exists (select 1 from public.group_members where group_id = v.group_id and player_id = who and role = 'organiser') then return; end if;
+  insert into public.plan_coorganisers (plan_id, group_id, player_id, added_by) values (v.id, v.group_id, who, who)
+  on conflict (plan_id, player_id) do nothing;
+exception when others then null; -- e.g. already 3 co-organisers: the group organiser can still send it
+end $$;
+revoke all on function private.idea_organiser_can_run(uuid) from public, anon, authenticated;
+
+-- The group's answers to the 4 quick taps WITHOUT names, for everyone in the group (Josh 19:34: "names visible to the
+-- organiser only"). The rows themselves (plan_wishes) are read by their owner and the idea's organiser.
+create or replace function public.idea_wish_answers(p_plan uuid) returns jsonb
+language sql stable security definer set search_path = '' as $$
+  select coalesce(jsonb_agg(jsonb_build_object('cant_dates', w.cant_dates, 'spend_band', w.spend_band, 'travel', w.travel,
+           'max_drive_min', w.max_drive_min, 'golf_per_day', w.golf_per_day, 'day_prefs', w.day_prefs, 'home_by', w.home_by, 'wish', w.wish)
+           order by w.updated_at), '[]'::jsonb)
+  from public.plan_wishes w join public.plans p on p.id = w.plan_id
+  where w.plan_id = p_plan and private.is_group_member(p.group_id) and public.feature_on(p.group_id, 'planner')
+$$;
+revoke all on function public.idea_wish_answers(uuid) from public, anon;
+grant execute on function public.idea_wish_answers(uuid) to authenticated;
 
 -- The link preview (WhatsApp / Messenger fetch the link with no sign-in): by the link's token only, a shared idea's
 -- name, rough when / where / getting there, who proposed it (first name), the group's name, the picture and the plan's

@@ -73,7 +73,7 @@ const NOT_IN_DIGEST = new Set(['swing']);
 const KIND_FEATURE: Record<string, string> = {
   poll_open: 'planner_tasks', poll_decided: 'planner_tasks', poll_closing: 'planner_tasks', nudge_votes: 'planner_tasks',
   job_assigned: 'planner_tasks', job_due: 'planner_tasks',
-  plan_new: 'planner', plan_proposed: 'planner', coorganiser_added: 'planner', trip_locked: 'planner', rsvp_locked: 'planner', rsvp_deadline: 'planner',
+  plan_new: 'planner', plan_proposed: 'planner', idea_shared: 'planner', coorganiser_added: 'planner', trip_locked: 'planner', rsvp_locked: 'planner', rsvp_deadline: 'planner',
   nudge_rsvp: 'planner', trip_week: 'planner', trip_tomorrow: 'planner', comment: 'planner',
   nudge_kitty: 'planner_costs', payment_recorded: 'planner_costs', groups_set: 'planner_rooms',
   deposit_ask: 'planner_costs', nudge_deposit: 'planner_costs',
@@ -724,6 +724,21 @@ Deno.serve(async (req) => {
         const who = name(ppl.find((p) => p.id === from));
         const { count } = await db.from('plan_polls').select('id', { count: 'exact', head: true }).eq('plan_id', pl.id).eq('status', 'open');
         sent = await send(g, 'all', { title: `💡 ${who} has an idea: ${pl.name}`, body: count ? 'Vote on when and where, and say if you’d be in.' : 'Say if you’d be in.', url: planUrl(pl.id, count ? 'vote' : 'people') }, from, 'plan_proposed');
+        break;
+      }
+      case 'idea_shared': {
+        // ov39 (108): "📣 Share it" on a trip idea — once per idea, from whoever proposed it or an organiser of it.
+        const pl = await plan(g, body.plan_id);
+        if (!pl?.idea || !pl.shared_at || pl.status !== 'planning') return json({ error: 'Not a shared idea' }, 403);
+        if (pl.created_by !== from && !me.is_admin && !(await coorg(pl.id).catch(() => false))) return json({ error: 'Not your idea' }, 403);
+        if (!(await once(`idea-shared:${pl.id}`))) break;
+        let room = false;
+        for (let i = 1; i <= 3 && !room; i++) room = await once(`ideas-by:${g}:${from}:${sydneyDate(0)}:${i}`);
+        if (!room) break;
+        const ppl = await players(g);
+        const fx = (pl.idea_fixed || {}) as { weekend?: { start?: string }; area?: string };
+        const shape = [fx.weekend?.start ? fmt(fx.weekend.start) : pl.idea_when, fx.area || pl.idea_where].filter(Boolean).join(', ');
+        sent = await send(g, 'all', { title: `💡 ${name(ppl.find((p) => p.id === pl.created_by))} has a trip idea: ${shape || pl.name}`, body: 'Add your dates, areas and courses — 4 quick taps.', url: `${APP}#/idea/${pl.id}` }, from, 'idea_shared');
         break;
       }
       case 'rule_proposed': {

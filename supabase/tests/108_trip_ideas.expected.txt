@@ -19,39 +19,63 @@ RESULTS: 1. chris proposes an idea → ok true
 19. tom changes it to thumbs down → ok -1
 20. tom reacts as chris → refused: new row violates row-level security policy for table "plan_idea_reactions"
 21. tom answers the 4 taps → ok 2 late 16:00:00 Please no 6am tee times
-22. tom wants "brunch" on Saturday → refused: new row for relation "plan_wishes" violates check constraint "plan_wishes_day_prefs_check"
-23. tom fixes the weekend himself → refused: Only an organiser can fix parts of the idea
-24. tom says a Saturday he can't do → refused: new row for relation "plan_wishes" violates check constraint "plan_wishes_cant_dates_check"
-25. tom spends "heaps" → refused: new row for relation "plan_wishes" violates check constraint "plan_wishes_spend_band_check"
-26. tom answers for chris → refused: new row violates row-level security policy for table "plan_wishes"
-27. tom removes chris's area → ok
-28. tom tidies the idea → refused: Only an organiser can tidy it up
-29. tom spins off the leftovers → refused: Only an organiser can start another idea from these
-30. the guest adds a course idea → ok true
-31. organiser fixes a 9-night "weekend" → refused: That weekend isn't right
-32. organiser fixes the area and 2 nights → ok {"area": "Port Douglas", "nights": 2}
-33. organiser adds an area outside it (straight in) → ok in
-34. tom suggests another area (queued) → ok queued
-35. tom adds a course in the area (straight in) → ok in
-36. tom accepts his own suggestion → refused: Only an organiser can look at suggestions
-37. tom sets the definition column by hand → ok
-38. organiser declines it with a note → ok declined
-39. organiser looks at it twice → refused: That one's already been looked at
-40. the declined one can't be ticked → ok 0
-41. organiser sends nothing to the vote → refused: Tick at least one thing for the vote
-42. organiser ticks two and sends → ok 2
-43. the idea is marked sent → ok true
-44. organiser can't set sent by hand on another plan → refused: Share the idea with the 📣 Share it button
-45. organiser spins off the leftovers → ok true
-46. the new idea came from the old one → ok true true true
-47. leftovers keep who added and the ✨ → ok Fri 19 – Sun 21 Mar:Tom:false, Mirage Country Club:Gus:true, Noosa:Ao:false, Palmer Sea Reef:Tom:false, Port Douglas:Chris:false
-48. organiser removes tom's weekend → ok 1
-49. preview by token → ok March fly trip · March · Chris · Test Group A108 · true
-50. preview with a made-up token → ok nothing
-51. anon reads the plans table → ok 0
-52. anon reads the lists → refused: permission denied for table plan_idea_items
-53. other group sees the lists → ok 0
-54. other group sees the wishes → ok 0
-55. other group adds to the idea → refused: That belongs to another group
-56. other group shares it → refused: Trip not found
-57. other group tidies it → refused: Trip not found
+22. tom reads his own answers → ok 1
+23. tom wants "brunch" on Saturday → refused: new row for relation "plan_wishes" violates check constraint "plan_wishes_day_prefs_check"
+24. tom fixes the weekend himself → refused: Only the organiser can set parts of the idea
+25. tom says a Saturday he can't do → refused: new row for relation "plan_wishes" violates check constraint "plan_wishes_cant_dates_check"
+26. tom spends "heaps" → refused: new row for relation "plan_wishes" violates check constraint "plan_wishes_spend_band_check"
+27. tom answers for chris → refused: new row violates row-level security policy for table "plan_wishes"
+28. tom removes chris's area → ok
+29. tom tidies the idea → refused: Only an organiser can tidy it up
+30. tom spins off the leftovers → refused: Only the organiser can do that
+31. the guest adds a course idea → ok true
+32. organiser sets a 9-night "weekend" → refused: That weekend isn't right (1 to 6 days)
+33. organiser: the area open to ideas, within 3 h of Sydney → ok {"set": [], "area": "Port Douglas", "from": "Sydney", "within_min": 180}
+34. tom suggests another area while it's open (straight in) → ok in
+35. organiser sets the area, 2 nights, as much golf as possible → ok {"set": ["area", "nights"], "area": "Port Douglas", "golf": "max", "nights": 2, "travel": "fly"}
+36. organiser adds an area outside it (straight in) → ok in
+37. tom suggests another area (queued) → ok queued
+38. tom adds a course in the area (straight in) → ok in
+39. tom accepts his own suggestion → refused: Only an organiser can look at suggestions
+40. tom sets the definition column by hand → ok
+41. organiser declines it with a note → ok declined
+42. organiser looks at it twice → refused: That one's already been looked at
+43. the declined one can't be ticked → ok 0
+44. organiser sends nothing to the vote → refused: Tick at least one thing for the vote
+45. organiser ticks two and sends → ok 2
+46. the idea is marked sent → ok true
+47. organiser can't set sent by hand on another plan → refused: Share the idea with the 📣 Share it button
+48. organiser gives the declined Hamilton Island back to tom → ok 1
+49. organiser gives back his own Noosa → refused: Nothing to give back — those are yours
+50. organiser parks Mirage in the future ideas → ok true
+51. the future ideas pool has it → ok Future trip ideas · Mirage Country Club
+52. tom is told his idea came back → ok 1 💡 Your Hamilton Island idea didn’t make this vote
+53. tom adds a weekend to the future ideas → ok in
+54. tom starts his own idea from Hamilton Island → ok true
+55. his new idea → ok Hamilton Island trip · proposed true · Hamilton Island
+56. tom starts it twice → refused: That one isn't yours to start
+57. tom starts chris's Port Douglas → refused: That one isn't yours to start
+58. tom makes Mirage (in the pool) a trip idea → ok true
+59. organiser spins off the leftovers → ok true
+60. the new idea came from the old one → ok true true true
+61. leftovers keep who added and the ✨ → ok Cairns:Tom:false, Fri 19 – Sun 21 Mar:Tom:false, Noosa:Ao:false, Palmer Sea Reef:Tom:false, Port Douglas:Chris:false
+62. organiser removes tom's weekend → ok 1
+63. chris (the organiser) reads everyone's answers → ok 1
+64. the guest reads the answers (no names) → ok 0
+65. the guest gets the answers without names → ok 1 false
+66. tom hands chris's idea to himself → refused: Only the organiser can hand it over
+67. chris hands it to the guest → refused: A guest can't organise a trip
+68. chris hands it to tom → ok true
+69. chris can't organise it any more → refused: Only the organiser can set parts of the idea
+70. tom is told → ok 1 organiser_handover
+71. tom, now organising, reads the answers → ok 1
+72. tom can run the trip's votes (the builder) → ok 1
+73. preview by token → ok March fly trip · March · Chris · Test Group A108 · true
+74. preview with a made-up token → ok nothing
+75. anon reads the plans table → ok 0
+76. anon reads the lists → refused: permission denied for table plan_idea_items
+77. other group sees the lists → ok 0
+78. other group sees the wishes → ok 0
+79. other group adds to the idea → refused: That belongs to another group
+80. other group shares it → refused: Trip not found
+81. other group tidies it → refused: Trip not found

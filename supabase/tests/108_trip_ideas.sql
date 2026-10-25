@@ -49,6 +49,8 @@ insert into public.group_members (group_id, user_id, player_id, role) values
   ('00000000-0000-4000-8000-00000000f108', '00000000-0000-4000-8000-0000008a0a04', '00000000-0000-4000-8000-0000008a0b04', 'guest'),
   ('00000000-0000-4000-8000-00000000f208', '00000000-0000-4000-8000-0000008a0a05', '00000000-0000-4000-8000-0000008a0b10', 'organiser');
 
+insert into public.group_features (group_id, feature_key, enabled) values ('00000000-0000-4000-8000-00000000f108', 'trip_finder', true);
+
 -- ---------------------------------------------------------------- Chris proposes an idea
 select pg_temp.as_user('00000000-0000-4000-8000-0000008a0a02');
 set local role authenticated;
@@ -88,7 +90,8 @@ select pg_temp.try('tom thumbs up the first weekend', $q$insert into public.plan
 select pg_temp.try('tom changes it to thumbs down', $q$update public.plan_idea_reactions set value = -1 where item_id = '00000000-0000-4000-8000-0000008a0d01' and player_id = '00000000-0000-4000-8000-0000008a0b03' returning value::text$q$);
 select pg_temp.try('tom reacts as chris', $q$insert into public.plan_idea_reactions (item_id, player_id, value) values ('00000000-0000-4000-8000-0000008a0d01', '00000000-0000-4000-8000-0000008a0b02', 1) returning 1$q$);
 select pg_temp.try('tom answers the 4 taps', $q$insert into public.plan_wishes (plan_id, player_id, cant_dates, spend_band, travel, max_drive_min, golf_per_day, day_prefs, home_by, wish)
-  values ('00000000-0000-4000-8000-0000008a0c01', '00000000-0000-4000-8000-0000008a0b03', '{2027-03-19,2027-03-12,2027-03-19}', '500_800', 'either', 180, 'one', '{"fri":"late","sun":"early"}', '16:00', '  Please no 6am tee times  ') returning cardinality(cant_dates)::text || ' ' || (day_prefs->>'fri') || ' ' || home_by::text || ' ' || wish$q$);
+  values ('00000000-0000-4000-8000-0000008a0c01', '00000000-0000-4000-8000-0000008a0b03', '{2027-03-19,2027-03-12,2027-03-19}', '500_800', 'either', 180, 'daily', '{"fri":"late","sun":"early"}', '16:00', '  Please no 6am tee times  ') returning cardinality(cant_dates)::text || ' ' || (day_prefs->>'fri') || ' ' || home_by::text || ' ' || wish$q$);
+select pg_temp.try('tom reads his own answers', $q$select count(*)::text from public.plan_wishes$q$);
 select pg_temp.try('tom wants "brunch" on Saturday', $q$update public.plan_wishes set day_prefs = '{"sat":"brunch"}' where plan_id = '00000000-0000-4000-8000-0000008a0c01' returning 1$q$);
 select pg_temp.try('tom fixes the weekend himself', $q$select public.idea_set_fixed('00000000-0000-4000-8000-0000008a0c01', '{"area":"Hobart"}')::text$q$);
 select pg_temp.try('tom says a Saturday he can''t do', $q$update public.plan_wishes set cant_dates = '{2027-03-13}' where plan_id = '00000000-0000-4000-8000-0000008a0c01' and player_id = '00000000-0000-4000-8000-0000008a0b03' returning 1$q$);
@@ -101,14 +104,22 @@ reset role;
 
 select pg_temp.as_user('00000000-0000-4000-8000-0000008a0a04');
 set local role authenticated;
-select pg_temp.try('the guest adds a course idea', $q$insert into public.plan_idea_items (plan_id, kind, label, by_ai) values ('00000000-0000-4000-8000-0000008a0c01', 'course', 'Mirage Country Club', true) returning by_ai::text$q$);
+select pg_temp.try('the guest adds a course idea', $q$insert into public.plan_idea_items (id, plan_id, kind, label, by_ai) values ('00000000-0000-4000-8000-0000008a0d04', '00000000-0000-4000-8000-0000008a0c01', 'course', 'Mirage Country Club', true) returning by_ai::text$q$);
 reset role;
 
 -- ---------------------------------------------------------------- the organiser fixes the area; suggestions outside it queue
 select pg_temp.as_user('00000000-0000-4000-8000-0000008a0a01');
 set local role authenticated;
-select pg_temp.try('organiser fixes a 9-night "weekend"', $q$select public.idea_set_fixed('00000000-0000-4000-8000-0000008a0c01', '{"weekend":{"start":"2027-03-12","end":"2027-03-22"}}')::text$q$);
-select pg_temp.try('organiser fixes the area and 2 nights', $q$select public.idea_set_fixed('00000000-0000-4000-8000-0000008a0c01', '{"area":"Port Douglas","nights":2,"junk":1}')::text$q$);
+select pg_temp.try('organiser sets a 9-night "weekend"', $q$select public.idea_set_fixed('00000000-0000-4000-8000-0000008a0c01', '{"weekend":{"start":"2027-03-12","end":"2027-03-22"}}')::text$q$);
+select pg_temp.try('organiser: the area open to ideas, within 3 h of Sydney', $q$select public.idea_set_fixed('00000000-0000-4000-8000-0000008a0c01', '{"area":"Port Douglas","from":"Sydney","within_min":180,"set":[]}')::text$q$);
+reset role;
+select pg_temp.as_user('00000000-0000-4000-8000-0000008a0a03');
+set local role authenticated;
+select pg_temp.try('tom suggests another area while it''s open (straight in)', $q$insert into public.plan_idea_items (plan_id, kind, label) values ('00000000-0000-4000-8000-0000008a0c01', 'area', 'Cairns') returning status$q$);
+reset role;
+select pg_temp.as_user('00000000-0000-4000-8000-0000008a0a01');
+set local role authenticated;
+select pg_temp.try('organiser sets the area, 2 nights, as much golf as possible', $q$select public.idea_set_fixed('00000000-0000-4000-8000-0000008a0c01', '{"area":"Port Douglas","nights":2,"golf":"max","travel":"fly","set":["area","nights","weekend","junk"],"junk":1}')::text$q$);
 select pg_temp.try('organiser adds an area outside it (straight in)', $q$insert into public.plan_idea_items (plan_id, kind, label) values ('00000000-0000-4000-8000-0000008a0c01', 'area', 'Noosa') returning status$q$);
 reset role;
 select pg_temp.as_user('00000000-0000-4000-8000-0000008a0a03');
@@ -129,11 +140,55 @@ select pg_temp.try('organiser sends nothing to the vote', $q$select public.idea_
 select pg_temp.try('organiser ticks two and sends', $q$select public.idea_tidy('00000000-0000-4000-8000-0000008a0c01', array['00000000-0000-4000-8000-0000008a0d01','00000000-0000-4000-8000-0000008a0d03']::uuid[], true)::text$q$);
 select pg_temp.try('the idea is marked sent', $q$select (idea_sent_at is not null)::text from public.plans where id = '00000000-0000-4000-8000-0000008a0c01'$q$);
 select pg_temp.try('organiser can''t set sent by hand on another plan', $q$update public.plans set idea_sent_at = null where id = '00000000-0000-4000-8000-0000008a0c01' returning 1$q$);
+select pg_temp.try('organiser gives the declined Hamilton Island back to tom', $q$select public.idea_give_back('00000000-0000-4000-8000-0000008a0c01', array['00000000-0000-4000-8000-0000008a0d05']::uuid[])::text$q$);
+select pg_temp.try('organiser gives back his own Noosa', $q$select public.idea_give_back('00000000-0000-4000-8000-0000008a0c01', array[(select id from public.plan_idea_items where label = 'Noosa')]::uuid[])::text$q$);
+select pg_temp.try('organiser parks Mirage in the future ideas', $q$select (public.idea_park('00000000-0000-4000-8000-0000008a0c01', array['00000000-0000-4000-8000-0000008a0d04']::uuid[]) is not null)::text$q$);
+select pg_temp.try('the future ideas pool has it', $q$select p.name || ' · ' || string_agg(i.label, ',') from public.plans p join public.plan_idea_items i on i.plan_id = p.id where p.idea_pool group by p.name$q$);
+reset role;
+select pg_temp.try('tom is told his idea came back', $q$select count(*)::text || ' ' || min(title) from public.notify_queue where kind = 'idea_given_back' and user_id = '00000000-0000-4000-8000-0000008a0a03'$q$);
+select pg_temp.as_user('00000000-0000-4000-8000-0000008a0a03');
+set local role authenticated;
+select pg_temp.try('tom adds a weekend to the future ideas', $q$insert into public.plan_idea_items (plan_id, kind, label, start_date, end_date) values ((select id from public.plans where idea_pool), 'date', 'Fri 7 – Sun 9 May', '2027-05-07', '2027-05-09') returning status$q$);
+select pg_temp.try('tom starts his own idea from Hamilton Island', $q$select (public.idea_start_from('00000000-0000-4000-8000-0000008a0d05') is not null)::text$q$);
+select pg_temp.try('his new idea', $q$select p.name || ' · proposed ' || p.proposed::text || ' · ' || (select string_agg(label, ',') from public.plan_idea_items where plan_id = p.id) from public.plans p where p.name = 'Hamilton Island trip'$q$);
+select pg_temp.try('tom starts it twice', $q$select public.idea_start_from('00000000-0000-4000-8000-0000008a0d05')::text$q$);
+select pg_temp.try('tom starts chris''s Port Douglas', $q$select public.idea_start_from((select id from public.plan_idea_items where label = 'Port Douglas' and plan_id = '00000000-0000-4000-8000-0000008a0c01'))::text$q$);
+select pg_temp.try('tom makes Mirage (in the pool) a trip idea', $q$select (public.idea_start_from((select i.id from public.plan_idea_items i join public.plans p on p.id = i.plan_id where p.idea_pool and i.label = 'Mirage Country Club')) is not null)::text$q$);
+reset role;
+select pg_temp.as_user('00000000-0000-4000-8000-0000008a0a01');
+set local role authenticated;
 select pg_temp.try('organiser spins off the leftovers', $q$select (public.idea_spin_off('00000000-0000-4000-8000-0000008a0c01', 'Plan B') is not null)::text$q$);
 select pg_temp.try('the new idea came from the old one', $q$select idea::text || ' ' || (idea_from = '00000000-0000-4000-8000-0000008a0c01')::text || ' ' || (organiser_id = '00000000-0000-4000-8000-0000008a0b01')::text from public.plans where name = 'Plan B'$q$);
 select pg_temp.try('leftovers keep who added and the ✨', $q$select string_agg(i.label || ':' || coalesce(p.nickname, '?') || ':' || i.by_ai::text, ', ' order by i.label)
   from public.plans n join public.plan_idea_items i on i.plan_id = n.id left join public.players p on p.id = i.added_by where n.name = 'Plan B'$q$);
 select pg_temp.try('organiser removes tom''s weekend', $q$delete from public.plan_idea_items where id = '00000000-0000-4000-8000-0000008a0d02' returning 1$q$);
+reset role;
+
+-- ---------------------------------------------------------------- names stay with the organiser; hand over
+select pg_temp.as_user('00000000-0000-4000-8000-0000008a0a02');
+set local role authenticated;
+select pg_temp.try('chris (the organiser) reads everyone''s answers', $q$select count(*)::text from public.plan_wishes$q$);
+reset role;
+select pg_temp.as_user('00000000-0000-4000-8000-0000008a0a04');
+set local role authenticated;
+select pg_temp.try('the guest reads the answers (no names)', $q$select count(*)::text from public.plan_wishes$q$);
+select pg_temp.try('the guest gets the answers without names', $q$select jsonb_array_length(public.idea_wish_answers('00000000-0000-4000-8000-0000008a0c01'))::text || ' ' || (public.idea_wish_answers('00000000-0000-4000-8000-0000008a0c01')::text like '%player_id%')::text$q$);
+reset role;
+select pg_temp.as_user('00000000-0000-4000-8000-0000008a0a03');
+set local role authenticated;
+select pg_temp.try('tom hands chris''s idea to himself', $q$select public.hand_over_idea('00000000-0000-4000-8000-0000008a0c01', '00000000-0000-4000-8000-0000008a0b03')::text$q$);
+reset role;
+select pg_temp.as_user('00000000-0000-4000-8000-0000008a0a02');
+set local role authenticated;
+select pg_temp.try('chris hands it to the guest', $q$select public.hand_over_idea('00000000-0000-4000-8000-0000008a0c01', '00000000-0000-4000-8000-0000008a0b04')::text$q$);
+select pg_temp.try('chris hands it to tom', $q$select (public.hand_over_idea('00000000-0000-4000-8000-0000008a0c01', '00000000-0000-4000-8000-0000008a0b03') = '00000000-0000-4000-8000-0000008a0b03')::text$q$);
+select pg_temp.try('chris can''t organise it any more', $q$select public.idea_set_fixed('00000000-0000-4000-8000-0000008a0c01', '{}')::text$q$);
+reset role;
+select pg_temp.try('tom is told', $q$select count(*)::text || ' ' || min(kind) from public.notify_queue where kind = 'organiser_handover' and user_id = '00000000-0000-4000-8000-0000008a0a03'$q$);
+select pg_temp.as_user('00000000-0000-4000-8000-0000008a0a03');
+set local role authenticated;
+select pg_temp.try('tom, now organising, reads the answers', $q$select count(*)::text from public.plan_wishes$q$);
+select pg_temp.try('tom can run the trip''s votes (the builder)', $q$insert into public.trip_builds (plan_id, state) values ('00000000-0000-4000-8000-0000008a0c01', '{"region":"Port Douglas"}') returning 1$q$);
 reset role;
 
 -- ---------------------------------------------------------------- the link preview (no sign-in)

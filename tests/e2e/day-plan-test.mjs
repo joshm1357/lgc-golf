@@ -63,8 +63,10 @@ const db = {
     { group_id: GROUP, course_id: L(2), weekdays: 'after 10', weekends: 'Sat after 11' },
   ],
   course_research: [{ library_id: L(2), name: 'The Vintage', fee_weekday: 99, fee_weekend: 129, details: { style: 'parkland' } }],
-  // ov39's wishes (108): Cy wants to play early on the Saturday.
-  plan_wishes: [{ plan_id: PLAN, player_id: pid(3), day_prefs: { sat: 'early' }, golf_per_day: 'daily', updated_at: now }],
+  // ov39's wishes (108): Cy wants to play early on the middle days (ov41: by the day's place, and 3 nights); Di's older
+  // row says early by weekday (Saturday) — still read.
+  plan_wishes: [{ plan_id: PLAN, player_id: pid(3), day_prefs: { middle: 'early' }, nights: [3], golf_per_day: 'daily', updated_at: now },
+    { plan_id: PLAN, player_id: pid(4), day_prefs: { sat: 'early' }, updated_at: now }],
   group_features: ['feed', 'planner', 'planner_tasks', 'trip_finder'].map((k) => ({ group_id: GROUP, feature_key: k, enabled: true })),
 };
 let asPlayer = false;
@@ -216,7 +218,8 @@ await page.getByTestId('dp-travel').getByRole('button', { name: '🚗 Drive' }).
 // 4. Saturday: Cy wants to play early (wishes). Then Al (a player) says "morning free".
 await tab(1).click(); await wait(600);
 check(/Show 1 more/.test(await page.getByTestId('dp-more-courses').innerText()) && (await page.locator('.dp-cmp-cards [data-testid="dp-course"]').count()) === 3, 'Saturday: the best 3 courses, "Show 1 more" for the rest');
-check((await page.getByTestId('dp-prefs-line').innerText()).includes('1 want to play early'), 'Cy’s wish (play early) shows for Saturday');
+check((await page.getByTestId('dp-prefs-line').innerText()).includes('2 want to play early'), `Cy’s “middle days: early” and Di’s old “Saturday: early” both show for Saturday (${await page.getByTestId('dp-prefs-line').innerText()})`);
+check(/1 wants 3 nights/.test(await page.getByTestId('dp-schedule-fit').innerText()), `the trip’s line says Cy wants 3 nights (${await page.getByTestId('dp-schedule-fit').innerText()})`);
 const vintageBest0 = await (await openCourse('The Vintage')).locator('[data-testid="dp-slot"].best').count();
 check(vintageBest0 === 0, 'The Vintage (after 11 on Saturdays) has no time that suits "play early"');
 asPlayer = true;
@@ -233,7 +236,7 @@ check(await page.getByTestId('dp-note').count() === 1 && (await page.getByTestId
 await wait(400);
 const best = await (await openCourse('The Vintage')).locator('[data-testid="dp-slot"].best').evaluateAll((els) => els.map((e) => Number(e.dataset.tee)));
 check(best.length > 0 && best.every((t) => t >= 11 * 60 + 30), `now the starred Saturday times suit "morning free" (from 11:30: ${best.map((t) => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`).join(', ')})`);
-check(/Not for 1 of the group/.test(await (await openCourse('The Vintage')).getByTestId('dp-notfor').innerText()), 'a player sees counts, not names');
+check(/Not for 2 of the group/.test(await (await openCourse('The Vintage')).getByTestId('dp-notfor').innerText()), 'a player sees counts, not names (Cy and Di)');
 check(await page.locator('[data-testid="day-wish-markers"]').isVisible(), 'the wishes sit on the timeline as markers');
 await page.screenshot({ path: `${SHOTS}/3-saturday-player-note.png`, fullPage: true });
 

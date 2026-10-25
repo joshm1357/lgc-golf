@@ -172,3 +172,12 @@
 - Link previews: a Cloudflare Pages function at /i/<token> (deployed by the existing `wrangler pages deploy`); the build
   writes /preview-db.json (the public database address and publishable key) for it. GitHub Pages can't: there the
   picture + message with the plain link are the fallback.
+
+## ov41 — nights and day positions (25 Oct 2026)
+- "How many nights?" is part of the first quick tap (it stays "4 quick taps"). Multi-pick; "4+" is saved as 4 (the
+  database takes 1–6, so an organiser's 5-night trip still suits a "4+"). `[]` = not fussed, null = not answered.
+- When to play is keyed by the day's place in the trip (first / middle / last), not the weekday. All middle days share
+  one answer. A day trip shows one row ("The day"), read as both first and last. Old weekday rows are still read.
+- Migration 108 was edited in place rather than adding 110, because 108 isn't live yet (same release).
+- The organiser's length is now shown in nights to match ("2 nights", not "3 days"); the stored value didn't change.
+

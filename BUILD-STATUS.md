@@ -2097,6 +2097,28 @@ Tests: `src/lib/tribunalWords.test.js` (5) + governance.test.js updated; whole v
 cleanly). e2e `tests/e2e/tribunal-clock-test.mjs` (12 checks) passes; governance, governance-hub, dispute,
 rulebook-v3, stage10 pass.
 
+## ov41 — Nights as an input; when to play by First day / Middle days / Last day (25 Oct 2026, branch `ov41-nights-daypos`, from `v10-7-release`, edits migration 108 — unreleased — not applied anywhere)
+
+Josh 21:12: "The number of nights should be an input too. Then it should be first day, middle days, end day I think on when to play."
+- **How many nights?** In the trip idea's quick taps (part of tap 1, under the weekends): 1 / 2 / 3 / 4+ / Not fussed,
+  pick one or more. Saved as `plan_wishes.nights int[]` (1–6; the app saves 4 for "4+"; `[]` = not fussed, null = not
+  answered). Hidden when the organiser has the weekend or the length Set. The organiser's existing length field
+  (`idea_fixed.nights`) is now worded in nights ("How many nights", "🛏️ 2 nights"). Group summary: "most say 2 nights".
+  Fit lines: a weekend on the list "suits 7 of 9 · 2 want 3 nights" (`dateFit` / `fitLine` / `dateWords`);
+  `tripfit.nightsCheck` (and `fitOption({ nights })`), the day plan's trip line ("… · 1 wants 3 nights"), and
+  "What the group said" (`wishesSummary`). The Caddie gets the nights line in its context.
+- **When to play:** rows First day / Middle days / Last day + Home by (Middle hidden for 1–2 day trips; one row "The
+  day" for a day trip). `day_prefs` keys 'first' | 'middle' | 'last' (values unchanged). The day plan maps each trip
+  day by position (`daytiming.dayPosKey`, `planDays().pos`); an old row's weekday key is still read for that weekday
+  (`prefFor`). Same words ("First day", "Middle days", "Last day") in the summary lines.
+- **108 edited in place** (unreleased): `plan_wishes.nights` (+ `add column if not exists` for a database that ran an
+  earlier copy), `private.day_prefs_ok` accepts first/middle/last and the old weekday keys, `idea_wish_answers` returns
+  nights. No check dropped or re-added.
+- Small fix: selected chips on the trip idea showed white text on the light gold (unreadable) — now dark text.
+- Tests: vitest 1961 pass (new: position mapping for 1/2/3/4/6-day trips, old weekday rows, nights cleaning / fit /
+  summary); `supabase/tests/108_trip_ideas.sql` (+8 checks, local Postgres 16 with 001–109) and 109 pass; Deno
+  ai-helper ideas tests pass; e2e trip-ideas, day-plan, plan-ux pass.
+
 ## ov40 — The day plan: golf on each day, rough timing in colours, notes on a day (25 Oct 2026, branch `ov40-day-plan`, from `v10-6-release`, migration 109, not applied anywhere)
 
 - **Golf on each day (Josh's top priority).** Every trip day has golf none / 9 / 18 / 36 and a travel-day switch

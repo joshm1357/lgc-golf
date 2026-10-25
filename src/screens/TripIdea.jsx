@@ -175,7 +175,7 @@ function Chips({ options, value, onPick, label }) {
     <div className="row" style={{ gap: 6, flexWrap: 'wrap' }} role="group" aria-label={label}>
       {options.map((o) => (
         <button key={String(o.value)} type="button" className="chip" aria-pressed={value === o.value} onClick={() => onPick(value === o.value ? null : o.value)}
-          style={{ minHeight: 40, fontWeight: value === o.value ? 800 : 500, background: value === o.value ? 'var(--gold-soft)' : undefined, borderColor: value === o.value ? 'var(--gold)' : undefined }}>
+          style={{ minHeight: 40, fontWeight: value === o.value ? 800 : 500, background: value === o.value ? 'var(--gold-soft)' : undefined, borderColor: value === o.value ? 'var(--gold)' : undefined, color: value === o.value ? 'var(--text)' : undefined }}>
           {o.label}
         </button>
       ))}
@@ -193,7 +193,7 @@ function NightsChips({ value, onPick }) {
       <div className="row" style={{ gap: 6, flexWrap: 'wrap' }} role="group" aria-label="How many nights">
         {I.NIGHTS.map((o) => (
           <button key={String(o.value)} type="button" className="chip" aria-pressed={on(o)} onClick={() => onPick(o.value)}
-            style={{ minHeight: 40, minWidth: 44, fontWeight: on(o) ? 800 : 500, background: on(o) ? 'var(--gold-soft)' : undefined, borderColor: on(o) ? 'var(--gold)' : undefined }}>
+            style={{ minHeight: 40, minWidth: 44, fontWeight: on(o) ? 800 : 500, background: on(o) ? 'var(--gold-soft)' : undefined, borderColor: on(o) ? 'var(--gold)' : undefined, color: on(o) ? 'var(--text)' : undefined }}>
             {o.label}
           </button>
         ))}
@@ -208,7 +208,7 @@ function MiniChips({ options, value, onPick, label }) {
     <div className="row" style={{ gap: 4, flexWrap: 'wrap' }} role="group" aria-label={label}>
       {options.map((o) => (
         <button key={String(o.value)} type="button" className="chip" aria-pressed={value === o.value} onClick={() => onPick(value === o.value ? null : o.value)}
-          style={{ minHeight: 34, padding: '2px 10px', fontSize: 14, fontWeight: value === o.value ? 800 : 500, background: value === o.value ? 'var(--gold-soft)' : undefined, borderColor: value === o.value ? 'var(--gold)' : undefined }}>
+          style={{ minHeight: 34, padding: '2px 10px', fontSize: 14, fontWeight: value === o.value ? 800 : 500, background: value === o.value ? 'var(--gold-soft)' : undefined, borderColor: value === o.value ? 'var(--gold)' : undefined, color: value === o.value ? 'var(--text)' : undefined }}>
           {o.label}
         </button>
       ))}

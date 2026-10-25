@@ -254,11 +254,11 @@ check(/#\/idea\//.test(page.url()) && await page.getByTestId('organiser-panel').
 await page.getByTestId('edit-def').click();
 await page.getByLabel('Where', { exact: true }).last().fill('Hunter Valley');
 await page.getByTestId('set-area').click();
-await page.getByLabel('How long').selectOption('2');
+await page.getByLabel('How many nights').selectOption('2');
 await page.getByTestId('def-save').click(); await wait(800);
 check(idea.idea_fixed?.area === 'Hunter Valley' && idea.idea_fixed.nights === 2 && JSON.stringify(idea.idea_fixed.set) === '["area"]', `what's set is saved (${JSON.stringify(idea.idea_fixed)})`);
 const defs = await page.getByTestId('def-line').allInnerTexts();
-check(defs.some((t) => /Hunter Valley/.test(t) && /Set/.test(t)) && defs.some((t) => /3 days/.test(t) && /Open to ideas/.test(t)), `the top shows Set / Open to ideas (${defs.join(' | ').replace(/\n/g, ' ')})`);
+check(defs.some((t) => /Hunter Valley/.test(t) && /Set/.test(t)) && defs.some((t) => /2 nights/.test(t) && /Open to ideas/.test(t)), `the top shows Set / Open to ideas (${defs.join(' | ').replace(/\n/g, ' ')})`);
 await page.getByTestId('suggest-box').last().locator('input').fill('Kiama');
 await page.getByTestId('suggest-add').last().click(); await wait(600);
 await page.getByTestId('suggest-box').last().getByRole('button', { name: '📅 A weekend' }).click();
@@ -292,16 +292,26 @@ check(offered === 8 && /Feb|Mar/.test(firstLabel), `the weekends start at the id
 await page.getByTestId('more-weekends').click(); await wait(300);
 check(await page.getByTestId('cant-calendar').getByRole('button').count() === 16, '"Show more" adds 8 more');
 await page.getByTestId('cant-calendar').getByLabel(`Can't do ${josWeekend0.label}`).click(); await wait(400);
+// ov41 (Josh 21:12): "How many nights?" — the length is open, so Al says 2 or 3.
+await page.getByRole('group', { name: 'How many nights' }).getByRole('button', { name: '2', exact: true }).click(); await wait(300);
+await page.getByRole('group', { name: 'How many nights' }).getByRole('button', { name: '3', exact: true }).click(); await wait(300);
+check((await page.getByRole('group', { name: 'How many nights' }).getByRole('button', { pressed: true }).allInnerTexts()).join(',') === '2,3', 'Al picks 2 or 3 nights (multi-pick)');
 await page.getByRole('group', { name: 'Spend each' }).getByRole('button', { name: '$500–800' }).click(); await wait(300);
 await page.getByRole('group', { name: 'Getting there' }).getByRole('button', { name: 'Happy to fly' }).click(); await wait(300);
 await page.getByRole('group', { name: 'How much golf' }).getByRole('button', { name: 'A round a day' }).click(); await wait(300);
 await page.getByTestId('wish-more').locator('summary').click(); await wait(300);
-await page.getByRole('group', { name: 'Friday timing' }).getByRole('button', { name: 'Late' }).click(); await wait(300);
-await page.getByRole('group', { name: 'Sunday timing' }).getByRole('button', { name: 'Early' }).click(); await wait(300);
+// When to play: First day / Middle days / Last day (ov41) — a 2-night trip has all three.
+check(await page.getByTestId('day-pref-first').isVisible() && await page.getByTestId('day-pref-middle').isVisible() && await page.getByTestId('day-pref-last').isVisible() && await page.getByTestId('day-pref-fri').count() === 0,
+  'when to play: First day, Middle days, Last day (not weekdays)');
+await page.getByRole('group', { name: 'First day timing' }).getByRole('button', { name: 'Late' }).click(); await wait(300);
+await page.getByRole('group', { name: 'Middle days timing' }).getByRole('button', { name: 'Midday' }).click(); await wait(300);
+await page.getByRole('group', { name: 'Last day timing' }).getByRole('button', { name: 'Early' }).click(); await wait(300);
 await page.getByLabel('One wish').fill('Barnbougle one day'); await page.getByLabel('One wish').blur(); await wait(600);
 const alw = db.plan_wishes.find((w) => w.plan_id === idea.id && w.player_id === AL);
-check(alw && alw.cant_dates.length === 1 && alw.spend_band === '500_800' && alw.travel === 'fly' && alw.golf_per_day === 'daily' && alw.day_prefs.fri === 'late' && alw.day_prefs.sun === 'early' && alw.wish === 'Barnbougle one day',
+check(alw && alw.cant_dates.length === 1 && alw.spend_band === '500_800' && alw.travel === 'fly' && alw.golf_per_day === 'daily' && alw.day_prefs.first === 'late' && alw.day_prefs.middle === 'midday' && alw.day_prefs.last === 'early' && JSON.stringify(alw.nights) === '[2,3]' && alw.wish === 'Barnbougle one day',
   `Al's 4 quick taps are saved as one row (${JSON.stringify(alw && { ...alw, id: undefined })})`);
+await page.getByTestId('wish-more').screenshot({ path: `${SHOTS}/03b-days-al.png` }).catch(() => {}); await page.getByTestId('nights-chips').screenshot({ path: `${SHOTS}/03a-nights-al.png` }).catch(() => {});
+check(/most say 2 nights/.test(await page.getByTestId('wish-summary').innerText()), `the summary says the nights (${await page.getByTestId('wish-summary').innerText()})`);
 // A suggestion outside what's set → the organiser's queue.
 await page.getByTestId('suggest-box').locator('input').fill('Port Macquarie');
 check(/goes to the organiser/.test(await page.getByTestId('suggest-box').innerText()), 'Al is told it goes to the organiser (the area is set)');

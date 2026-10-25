@@ -231,6 +231,9 @@ const shot = async (name) => {
   await page.setViewportSize({ width: 375, height: 812 }); await wait(200);
 };
 const as = async (id, hash) => { who = id; await page.goto(`${BASE}${hash}`); await page.reload(); await wait(900); };
+// v10.7: "March away" offers weekends from March — the first offered Friday is the one on or after 26–28 Feb.
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const marchFri = (k) => { const t = new Date(); const y = t.getMonth() > 2 ? t.getFullYear() + 1 : t.getFullYear(); const d = new Date(y, 2, 1); d.setDate(d.getDate() - 3); while (d.getDay() !== 5) d.setDate(d.getDate() + 1); d.setDate(d.getDate() + 7 * k); return iso(d); };
 const fri = (weeks) => { const d = new Date(); d.setDate(d.getDate() + ((5 - d.getDay() + 7) % 7) + 7 * weeks); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
 // ================================================================ 1. propose
@@ -259,7 +262,7 @@ check(defs.some((t) => /Hunter Valley/.test(t) && /Set/.test(t)) && defs.some((t
 await page.getByTestId('suggest-box').last().locator('input').fill('Kiama');
 await page.getByTestId('suggest-add').last().click(); await wait(600);
 await page.getByTestId('suggest-box').last().getByRole('button', { name: '📅 A weekend' }).click();
-await page.getByTestId('suggest-box').last().locator('select').selectOption(fri(10));
+await page.getByTestId('suggest-box').last().locator('select').selectOption(marchFri(1));
 await page.getByTestId('suggest-add').last().click(); await wait(600);
 check(db.plan_idea_items.filter((i) => i.plan_id === idea.id && i.status === 'in').length === 2, 'Josh adds an area and a weekend (straight in — he organises it)');
 
@@ -283,10 +286,16 @@ check((await page.getByTestId('trip-idea').getAttribute('data-view')) === 'summa
 check(await page.getByTestId('organiser-panel').count() === 0, 'no organising tools for Al');
 await shot('03-summary-al');
 const josWeekend0 = db.plan_idea_items.find((i) => i.plan_id === idea.id && i.kind === 'date' && i.added_by === JOSH);
+const offered = await page.getByTestId('cant-calendar').getByRole('button').count();
+const firstLabel = await page.getByTestId('cant-calendar').getByRole('button').first().getAttribute('aria-label');
+check(offered === 8 && /Feb|Mar/.test(firstLabel), `the weekends start at the idea's month — 8 from March (${offered}: ${firstLabel})`);
+await page.getByTestId('more-weekends').click(); await wait(300);
+check(await page.getByTestId('cant-calendar').getByRole('button').count() === 16, '"Show more" adds 8 more');
 await page.getByTestId('cant-calendar').getByLabel(`Can't do ${josWeekend0.label}`).click(); await wait(400);
 await page.getByRole('group', { name: 'Spend each' }).getByRole('button', { name: '$500–800' }).click(); await wait(300);
 await page.getByRole('group', { name: 'Getting there' }).getByRole('button', { name: 'Happy to fly' }).click(); await wait(300);
 await page.getByRole('group', { name: 'How much golf' }).getByRole('button', { name: 'A round a day' }).click(); await wait(300);
+await page.getByTestId('wish-more').locator('summary').click(); await wait(300);
 await page.getByRole('group', { name: 'Friday timing' }).getByRole('button', { name: 'Late' }).click(); await wait(300);
 await page.getByRole('group', { name: 'Sunday timing' }).getByRole('button', { name: 'Early' }).click(); await wait(300);
 await page.getByLabel('One wish').fill('Barnbougle one day'); await page.getByLabel('One wish').blur(); await wait(600);
@@ -299,7 +308,7 @@ check(/goes to the organiser/.test(await page.getByTestId('suggest-box').innerTe
 await page.getByTestId('suggest-add').click(); await wait(600);
 check(db.plan_idea_items.find((i) => i.label === 'Port Macquarie')?.status === 'queued', 'Port Macquarie is queued for Josh');
 await page.getByTestId('suggest-box').getByRole('button', { name: '📅 A weekend' }).click();
-await page.getByTestId('suggest-box').locator('select').selectOption(fri(11));
+await page.getByTestId('suggest-box').locator('select').selectOption(marchFri(2));
 await page.getByTestId('suggest-add').click(); await wait(600);
 await page.getByLabel('Comment').fill('Keen — not the 12th though');
 await page.getByTestId('comment-send').click(); await wait(600);
@@ -335,7 +344,8 @@ await page.getByTestId('suggest-add').last().click(); await wait(600);
 await page.getByRole('button', { name: `Thumbs down ${josWeekend.label}` }).click(); await wait(500);
 check(db.plan_idea_items.some((i) => i.label === 'Cypress Lakes' && i.added_by === BO) && db.plan_idea_reactions.some((r) => r.player_id === BO && r.value === -1), 'Bo adds a course and 👎 a weekend');
 const t = await page.locator(`[data-testid="idea-item"][data-label="${josWeekend.label}"]`).innerText();
-check(/👍 1/.test(t) && /👎 1/.test(t), `the weekend shows 👍 1 👎 1 (${t.replace(/\n/g, ' ')})`);
+check(/👍 1/.test(t) && /👎 1/.test(t) && /1 can’t do it/.test(t), `the weekend shows 👍 1 👎 1 and "1 can’t do it" for a player (${t.replace(/\n/g, ' ')})`);
+check(await page.getByTestId('suggest-box').count() === 1, 'one "Suggest something" box on the lists page');
 await shot('05-lists-bo');
 
 // ================================================================ 5. Josh: the queue, tidy → vote
@@ -344,7 +354,7 @@ await page.getByTestId('queue').waitFor({ timeout: 10000 });
 check((await page.getByTestId('queue-count').innerText()) === '1 suggestion to look at', 'Josh sees "1 suggestion to look at"');
 const alWeekend = db.plan_idea_items.find((i) => i.plan_id === idea.id && i.kind === 'date' && i.added_by === AL);
 const jw = await page.locator(`[data-testid="idea-item"][data-label="${josWeekend.label}"]`).innerText();
-check(/Can’t: Al/.test(jw) && /suits 0 of 1/.test(jw), `the organiser sees names with the fit line (${jw.replace(/\n/g, ' ')})`);
+check(/Al can’t do this one/.test(jw) && !/suits/.test(jw), `the organiser sees who can't do a weekend by name (${jw.replace(/\n/g, ' ')})`);
 await shot('06-organiser-queue');
 await page.getByTestId('queue-accept').click(); await wait(600);
 check(db.plan_idea_items.find((i) => i.label === 'Port Macquarie')?.status === 'in', 'Josh adds Port Macquarie to the lists');

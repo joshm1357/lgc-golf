@@ -94,7 +94,7 @@ export default function TripIdea() {
         ) : (
           <>
             {isOrg && <OrganiserPanel {...ctx} />}
-            {!isOrg && <QuickFeedback {...ctx} compact />}
+            {!isOrg && <QuickFeedback {...ctx} compact suggest={false} />}
             <Lists {...ctx} />
             <IdeaCaddie {...ctx} />
             <details className="card pad" open={mode === 'board' && pd.comments.length > 0}>
@@ -109,6 +109,13 @@ export default function TripIdea() {
   );
 }
 
+// The share picture, shown only once it has loaded (never a broken-image box).
+function SharePic({ url }) {
+  const [ok, setOk] = useState(false);
+  return <img src={url} alt="" data-testid="hero-picture" onLoad={() => setOk(true)} onError={() => setOk(false)}
+    style={{ width: '100%', borderRadius: 10, aspectRatio: '1200 / 630', objectFit: 'cover', display: ok ? 'block' : 'none' }} />;
+}
+
 // ---------------------------------------------------------------- the top: what's set, what's open, the group so far
 
 function Hero({ plan, fixed, summary, isOrg, me }) {
@@ -116,7 +123,7 @@ function Hero({ plan, fixed, summary, isOrg, me }) {
   const shape = I.ideaShape(plan);
   return (
     <div className="card pad stack" style={{ gap: 8, borderColor: 'var(--gold)', borderWidth: 2 }} data-testid="idea-hero">
-      {plan.card_url && <img src={plan.card_url} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} style={{ width: '100%', borderRadius: 10, aspectRatio: '1200 / 630', objectFit: 'cover' }} />}
+      {plan.card_url && <SharePic url={plan.card_url} />}
       {!lines.length && <span>{shape || 'When and where: up to you lot'}</span>}
       {lines.map((d) => (
         <div key={d.key} className="row between" style={{ gap: 8 }} data-testid="def-line">
@@ -134,7 +141,7 @@ function Hero({ plan, fixed, summary, isOrg, me }) {
 
 // ---------------------------------------------------------------- COLLECT: one-tap feedback and the 4 quick taps
 
-function QuickFeedback({ plan, pd, me, canAdd, fixed, reload, compact = false }) {
+function QuickFeedback({ plan, pd, me, canAdd, fixed, reload, compact = false, suggest = true }) {
   const weekendSet = I.isSet(fixed, 'weekend') && fixed.weekend?.start;
   const mine = pd.rsvps.find((r) => r.player_id === me)?.status || null;
   const [busy, run] = useRun();
@@ -157,7 +164,7 @@ function QuickFeedback({ plan, pd, me, canAdd, fixed, reload, compact = false })
         </div>
       )}
       <WishTaps plan={plan} me={me} fixed={fixed} reload={reload} compact={compact} />
-      <SuggestBox plan={plan} fixed={fixed} reload={reload} />
+      {suggest && <SuggestBox plan={plan} fixed={fixed} reload={reload} />}
       {!compact && <QuickComment pd={pd} plan={plan} />}
     </div>
   );
@@ -176,9 +183,24 @@ function Chips({ options, value, onPick, label }) {
   );
 }
 
+/** Smaller chips in one wrapping row (the per-day timings). */
+function MiniChips({ options, value, onPick, label }) {
+  return (
+    <div className="row" style={{ gap: 4, flexWrap: 'wrap' }} role="group" aria-label={label}>
+      {options.map((o) => (
+        <button key={String(o.value)} type="button" className="chip" aria-pressed={value === o.value} onClick={() => onPick(value === o.value ? null : o.value)}
+          style={{ minHeight: 34, padding: '2px 10px', fontSize: 14, fontWeight: value === o.value ? 800 : 500, background: value === o.value ? 'var(--gold-soft)' : undefined, borderColor: value === o.value ? 'var(--gold)' : undefined }}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function WishTaps({ plan, me, fixed, reload, compact }) {
   const [w, setW] = useState(null);
   const [open, setOpen] = useState(!compact);
+  const [more, setMore] = useState(0); // v10.7: "Show more" weekends
   useEffect(() => {
     supabase.from('plan_wishes').select('*').eq('plan_id', plan.id).eq('player_id', me).maybeSingle()
       .then(({ data }) => setW(data || { cant_dates: [], day_prefs: {} }), () => setW({ cant_dates: [], day_prefs: {} }));
@@ -192,7 +214,8 @@ function WishTaps({ plan, me, fixed, reload, compact }) {
   if (!w) return null;
   const weekendSet = I.isSet(fixed, 'weekend');
   const done = I.tapsDone(w, { weekendFixed: weekendSet, rsvp: weekendSet ? 'x' : null });
-  const fridays = I.upcomingFridays(TB.addDays(todayISO(), 7), 16);
+  const offer = I.weekendsToOffer(plan, todayISO());
+  const fridays = [...offer, ...(more ? I.upcomingFridays(TB.addDays(offer[offer.length - 1], 7), more) : [])];
   const nights = fixed.nights ?? 2;
   const days = I.tripDayKeys(fixed);
   return (
@@ -205,20 +228,21 @@ function WishTaps({ plan, me, fixed, reload, compact }) {
           {!weekendSet && (
             <div className="stack" style={{ gap: 4 }}>
               <span className="label">1. Weekends you CAN’T do</span>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(76px, 1fr))', gap: 6 }} data-testid="cant-calendar">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }} data-testid="cant-calendar">
                 {fridays.map((f) => {
                   const on = (w.cant_dates || []).includes(f);
                   const d = TB.dateOf(f);
                   return (
                     <button key={f} type="button" className="chip" aria-pressed={on} onClick={() => save({ cant_dates: I.toggleCant(w.cant_dates || [], f), dates_ok: true })}
-                      style={{ minHeight: 44, flexDirection: 'column', textDecoration: on ? 'line-through' : 'none', background: on ? '#FDE7E5' : undefined, borderColor: on ? '#B3261E' : undefined }}
+                      style={{ minHeight: 40, padding: '4px 2px', flexDirection: 'column', textDecoration: on ? 'line-through' : 'none', background: on ? '#FDE7E5' : undefined, borderColor: on ? '#B3261E' : undefined }}
                       aria-label={`Can't do ${I.fridayLabel(f, nights || 2)}`}>
                       <span className="small" style={{ fontWeight: 700 }}>{d.getDate()} {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()]}</span>
                     </button>
                   );
                 })}
               </div>
-              <span className="small muted">Fridays shown — tap the weekends you’re out.{(w.cant_dates || []).length ? '' : ' Can do them all? Leave it.'}</span>
+              <span className="small muted row between" style={{ gap: 6 }}><span>Fridays — tap the weekends you’re out.</span>
+                <button type="button" className="chip" style={{ minHeight: 32 }} onClick={() => setMore(more + 8)} data-testid="more-weekends">Show more</button></span>
             </div>
           )}
           <div className="stack" style={{ gap: 4 }}>
@@ -238,11 +262,14 @@ function WishTaps({ plan, me, fixed, reload, compact }) {
           <div className="stack" style={{ gap: 4 }}>
             <span className="label">{weekendSet ? '3' : '4'}. How much golf</span>
             <Chips label="How much golf" options={I.GOLF} value={w.golf_per_day} onPick={(v) => save({ golf_per_day: v })} />
-            <span className="small muted">How you’d like the days (optional)</span>
+          </div>
+          <details data-testid="wish-more">
+            <summary className="small" style={{ fontWeight: 700, cursor: 'pointer', minHeight: 32 }}>More (optional) — how you’d like the days, home by, one wish</summary>
+            <div className="stack" style={{ gap: 6, marginTop: 6 }}>
             {days.map((k) => (
-              <div key={k} className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }} data-testid={`day-pref-${k}`}>
-                <span className="small" style={{ width: 34, fontWeight: 700 }}>{I.DAY_NAME[k].slice(0, 3)}</span>
-                <Chips label={`${I.DAY_NAME[k]} timing`} options={I.DAY_PREF} value={w.day_prefs?.[k] || null}
+              <div key={k} className="row" style={{ gap: 4, alignItems: 'center', flexWrap: 'wrap' }} data-testid={`day-pref-${k}`}>
+                <span className="small" style={{ width: 30, fontWeight: 700 }}>{I.DAY_NAME[k].slice(0, 3)}</span>
+                <MiniChips label={`${I.DAY_NAME[k]} timing`} options={I.DAY_PREF} value={w.day_prefs?.[k] || null}
                   onPick={(v) => { const dp = { ...(w.day_prefs || {}) }; if (v) dp[k] = v; else delete dp[k]; save({ day_prefs: dp }); }} />
               </div>
             ))}
@@ -253,9 +280,10 @@ function WishTaps({ plan, me, fixed, reload, compact }) {
                 {['12:00', '14:00', '16:00', '18:00', '20:00'].map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </label>
-          </div>
           <label className="field"><span>One wish (a course, a place, a must or a please-no)</span>
             <input className="input" defaultValue={w.wish || ''} onBlur={(e) => { if ((e.target.value || '') !== (w.wish || '')) save({ wish: e.target.value }); }} placeholder="e.g. Barnbougle, or no 6am tee times" aria-label="One wish" /></label>
+            </div>
+          </details>
         </>
       )}
     </div>
@@ -322,6 +350,7 @@ function Lists(ctx) {
   const { l, canAdd, plan, fixed, reload } = ctx;
   return (
     <div className="stack" style={{ gap: 10 }} data-testid="idea-lists">
+      {canAdd && <SuggestBox plan={plan} fixed={fixed} reload={reload} />}
       {[['date', '📅 Dates'], ['area', '📍 Areas'], ['course', '⛳ Courses']].map(([k, t]) => (
         <div key={k} className="card pad stack" style={{ gap: 6 }} data-testid={`list-${k}`}>
           <strong>{t} <span className="small muted">({l[k].length})</span></strong>
@@ -329,15 +358,16 @@ function Lists(ctx) {
           {l[k].map((it) => <ItemRow key={it.id} it={it} {...ctx} />)}
         </div>
       ))}
-      {canAdd && <SuggestBox plan={plan} fixed={fixed} reload={reload} />}
     </div>
   );
 }
 
 function ItemRow({ it, me, isOrg, data, x, answers, reload, canAdd }) {
   const [busy, run] = useRun();
-  const fit = I.itemFit(it, { wishes: answers, stayAreas: x.stayAreas, base: x.base });
-  const cant = isOrg && it.kind === 'date' ? I.whoCant(it, x.wishRows, (id) => nameOf(data, id)) : [];
+  // v10.7: a weekend says who can't do it (names for the organiser, a count for others) — only once someone's answered.
+  const fit = it.kind === 'date' ? I.dateWords(it, { answers, rows: x.wishRows, nameOf: isOrg ? (id) => nameOf(data, id) : null })
+    : I.itemFit(it, { wishes: answers, stayAreas: x.stayAreas, base: x.base });
+  const cantDate = it.kind === 'date' && /can’t/.test(fit);
   const react = (v) => run(async () => {
     const next = I.nextReaction(it.t.mine, v);
     if (!next) await must(supabase.from('plan_idea_reactions').delete().eq('item_id', it.id).eq('player_id', me));
@@ -357,8 +387,7 @@ function ItemRow({ it, me, isOrg, data, x, answers, reload, canAdd }) {
         <span style={{ fontWeight: 700 }}>{it.by_ai && <span title="From the Caddie">✨ </span>}{it.label}{it.kind === 'course' && it.area ? <span className="small muted"> · {it.area}</span> : null}</span>
         {it.note && <span className="small muted">{it.note}</span>}
         {fly && <span className="small muted">✈️ {I.flightLine(fly)}</span>}
-        {fit && <span className="small" style={{ color: '#2E6B3F', fontWeight: 600 }} data-testid="fit-line">{fit}</span>}
-        {cant.length > 0 && <span className="small" style={{ color: '#B3261E' }} data-testid="who-cant">Can’t: {cant.join(', ')}</span>}
+        {fit && <span className="small" style={{ color: cantDate ? '#B3261E' : '#2E6B3F', fontWeight: 600 }} data-testid="fit-line">{fit}</span>}
         <span className="small muted">{by ? `from ${by}` : ''}</span>
       </div>
       <div className="row" style={{ gap: 4, flex: 'none' }}>

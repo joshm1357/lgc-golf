@@ -89,3 +89,16 @@ Also: **🤝 Hand over organising** (notifies the new organiser), **one organise
 - Parked ideas are their own plans (💭 Future trip ideas); the 48 h is exact at claim time (stored claim_until) and a
   15-minute job sends the reminder and the "up for grabs" post.
 - The share picture for the preview goes in the public photos bucket (as all photos do).
+
+## v10.7 review fixes (March test, 25 Oct) — on `v10-7-release`
+1. "Weekends you can't do" starts at the idea's month (what's set → rough when → the name, e.g. "March away"), 8
+   weekends from the one running into the 1st, "Show more" adds 8; nothing known → the next 3 months (13). Never
+   before next week. `weekendsToOffer` / `ideaMonth` in lib/ideas.js (tested).
+2. The 4 quick taps are compact: weekends in a 4-across grid, then spend, getting there, how much golf; "More
+   (optional)" folds the per-day timings (one row per trip day, smaller chips in one wrapping row), home by and the wish.
+3. A weekend row now says what it means, and only once someone's answered: "Al can't do this one" (organiser) /
+   "1 can't do it" (others) / "All 3 who've answered can do it". `dateWords` (tested).
+4. One "Suggest something" box on the lists page (at the top).
+5. The share picture was only the test fake (its storage address isn't served there). The hero now shows the picture
+   only once it has loaded — never a broken-image box.
+Tests: vitest 1,950 pass; e2e trip-ideas, plan-ux, day-plan all pass. New screenshots in `shots-ov39/` (worktree).

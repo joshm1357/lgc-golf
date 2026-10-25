@@ -261,3 +261,30 @@ describe('parked ideas', () => {
     expect(claimState({}, 'chris', now).state).toBe('open');
   });
 });
+
+describe('v10.7: weekends from the idea’s month, date words', () => {
+  it('starts the weekends at the idea’s month (rough when, or the name)', async () => {
+    const { weekendsToOffer, ideaMonth } = await import('./ideas.js');
+    expect(ideaMonth({ name: 'March away' })).toBe(2);
+    expect(ideaMonth({ name: 'Golf trip', idea_when: 'the June long weekend' })).toBe(5);
+    expect(ideaMonth({ name: 'Golf trip' })).toBe(null);
+    const m = weekendsToOffer({ name: 'March away' }, '2026-10-25');
+    expect(m.length).toBe(8);
+    expect(m[0]).toBe('2027-02-26'); // the weekend running into 1 March
+    expect(m[7]).toBe('2027-04-16');
+    const none = weekendsToOffer({ name: 'x' }, '2026-10-25');
+    expect(none.length).toBe(13);
+    expect(none[0]).toBe('2026-11-06');
+    expect(weekendsToOffer({ idea_when: 'November' }, '2026-10-25')[0]).toBe('2026-11-06'); // never before next week
+  });
+  it('says what a date row means', async () => {
+    const { dateWords } = await import('./ideas.js');
+    const it0 = { start_date: '2027-03-05' };
+    const answers = [{ cant_dates: ['2027-03-05'] }, { cant_dates: [] }];
+    const rows = [{ player_id: 'al', cant_dates: ['2027-03-05'] }, { player_id: 'bo', cant_dates: [] }];
+    expect(dateWords(it0, { answers: [] })).toBe('');
+    expect(dateWords(it0, { answers })).toBe('1 can’t do it');
+    expect(dateWords(it0, { answers, rows, nameOf: (id) => ({ al: 'Al' }[id]) })).toBe('Al can’t do this one');
+    expect(dateWords({ start_date: '2027-03-12' }, { answers })).toBe('All 2 who’ve answered can do it');
+  });
+});

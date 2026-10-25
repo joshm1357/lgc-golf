@@ -528,3 +528,51 @@ export function claimState(plan = {}, me = null, now = new Date()) {
   if (!plan.claim_owner || !until || until <= now) return { state: 'open', until, owner: plan.claim_owner || null };
   return { state: plan.claim_owner === me ? 'mine' : 'theirs', until, owner: plan.claim_owner };
 }
+
+// ------------------------------------------------------------------ v10.7 (the March test)
+
+const MONTH_WORDS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+/** The month an idea is roughly in (0–11), from what's set, its rough when, or its name ("March away"). Null if none. */
+export function ideaMonth(plan = {}) {
+  const f = plan.idea_fixed || {};
+  if (f.weekend?.start) return TBmonth(f.weekend.start);
+  for (const t of [f.when, plan.idea_when, plan.name]) {
+    const m = /\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/i.exec(String(t || ''));
+    if (m) return MONTH_WORDS.indexOf(m[1].slice(0, 3).toLowerCase());
+  }
+  return null;
+}
+const TBmonth = (iso) => (dateOf(iso) ? dateOf(iso).getMonth() : null);
+
+/**
+ * The weekends to offer for "Weekends you can't do": from the idea's month (the next one coming; a weekend that
+ * starts a few days before the 1st counts), ~8 of them; nothing known → the next 3 months (13). Never before next week.
+ * → { fridays, more: (n) => the next n Fridays after these }
+ */
+export function weekendsToOffer(plan = {}, today = isoOf(new Date())) {
+  const soonest = addDays(today, 7);
+  const m = ideaMonth(plan);
+  let start = soonest;
+  if (m != null) {
+    const t = dateOf(today);
+    let y = t.getFullYear();
+    if (m < t.getMonth()) y += 1;
+    const first = isoOf(new Date(y, m, 1));
+    start = addDays(first, -3) > soonest ? addDays(first, -3) : soonest;
+  }
+  const n = m != null ? 8 : 13;
+  return upcomingFridays(start, n);
+}
+
+/** A weekend row's words from the answers: who can't (names for the organiser, a count for others). '' if nobody's answered. */
+export function dateWords(item, { answers = [], rows = [], nameOf = null } = {}) {
+  if (!(answers || []).length) return '';
+  const f = dateFit(item, answers);
+  const out = f.of - f.can;
+  if (!out) return f.of === 1 ? 'The one who’s answered can do it' : `All ${f.of} who’ve answered can do it`;
+  if (nameOf) {
+    const names = whoCant(item, rows, nameOf);
+    if (names.length) return `${names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`} can’t do this one`;
+  }
+  return `${out} can’t do it`;
+}

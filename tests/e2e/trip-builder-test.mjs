@@ -283,6 +283,14 @@ check(state().stays?.map((s) => s.name).join(',') === 'Nowra,Jervis Bay (Huskiss
 
 // 5. Day 1 — on the way: suggestions along the drive.
 const days = page.locator('[data-testid="tb-day"]');
+// ov40: choosing the area now fills EVERY day from the area's courses (it used to leave the first and last days empty —
+// the Blue Mountains "only one round" bug). Clear the travel days so this walk-through can add its own.
+check((state().days || []).filter((d) => d.leg !== 'stay').every((d) => (d.options || []).length > 0), `ov40: the travel days start filled too (${(state().days || []).map((d) => (d.options || []).length).join('/')})`);
+for (const i of [0, 2]) {
+  for (let n = 0; n < 6 && (await days.nth(i).locator('[data-testid="tb-option"]').count()); n++) {
+    await days.nth(i).locator('[data-testid="tb-option"]').first().getByRole('button', { name: /^Remove / }).click(); await wait(300);
+  }
+}
 await days.nth(0).getByRole('button').first().click(); await wait();
 const sug1 = await days.nth(0).locator('[data-testid="tb-suggestions"]').innerText();
 check(sug1.includes('Shoalhaven Heads GC') && sug1.includes('off the way') && !sug1.includes('Mollymook'), `day 1 suggestions are on the way (${sug1.replace(/\s+/g, ' ').slice(0, 90)})`);

@@ -10,5 +10,5 @@
 10. tom sees Saturday's notes → ok 1
 11. tom deletes Hamish's note (rows) → ok 0
 12. other group sees the notes → ok 0
-13. other group adds a note → refused: new row violates row-level security policy for table "plan_comments"
+13. other group adds a note → refused: That belongs to another group
 14. organiser deletes Hamish's note (rows) → ok 1

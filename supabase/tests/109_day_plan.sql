@@ -1,7 +1,7 @@
 -- 109 test: notes on a trip day. A player adds a day note with a wish; a wish without a day, a bad wish or a home_by
 -- without "home by" is refused; a plain chat message still works (old app); another group can't see or add; a player
 -- can't delete someone else's note; an organiser can.
--- STAGING only, after 109. Self-contained test groups. Rolled back; the results come back as the error message
+-- STAGING only, after 109 (checked on a local Postgres 16 with 001–109). Self-contained test groups. Rolled back; the results come back as the error message
 -- ("RESULTS: ..."). Expected answers in 109_day_plan.expected.txt.
 -- Group A: ao — organiser, a1 (Hamish), a2 (Tom). Group B: bo.
 

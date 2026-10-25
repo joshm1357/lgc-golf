@@ -784,6 +784,7 @@ export function ChatTab({ pd }) {
                 <span className="small muted">{when(c.created_at)}</span>
               </div>
               <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{c.body}</div>
+              {c.day_date && <Link to={`/plan/${pd.plan.id}/days`} className="small" style={{ color: 'var(--navy)' }} data-testid="chat-day-tag">📅 On {new Date(`${String(c.day_date).slice(0, 10)}T12:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })} · day plan</Link>}
               {(mine || status.is_admin) && (
                 <button type="button" className="small" style={{ border: 0, background: 'none', padding: 0, color: 'var(--muted)', marginTop: 2 }}
                   onClick={async () => { if (await askConfirm({ title: 'Delete this message?', yes: 'Delete it' })) run(async () => { await must(supabase.from('plan_comments').delete().eq('id', c.id)); pd.reload(); }); }}>Delete</button>

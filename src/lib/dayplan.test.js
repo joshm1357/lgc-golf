@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planDays, startPoints, snapStarts, buildDay, applyPick, setDay, bestSlot, feeFor, pickLine, dayGolfLength, travelOf, dayCourses } from './dayplan.js';
+import { planDays, startPoints, snapStarts, buildDay, applyPick, setDay, bestSlot, feeFor, pickLine, dayGolfLength, travelOf, dayCourses, calloutTimes } from './dayplan.js';
 import { cleanWishes } from './tripfit.js';
 
 const stay = { key: 'Cessnock', name: 'Cessnock', lat: -32.83, lng: 151.36 };
@@ -135,5 +135,26 @@ describe('small helpers', () => {
     expect(feeFor({ fee_weekday: 45, fee_weekend: 50 }, 3)).toBe(45);
     expect(feeFor({ fee_weekday: 45 }, 0)).toBe(45);
     expect(feeFor(null, 0)).toBe(null);
+  });
+});
+
+describe('a one-day round (call-out)', () => {
+  const place = { lat: -33.9, lng: 151.22 }; // Moore Park
+  it('each time on offer: tee, in, leave home, dusk', () => {
+    const t = calloutTimes({ plan: { status: 'planning' }, options: [{ id: 'o1', start_date: '2026-10-31', tee_time: '07:30' }, { id: 'o2', start_date: '2026-10-31', part: 'arvo' }], place, players: 4, homeDrive: 20 });
+    expect(t[0].line).toBe('Tee off 7:30am · in about 12pm · leave home about 6:40am · about 7 h 20 before dusk ✓');
+    expect(t[1].line).toMatch(/^Arvo: about 1pm · in about 5:30pm · leave home about 12:10pm · about 1 h 5\d before dusk ✓$/);
+    expect(t[0].blocks.map((b) => b.kind)).toEqual(['travel', 'golf', 'travel']);
+  });
+  it('a winter twilight game is flagged', () => {
+    const t = calloutTimes({ plan: { status: 'planning' }, options: [{ id: 'o', start_date: '2027-06-19', part: 'twilight' }], place, players: 4 });
+    expect(t[0].flag.tone).toBe('dark');
+    expect(t[0].line).toMatch(/finishes after dusk — tee off by 12:2\dpm to finish before dusk/);
+  });
+  it('locked: the round’s own date and tee time', () => {
+    const t = calloutTimes({ plan: { status: 'confirmed', start_date: '2026-11-07', tee_time: '08:10' }, options: [{ id: 'x', start_date: '2026-11-08', tee_time: '09:00' }], place });
+    expect(t).toHaveLength(1);
+    expect(t[0].date).toBe('2026-11-07');
+    expect(t[0].tee).toBe(8 * 60 + 10);
   });
 });

@@ -2096,3 +2096,39 @@ Tests: `src/lib/tribunalWords.test.js` (5) + governance.test.js updated; whole v
 `supabase/tests/106_tribunal_clock.sql` (52 checks, local Postgres 16 with 001–106, expected file; 106 re-runs
 cleanly). e2e `tests/e2e/tribunal-clock-test.mjs` (12 checks) passes; governance, governance-hub, dispute,
 rulebook-v3, stage10 pass.
+
+## ov40 — The day plan: golf on each day, rough timing in colours, notes on a day (25 Oct 2026, branch `ov40-day-plan`, from `v10-6-release`, migration 109, not applied anywhere)
+
+- **Golf on each day (Josh's top priority).** Every trip day has golf none / 9 / 18 / 36 and a travel-day switch
+  (`st.days[i].golf`, `.travel`; `lib/tripbuilder.js` dayGolf / dayLeg / dayRounds / dayRoleLine). Default 18 every
+  day. **The Blue Mountains one-round cause**: choosing an area only pre-filled the stay days (`prefillStayDays`), so the
+  way-there and way-home days stayed empty and only one round could come out (seen read-only on live: way [] · stay 3 ·
+  home []). Now every day is filled for its role; old trips get their empty travel days filled once when the organiser
+  opens Plan the trip (`st.daysFilled`). 36-hole days make two rounds through "Set it up in the app"
+  (`shapeFromConfig` → `setupRoundsFromShape`); no-golf days aren't gaps; call jobs skip them. A course can repeat only
+  when there aren't enough to go round (`repeats`). Flying trips play near the stay on every day. "How much golf"
+  (max / daily / spare_day / any) sets every day at once (`golfForAmount`, `applyGolfAmount`).
+- **lib/daytiming.js**: travel chains (drive; fly = airport drive + check-in + flight + bags/car + drive, first flights
+  about 6am, last back about 9pm, no fares), the group's social / visitor times read from free text ("Sat after 2, Sun
+  after 11"; unknown → the usual for clubs, unconfirmed), round length (Stableford ~4 h 30 a 4-ball, Ambrose ~4 h, last
+  group later), NOAA sunrise/sunset in the place's own Australian clock, dusk flags, wishes (early / midday / late /
+  morning free / home by), one day as coloured blocks.
+- **lib/tripfit.js**: fit lines ("suits 7 of 8 · tee 12:30pm suits “morning free” (2) · 4 h 35 before dusk") and who
+  it doesn't suit and why; reads ov39's `plan_wishes` defensively (`cleanWishes`, final shape incl. day_prefs, home_by).
+- **lib/dayplan.js**: builder state → each day's inputs, the courses placed for the day's role, the comparison rows,
+  the organiser's pick (`st.dayPlan.picks` + the course on that day's options), a one-day round's times (`calloutTimes`).
+- **Screens**: `screens/DayPlan.jsx` (`/plan/:id/days`, from Plan the trip → Courses & stays, and "🕒 Timing for this
+  day" on each day card): how much golf, getting there (drive / fly with the numbers), day tabs, the timeline
+  (`components/DayTimeline.jsx`: travel blue, golf green, free sand, evening navy, daylight band, dusk line, wish
+  markers), the course comparison (cards on a phone, side by side on a laptop) with usual times, fee, drive, group size,
+  how to book, the fit line and the tee times that fit (★ = suits most wishes; organiser taps to pick), and notes on the
+  day with a wish. Names of who it doesn't suit: organiser only. `components/CalloutDayPlan.jsx` on a one-day round
+  call-out: each time on offer → leave home, tee, in, dusk.
+- **Migration 109** (additive): plan_comments.day_date / day_pref / home_by + checks + an index. No policy changes,
+  nothing dropped. `supabase/tests/109_day_plan.sql` (14 checks, run on local Postgres 16 with 001–109; expected file;
+  109 re-runs cleanly).
+
+Tests: vitest 1901 pass (new: daytiming 40, tripfit 14, dayplan 17, tripdays 6, tripdays.long 9; planux, tripbuilder
+updated for the new rules). e2e `tests/e2e/day-plan-test.mjs` (38 checks) passes; trip-builder (updated: travel days
+now start filled), plan-ux, tripfinder, trips, votes-coorg, trip-plan, weekends-comps, trip-page, trip-overview pass;
+round-callout 24/25 — the one failure ("sat or sun morning") is date-dependent (today is a Sunday) and not touched here.

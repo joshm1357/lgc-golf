@@ -17,6 +17,7 @@ import {
   lockPreview, promotedBy, spotsWords, extrasOn, cleanExtras, EXTRAS, cleanTime, optionLabel,
 } from '../lib/callout.js';
 import { calloutView, ReplyButtons, replyRsvp, standingWords, useCallout } from '../components/CalloutCard.jsx';
+import CalloutDayPlan from '../components/CalloutDayPlan.jsx';
 import { CourseFinder } from '../components/CalloutSheet.jsx';
 import { TripWeather } from '../components/Weather.jsx';
 import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
@@ -187,6 +188,9 @@ export default function RoundCallout({ pd }) {
             {has('kitty') && <details className="co-more co-extra"><summary>💰 Kitty</summary><LazyArea fallback={null} quiet><KittyTab pd={pd} /></LazyArea></details>}
           </div>
         )}
+
+        {/* ov40: the day, roughly — leave home, tee off, in, dusk */}
+        {!cancelled && <CalloutDayPlan plan={plan} options={v.options} players={Math.max(4, v.spots.in.length)} me={me} />}
 
         {v.locked && trip && <TripWeather plan={plan} rounds={round ? [round] : []} coursesById={data.coursesById} />}
 

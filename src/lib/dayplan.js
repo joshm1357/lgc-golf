@@ -239,3 +239,42 @@ export function scheduleLine(st = {}, { people = [], wishes = [], nameOf = (id) 
   return `${r.line}${tail}`;
 }
 export { dur };
+
+// ------------------------------------------------------------------ a one-day round (call-out, 103)
+
+export const PART_TEE = { morning: 7 * 60 + 30, midday: 11 * 60 + 30, arvo: 13 * 60, twilight: 15 * 60 + 30 };
+/**
+ * A one-day round's times, roughly: for each time on offer (or the locked one) — leave home, tee off, finish, dusk.
+ *   plan: { status, start_date, tee_time }; options: plan_options rows ({ start_date, tee_time, part, label })
+ *   place: the course { lat, lng } (for the sun); players: how many; homeDrive: minutes from my home area (or null)
+ * → [{ key, label, date, tee, finish, leave, sun, flag, line, blocks }]
+ */
+export function calloutTimes({ plan = {}, options = [], place = null, players = 4, homeDrive = null, format = 'stableford' } = {}) {
+  const locked = plan.status === 'confirmed' || plan.status === 'done';
+  const list = locked || !options.length
+    ? (plan.start_date ? [{ key: 'locked', date: String(plan.start_date).slice(0, 10), tee_time: plan.tee_time, part: null, label: null }] : [])
+    : options.map((o) => ({ key: o.id, date: String(o.start_date || '').slice(0, 10), tee_time: o.tee_time, part: o.part, label: o.label }));
+  const golf = golfLength({ format, players: Math.max(1, players) });
+  return list.filter((o) => o.date).map((o) => {
+    const tee = o.tee_time ? anyClockLocal(o.tee_time) : PART_TEE[o.part] ?? null;
+    const sun = place ? sunTimes(o.date, place.lat, place.lng) : null;
+    if (tee == null) return { ...o, tee: null, sun, line: 'Pick a time to see the day' };
+    const finish = tee + golf.total;
+    const flag = sun ? duskFlagLocal(finish, sun.sunset, sun.sunset - golf.total) : null;
+    const leave = homeDrive != null ? tee - 30 - homeDrive : null;
+    const blocks = [
+      ...(leave != null ? [{ kind: 'travel', from: leave, to: leave + homeDrive, label: `Drive (about ${dur(homeDrive)})` }] : []),
+      { kind: 'golf', from: tee, to: finish, label: `Golf: tee off ${hm(tee)}${o.tee_time ? '' : ' (roughly)'}` },
+      ...(homeDrive != null ? [{ kind: 'travel', from: finish, to: finish + homeDrive, label: 'Drive home' }] : []),
+    ];
+    const line = [o.tee_time ? `Tee off ${hm(tee)}` : `${o.part ? `${o.part[0].toUpperCase()}${o.part.slice(1)}` : 'Tee off'}: about ${hm(tee)}`,
+      `in about ${hm(Math.round(finish / 5) * 5)}`, leave != null ? `leave home about ${hm(Math.round(leave / 5) * 5)}` : null, flag?.text].filter(Boolean).join(' · ');
+    return { ...o, tee, finish, leave, sun, flag, line, blocks };
+  });
+}
+const anyClockLocal = (t) => { const m = /^(\d{1,2}):(\d{2})/.exec(String(t || '')); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+function duskFlagLocal(finish, sunset, latestTee) {
+  const margin = sunset - finish;
+  if (margin >= 30) return { tone: 'ok', margin, text: `about ${dur(Math.round(margin / 5) * 5)} before dusk ✓` };
+  return { tone: margin >= 0 ? 'tight' : 'dark', margin, text: `${margin >= 0 ? 'tight' : 'finishes after dusk'} — tee off by ${hm(latestTee)} to finish before dusk` };
+}

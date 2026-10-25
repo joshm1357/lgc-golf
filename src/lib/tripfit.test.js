@@ -9,14 +9,15 @@ const at = (h, m = 0) => h * 60 + m;
 describe('reading plan_wishes defensively', () => {
   it('keeps the known values, drops the rest, newest row per person wins', () => {
     const w = cleanWishes([
-      { player_id: 'a', travel: 'fly', spend_band: 'lt500', cant_dates: ['2027-03-12', 'junk'], max_drive_min: '180', day_pref: 'morning_free', golf_per_day: 'one', wish: '  beers  ' },
+      { player_id: 'a', travel: 'fly', spend_band: 'lt500', cant_dates: ['2027-03-12', 'junk'], max_drive_min: '180', day_prefs: { fri: 'late', sat: 'morning_free', xyz: 'early', sun: 'junk' }, home_by: '18:00:00', golf_per_day: 'one', wish: '  beers  ' },
       { player_id: 'b', travel: 'boat', spend_band: 'lots', max_drive_min: -5 },
       { player_id: 'b', travel: 'drive' },
       null, { travel: 'fly' },
     ]);
     expect(w).toHaveLength(2);
-    expect(w[0]).toMatchObject({ travel: 'fly', spend_band: 'lt500', cant_dates: ['2027-03-12'], max_drive_min: 180, day_pref: 'morning_free', golf_per_day: 'one', wish: 'beers' });
-    expect(w[1]).toMatchObject({ travel: 'drive', spend_band: null, max_drive_min: null });
+    expect(w[0]).toMatchObject({ travel: 'fly', spend_band: 'lt500', cant_dates: ['2027-03-12'], max_drive_min: 180, day_prefs: { fri: 'late', sat: 'morning_free' }, home_by: '18:00', golf_per_day: 'one', wish: 'beers' });
+    expect(w[1]).toMatchObject({ travel: 'drive', spend_band: null, max_drive_min: null, day_prefs: {}, home_by: null });
+    expect(cleanWishes([{ player_id: 'z', day_prefs: '{"sun":"early"}' }])[0].day_prefs).toEqual({ sun: 'early' });
     expect(cleanWishes(undefined)).toEqual([]);
   });
 });
@@ -43,9 +44,9 @@ describe('the weekend', () => {
 
 describe('the checks', () => {
   const wishes = cleanWishes([
-    { player_id: 'a', max_drive_min: 120, travel: 'drive', golf_per_day: 'one', day_pref: 'morning_free', spend_band: 'lt500' },
-    { player_id: 'b', max_drive_min: 240, travel: 'fly', day_pref: 'midday', spend_band: '800_1200' },
-    { player_id: 'c', travel: 'either', day_pref: 'early' },
+    { player_id: 'a', max_drive_min: 120, travel: 'drive', golf_per_day: 'one', day_prefs: { sat: 'morning_free' }, spend_band: 'lt500' },
+    { player_id: 'b', max_drive_min: 240, travel: 'fly', day_prefs: { sat: 'midday' }, spend_band: '800_1200' },
+    { player_id: 'c', travel: 'either', day_prefs: { sat: 'early' } },
   ]);
   it('drive within each person’s longest', () => {
     const r = driveCheck(180, { people, wishes });
@@ -63,7 +64,7 @@ describe('the checks', () => {
     expect(golfCheck(1, { people, wishes }).line).toBe(null);
   });
   it('tee times vs the day wishes', () => {
-    const prefs = wishes.filter((w) => w.day_pref).map((w) => ({ who: w.player_id, pref: w.day_pref }));
+    const prefs = wishes.map((w) => ({ who: w.player_id, pref: w.day_prefs.sat }));
     const r = teeCheck(at(12, 30), { people, prefs });
     expect(r.no.map((x) => x.id)).toEqual(['c']);
     expect(r.line).toMatch(/^tee 12:30pm suits “(morning free|play midday)”$/);
@@ -83,7 +84,7 @@ describe('the fit line', () => {
   const wishes = cleanWishes([
     { player_id: 'a', cant_dates: ['2027-03-12'] },
     { player_id: 'b', max_drive_min: 120 },
-    { player_id: 'c', day_pref: 'midday' },
+    { player_id: 'c', day_prefs: { fri: 'midday' } },
   ]);
   const prefs = [{ who: 'c', pref: 'midday' }];
   it('says it plainly, and names who it doesn’t suit', () => {
@@ -103,7 +104,7 @@ describe('the fit line', () => {
   });
   it('sums up what the group said', () => {
     expect(wishesSummary([], people)).toBe('Nobody’s said what they’d like yet.');
-    const s = wishesSummary(cleanWishes([{ player_id: 'a', travel: 'fly', day_pref: 'morning_free', max_drive_min: 180 }, { player_id: 'b', golf_per_day: 'one', max_drive_min: 240 }]), people);
-    expect(s).toBe('2 of 5 have said what they’d like · 1 happy to fly · longest drive mostly about 3 h · 1 want one round a day · 1 want mornings free');
+    const s = wishesSummary(cleanWishes([{ player_id: 'a', travel: 'fly', day_prefs: { fri: 'late', sun: 'early' }, max_drive_min: 180, home_by: '18:00' }, { player_id: 'b', golf_per_day: 'one', max_drive_min: 240, day_prefs: { fri: 'late' } }]), people);
+    expect(s).toBe('2 of 5 have said what they’d like · 1 happy to fly · longest drive mostly about 3 h · 1 want one round a day · Friday: 2 later · Sunday: 1 early · 1 want to be home by about 6pm on the last day');
   });
 });

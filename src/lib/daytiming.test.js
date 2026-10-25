@@ -246,9 +246,14 @@ describe('one day put together', () => {
 });
 
 describe('wishes for a day', () => {
-  it('a day note beats the trip-wide wish; the latest note wins', () => {
+  it('a day note beats plan_wishes; plan_wishes is per weekday; the latest note wins', () => {
+    // 2026-03-14 is a Saturday.
+    const wishes = [
+      { player_id: 'p1', day_prefs: { sat: 'early' } }, { player_id: 'p2', day_prefs: { sat: 'midday', fri: 'late' } },
+      { player_id: 'p3', day_prefs: { sat: 'any' } }, { player_id: 'p4', day_prefs: { fri: 'late' } },
+    ];
     const prefs = dayPrefs('2026-03-14', {
-      wishes: [{ player_id: 'p1', day_pref: 'early' }, { player_id: 'p2', day_pref: 'midday' }, { player_id: 'p3', day_pref: 'any' }],
+      wishes,
       comments: [
         { player_id: 'p1', day_date: '2026-03-14', day_pref: 'midday', created_at: '2026-10-25T01:00:00Z' },
         { player_id: 'p1', day_date: '2026-03-14', day_pref: 'morning_free', created_at: '2026-10-25T02:00:00Z' },
@@ -258,6 +263,19 @@ describe('wishes for a day', () => {
     expect(prefs.find((p) => p.who === 'p1')).toMatchObject({ pref: 'morning_free', source: 'note' });
     expect(prefs.find((p) => p.who === 'p2')).toMatchObject({ pref: 'midday', source: 'wishes' });
     expect(prefs.find((p) => p.who === 'p3')).toBe(undefined);
+    expect(prefs.find((p) => p.who === 'p4')).toBe(undefined); // only said Friday
     expect(prefsLine(prefs)).toBe('1 want the morning free · 1 want to play midday');
+    expect(dayPrefs('2026-03-13', { wishes }).filter((p) => p.pref === 'late').length).toBe(2); // Friday: late
+  });
+  it('home_by counts on the last day only', () => {
+    const wishes = [{ player_id: 'p1', home_by: '18:00:00' }, { player_id: 'p2', home_by: '17:30' }];
+    expect(dayPrefs('2026-03-15', { wishes })).toEqual([]);
+    const last = dayPrefs('2026-03-15', { wishes, last: true });
+    expect(last).toEqual([{ who: 'p1', pref: 'home_by', homeBy: '18:00', source: 'wishes' }, { who: 'p2', pref: 'home_by', homeBy: '17:30', source: 'wishes' }]);
+    expect(prefsLine(last)).toBe('2 want to be home by 5:30pm');
+  });
+  it('late means from 12:30', () => {
+    expect(suits('late', at(13))).toBe(true);
+    expect(suits('late', at(10))).toBe(false);
   });
 });

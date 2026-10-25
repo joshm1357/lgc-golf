@@ -7,8 +7,9 @@
 //
 //   plan_wishes (108, one row per person per plan): { plan_id, player_id, cant_dates: date[] (Fridays of weekends they
 //   can't do), spend_band: 'lt500' | '500_800' | '800_1200' | 'any' | null, travel: 'drive' | 'fly' | 'either' | null,
-//   max_drive_min: int | null, golf_per_day: 'one' | '36_ok' | 'mix' | null, day_pref: 'early' | 'midday' |
-//   'morning_free' | 'any' | null, wish: text | null }
+//   max_drive_min: int | null, golf_per_day: 'one' | '36_ok' | 'mix' | null, day_prefs: jsonb keyed by weekday
+//   ('fri', 'sat', 'sun', 'mon') → 'early' | 'midday' | 'late' | 'morning_free' | 'any', home_by: time (the last day),
+//   wish: text | null, updated_at }
 //   Read defensively (cleanWishes): the table may not be there yet, rows may be partial.
 import { suits, dur, hm, r5, PREF_LABEL } from './daytiming.js';
 import { dateOf, isoOf } from './tripbuilder.js';
@@ -18,7 +19,8 @@ export const SPEND_LABEL = { lt500: 'under $500', '500_800': '$500–800', '800_
 const SPENDS = Object.keys(SPEND_MAX);
 const TRAVELS = ['drive', 'fly', 'either'];
 const GOLFS = ['one', '36_ok', 'mix'];
-const DAYPREFS = ['early', 'midday', 'morning_free', 'any'];
+const DAYPREFS = ['early', 'midday', 'late', 'morning_free', 'any'];
+const WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 export const FLY_SHARE = 0.5; // flying is on the table when at least half of those who said said fly or either
 
 /** Rows from plan_wishes (or anything shaped like them) → tidy wishes, one per person (the newest wins). */
@@ -33,11 +35,21 @@ export function cleanWishes(rows) {
       cant_dates: (Array.isArray(r.cant_dates) ? r.cant_dates : []).map((d) => String(d).slice(0, 10)).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)),
       spend_band: pick(r.spend_band, SPENDS), travel: pick(r.travel, TRAVELS),
       max_drive_min: Number.isFinite(n) && n > 0 ? Math.round(n) : null,
-      golf_per_day: pick(r.golf_per_day, GOLFS), day_pref: pick(r.day_pref, DAYPREFS),
+      golf_per_day: pick(r.golf_per_day, GOLFS),
+      day_prefs: cleanDayPrefs(r.day_prefs),
+      home_by: /^([01]\d|2[0-3]):[0-5]\d/.test(String(r.home_by || '')) ? String(r.home_by).slice(0, 5) : null,
       wish: typeof r.wish === 'string' && r.wish.trim() ? r.wish.trim().slice(0, 500) : null,
     });
   }
   return [...by.values()];
+}
+
+/** { fri: 'late', sat: 'junk', xyz: 'early' } → { fri: 'late' } (a JSON string is read too). */
+export function cleanDayPrefs(v) {
+  let o = v;
+  if (typeof o === 'string') { try { o = JSON.parse(o); } catch { o = null; } }
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return {};
+  return Object.fromEntries(Object.entries(o).filter(([k, x]) => WEEKDAYS.includes(k) && DAYPREFS.includes(x)));
 }
 
 /** The Friday of a weekend (how cant_dates are kept): Thu → the next day, Sat → the day before, Sun → two before. */
@@ -180,13 +192,22 @@ export function wishesSummary(wishes = [], people = []) {
     n((w) => w.travel === 'fly' || w.travel === 'either') ? `${n((w) => w.travel === 'fly' || w.travel === 'either')} happy to fly` : null,
     n((w) => w.max_drive_min) ? `longest drive mostly about ${dur(roundDrive(median(wishes.map((w) => w.max_drive_min).filter(Boolean))))}` : null,
     n((w) => w.golf_per_day === 'one') ? `${n((w) => w.golf_per_day === 'one')} want one round a day` : null,
-    n((w) => w.day_pref === 'morning_free') ? `${n((w) => w.day_pref === 'morning_free')} want mornings free` : null,
-    n((w) => w.day_pref === 'early') ? `${n((w) => w.day_pref === 'early')} like to play early` : null,
-    n((w) => w.day_pref === 'midday') ? `${n((w) => w.day_pref === 'midday')} like midday` : null,
+    ...['fri', 'sat', 'sun', 'mon'].map((d) => dayWishLine(d, wishes)),
+    n((w) => w.home_by) ? `${n((w) => w.home_by)} want to be home by about ${hm(Math.min(...wishes.filter((w) => w.home_by).map((w) => toMinutes(w.home_by))))} on the last day` : null,
   ].filter(Boolean);
   return bits.join(' · ');
 }
 
+const DAY_NAME = { fri: 'Friday', sat: 'Saturday', sun: 'Sunday', mon: 'Monday' };
+const PREF_WORDS = { early: 'early', midday: 'midday', late: 'later', morning_free: 'with the morning free' };
+/** "Friday: 3 later, 1 early" — what people said for that weekday. */
+function dayWishLine(d, wishes) {
+  const c = {};
+  for (const w of wishes) { const p = w.day_prefs?.[d]; if (p && p !== 'any') c[p] = (c[p] || 0) + 1; }
+  const e = Object.entries(c).sort((a, b) => b[1] - a[1]);
+  return e.length ? `${DAY_NAME[d]}: ${e.map(([p, k]) => `${k} ${PREF_WORDS[p]}`).join(', ')}` : null;
+}
+const toMinutes = (t) => { const [h, m] = String(t).split(':').map(Number); return h * 60 + (m || 0); };
 const byId = (wishes) => Object.fromEntries((wishes || []).map((w) => [w.player_id, w]));
 function finish(people, no, line) {
   const bad = new Set(no.map((n) => n.id));

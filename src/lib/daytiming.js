@@ -32,6 +32,7 @@ export const PREFS = [
   { value: 'morning_free', label: 'Morning free', short: 'morning free' },
   { value: 'early', label: 'Play early', short: 'play early' },
   { value: 'midday', label: 'Play midday', short: 'play midday' },
+  { value: 'late', label: 'Play later', short: 'play later' },
   { value: 'home_by', label: 'Home by…', short: 'home by' },
 ];
 export const PREF_LABEL = Object.fromEntries(PREFS.map((p) => [p.value, p.label]));
@@ -324,11 +325,13 @@ export function duskFlag(finish, sunset, { latestTee = null } = {}) {
   if (margin >= 0) return { tone: 'tight', margin, text: `tight${by || ' — finishes just before dusk'}` };
   return { tone: 'dark', margin, text: `finishes after dusk${by}` };
 }
-/** Does a tee time suit a wish? pref: 'early' | 'midday' | 'morning_free' | 'home_by' (with homeBy) | 'any'. */
+/** Does a tee time suit a wish? pref: 'early' (by 9) | 'midday' (10:30–1:30) | 'late' (from 12:30) | 'morning_free'
+ *  (from 11:30) | 'home_by' (with homeBy: finish + the drive home by then) | 'any'. */
 export function suits(pref, tee, { finish = null, homeBy = null, driveHome = 0 } = {}) {
   if (!pref || pref === 'any') return true;
   if (pref === 'early') return tee <= 9 * 60;
   if (pref === 'midday') return tee >= 10 * 60 + 30 && tee <= 13 * 60 + 30;
+  if (pref === 'late') return tee >= 12 * 60 + 30;
   if (pref === 'morning_free') return tee >= 11 * 60 + 30;
   if (pref === 'home_by') {
     const by = anyClock(homeBy);
@@ -475,26 +478,41 @@ function travelChainBack(from, travel) {
 
 // ------------------------------------------------------------------ wishes for a day (comments + plan_wishes)
 
+const WD = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+/** '2027-03-12' → 'fri' (the key plan_wishes.day_prefs uses). */
+export function weekdayKey(iso) {
+  const [y, m, d] = dateParts(iso);
+  return y ? WD[new Date(Date.UTC(y, m - 1, d)).getUTCDay()] : null;
+}
 /**
- * Each person's wish for one day: their latest day note with a preference wins; else their trip-wide day_pref from
- * plan_wishes. → [{ who: player_id, pref, homeBy, source: 'note' | 'wishes' }]
+ * Each person's wish for one day. Their latest note on that day with a preference wins; else plan_wishes: the
+ * day_prefs entry for that weekday ({ fri: 'late', sun: 'early' }), and on the last day their home_by.
+ * → [{ who: player_id, pref, homeBy, source: 'note' | 'wishes' }]
  */
-export function dayPrefs(date, { comments = [], wishes = [] } = {}) {
+export function dayPrefs(date, { comments = [], wishes = [], last = false } = {}) {
+  const key = weekdayKey(date);
   const by = new Map();
-  for (const w of wishes) if (w?.player_id && w.day_pref && w.day_pref !== 'any') by.set(w.player_id, { who: w.player_id, pref: w.day_pref, homeBy: null, source: 'wishes' });
+  for (const w of wishes) {
+    if (!w?.player_id) continue;
+    const p = (w.day_prefs && typeof w.day_prefs === 'object' ? w.day_prefs[key] : null) || null;
+    if (p && p !== 'any') by.set(w.player_id, { who: w.player_id, pref: p, homeBy: null, source: 'wishes' });
+    else if (last && w.home_by) by.set(w.player_id, { who: w.player_id, pref: 'home_by', homeBy: String(w.home_by).slice(0, 5), source: 'wishes' });
+  }
   const notes = comments.filter((c) => c.day_date && String(c.day_date).slice(0, 10) === date && c.day_pref)
     .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
-  for (const c of notes) by.set(c.player_id, { who: c.player_id, pref: c.day_pref, homeBy: c.home_by || null, source: 'note' });
+  for (const c of notes) by.set(c.player_id, { who: c.player_id, pref: c.day_pref, homeBy: c.home_by ? String(c.home_by).slice(0, 5) : null, source: 'note' });
   return [...by.values()];
 }
 /** "3 want the morning free · 1 home by 6pm" */
 export function prefsLine(prefs = []) {
   const n = (k) => prefs.filter((p) => p.pref === k).length;
+  const homes = prefs.filter((p) => p.pref === 'home_by' && p.homeBy).map((p) => anyClock(p.homeBy)).filter((x) => x != null);
   const bits = [
     n('morning_free') && `${n('morning_free')} want the morning free`,
     n('early') && `${n('early')} want to play early`,
     n('midday') && `${n('midday')} want to play midday`,
-    n('home_by') && `${n('home_by')} want to be home by a time`,
+    n('late') && `${n('late')} want to play later`,
+    n('home_by') && `${n('home_by')} want to be home by ${homes.length ? hm(Math.min(...homes)) : 'a time'}`,
   ].filter(Boolean);
   return bits.join(' · ');
 }

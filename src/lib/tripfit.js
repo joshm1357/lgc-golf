@@ -1,0 +1,200 @@
+// How well a choice fits the group (ov40, 25 Oct 2026). Pure functions only — no React, no database.
+//
+// Josh: "review strategically what I'm looking for and the inputs I want in order to organise the weekend… different
+// courses, how to do it, get input." COLLECT (each person's wishes, ov39's plan_wishes) → SHAPE (the day plan, this)
+// → DECIDE (the organiser picks). Never a black-box score: every option gets a short fit line, plus who it doesn't
+// suit and why, by name.
+//
+//   plan_wishes (108, one row per person per plan): { plan_id, player_id, cant_dates: date[] (Fridays of weekends they
+//   can't do), spend_band: 'lt500' | '500_800' | '800_1200' | 'any' | null, travel: 'drive' | 'fly' | 'either' | null,
+//   max_drive_min: int | null, golf_per_day: 'one' | '36_ok' | 'mix' | null, day_pref: 'early' | 'midday' |
+//   'morning_free' | 'any' | null, wish: text | null }
+//   Read defensively (cleanWishes): the table may not be there yet, rows may be partial.
+import { suits, dur, hm, r5, PREF_LABEL } from './daytiming.js';
+import { dateOf, isoOf } from './tripbuilder.js';
+
+export const SPEND_MAX = { lt500: 500, '500_800': 800, '800_1200': 1200, any: Infinity };
+export const SPEND_LABEL = { lt500: 'under $500', '500_800': '$500–800', '800_1200': '$800–1,200', any: 'any spend' };
+const SPENDS = Object.keys(SPEND_MAX);
+const TRAVELS = ['drive', 'fly', 'either'];
+const GOLFS = ['one', '36_ok', 'mix'];
+const DAYPREFS = ['early', 'midday', 'morning_free', 'any'];
+export const FLY_SHARE = 0.5; // flying is on the table when at least half of those who said said fly or either
+
+/** Rows from plan_wishes (or anything shaped like them) → tidy wishes, one per person (the newest wins). */
+export function cleanWishes(rows) {
+  const by = new Map();
+  for (const r of Array.isArray(rows) ? rows : []) {
+    if (!r || !r.player_id) continue;
+    const pick = (v, ok) => (ok.includes(v) ? v : null);
+    const n = Number(r.max_drive_min);
+    by.set(r.player_id, {
+      player_id: r.player_id,
+      cant_dates: (Array.isArray(r.cant_dates) ? r.cant_dates : []).map((d) => String(d).slice(0, 10)).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)),
+      spend_band: pick(r.spend_band, SPENDS), travel: pick(r.travel, TRAVELS),
+      max_drive_min: Number.isFinite(n) && n > 0 ? Math.round(n) : null,
+      golf_per_day: pick(r.golf_per_day, GOLFS), day_pref: pick(r.day_pref, DAYPREFS),
+      wish: typeof r.wish === 'string' && r.wish.trim() ? r.wish.trim().slice(0, 500) : null,
+    });
+  }
+  return [...by.values()];
+}
+
+/** The Friday of a weekend (how cant_dates are kept): Thu → the next day, Sat → the day before, Sun → two before. */
+export function fridayOf(iso) {
+  const d = dateOf(iso);
+  if (!d) return null;
+  const shift = { 4: 1, 5: 0, 6: -1, 0: -2, 1: -3 }[d.getDay()];
+  if (shift == null) return isoOf(d);
+  d.setDate(d.getDate() + shift);
+  return isoOf(d);
+}
+
+/**
+ * Who we're fitting: everyone who's in or maybe, else everyone with wishes, else the group.
+ * → [{ id, name }]
+ */
+export function peopleFor({ rsvps = [], wishes = [], players = [], nameOf = (id) => id } = {}) {
+  const going = rsvps.filter((r) => r.status === 'in' || r.status === 'maybe').map((r) => r.player_id);
+  const ids = going.length ? going : wishes.length ? wishes.map((w) => w.player_id) : players.filter((p) => p.approved !== false).map((p) => p.id);
+  return [...new Set(ids)].map((id) => ({ id, name: nameOf(id) || 'Someone' }));
+}
+
+// ------------------------------------------------------------------ the checks (each → { ok: [ids], no: [{ id, why }], line })
+
+/** Can they make the weekend? (cant_dates hold the Friday; an RSVP of "out" on this trip is a no too.) */
+export function datesCheck(weekendStart, { people = [], wishes = [], rsvps = [] } = {}) {
+  const fri = fridayOf(weekendStart);
+  const w = byId(wishes);
+  const no = [];
+  for (const p of people) {
+    if ((w[p.id]?.cant_dates || []).includes(fri)) no.push({ id: p.id, why: 'can’t do that weekend' });
+    else if (rsvps.some((r) => r.player_id === p.id && r.status === 'out')) no.push({ id: p.id, why: 'said they’re out' });
+  }
+  return finish(people, no, (ok) => `fits ${ok} of ${people.length}`);
+}
+/** Is the drive within each person's longest drive? driveMin: one number, or { player_id: minutes } (from their start). */
+export function driveCheck(driveMin, { people = [], wishes = [] } = {}) {
+  const w = byId(wishes);
+  const no = [];
+  let said = 0;
+  for (const p of people) {
+    const max = w[p.id]?.max_drive_min;
+    if (!max) continue;
+    said += 1;
+    const d = typeof driveMin === 'object' && driveMin ? driveMin[p.id] : driveMin;
+    if (d != null && d > max) no.push({ id: p.id, why: `more than ${dur(max)} drive` });
+  }
+  if (!said || driveMin == null) return { ok: people.map((p) => p.id), no: [], line: null };
+  const top = typeof driveMin === 'object' ? Math.max(...Object.values(driveMin).filter((x) => x != null)) : driveMin;
+  return finish(people, no, (ok) => `within ${dur(roundDrive(top))} for ${ok}`);
+}
+/** Flying: on the table only if enough said fly or either. → { ok, no, line, allowed } */
+export function flyCheck({ people = [], wishes = [] } = {}) {
+  const w = byId(wishes);
+  const said = people.filter((p) => w[p.id]?.travel);
+  const keen = said.filter((p) => ['fly', 'either'].includes(w[p.id].travel));
+  const no = said.filter((p) => w[p.id].travel === 'drive').map((p) => ({ id: p.id, why: 'would rather drive' }));
+  const allowed = !said.length || keen.length / said.length >= FLY_SHARE;
+  return { ...finish(people, no, () => `${keen.length} of ${said.length || people.length} happy to fly`), allowed };
+}
+/** 36 holes in a day vs "one round a day" people. rounds: rounds that day. */
+export function golfCheck(rounds, { people = [], wishes = [] } = {}) {
+  const w = byId(wishes);
+  if ((Number(rounds) || 0) < 2) return { ok: people.map((p) => p.id), no: [], line: null };
+  const no = people.filter((p) => w[p.id]?.golf_per_day === 'one').map((p) => ({ id: p.id, why: 'one round a day' }));
+  return finish(people, no, (ok) => `36 holes OK for ${ok}`);
+}
+/** A tee time against people's day wishes. prefs: [{ who, pref, homeBy }] (daytiming.dayPrefs). */
+export function teeCheck(tee, { people = [], prefs = [], finish: fin = null, driveHome = 0 } = {}) {
+  const ids = new Set(people.map((p) => p.id));
+  const mine = prefs.filter((p) => ids.has(p.who) && p.pref && p.pref !== 'any');
+  const no = mine.filter((p) => !suits(p.pref, tee, { finish: fin, homeBy: p.homeBy, driveHome })).map((p) => ({ id: p.who, why: `wanted “${(PREF_LABEL[p.pref] || p.pref).toLowerCase()}${p.pref === 'home_by' && p.homeBy ? ` ${p.homeBy}` : ''}”` }));
+  if (!mine.length) return { ok: people.map((p) => p.id), no: [], line: null };
+  const happy = mine.filter((p) => !no.some((x) => x.id === p.who));
+  const counts = {};
+  for (const p of happy) counts[p.pref] = (counts[p.pref] || 0) + 1;
+  const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+  const line = top ? `tee ${hm(tee)} suits “${(PREF_LABEL[top[0]] || top[0]).toLowerCase()}”${top[1] > 1 ? ` (${top[1]})` : ''}` : `tee ${hm(tee)} suits none of the wishes`;
+  return { ok: people.map((p) => p.id).filter((id) => !no.some((x) => x.id === id)), no, line };
+}
+/** Daylight: "2 h before dusk" / "tight" / "after dusk". margin: minutes from the finish to sunset. */
+export function duskCheck(margin) {
+  if (margin == null) return { ok: [], no: [], line: null };
+  if (margin < 0) return { ok: [], no: [], line: `about ${dur(r5(-margin))} after dusk ✗` };
+  if (margin < 30) return { ok: [], no: [], line: 'tight before dusk' };
+  return { ok: [], no: [], line: `${dur(r5(margin))} before dusk` };
+}
+/** A rough cost per head against spend bands (only when a cost is known). */
+export function costCheck(perHead, { people = [], wishes = [] } = {}) {
+  if (perHead == null || !Number.isFinite(Number(perHead))) return { ok: people.map((p) => p.id), no: [], line: null };
+  const w = byId(wishes);
+  const no = people.filter((p) => w[p.id]?.spend_band && Number(perHead) > SPEND_MAX[w[p.id].spend_band])
+    .map((p) => ({ id: p.id, why: `budget ${SPEND_LABEL[w[p.id].spend_band]}` }));
+  return finish(people, no, (ok) => `about $${Math.round(Number(perHead))} a head — in budget for ${ok}`);
+}
+
+// ------------------------------------------------------------------ putting it together
+
+/**
+ * The fit of one option. Any of: weekend (ISO start), drive (minutes or per-person), fly (true), rounds (that day),
+ * tee + finish (minutes), duskMargin, perHead (dollars). ctx: { people, wishes, rsvps, prefs, nameOf }.
+ * → { line: 'fits 9 of 11 · within 3 h for 10 · tee 12:30pm suits “play midday” · 2 h before dusk',
+ *     notFor: [{ id, name, why: ['can’t do that weekend', …] }], fits: n, of: N }
+ */
+export function fitOption(opt = {}, ctx = {}) {
+  const people = ctx.people || [];
+  const parts = [];
+  if (opt.weekend) parts.push(datesCheck(opt.weekend, ctx));
+  if (opt.fly) { const f = flyCheck(ctx); parts.push(f.allowed ? f : { ...f, line: `${f.line} — not enough for flying` }); } else if (opt.drive != null) parts.push(driveCheck(opt.drive, ctx));
+  if (opt.rounds != null) parts.push(golfCheck(opt.rounds, ctx));
+  if (opt.tee != null) parts.push(teeCheck(opt.tee, { ...ctx, finish: opt.finish ?? null, driveHome: opt.driveHome || 0 }));
+  if (opt.duskMargin !== undefined) parts.push(duskCheck(opt.duskMargin));
+  if (opt.perHead != null) parts.push(costCheck(opt.perHead, ctx));
+  const why = new Map();
+  for (const p of parts) for (const n of p.no || []) why.set(n.id, [...(why.get(n.id) || []), n.why]);
+  const nameOf = ctx.nameOf || ((id) => people.find((p) => p.id === id)?.name || 'Someone');
+  const notFor = [...why.entries()].map(([id, w]) => ({ id, name: nameOf(id), why: w }));
+  const fits = people.filter((p) => !why.has(p.id)).length;
+  const lines = parts.map((p) => p.line).filter(Boolean);
+  if (!opt.weekend && people.length && notFor.length) lines.unshift(`suits ${fits} of ${people.length}`);
+  return { line: lines.join(' · '), notFor, fits, of: people.length };
+}
+/** "Not for: Al (can’t do that weekend), Bo (wanted “morning free”)" */
+export function notForLine(notFor = [], max = 4) {
+  if (!notFor.length) return '';
+  const shown = notFor.slice(0, max).map((n) => `${n.name} (${n.why.join(', ')})`);
+  return `Not for: ${shown.join(', ')}${notFor.length > max ? ` and ${notFor.length - max} more` : ''}`;
+}
+/** Rank options by how many it fits (then by the order given). Never hides the line. */
+export function rankByFit(options = []) {
+  return options.map((o, i) => ({ ...o, i })).sort((a, b) => (b.fit?.fits ?? 0) - (a.fit?.fits ?? 0) || a.i - b.i).map(({ i, ...o }) => o);
+}
+
+/** What the group said, in one short paragraph for the organiser (the COLLECT summary). */
+export function wishesSummary(wishes = [], people = []) {
+  if (!wishes.length) return 'Nobody’s said what they’d like yet.';
+  const n = (f) => wishes.filter(f).length;
+  const bits = [
+    `${wishes.length} of ${people.length || wishes.length} have said what they’d like`,
+    n((w) => w.travel === 'fly' || w.travel === 'either') ? `${n((w) => w.travel === 'fly' || w.travel === 'either')} happy to fly` : null,
+    n((w) => w.max_drive_min) ? `longest drive mostly about ${dur(roundDrive(median(wishes.map((w) => w.max_drive_min).filter(Boolean))))}` : null,
+    n((w) => w.golf_per_day === 'one') ? `${n((w) => w.golf_per_day === 'one')} want one round a day` : null,
+    n((w) => w.day_pref === 'morning_free') ? `${n((w) => w.day_pref === 'morning_free')} want mornings free` : null,
+    n((w) => w.day_pref === 'early') ? `${n((w) => w.day_pref === 'early')} like to play early` : null,
+    n((w) => w.day_pref === 'midday') ? `${n((w) => w.day_pref === 'midday')} like midday` : null,
+  ].filter(Boolean);
+  return bits.join(' · ');
+}
+
+const byId = (wishes) => Object.fromEntries((wishes || []).map((w) => [w.player_id, w]));
+function finish(people, no, line) {
+  const bad = new Set(no.map((n) => n.id));
+  const ok = people.map((p) => p.id).filter((id) => !bad.has(id));
+  return { ok, no, line: line(ok.length) };
+}
+const roundDrive = (m) => (m >= 90 ? Math.round(m / 30) * 30 : Math.round(m / 5) * 5);
+function median(xs) {
+  const s = [...xs].sort((a, b) => a - b);
+  return s.length ? s[Math.floor((s.length - 1) / 2)] : 0;
+}

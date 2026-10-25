@@ -27,8 +27,10 @@
 --   * plan_idea_reactions — 👍 / 👎 on an item, one per person.
 --   * plan_wishes — "Help plan — 4 quick taps", one row per person per plan (ov40 reads it for the day schedule):
 --     { plan_id, player_id, cant_dates (Fridays of weekends they can't do), spend_band, travel, max_drive_min,
---       golf_per_day ('max' as much as possible | 'daily' a round a day | 'spare_day' leave a spare day | 'any'), day_prefs (jsonb by weekday 'thu'|'fri'|'sat'|'sun'|'mon' → 'early'|'midday'|'late'|
---       'morning_free'|'any'), home_by (time, the last day), wish, updated_at } (+ group_id, like every table).
+--       golf_per_day ('max' as much as possible | 'daily' a round a day | 'spare_day' leave a spare day | 'any'), day_prefs (jsonb by the day's place in the trip 'first'|'middle'|'last' → 'early'|'midday'|'late'|
+--       'morning_free'|'any'; old weekday keys 'thu'…'mon' are still accepted and read for that weekday), home_by (time,
+--       the last day), nights (int[]: the trip lengths they'd do, 1–6 nights, 4 = "4+"; null = not answered, {} = not
+--       fussed — Josh 21:12 "the number of nights should be an input too"), wish, updated_at } (+ group_id, like every table).
 --     A fixed weekend is answered with the existing In / Maybe / Can't (plan_rsvps), not cant_dates.
 --   * Functions: share_idea (who can share; makes the token), idea_tidy (organiser ticks; optionally marks it sent to
 --     the vote), idea_spin_off (a new idea from the unused ones), idea_set_fixed (the definition), idea_review
@@ -130,11 +132,12 @@ language sql immutable set search_path = '' as $$
   select coalesce(bool_and(extract(isodow from d) = 5), true) from unnest(coalesce(p_dates, '{}'::date[])) d
 $$;
 
--- day_prefs: { fri: 'late', sun: 'early' } — weekdays thu–mon, each early / midday / late / morning_free / any.
+-- day_prefs: { first: 'late', last: 'early' } — by the day's place in the trip (first / middle / last; Josh 21:12), each
+-- early / midday / late / morning_free / any. Old weekday keys (thu–mon) are still accepted.
 create or replace function private.day_prefs_ok(p jsonb) returns boolean
 language sql immutable set search_path = '' as $$
   select jsonb_typeof(p) = 'object' and coalesce((
-    select bool_and(k in ('thu', 'fri', 'sat', 'sun', 'mon') and jsonb_typeof(v) = 'string'
+    select bool_and(k in ('first', 'middle', 'last', 'thu', 'fri', 'sat', 'sun', 'mon') and jsonb_typeof(v) = 'string'
                     and v #>> '{}' in ('early', 'midday', 'late', 'morning_free', 'any'))
     from jsonb_each(p) e(k, v)), true)
 $$;
@@ -276,10 +279,14 @@ create table if not exists public.plan_wishes (
   golf_per_day text check (golf_per_day is null or golf_per_day in ('max', 'daily', 'spare_day', 'any')),
   day_prefs jsonb not null default '{}'::jsonb check (private.day_prefs_ok(day_prefs)),
   home_by time,
+  nights int[] check (nights is null or (cardinality(nights) <= 6 and nights <@ array[1, 2, 3, 4, 5, 6])),
   wish text check (wish is null or char_length(wish) <= 300),
   updated_at timestamptz not null default now(),
   primary key (plan_id, player_id)
 );
+-- nights came in late in the release (ov41); a database that already ran an earlier copy of 108 gets it here.
+alter table public.plan_wishes add column if not exists nights int[]
+  check (nights is null or (cardinality(nights) <= 6 and nights <@ array[1, 2, 3, 4, 5, 6]));
 create index if not exists plan_wishes_group_idx on public.plan_wishes (group_id);
 create index if not exists plan_wishes_player_idx on public.plan_wishes (player_id);
 alter table public.plan_wishes enable row level security;
@@ -719,7 +726,7 @@ revoke all on function private.idea_organiser_can_run(uuid) from public, anon, a
 create or replace function public.idea_wish_answers(p_plan uuid) returns jsonb
 language sql stable security definer set search_path = '' as $$
   select coalesce(jsonb_agg(jsonb_build_object('cant_dates', w.cant_dates, 'spend_band', w.spend_band, 'travel', w.travel,
-           'max_drive_min', w.max_drive_min, 'golf_per_day', w.golf_per_day, 'day_prefs', w.day_prefs, 'home_by', w.home_by, 'wish', w.wish)
+           'max_drive_min', w.max_drive_min, 'golf_per_day', w.golf_per_day, 'day_prefs', w.day_prefs, 'home_by', w.home_by, 'nights', w.nights, 'wish', w.wish)
            order by w.updated_at), '[]'::jsonb)
   from public.plan_wishes w join public.plans p on p.id = w.plan_id
   where w.plan_id = p_plan and private.is_group_member(p.group_id) and public.feature_on(p.group_id, 'planner')

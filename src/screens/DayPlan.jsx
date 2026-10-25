@@ -16,9 +16,9 @@ import { useCourseResearch } from '../components/CourseResearch.jsx';
 import DayTimeline from '../components/DayTimeline.jsx';
 import * as TB from '../lib/tripbuilder.js';
 import { pickFacts } from '../lib/tripfinder.js';
-import { PREFS, hm, dur, FLY_DEFAULTS, prefsLine } from '../lib/daytiming.js';
+import { PREFS, hm, dur, FLY_DEFAULTS, prefsLine, duskFlag, anyClock } from '../lib/daytiming.js';
 import { cleanWishes, peopleFor, wishesSummary } from '../lib/tripfit.js';
-import { planDays, startPoints, snapStarts, buildDay, applyPick, setDay, pickLine, travelOf, dayFormat } from '../lib/dayplan.js';
+import { planDays, startPoints, snapStarts, buildDay, applyPick, setDay, pickLine, travelOf, dayFormat, applyGolfAmount, scheduleLine } from '../lib/dayplan.js';
 
 const GOLF_OPTS = TB.GOLF_CHOICES.map((g) => ({ value: g.value, label: g.value === 'none' ? 'None' : g.value === '36' ? '36' : g.value }));
 const FORMAT_OPTS = [{ value: 'stableford', label: 'Stableford' }, { value: 'ambrose', label: 'Ambrose' }];
@@ -71,7 +71,7 @@ export default function DayPlan() {
     if (!org || !st || !row || !starts?.length) return;
     const snap = snapStarts(starts);
     if (JSON.stringify(snap) !== JSON.stringify(st.dayPlan?.starts || [])) save({ ...st, dayPlan: { ...(st.dayPlan || {}), starts: snap } });
-  }, [org, starts, row]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [org, starts, row, !!st]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const stays = st?.stays || [];
   // The area's courses (organisers load the library around where we stay; players see the ones saved on the trip).
@@ -137,6 +137,18 @@ export default function DayPlan() {
         {wishes.length > 0 && <div className="card pad small" data-testid="dp-wishes"><strong>What the group said:</strong> {wishesSummary(wishes, people)}</div>}
         {noDates && <div className="card pad small">No dates yet — times use the first weekend on the shortlist once there is one. <Link to={`/plan/${planId}/build`}>Plan the trip</Link></div>}
 
+        {/* ---------------- how much golf (the group's answer is the default) */}
+        <div className="card pad stack" style={{ gap: 8 }} data-testid="dp-golf-amount">
+          <div className="row between" style={{ gap: 8, flexWrap: 'wrap' }}>
+            <strong>How much golf</strong>
+            {!org && <span className="small">{TB.GOLF_AMOUNTS.find((g) => g.value === (st.golfAmount || TB.golfAmountFromWishes(wishes)))?.label}</span>}
+          </div>
+          {org && <Seg light options={TB.GOLF_AMOUNTS} value={st.golfAmount || TB.golfAmountFromWishes(wishes)} onChange={(v) => run(async () => { await save(applyGolfAmount(st, v, { players: need.people || 8 })); }, 'Each day’s golf is set — change any day below')} />}
+          {org && !st.golfAmount && wishes.some((w) => w.golf_per_day) && <span className="small muted">The group mostly said “{TB.GOLF_AMOUNTS.find((g) => g.value === TB.golfAmountFromWishes(wishes))?.label.toLowerCase()}”. Tap one to set every day from it.</span>}
+          <span className="small" data-testid="dp-schedule-line">{days.map((d) => `${d.date ? TB.dayLabel(d.date).split(' ')[0] : d.name} ${d.golf === 'none' ? 'no golf' : `${d.golf} holes`}`).join(' · ')}</span>
+          <span className="small muted" data-testid="dp-schedule-fit">{scheduleLine(st, { people, wishes, nameOf, names: org })}</span>
+        </div>
+
         {/* ---------------- how we get there */}
         <div className="card pad stack" style={{ gap: 8 }} data-testid="dp-travel">
           <div className="row between" style={{ gap: 8, flexWrap: 'wrap' }}>
@@ -188,12 +200,26 @@ export default function DayPlan() {
                 )}
                 <div className="dp-legend" aria-hidden="true"><span><i className="dt-dot dt-travel" /> travel</span><span><i className="dt-dot dt-golf" /> golf</span><span><i className="dt-dot dt-free" /> free</span><span><i className="dt-dot dt-evening" /> dinner / evening</span><span><i className="dt-dot dt-sun" /> daylight</span></div>
                 <DayTimeline blocks={built.plan.blocks} sun={built.plan.sun} prefs={built.prefs} />
+                {(() => {
+                  // A picked time that runs past dusk, or a 36-hole day with no daylight for it, says so plainly.
+                  const t = pick?.tee ? anyClock(pick.tee) : null;
+                  const sunset = built.plan.sun?.sunset;
+                  const f = t != null && sunset != null ? duskFlag(t + built.golf.total, sunset, { latestTee: sunset - built.golf.total }) : null;
+                  const no36 = day.golf === '36' && built.rows.length > 0 && built.rows.every((r) => !r.slots.length);
+                  return (
+                    <>
+                      {f && f.tone !== 'ok' && <div className="small" style={{ color: 'var(--down)', fontWeight: 700 }} data-testid="dp-pick-flag">⚠️ The picked time {f.text}.</div>}
+                      {no36 && <div className="small" style={{ color: 'var(--down)', fontWeight: 700 }} data-testid="dp-36-flag">⚠️ 36 holes doesn’t fit the daylight on {TB.dayLabel(day.date)} — about {dur(built.golf.total)} of golf, and dusk is about {hm(sunset)}. Try 18 holes.</div>}
+                    </>
+                  );
+                })()}
                 {pick && <div className="small" data-testid="dp-picked">✅ <strong>Picked:</strong> {pickLine(pick, courseMap, built.golf.total)}{org && <> · <button type="button" className="small" style={{ border: 0, background: 'none', padding: 0, textDecoration: 'underline', color: 'var(--navy)' }} onClick={clearPick}>clear</button></>}</div>}
                 {built.prefs.length > 0 && <div className="small" data-testid="dp-prefs-line">💬 {prefsLine(built.prefs)}</div>}
-                <span className="small muted">{built.golf.two ? `36 holes: two rounds and about 45 min for lunch` : `${day.golf === '9' ? '9 holes' : dayFormat(st, day) === 'ambrose' ? 'Ambrose, about 4 h a group' : 'Stableford, about 4 h 30 a group'}`}{built.golf.groups > 1 ? `, ${built.golf.groups} groups ${built.golf.interval} min apart` : ''} — about {dur(built.golf.total)} from the first tee to the last group in.</span>
+                <span className="small muted">{built.golf.two ? `36 holes: two rounds and about 45 min for lunch` : `${day.golf === '9' ? '9 holes' : dayFormat(st, day) === 'ambrose' ? 'Ambrose, about 4 h a group (the usual — unconfirmed)' : 'Stableford, about 4 h 30 a 4-ball (the usual — unconfirmed)'}`}{built.golf.groups > 1 ? `, ${built.golf.groups} groups ${built.golf.interval} min apart` : ''} — about {dur(built.golf.total)} from the first tee to the last group in.</span>
               </div>
 
               {day.golf !== 'none' && <Compare built={built} day={day} org={org} busy={busy} pick={pick} onPick={doPick} planId={planId} />}
+              {travel.mode === 'fly' && <span className="small muted">✈️ Flight times are about: first flights out about 6am, last back about 9pm — check the airline.</span>}
               {day.golf === 'none' && <div className="small muted">No golf this day.</div>}
             </div>
             <DayNotes pd={pd} day={day} me={me} org={org} nameOf={nameOf} />
@@ -231,13 +257,13 @@ function Compare({ built, day, org, busy, pick, onPick, planId }) {
               {r.style && <><dt>Style</dt><dd>{r.style}</dd></>}
               <dt>Drive</dt><dd>{r.drive}</dd>
               {r.fee && <><dt>Green fee</dt><dd>{r.fee}</dd></>}
-              <dt>Usual times</dt><dd data-testid="dp-times">{r.times}</dd>
+              <dt>Usual times</dt><dd data-testid="dp-times">{r.times}{r.guess && r.timesSource ? <span className="small muted"> ({r.timesSource})</span> : null}</dd>
               {r.maxGroup && <><dt>Group size</dt><dd>{r.maxGroup}</dd></>}
               {r.book && <><dt>Book</dt><dd>{r.bookUrl ? <a href={r.bookUrl} target="_blank" rel="noreferrer">{r.book}</a> : r.book}</dd></>}
             </dl>
             <div className={`dp-fit${r.best ? '' : ' no'}`} data-testid="dp-fit-line">{r.fitLine}</div>
             {r.bestLine && <div className="small" data-testid="dp-best-line">{r.bestLine}</div>}
-            {r.notForLine && <div className="dp-notfor" data-testid="dp-notfor">{r.notForLine}</div>}
+            {r.notForCount > 0 && <div className="dp-notfor" data-testid="dp-notfor">{org ? r.notForLine : `Not for ${r.notForCount} of the group`}</div>}
             {r.slots.length > 0 && slotChips(r)}
           </div>
         ))}
@@ -248,7 +274,7 @@ function Compare({ built, day, org, busy, pick, onPick, planId }) {
           {[['Known', 'known'], ['Style', 'style'], ['Drive', 'drive'], ['Green fee', 'fee'], ['Usual times', 'times'], ['Group size', 'maxGroup'], ['Book', 'book']].map(([l, k]) => (
             rows.some((r) => r[k]) ? <tr key={k}><th scope="row">{l}</th>{rows.map((r) => <td key={r.id}>{r[k] || '—'}</td>)}</tr> : null
           ))}
-          <tr><th scope="row">Fits</th>{rows.map((r) => <td key={r.id} className={`dp-fit${r.best ? '' : ' no'}`}>{r.fitLine}{r.notForLine ? <div className="dp-notfor">{r.notForLine}</div> : null}</td>)}</tr>
+          <tr><th scope="row">Fits</th>{rows.map((r) => <td key={r.id} className={`dp-fit${r.best ? '' : ' no'}`}>{r.fitLine}{r.notForCount > 0 ? <div className="dp-notfor">{org ? r.notForLine : `Not for ${r.notForCount} of the group`}</div> : null}</td>)}</tr>
           <tr><th scope="row">Tee times</th>{rows.map((r) => <td key={r.id}>{r.bestLine && <div className="small">{r.bestLine}</div>}{slotChips(r)}</td>)}</tr>
         </tbody>
       </table>

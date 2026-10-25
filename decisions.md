@@ -181,3 +181,18 @@
 - Migration 108 was edited in place rather than adding 110, because 108 isn't live yet (same release).
 - The organiser's length is now shown in nights to match ("2 nights", not "3 days"); the stored value didn't change.
 
+
+## ov42 — the link preview says what's asked and by when (26 Oct 2026, Josh: "nothing about what is requested")
+- Three stages, worked out by the database for the preview (idea_preview, 110) and the same way in the app for the
+  picture: collecting → "💡 <name>: have your say by Thu 6pm"; a When? / Where? vote open → "🗳️ <name>: vote by Thu";
+  locked in (or sent to the vote with nothing left open and a winner) → "✅ It's on: <where>, <dates>". Counts only.
+- "Have your say by" is new (plans.idea_answer_by), set on 📣 Share it: 4 days on at 6pm Sydney unless already set;
+  the person sharing can change it there. It shows on the idea's summary and in the chat message.
+- The vote's closing is a date (plan_polls.closes_on), so it reads "vote by Thu" with no time.
+- "n of m": m is the group's approved non-guest players, or the In / Maybe people once there are any; m never shows
+  below n.
+- The evening-before nudge is built (cheap): one buzz, 24 h before the deadline, to people who haven't answered —
+  its own pg_cron job 'lgc-idea-answer-nudge'. Moving the deadline re-arms it.
+- The preview page waits at most 1.5 s in total for the database; after that (or any error) the plain preview goes
+  out. The plain one is cached 60 s, a real idea's 5 min.
+- An answer from before 110 is applied (no stage) reads as collecting with no deadline — the page works either way.

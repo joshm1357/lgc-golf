@@ -25,6 +25,7 @@ import { uploadPhoto } from '../lib/images.js';
 import { todayISO } from '../lib/plan.js';
 import * as TB from '../lib/tripbuilder.js';
 import * as I from '../lib/ideas.js';
+import * as P from '../lib/ideapreview.js';
 
 const nameOf = (data, id) => (id && data.playersById[id] ? playerName(data.playersById[id]) : null);
 const first = (s) => String(s || '').split(' ')[0];
@@ -132,6 +133,9 @@ function Hero({ plan, fixed, summary, isOrg, me }) {
         </div>
       ))}
       {plan.brief && <span className="small muted">{plan.brief}</span>}
+      {plan.idea_answer_by && plan.shared_at && plan.status === 'planning' && !plan.idea_sent_at && !plan.idea_pool && (
+        <span className="small" style={{ fontWeight: 800, color: '#7A5A00' }} data-testid="answer-by">⏰ Have your say by {P.shortWhen(plan.idea_answer_by)}</span>
+      )}
       <span className="small" style={{ fontWeight: 700 }} data-testid="wish-summary">👥 {summary.line}</span>
       {!plan.shared_at && !plan.idea_pool && <span className="small muted">Not shared yet — {plan.created_by === me || isOrg ? 'tap 📣 Share it when you’re ready.' : 'only whoever proposed it can see it for now.'}</span>}
       {isOrg && summary.wishes.length > 0 && <span className="small muted">Wishes: {summary.wishes.slice(0, 4).map((w) => `“${w}”`).join(' · ')}</span>}
@@ -672,34 +676,64 @@ function HandOver({ plan, data, organiserId, reload, onDone }) {
 }
 
 // 📣 Share it: (a) a Feed post + buzz in the app, (b) a picture and a link with a proper preview for the group chat.
-function ShareIt({ plan, data, status, reload, onClose }) {
+// ov42 (Josh 26 Oct): the picture and the link preview say what's asked and by when — "Have your say by Thu 6pm"
+// (4 days on, 6pm Sydney, unless it's already set; whoever shares can change it), "Vote by …" once a vote is open,
+// "It's on: …" once decided. The picture is made fresh on each press, so it follows the stage.
+const localInput = (d) => { const x = new Date(d); const p = (n) => String(n).padStart(2, '0'); return `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())}T${p(x.getHours())}:${p(x.getMinutes())}`; };
+function ShareIt({ plan, pd, answers, data, status, reload, onClose }) {
   const [busy, run] = useRun();
   const [out, setOut] = useState(null);
+  const [answerBy, setAnswerBy] = useState(() => plan.idea_answer_by || P.defaultAnswerBy().toISOString());
+  const [editBy, setEditBy] = useState(null);
   const by = first(nameOf(data, plan.created_by)) || 'Someone';
-  useEffect(() => {
-    run(async () => {
-      const look = status?.look || {};
-      const card = I.ideaCard(plan, by);
-      const [file, preview] = await Promise.all([drawCard('idea', card, look), drawIdeaPreview(card, look).catch(() => null)]);
-      let url = null;
-      if (preview) { try { url = await uploadPhoto(preview, 'ideas', {}); } catch { url = null; } }
-      const firstTime = !plan.shared_at;
-      const token = await must(supabase.rpc('share_idea', { p_plan: plan.id, p_card_url: url && /\/storage\/v1\/object\/public\/photos\//.test(url) ? url : null }));
-      if (firstTime) {
-        try { await supabase.from('posts').insert({ kind: 'user', player_id: status.player_id, link: `/idea/${plan.id}`, body: I.feedLine(plan, by) }); } catch { /* the feed is a nice-to-have */ }
-        notify('idea_shared', { plan_id: plan.id }).catch(() => {});
-      }
-      const link = I.ideaLink({ origin: window.location.origin, base: import.meta.env.BASE_URL, token, appLink: appLink(`/idea/${plan.id}`) });
-      setOut({ file, img: URL.createObjectURL(file), link, msg: I.shareMessage(plan, by, link), firstTime });
-      reload();
-    });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const collecting = plan.status === 'planning' && !plan.idea_sent_at;
+  const make = (deadline) => run(async () => {
+    const look = status?.look || {};
+    const pv = P.previewFromPlan({ plan: { ...plan, idea_answer_by: collecting ? deadline : plan.idea_answer_by }, by, polls: pd?.polls, votes: pd?.votes, rsvps: pd?.rsvps, wishes: answers });
+    const card = { ...I.ideaCard(plan, by), ...P.pictureWords(pv) };
+    const [file, preview] = await Promise.all([drawCard('idea', card, look), drawIdeaPreview(card, look).catch(() => null)]);
+    let url = null;
+    if (preview) { try { url = await uploadPhoto(preview, 'ideas', {}); } catch { url = null; } }
+    const firstTime = !plan.shared_at;
+    const token = await must(supabase.rpc('share_idea', { p_plan: plan.id, p_card_url: url && /\/storage\/v1\/object\/public\/photos\//.test(url) ? url : null }));
+    if (collecting && deadline && deadline !== plan.idea_answer_by) {
+      // 110: if the database doesn't have it yet, the share still works (the link just has no deadline).
+      try { await supabase.rpc('idea_set_answer_by', { p_plan: plan.id, p_at: deadline }); } catch { /* not there yet */ }
+    }
+    if (firstTime) {
+      try { await supabase.from('posts').insert({ kind: 'user', player_id: status.player_id, link: `/idea/${plan.id}`, body: I.feedLine(plan, by) }); } catch { /* the feed is a nice-to-have */ }
+      notify('idea_shared', { plan_id: plan.id }).catch(() => {});
+    }
+    const link = I.ideaLink({ origin: window.location.origin, base: import.meta.env.BASE_URL, token, appLink: appLink(`/idea/${plan.id}`) });
+    const ask = P.ideaAsk(pv);
+    const msg = I.shareMessage(plan, by, link, collecting && ask.deadline ? `Have your say by ${ask.deadline}.` : '');
+    setOut({ file, img: URL.createObjectURL(file), link, msg, firstTime, deadline: collecting ? ask.deadline : '' });
+    reload();
+  });
+  useEffect(() => { make(answerBy); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const saveBy = () => {
+    const d = new Date(editBy);
+    if (Number.isNaN(d.getTime()) || d.getTime() < Date.now()) { toast('Pick a time that hasn’t passed'); return; }
+    const iso = d.toISOString();
+    setAnswerBy(iso); setEditBy(null); setOut(null); make(iso);
+  };
   const copy = async () => { try { await navigator.clipboard.writeText(out.link); toast('Link copied — paste it in the group chat'); } catch { toast('Couldn’t copy — press and hold the link'); } };
   return (
     <Sheet title="📣 Share it" onClose={onClose}>
       {!out ? <Loading text={busy ? 'Making the picture…' : 'Getting it ready…'} /> : (
         <div className="stack" style={{ gap: 10 }} data-testid="share-out">
           {out.firstTime && <span className="small" style={{ fontWeight: 700 }}>✓ Posted in the app — everyone in the group can add to it now.</span>}
+          {collecting && (editBy == null ? (
+            <div className="row between" style={{ gap: 8, alignItems: 'center' }}>
+              <span className="small" style={{ fontWeight: 700 }} data-testid="share-answer-by">⏰ Have your say by {out.deadline}</span>
+              <button type="button" className="btn ghost sm" onClick={() => setEditBy(localInput(answerBy))} data-testid="answer-by-change">Change</button>
+            </div>
+          ) : (
+            <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+              <input type="datetime-local" value={editBy} onChange={(e) => setEditBy(e.target.value)} aria-label="Have your say by" style={{ minHeight: 44, flex: 1 }} data-testid="answer-by-input" />
+              <button type="button" className="btn sm" onClick={saveBy} data-testid="answer-by-save">Save</button>
+            </div>
+          ))}
           <img src={out.img} alt="The share picture" style={{ width: '100%', maxWidth: 360, alignSelf: 'center', borderRadius: 12 }} data-testid="share-card" />
           <div className="small" style={{ background: 'var(--ground)', borderRadius: 10, padding: '8px 10px', wordBreak: 'break-word' }} data-testid="share-message">{out.msg}</div>
           <div className="row" style={{ gap: 6 }}>

@@ -1,0 +1,18 @@
+1. chris (proposed it) sets have your say by → ok true
+2. chris sets it a year away → refused: Pick a time in the next few weeks
+3. tom (a player) sets it → refused: Only whoever proposed it, or an organiser, can set that
+4. tom sets the column directly (rows) → ok 0
+5. other group sets it → refused: Trip not found
+6. anon preview: collecting → ok collecting 0 of 3 true Chris
+7. anon preview: tom answered → ok collecting 1 of 3
+8. anon preview: no names anywhere → ok true
+9. anon preview: made-up token → ok nothing
+10. nudge job 2 days early → ok 0
+11. nudge job the evening before → ok 1
+12. who is nudged (not tom who answered, not the guest) → ok 2 true
+13. nudge job again: once only → ok 0
+14. anon preview: vote open → ok vote ["dates", "location"] 2026-11-03 1 of 3
+15. anon preview: decided by the vote → ok decided Hunter Valley 2027-03-13 2027-03-15 1 in; 1 people
+16. anon preview: locked in → ok decided Cessnock 2027-03-20 2027-03-22
+17. anon reads plans → ok 0
+18. chris sets it after lock-in → refused: This trip isn't being planned any more

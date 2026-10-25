@@ -171,7 +171,7 @@ const step = (k) => page.locator(`[data-testid="tb-step-${k}"]`);
 
 const PLANB = 'eeeeeeee-0000-4000-8000-0000000000b2';
 const AL = pid(1);
-const fri = (weeks) => { const d = new Date(); d.setDate(d.getDate() + ((5 - d.getDay() + 7) % 7) + 7 * weeks); return d.toISOString().slice(0, 10); };
+const fri = (weeks) => { const d = new Date(); d.setDate(d.getDate() + ((5 - d.getDay() + 7) % 7) + 7 * weeks); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }; // local date (toISOString is UTC: a Thursday before 11am in Sydney)
 const plus = (iso, n) => { const d = new Date(`${iso}T00:00:00`); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const wk = (weeks) => ({ start: fri(weeks), end: plus(fri(weeks), 2), long: false });
 db.trip_builds.push(

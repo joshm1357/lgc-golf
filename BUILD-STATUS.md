@@ -2135,3 +2135,34 @@ Tests: vitest 1906 pass (new: daytiming 40, tripfit 14, dayplan 22, tripdays 6, 
 updated for the new rules). e2e `tests/e2e/day-plan-test.mjs` (50 checks) passes; trip-builder (updated: travel days
 now start filled), plan-ux, tripfinder, trips, votes-coorg, trip-plan, weekends-comps, trip-page, trip-overview pass;
 round-callout 24/25 — the one failure ("sat or sun morning") is date-dependent (today is a Sunday) and not touched here.
+## ov39 — Trip ideas you can share: COLLECT → SHAPE → DECIDE; the Caddie as a fast idea-giver (25 Oct 2026, branch `ov39-trip-ideas`, from `v10-6-release`, migration 108, not applied anywhere)
+**Built**
+- **💡 Put out a trip idea** (Trips): a name and whatever you know (rough when, where, drive / fly / either, a note). A plan
+  in the existing engine (kind 'trip', planning, proposed unless an organiser) with `idea = true`. Screen `#/idea/<id>`
+  (`screens/TripIdea.jsx`, logic in `lib/ideas.js`).
+- **📣 Share it**: a Feed post + buzz (`idea_shared`), a share card (shareCard.js 'idea'), and a link. On Cloudflare the
+  link is `/i/<token>#/join/<code>?to=/idea/<id>` — a Pages function (`functions/i/[token].js`, logic in
+  `lib/ideapreview.js`) serves the WhatsApp/Messenger preview (title, line, a 1200×630 picture uploaded at share time)
+  and hops people into the app. On GitHub Pages (today's live address) it's the plain app link + picture.
+- **COLLECT**: the link lands on a quick summary — what's Set and what's Open to ideas, the group's answers in one line,
+  In / Maybe / Can't when the weekend is set, "Help plan — 4 quick taps" (`plan_wishes`: weekends I can't do, spend,
+  getting there + longest drive, how much golf + per-day timing + home by, one wish), a suggestion, a comment.
+- **SHAPE**: dates / areas / courses lists, 👍 / 👎, who added what, ✨ Caddie items, fit lines ("suits 9 of 11 · within
+  3 h") — counts for everyone, names for the organiser. Suggestions outside what's Set go to the organiser's queue.
+- **The organiser**: What's set (any mix, each Set / Open to ideas; trips of 1–6 days; how much golf), the queue,
+  📋 Paste the chat / ✨ Ideas from the comments (the Caddie proposes, the organiser taps + Add), 🤝 Hand over organising,
+  ✨ Pull it together (the planning chat on the strong model, group organisers), 🗳️ Tidy up → vote.
+- **DECIDE**: ticks → `idea_tidy` → the trip builder's state (weekends, areas, courses, fit notes) → the v10.6 builder
+  opens with `?call=auto` and calls the When? / Where? vote(s) with the fit lines on each option.
+- **Leftovers**: the Caddie groups what was dropped into 1–3 named parked ideas (or a no-AI grouping); OK / edit / discard
+  each → 💭 Future trip ideas. The main item's suggester has 48 h first refusal, then anyone can claim it. "Or start
+  another trip idea now" stays.
+- **The Caddie on an idea** (`ai-helper` mode `idea_chat`, `ideas.ts`): one call, short reply + up to 3 idea cards, the
+  group's context and answers up front, flying to ONE place (flight time, first / last flights, a flight search link,
+  no fares). Uses `AI_FAST_MODEL` (same provider and key; light thinking), else the usual model. The planning chat may
+  now plan a single flying destination (plan.ts).
+**Tested**: vitest (all 1,853+, new ideas / ideapreview / shareCard tests); Deno ai-helper (158, incl. 9 new) and
+type-checks of ai-helper and notify; `supabase/tests/108_trip_ideas.sql` (85 checks, local Postgres 16 with 001–108,
+expected file; 108 re-runs cleanly); e2e `tests/e2e/trip-ideas-test.mjs` (all pass); votes-coorg, plan-ux,
+trip-builder, trips pass; weekends-comps has 1 date-dependent failure that fails the same on v10-6-release.
+**Next**: Josh's OK; apply 108 on staging; set `AI_FAST_MODEL`; check a real WhatsApp preview on a branch link.

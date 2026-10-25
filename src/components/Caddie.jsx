@@ -39,9 +39,11 @@ export function openCaddie(question, { plan = false } = {}) {
 export const openPlanner = (opts) => {
   if (opts && typeof opts === 'object' && 'planId' in opts && !opts.nativeEvent) {
     chatWanted.planId = opts.planId || null;
+    if (opts.say) { chatWanted.say = String(opts.say); chatWanted.sayFor = opts.planId || null; }
     window.dispatchEvent(new CustomEvent(CHAT_SWITCH, { detail: { planId: chatWanted.planId } }));
   }
   openCaddie(null, { plan: true });
+  if (opts?.say) setTimeout(() => window.dispatchEvent(new CustomEvent('planchat:say')), 0);
 };
 
 /** An original glyph: a golf bag with three clubs. */

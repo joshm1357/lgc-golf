@@ -3,8 +3,8 @@
 // courses for tee times on the settled weekend(s) → 4 Pick the trip (or vote 2 "Which trip?") → it fills the trip.
 // Organisers build; players see it read-only, vote, and put in tee times for a "Call the course" job they own.
 // All the maths is in src/lib/tripbuilder.js. Drive times are "about" (straight line × 1.3 at 80 km/h).
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
 import { useSession, useData, useFeature, useRealtime, playerName } from '../lib/store.jsx';
 import { Header, Loading, Seg, toast, askConfirm } from '../components/ui.jsx';
@@ -226,6 +226,16 @@ export default function TripBuilder() {
     save({ ...st, days: filled, daysFilled: 1, courses: { ...(st.courses || {}), ...Object.fromEntries(filled.flatMap((d) => d.options).filter((id) => courseMap[id] && !st.courses?.[id]).map((id) => [id, slim(courseMap[id])])) } });
   }, [org, row, lib, stays.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ov39: a trip idea sent to the vote lands here with ?call=auto (or when / where / both): call that vote straight
+  // away (the When? / Where? votes, as v10.6). callRef is set further down, once everything's worked out.
+  const [sp] = useSearchParams();
+  const callRef = useRef(null);
+  const autoCalled = useRef(false);
+  useEffect(() => {
+    if (autoCalled.current || !sp.get('call') || !callRef.current) return;
+    autoCalled.current = true;
+    callRef.current(sp.get('call'));
+  });
   if (!pd || !st || row === undefined) return <div className="page"><Header back="Trip" title="Plan the trip" /><Loading /></div>;
   if (!plan) return <div className="page"><Header back="Trip" title="Plan the trip" /><div className="empty">This trip has been removed.</div></div>;
   if (!org && !row) return <div className="page"><Header back="Trip" title="Plan the trip" sub={plan.name} /><div className="empty">The organiser hasn’t started building this trip yet.</div></div>;
@@ -409,6 +419,8 @@ export default function TripBuilder() {
       for (const id of ids) out[`areacourse:${r}:${id}`] = courseSummary({ course: courseMap[id] || {}, research: areaResearch[id] || null, from: pins[0] || reg || null });
       for (const s of pins) out[`stay:${s.key || s.name}`] = staySummary({ stay: s, courseIds: ids, courseMap });
     }
+    // ov39: the fit line from the group's 4 quick taps, for options that came from a trip idea ("suits 9 of 11").
+    for (const [k, v] of Object.entries(s0.fitNotes || {})) out[k] = [out[k], v].filter(Boolean).join(' · ');
     return out;
   };
 
@@ -461,6 +473,11 @@ export default function TripBuilder() {
   };
   // ov35: what each card can call now (nothing with votes switched off), and how many could vote.
   const choices = votesOn && !combined ? callChoices(st, ballotRange('full', st)) : { when: false, where: false, both: false };
+  callRef.current = org ? (want) => {
+    const part = ['both', 'when', 'where'].includes(want) && choices[want] ? want : choices.both ? 'both' : choices.when ? 'when' : choices.where ? 'where' : null;
+    if (part) callPart(part);
+    else toast('Nothing to vote on yet — one weekend and one area is already the plan');
+  } : null;
   const eligible = (data.players || []).filter((p) => p.approved !== false).length;
   const called = async ({ batch: b, keys }) => {
     const c = calling;

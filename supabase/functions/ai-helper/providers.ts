@@ -25,6 +25,8 @@ export type AiConfig = {
   apiKey: string;
   model: string;
   caps: { groupPerMonth: number; personPerDay: number };
+  /** ov39: how hard a thinking model thinks (OpenRouter only). Not set: 'medium' (Josh, 22 Oct). The fast model: 'low'. */
+  effort?: 'low' | 'medium' | 'high';
 };
 export const DEFAULT_CAPS = { groupPerMonth: 2000, personPerDay: 100 };
 export const ANTHROPIC_BASE = 'https://api.anthropic.com/v1';
@@ -73,6 +75,19 @@ export function aiConfig(get: (k: string) => string | undefined): { ok: true; cf
       caps: { groupPerMonth: int(get('AI_GROUP_MONTHLY_CAP'), DEFAULT_CAPS.groupPerMonth), personPerDay: int(get('AI_PERSON_DAILY_CAP'), DEFAULT_CAPS.personPerDay) },
     },
   };
+}
+
+/**
+ * ov39: the FAST model for quick chat (the Caddie on a trip idea), from AI_FAST_MODEL — the same provider and key as
+ * the usual model (A). Not set (or not a model id): the usual model, so nothing breaks. Light thinking. The strong
+ * model (AI_MODEL) stays for "Pull it together", planning and research. → { cfg, fast } (fast: AI_FAST_MODEL is used)
+ */
+export function fastConfig(get: (k: string) => string | undefined, a: AiConfig | null): { cfg: AiConfig | null; fast: boolean; reason?: string } {
+  if (!a) return { cfg: null, fast: false };
+  const m = String(get('AI_FAST_MODEL') ?? '').trim();
+  if (!m) return { cfg: a, fast: false };
+  if (m.length > 80 || /\s/.test(m)) return { cfg: a, fast: false, reason: 'AI_FAST_MODEL doesn’t look like a model id' };
+  return { cfg: { ...a, model: m, effort: 'low' }, fast: true };
 }
 
 // ------------------------------------------------------------------ Reading sloppy JSON
@@ -176,7 +191,7 @@ export function requestBody(cfg: AiConfig, o: { system: string; tools: ToolDef[]
     tool_choice: 'auto',
     // OpenRouter: "thinking" models (e.g. Kimi K2.6) can spend the whole token budget thinking and send back no answer.
     // Medium thinking (Josh, 22 Oct: quality over cost for now), kept out of the reply. Only sent to OpenRouter (other OpenAI-style hosts may refuse it).
-    ...(isOpenRouter(cfg) ? { reasoning: { effort: 'medium', exclude: true } } : {}),
+    ...(isOpenRouter(cfg) ? { reasoning: { effort: cfg.effort || 'medium', exclude: true } } : {}),
   };
 }
 

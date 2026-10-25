@@ -1,0 +1,85 @@
+RESULTS: 1. chris proposes an idea → ok true
+2. chris sets his own share token → refused: Share the idea with the 📣 Share it button
+3. chris adds an area before sharing → ok true
+4. tom adds before it is shared → refused: new row violates row-level security policy for table "plan_idea_items"
+5. tom shares chris's idea → refused: Only whoever proposed it, or an organiser, can share it
+6. chris shares with a picture not from the app → refused: That picture isn't one of the app's
+7. chris shares it → ok true
+8. sharing again keeps the link → ok true
+9. tom adds a weekend → ok 1
+10. tom adds a second weekend → ok 1
+11. tom adds a weekend that has gone → refused: That weekend has been and gone
+12. tom adds a 10-day "weekend" → refused: new row for relation "plan_idea_items" violates check constraint "plan_idea_items_check"
+13. tom adds a course → ok 1
+14. tom adds Port Douglas again → refused: duplicate key value violates unique constraint "plan_idea_items_once"
+15. tom adds as chris → refused: new row violates row-level security policy for table "plan_idea_items"
+16. tom adds one already ticked → refused: new row violates row-level security policy for table "plan_idea_items"
+17. tom ticks one himself → ok
+18. tom thumbs up the first weekend → ok true
+19. tom changes it to thumbs down → ok -1
+20. tom reacts as chris → refused: new row violates row-level security policy for table "plan_idea_reactions"
+21. tom answers the 4 taps → ok 2 late 16:00:00 Please no 6am tee times
+22. tom reads his own answers → ok 1
+23. tom wants "brunch" on Saturday → refused: new row for relation "plan_wishes" violates check constraint "plan_wishes_day_prefs_check"
+24. tom fixes the weekend himself → refused: Only the organiser can set parts of the idea
+25. tom says a Saturday he can't do → refused: new row for relation "plan_wishes" violates check constraint "plan_wishes_cant_dates_check"
+26. tom spends "heaps" → refused: new row for relation "plan_wishes" violates check constraint "plan_wishes_spend_band_check"
+27. tom answers for chris → refused: new row violates row-level security policy for table "plan_wishes"
+28. tom removes chris's area → ok
+29. tom tidies the idea → refused: Only an organiser can tidy it up
+30. tom spins off the leftovers → refused: Only the organiser can do that
+31. the guest adds a course idea → ok true
+32. organiser sets a 9-night "weekend" → refused: That weekend isn't right (1 to 6 days)
+33. organiser: the area open to ideas, within 3 h of Sydney → ok {"set": [], "area": "Port Douglas", "from": "Sydney", "within_min": 180}
+34. tom suggests another area while it's open (straight in) → ok in
+35. organiser sets the area, 2 nights, as much golf as possible → ok {"set": ["area", "nights"], "area": "Port Douglas", "golf": "max", "nights": 2, "travel": "fly"}
+36. organiser adds an area outside it (straight in) → ok in
+37. tom suggests another area (queued) → ok queued
+38. tom adds a course in the area (straight in) → ok in
+39. tom accepts his own suggestion → refused: Only an organiser can look at suggestions
+40. tom sets the definition column by hand → ok
+41. organiser declines it with a note → ok declined
+42. organiser looks at it twice → refused: That one's already been looked at
+43. the declined one can't be ticked → ok 0
+44. organiser sends nothing to the vote → refused: Tick at least one thing for the vote
+45. organiser ticks two and sends → ok 2
+46. the idea is marked sent → ok true
+47. organiser can't set sent by hand on another plan → refused: Share the idea with the 📣 Share it button
+48. organiser parks with no name → refused: Give it a name
+49. organiser parks "Fly north" (the declined Hamilton Island + Cairns) → ok true
+50. the parked idea → ok Fly north · Cairns,Hamilton Island · owner Tom · true
+51. tom is told it's his for 48 hours → ok 1 💭 Your Fly north idea is parked
+52. the guest adds a weekend to the parked idea → ok in
+53. the guest claims it → refused: Guests can't organise a trip
+54. chris claims it inside tom's 48 hours → refused: It's Tom's for now — you can claim it from Tue 7:44pm
+55. the job 43 hours on: one reminder to tom → ok 1
+56. tom's reminder → ok 2 💭 Your Fly north idea is parked
+57. the job again: no second reminder → ok 0
+58. the job 49 hours on: it goes open → ok 1
+59. the Feed post → ok 💭 Up for grabs: Fly north — a parked trip idea anyone can claim and organise.
+60. chris claims it once it's open → ok true
+61. it's chris's trip idea now → ok false true true
+62. tom claims it too late → refused: Someone's already claimed it
+63. organiser spins off the leftovers → ok true
+64. the new idea came from the old one → ok true true true
+65. leftovers keep who added and the ✨ → ok Fri 19 – Sun 21 Mar:Tom:false, Mirage Country Club:Gus:true, Noosa:Ao:false, Palmer Sea Reef:Tom:false, Port Douglas:Chris:false
+66. organiser removes tom's weekend → ok 1
+67. chris (the organiser) reads everyone's answers → ok 1
+68. the guest reads the answers (no names) → ok 0
+69. the guest gets the answers without names → ok 1 false
+70. tom hands chris's idea to himself → refused: Only the organiser can hand it over
+71. chris hands it to the guest → refused: A guest can't organise a trip
+72. chris hands it to tom → ok true
+73. chris can't organise it any more → refused: Only the organiser can set parts of the idea
+74. tom is told → ok 1 organiser_handover
+75. tom, now organising, reads the answers → ok 1
+76. tom can run the trip's votes (the builder) → ok 1
+77. preview by token → ok March fly trip · March · Chris · Test Group A108 · true
+78. preview with a made-up token → ok nothing
+79. anon reads the plans table → ok 0
+80. anon reads the lists → refused: permission denied for table plan_idea_items
+81. other group sees the lists → ok 0
+82. other group sees the wishes → ok 0
+83. other group adds to the idea → refused: That belongs to another group
+84. other group shares it → refused: Trip not found
+85. other group tidies it → refused: Trip not found

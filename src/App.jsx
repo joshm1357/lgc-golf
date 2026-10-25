@@ -88,6 +88,7 @@ const AwardsShow = lazyScreen(() => import('./screens/AwardsShow.jsx')); // ov28
 const TripFinder = lazyScreen(() => import('./screens/TripFinder.jsx'));
 const TripBuilder = lazyScreen(() => import('./screens/TripBuilder.jsx'));
 const DayPlan = lazyScreen(() => import('./screens/DayPlan.jsx')); // ov40: the day plan
+const TripIdea = lazyScreen(() => import('./screens/TripIdea.jsx')); // ov39: trip ideas you can share
 const Notifications = lazyScreen(() => import('./screens/Notifications.jsx'));
 const CompsBoard = lazyScreen(() => import('./screens/CompsBoard.jsx'));
 const TripOverviewScreen = lazyScreen(() => import('./screens/TripOverview.jsx')); // a trip's overview (trips with no plan)
@@ -335,6 +336,7 @@ function Inside() {
         <Route path="/plan" element={<FeatureRoute feature="planner" label="The Trips planner"><Planner /></FeatureRoute>} />
         <Route path="/plan/:planId" element={<FeatureRoute feature="planner" label="The Trips planner"><PlanDetailRoute /></FeatureRoute>} />
         <Route path="/plan/:planId/find" element={<FeatureRoute feature="trip_finder" label="The trip finder"><TripFinder /></FeatureRoute>} />
+        <Route path="/idea/:planId" element={<FeatureRoute feature="planner" label="The Trips planner"><TripIdea /></FeatureRoute>} />
         <Route path="/plan/:planId/build" element={<FeatureRoute feature="trip_finder" label="Plan the trip"><TripBuilderRoute /></FeatureRoute>} />
         <Route path="/plan/:planId/days" element={<FeatureRoute feature="trip_finder" label="Day plan"><DayPlanRoute /></FeatureRoute>} />
         <Route path="/rules" element={<GovRedirect to="/governance/rulebook" />} />

@@ -37,3 +37,17 @@ describe('the trip idea link preview', () => {
     expect(failed.body).toContain('og:image" content="https://a/b.png"');
   });
 });
+
+describe('v10.7.1: picture sizes in the preview', async () => {
+  const { previewPage } = await import('./ideapreview.js');
+  it('the fallback icon is sent with its real square size', () => {
+    const html = previewPage({ preview: null, url: 'https://x/i/abc', image: 'https://x/brand/trip-512.png' });
+    expect(html).toContain('og:image:width" content="512"');
+    expect(html).toContain('twitter:card" content="summary"');
+  });
+  it('an idea\'s own card is 1200 × 630', () => {
+    const html = previewPage({ preview: { name: 'March', card_url: 'https://cdn/x.jpg' }, url: 'https://x/i/abc', image: 'https://x/brand/trip-512.png' });
+    expect(html).toContain('og:image:width" content="1200"');
+    expect(html).toContain('summary_large_image');
+  });
+});

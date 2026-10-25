@@ -240,7 +240,7 @@ export type PlanApplyDb = {
 export function briefText(plan: TripPlan, tasksOn: boolean): string | null {
   const parts: string[] = [];
   if (plan.notes) parts.push(plan.notes);
-  if (plan.travel === 'fly') parts.push('Travel: the group would like a flying trip (flying and multi-stop trips are coming soon to the planner).');
+  if (plan.travel === 'fly') parts.push('Travel: flying to one place (flights aren’t booked in the app — fares are a rough guess). Trips with several stops are coming soon.');
   if (plan.costs.length) parts.push(`Rough costs each (the Caddie’s rough guess — check before booking):\n${costLines(plan).join('\n')}`);
   if (!tasksOn && plan.places.length > 1) parts.push(`Other places to think about: ${plan.places.slice(1).map((p) => p.label).join(', ')}`);
   if (!tasksOn && plan.jobs.length) parts.push(`Jobs:\n${plan.jobs.map((j) => `• ${j}`).join('\n')}`);
@@ -328,7 +328,7 @@ export const CHAT_TOOL = {
     draft: obj({
       name: { type: 'string', description: 'A working name, e.g. "March Away 2027"' },
       kind: { type: 'string', enum: ['trip', 'round'] },
-      travel: { type: 'string', enum: ['drive', 'fly'], description: 'How they get there: drive (one region within a drive — the default) or fly (not planned yet; kept as a note)' },
+      travel: { type: 'string', enum: ['drive', 'fly'], description: 'How they get there: drive (one region within a drive — the default) or fly (to ONE destination: courses and stays near it; several stops are coming soon)' },
       headcount: { type: 'integer', description: 'About how many are coming, once they have said (e.g. 9). Leave it out if unknown — never guess.' },
       dates: { type: 'array', description: '2 to 4 weekend options (YYYY-MM-DD)', items: obj({ start_date: { type: 'string' }, end_date: { type: 'string' }, note: { type: 'string' } }, ['start_date']) },
       places: { type: 'array', description: '2 to 4 places, each with the library course ids courses_near found (up to 6; fewer is fine)', items: obj({
@@ -376,7 +376,7 @@ WHICH QUESTIONS FIRST (you only get 3): pick in this order, skipping anything th
   c. driving or flying, then how far they'll travel / where.
   So a vague first message ("golf trip next year") gets: when, how many, driving or flying. Never leave out "when" to ask "how far" or "driving or flying".
   - Driving (the default, and "Not sure"): one region within a drive of home — that's what you plan.
-  - Flying: say plainly that flying and multi-stop trips are coming soon to the app, and offer to plan a driving trip now or keep the idea for later. Don't plan flights. Put travel: "fly" on the draft and a short line in its notes (e.g. "Keen on a flying trip — coming soon"); if they then want a driving one, set travel: "drive".
+  - Flying (ov39, Josh 25 Oct: "more able to put in ideas, including flying, just not multi-location yet"): plan ONE destination they fly to — its places are towns near that airport, with courses near them, exactly like a driving region. Put travel: "fly" on the draft and in its notes the home airport, a rough flight time and a rough return fare range each, clearly a guess (e.g. "Fly SYD–Cairns, about 3 h; fares roughly $350–550 return — a guess"). Several stops on one trip: say that's coming soon to the app and plan one destination now.
 Budget each and must-haves (one big house, a particular course…) are good to know but not needed to start.
 - If any of 1–3 is still unknown, keep the reply SHORT: message = what you understood so far, in one sentence; questions = 1 to 3 questions about what's missing, each with quick answers; draft = leave it out (or at most a light sketch: a working name and 2–3 town names, no course searches). Don't search for courses yet.
 - Once the key facts are known — or the organiser says "plan it", "just suggest something" or "surprise me" — build the draft (below) straight away, making sensible guesses for anything still unknown (say what you guessed), then ask about what's still open.

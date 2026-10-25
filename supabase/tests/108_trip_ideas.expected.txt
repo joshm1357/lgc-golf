@@ -45,37 +45,41 @@ RESULTS: 1. chris proposes an idea → ok true
 45. organiser ticks two and sends → ok 2
 46. the idea is marked sent → ok true
 47. organiser can't set sent by hand on another plan → refused: Share the idea with the 📣 Share it button
-48. organiser gives the declined Hamilton Island back to tom → ok 1
-49. organiser gives back his own Noosa → refused: Nothing to give back — those are yours
-50. organiser parks Mirage in the future ideas → ok true
-51. the future ideas pool has it → ok Future trip ideas · Mirage Country Club
-52. tom is told his idea came back → ok 1 💡 Your Hamilton Island idea didn’t make this vote
-53. tom adds a weekend to the future ideas → ok in
-54. tom starts his own idea from Hamilton Island → ok true
-55. his new idea → ok Hamilton Island trip · proposed true · Hamilton Island
-56. tom starts it twice → refused: That one isn't yours to start
-57. tom starts chris's Port Douglas → refused: That one isn't yours to start
-58. tom makes Mirage (in the pool) a trip idea → ok true
-59. organiser spins off the leftovers → ok true
-60. the new idea came from the old one → ok true true true
-61. leftovers keep who added and the ✨ → ok Cairns:Tom:false, Fri 19 – Sun 21 Mar:Tom:false, Noosa:Ao:false, Palmer Sea Reef:Tom:false, Port Douglas:Chris:false
-62. organiser removes tom's weekend → ok 1
-63. chris (the organiser) reads everyone's answers → ok 1
-64. the guest reads the answers (no names) → ok 0
-65. the guest gets the answers without names → ok 1 false
-66. tom hands chris's idea to himself → refused: Only the organiser can hand it over
-67. chris hands it to the guest → refused: A guest can't organise a trip
-68. chris hands it to tom → ok true
-69. chris can't organise it any more → refused: Only the organiser can set parts of the idea
-70. tom is told → ok 1 organiser_handover
-71. tom, now organising, reads the answers → ok 1
-72. tom can run the trip's votes (the builder) → ok 1
-73. preview by token → ok March fly trip · March · Chris · Test Group A108 · true
-74. preview with a made-up token → ok nothing
-75. anon reads the plans table → ok 0
-76. anon reads the lists → refused: permission denied for table plan_idea_items
-77. other group sees the lists → ok 0
-78. other group sees the wishes → ok 0
-79. other group adds to the idea → refused: That belongs to another group
-80. other group shares it → refused: Trip not found
-81. other group tidies it → refused: Trip not found
+48. organiser parks with no name → refused: Give it a name
+49. organiser parks "Fly north" (the declined Hamilton Island + Cairns) → ok true
+50. the parked idea → ok Fly north · Cairns,Hamilton Island · owner Tom · true
+51. tom is told it's his for 48 hours → ok 1 💭 Your Fly north idea is parked
+52. the guest adds a weekend to the parked idea → ok in
+53. the guest claims it → refused: Guests can't organise a trip
+54. chris claims it inside tom's 48 hours → refused: It's Tom's for now — you can claim it from Tue 7:44pm
+55. the job 43 hours on: one reminder to tom → ok 1
+56. tom's reminder → ok 2 💭 Your Fly north idea is parked
+57. the job again: no second reminder → ok 0
+58. the job 49 hours on: it goes open → ok 1
+59. the Feed post → ok 💭 Up for grabs: Fly north — a parked trip idea anyone can claim and organise.
+60. chris claims it once it's open → ok true
+61. it's chris's trip idea now → ok false true true
+62. tom claims it too late → refused: Someone's already claimed it
+63. organiser spins off the leftovers → ok true
+64. the new idea came from the old one → ok true true true
+65. leftovers keep who added and the ✨ → ok Fri 19 – Sun 21 Mar:Tom:false, Mirage Country Club:Gus:true, Noosa:Ao:false, Palmer Sea Reef:Tom:false, Port Douglas:Chris:false
+66. organiser removes tom's weekend → ok 1
+67. chris (the organiser) reads everyone's answers → ok 1
+68. the guest reads the answers (no names) → ok 0
+69. the guest gets the answers without names → ok 1 false
+70. tom hands chris's idea to himself → refused: Only the organiser can hand it over
+71. chris hands it to the guest → refused: A guest can't organise a trip
+72. chris hands it to tom → ok true
+73. chris can't organise it any more → refused: Only the organiser can set parts of the idea
+74. tom is told → ok 1 organiser_handover
+75. tom, now organising, reads the answers → ok 1
+76. tom can run the trip's votes (the builder) → ok 1
+77. preview by token → ok March fly trip · March · Chris · Test Group A108 · true
+78. preview with a made-up token → ok nothing
+79. anon reads the plans table → ok 0
+80. anon reads the lists → refused: permission denied for table plan_idea_items
+81. other group sees the lists → ok 0
+82. other group sees the wishes → ok 0
+83. other group adds to the idea → refused: That belongs to another group
+84. other group shares it → refused: Trip not found
+85. other group tidies it → refused: Trip not found

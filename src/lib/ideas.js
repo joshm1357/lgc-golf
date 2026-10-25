@@ -496,3 +496,35 @@ export function pullTogetherText({ plan = {}, lists: l = { date: [], area: [], c
     'Plan it now.',
   ].filter(Boolean).join(' ').slice(0, 590);
 }
+
+// ------------------------------------------------------------------ parked ideas (Josh 19:41)
+
+/**
+ * Without the Caddie: group the leftovers into up to 3 future-trip ideas — each area with its courses (and the
+ * weekends if there's only one area), then any other weekends together. → [{ name, why, items: [id] }]
+ */
+export function parkGroups(items = []) {
+  const left = (items || []).filter((i) => !i.picked && ['in', 'declined'].includes(i.status || 'in') && !i.leftover);
+  const areas = left.filter((i) => i.kind === 'area');
+  const courses = left.filter((i) => i.kind === 'course');
+  const dates = left.filter((i) => i.kind === 'date');
+  const out = [];
+  for (const a of areas.slice(0, 3)) {
+    const mine = courses.filter((c) => c.area && c.area.toLowerCase() === a.label.toLowerCase());
+    out.push({ name: `${a.label}${mine[0] ? ` — ${mine[0].label}` : ''}`, why: null, items: [a.id, ...mine.map((c) => c.id)] });
+  }
+  const used = new Set(out.flatMap((g) => g.items));
+  const loose = courses.filter((c) => !used.has(c.id));
+  if (out.length === 1) out[0].items.push(...dates.map((d) => d.id), ...loose.map((c) => c.id));
+  else if (out.length < 3 && (dates.length || loose.length)) {
+    out.push({ name: dates.length ? (dates.length === 1 ? dates[0].label : 'Other weekends') : 'Other courses', why: null, items: [...dates.map((d) => d.id), ...loose.map((c) => c.id)] });
+  }
+  return out.filter((g) => g.items.length);
+}
+
+/** A parked idea's claim state for me. → { state: 'mine' | 'theirs' | 'open', until, owner } */
+export function claimState(plan = {}, me = null, now = new Date()) {
+  const until = plan.claim_until ? new Date(plan.claim_until) : null;
+  if (!plan.claim_owner || !until || until <= now) return { state: 'open', until, owner: plan.claim_owner || null };
+  return { state: plan.claim_owner === me ? 'mine' : 'theirs', until, owner: plan.claim_owner };
+}

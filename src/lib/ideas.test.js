@@ -235,3 +235,29 @@ describe('the definition, flights and names (Josh 19:34)', () => {
     expect(whoCant({ start_date: '2027-03-13' }, rows, (id) => ({ a: 'Bo' }[id]))).toEqual(['Bo']);
   });
 });
+
+describe('parked ideas', () => {
+  it('groups leftovers without the Caddie', async () => {
+    const { parkGroups } = await import('./ideas.js');
+    const items = [
+      { id: 'a', kind: 'area', label: 'Tasmania', status: 'in' }, { id: 'c', kind: 'course', label: 'Barnbougle', area: 'tasmania', status: 'in' },
+      { id: 'b', kind: 'area', label: 'Hobart', status: 'declined' }, { id: 'd', kind: 'date', label: 'Fri 23 – Mon 26 Apr', status: 'in' },
+      { id: 'x', kind: 'area', label: 'Picked', status: 'in', picked: true }, { id: 'q', kind: 'area', label: 'Queued', status: 'queued' },
+    ];
+    expect(parkGroups(items)).toEqual([
+      { name: 'Tasmania — Barnbougle', why: null, items: ['a', 'c'] },
+      { name: 'Hobart', why: null, items: ['b'] },
+      { name: 'Fri 23 – Mon 26 Apr', why: null, items: ['d'] },
+    ]);
+    expect(parkGroups([{ id: 'a', kind: 'area', label: 'Kiama', status: 'in' }, { id: 'd', kind: 'date', label: 'W', status: 'in' }])).toEqual([{ name: 'Kiama', why: null, items: ['a', 'd'] }]);
+  });
+  it('knows whose it is to claim', async () => {
+    const { claimState } = await import('./ideas.js');
+    const now = new Date('2026-10-25T10:00:00Z');
+    const p = { claim_owner: 'tom', claim_until: '2026-10-27T10:00:00Z' };
+    expect(claimState(p, 'tom', now).state).toBe('mine');
+    expect(claimState(p, 'chris', now).state).toBe('theirs');
+    expect(claimState(p, 'chris', new Date('2026-10-28T00:00:00Z')).state).toBe('open');
+    expect(claimState({}, 'chris', now).state).toBe('open');
+  });
+});

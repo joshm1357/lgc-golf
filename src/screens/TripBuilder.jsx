@@ -222,7 +222,8 @@ export default function TripBuilder() {
 
   const steps = TB.builderSteps(st, { teeCount: tees.filter((t) => slotsFor(t).length).length });
   const current = step || (steps.find((s) => !s.done && !s.locked) || steps[steps.length - 1]).key;
-  const days = TB.tripDays(st.nights).map((d) => ({ ...d, options: st.days.find((x) => x.index === d.index && x.leg === d.leg)?.options || [] }));
+  // ov40: each day also carries its golf (none / 9 / 18 / 36) and whether it's a travel day.
+  const days = TB.tripDays(st.nights).map((d) => { const s0 = st.days.find((x) => x.index === d.index && x.leg === d.leg) || {}; return { ...d, options: s0.options || [], ...(s0.golf ? { golf: s0.golf } : {}), ...(s0.travel === false ? { travel: false } : {}) }; });
   const weekendDates = (index) => st.weekends.map((w) => TB.dayLabel(TB.dayDate(w, index))).join(' / ');
   const v1 = batches.find((b) => b.id === st.votes?.v1);
   // (the group's usual social golf times for the courses being called — see loadSocial above)
@@ -235,7 +236,7 @@ export default function TripBuilder() {
     save({
       ...st,
       courses: { ...st.courses, [c.id]: slim(c) },
-      days: days.map((x) => ({ index: x.index, leg: x.leg, options: x.index === d.index ? (has ? x.options.filter((id) => id !== c.id) : [...x.options, c.id]) : x.options })),
+      days: days.map(({ name, ...x }) => ({ ...x, options: x.index === d.index ? (has ? x.options.filter((id) => id !== c.id) : [...x.options, c.id]) : x.options })),
       info: { ...(st.info || {}), [`${d.index}:${c.id}`]: TB.legDrive(d.leg, c, { origin, stays }).text },
     });
   };
@@ -312,7 +313,7 @@ export default function TripBuilder() {
   const chooseAreaOld = (area, nights = null) => run(async () => {
     const n = nights ?? votedNights;
     const base = n !== st.nights ? { ...st, nights: n, days: TB.resizeDays(st.days, n) } : st;
-    let next = chooseAreaFromVotes(base, area, points, courseMap);
+    let next = chooseAreaFromVotes(base, area, points, courseMap, { origin });
     next = { ...next, areaPool: st.areaPool?.length ? st.areaPool : st.regionOptions };
     if (!st.weekendsSettled && st.votes?.v1 && (st.weekends || []).length) next = { ...next, ...settlePrimaryBackup(base, points, { nights: n }) };
     if (await closeV1(next)) next = await announce(next);
@@ -374,7 +375,7 @@ export default function TripBuilder() {
   // 📍 "Close the vote and go with <area>": the area with the vote's favourite courses and places ticked. The weekend
   // isn't touched.
   const closeWhere = (area) => run(async () => {
-    let next = chooseAreaFromVotes(st, area, points, courseMap);
+    let next = chooseAreaFromVotes(st, area, points, courseMap, { origin });
     next = { ...next, areaPool: st.areaPool?.length ? st.areaPool : st.regionOptions };
     await closePart('where', winnerKeys('where', { area }));
     next = await announcePart('where', next, area, `area:${area}`);
@@ -481,8 +482,8 @@ export default function TripBuilder() {
     const libIds = [...new Set(c.rounds.filter((r) => r.course_id).map((r) => r.course_id))];
     const courseIds = {};
     for (const id of libIds) courseIds[id] = await must(supabase.rpc('copy_library_course', { p_id: id }));
-    const formats = TB.usualFormats(c.rounds.filter((r) => r.course_id).length, { trips: data.trips, rounds: data.rounds });
-    const shape = TB.shapeFromConfig(c, { courseIds, formats, oldShape: plan.repeat_shape });
+    const formats = TB.usualFormats(c.rounds.filter((r) => r.course_id).reduce((n, r) => n + Math.max(1, TB.dayRounds(days.find((d) => d.index === r.index) || {})), 0), { trips: data.trips, rounds: data.rounds });
+    const shape = TB.shapeFromConfig(c, { courseIds, formats, oldShape: plan.repeat_shape, days });
     const end = c.weekend.end || TB.addDays(c.weekend.start, st.nights);
     await must(supabase.from('plans').update({ start_date: c.weekend.start, end_date: end, location_name: c.stay.name, address: st.region || null, repeat_shape: shape }).eq('id', planId));
     await save({ ...st, picked: c.key, pickedText: c.text, weekends: [c.weekend], weekendsSettled: true, configs: st.configs?.length ? st.configs : configs.slice(0, 5) });

@@ -96,7 +96,7 @@ function TripSetupSheet({ plan, onClose, onDone }) {
         const s = roundSettingsFromRules(rules || [], r.format);
         return {
           trip_id: trip.id, course_id: r.course_id, play_date: r.date, format: r.format, status: 'setup',
-          name: `${DOW[parseDate(r.date).getDay()]} ${formatName(r.format)} — ${course?.name || ''}`.trim(),
+          name: `${DOW[parseDate(r.date).getDay()]}${r.second ? ' arvo' : ''} ${formatName(r.format)} — ${course?.name || ''}`.trim(),
           ...(r.format === 'ambrose' ? { comp_bonus: bonusOn ? s.comp_bonus ?? 0 : 0, min_drives: s.min_drives } : {}),
           rules: s.text || null,
         };
@@ -126,8 +126,8 @@ function TripSetupSheet({ plan, onClose, onDone }) {
         <label className="field"><span>Trip name (shows on the trophies and honour boards)</span><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></label>
         <span className="label">Rounds · {fmtRange(plan.start_date, plan.end_date)}</span>
         {rounds.map((r, i) => (
-          <div key={r.date} className="card pad stack" style={{ gap: 6 }}>
-            <strong>{fmtRange(r.date)}</strong>
+          <div key={`${r.date}-${i}`} className="card pad stack" style={{ gap: 6 }}>
+            <strong>{fmtRange(r.date)}{r.second ? ' · second round' : ''}</strong>
             <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 8 }}>
               <select className="select" value={r.course_id} onChange={(e) => set(i, { course_id: e.target.value })} aria-label="Course">
                 <option value="">No golf / add later</option>

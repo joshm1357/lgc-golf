@@ -235,9 +235,12 @@ describe('each area has its own course set and places to stay', () => {
     expect(TB.toggleId(['a'], 'a')).toEqual([]);
     expect(TB.toggleId(['a'], 'b')).toEqual(['a', 'b']);
     const days = TB.prefillStayDays([{ index: 0, leg: 'way', options: [] }, { index: 1, leg: 'stay', options: [] }, { index: 2, leg: 'stay', options: ['x'] }], ['near2', 'near1', 'far'], map, { stays: towns });
-    expect(days[0].options).toEqual([]);
+    // ov40: the way there is filled too (no starting point known → the courses near where we stay).
+    expect(days[0].options).toEqual(['near1', 'near2']);
     expect(days[1].options).toEqual(['near1', 'near2']);
     expect(days[2].options).toEqual(['x']);
+    // …but a day with no golf is left alone.
+    expect(TB.prefillStayDays([{ index: 0, leg: 'way', options: [], golf: 'none' }], ['near1'], map, { stays: towns })[0].options).toEqual([]);
   });
   it('the start range: areas with their courses and stays, weekends, stays, courses, ideas, extras', () => {
     const map = Object.fromEntries(courses.map((c) => [c.id, c]));

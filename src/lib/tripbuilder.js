@@ -141,6 +141,26 @@ export function tripDays(nights) {
 }
 export const dayDate = (w, index) => (w?.start ? addDays(w.start, index) : null);
 
+// ov40 (Josh 25 Oct: "there's no way to select which rounds to play golf … it should be each day"): every day says
+// how much golf — none / 9 / 18 / 36 (two rounds) — and whether it's a travel day. Default: 18 holes every day, day 1
+// a round on the way there, the last day a round on the way home. Old saved days have no `golf` → 18.
+export const GOLF_CHOICES = [
+  { value: 'none', label: 'No golf' }, { value: '9', label: '9 holes' }, { value: '18', label: '18 holes' }, { value: '36', label: '36 (two rounds)' },
+];
+/** A day's golf: 'none' | '9' | '18' | '36' (default '18'). */
+export const dayGolf = (d) => (['none', '9', '18', '36'].includes(String(d?.golf)) ? String(d.golf) : '18');
+/** Rounds that day: 0, 1 or 2. */
+export const dayRounds = (d) => ({ none: 0, 9: 1, 18: 1, 36: 2 }[dayGolf(d)]);
+/** The day's role: its slot ('way' / 'home' on the first and last day) unless the organiser said it isn't a travel
+ *  day (d.travel === false → a stay day, e.g. they drive up the night before). */
+export const dayLeg = (d) => (d?.leg !== 'stay' && d?.travel === false ? 'stay' : d?.leg || 'stay');
+/** "On the way there · 18 holes" */
+export function dayRoleLine(d) {
+  const leg = dayLeg(d);
+  const role = leg === 'way' ? 'On the way there' : leg === 'home' ? 'On the way home' : 'Stay day';
+  return `${role} · ${GOLF_CHOICES.find((g) => g.value === dayGolf(d)).label}`;
+}
+
 // ------------------------------------------------------------------ areas
 
 /** Stay areas → regions: [{ region, state, lat, lng, towns: [names] }]. */
@@ -359,7 +379,9 @@ const up10 = (m) => Math.ceil(m / 10) * 10;
  */
 export function callJobs({ days = [], weekends = [], courses = {}, needed = 1, origin = null, stays = [], booking = {}, note = null }) {
   const by = new Map();
-  for (const d of days) {
+  for (const d0 of days) {
+    if (dayGolf(d0) === 'none') continue;
+    const d = { ...d0, leg: dayLeg(d0) };
     for (const id of d.options || []) {
       const c = courses[id];
       if (!c) continue;
@@ -409,7 +431,8 @@ export function buildConfigurations({ weekends = [], stays = [], days = [], cour
   const out = [];
   for (const w of weekends) {
     for (const s of stays) {
-      const perDay = days.map((d) => {
+      const perDay = days.filter((d) => dayGolf(d) !== 'none').map((d0) => {
+        const d = { ...d0, leg: dayLeg(d0) };
         const date = dayDate(w, d.index);
         const choices = [];
         for (const id of d.options || []) {
@@ -521,12 +544,17 @@ export function usualFormats(n, { trips = [], rounds = [] } = {}) {
  * courseIds: { libraryId: the group's own course id }. Keeps side comps / games from an old shape on the same day and
  * course ("Same as last time"). Days with no golf are left out.
  */
-export function shapeFromConfig(config, { courseIds = {}, formats = [], oldShape = null } = {}) {
-  const golf = config.rounds.filter((r) => r.course_id);
+export function shapeFromConfig(config, { courseIds = {}, formats = [], oldShape = null, days = [] } = {}) {
+  // ov40: a 36-hole day is two rounds on that day (the second on the same course, its tee times to come); 9 holes
+  // says so (holes: 9).
+  const golf = config.rounds.filter((r) => r.course_id).flatMap((r) => {
+    const g = dayGolf(days.find((d) => d.index === r.index) || {});
+    return g === '36' ? [r, { ...r, second: true, block: null }] : [{ ...r, ...(g === '9' ? { holes: 9 } : {}) }];
+  });
   const rounds = golf.map((r, i) => {
     const course = courseIds[r.course_id] || null;
-    const old = (oldShape?.rounds || []).find((x) => x.day === r.index && x.course_id === course);
-    return { ...(old || {}), day: r.index, course_id: course, format: formats[i] || old?.format || 'stableford', tee_times: r.block?.times || [] };
+    const old = (oldShape?.rounds || []).find((x) => x.day === r.index && x.course_id === course && !!x.second === !!r.second);
+    return { ...(old || {}), day: r.index, course_id: course, format: formats[i] || old?.format || 'stableford', tee_times: r.block?.times || [], ...(r.second ? { second: true } : {}), ...(r.holes ? { holes: r.holes } : {}) };
   }).filter((r) => r.course_id);
   return { ...(oldShape || {}), v: 1, from_builder: config.key, rounds };
 }
@@ -610,7 +638,7 @@ export function newState(plan = {}) {
 export function resizeDays(days = [], nights) {
   return tripDays(nights).map((d) => {
     const old = days.find((x) => x.index === d.index && x.leg === d.leg);
-    return { index: d.index, leg: d.leg, options: old?.options || [] };
+    return { index: d.index, leg: d.leg, options: old?.options || [], ...(old?.golf ? { golf: old.golf } : {}), ...(old?.travel === false ? { travel: false } : {}) };
   });
 }
 
@@ -653,16 +681,29 @@ export function toggleId(list = [], id, max = MAX_AREA_COURSES) {
 }
 
 /**
- * Days start pre-filled from the area's course set: every stay day with no options yet gets the area's courses that
- * fit it (closest first, up to MAX_OPTIONS_PER_DAY). The way there / home days are left for the organiser (they
- * depend on the drive). Several per day — never just one.
+ * Days start pre-filled from the area's course set: every day with golf and no options yet gets the area's courses
+ * that fit its role (up to MAX_OPTIONS_PER_DAY): stay days the closest to where we stay; the way there / home (ov40)
+ * the ones least out of the way from the starting point (origin), else — no origin known — the closest to where we
+ * stay (you arrive and play nearby). Several per day — never just one.
+ * ov40: before this, the way there / home days were left empty, so a 2-night trip (Blue Mountains, March 2027) only
+ * ever had golf on the Saturday — one round.
  */
-export function prefillStayDays(days = [], courseIds = [], courseMap = {}, { stays = [], stayMax = DEFAULT_STAY_MAX } = {}) {
-  const ranked = courseIds.map((id) => courseMap[id]).filter(Boolean)
-    .map((c) => ({ id: c.id, d: stays.length ? legDrive('stay', c, { stays }) : { min: 0 } }))
-    .filter((x) => !stays.length || fitsLeg('stay', x.d, { stayMax }))
+export function prefillStayDays(days = [], courseIds = [], courseMap = {}, { stays = [], stayMax = DEFAULT_STAY_MAX, origin = null, detourMax = DEFAULT_DETOUR_MAX } = {}) {
+  const list = courseIds.map((id) => courseMap[id]).filter(Boolean);
+  const ranked = (leg) => list
+    .map((c) => {
+      if (!stays.length) return { id: c.id, d: { min: 0 } };
+      if (leg !== 'stay' && origin) return { id: c.id, d: legDrive(leg, c, { origin, stays }), leg };
+      return { id: c.id, d: legDrive('stay', c, { stays }), leg: 'stay' };
+    })
+    .filter((x) => !stays.length || fitsLeg(x.leg || 'stay', x.d, { stayMax, detourMax }))
     .sort((a, b) => (a.d.min ?? 999) - (b.d.min ?? 999)).map((x) => x.id);
-  return days.map((d) => (d.leg === 'stay' && !(d.options || []).length ? { ...d, options: ranked.slice(0, MAX_OPTIONS_PER_DAY) } : d));
+  const by = { stay: ranked('stay'), way: ranked('way'), home: ranked('home') };
+  return days.map((d) => (dayGolf(d) !== 'none' && !(d.options || []).length ? { ...d, options: by[dayLeg(d)].slice(0, MAX_OPTIONS_PER_DAY) } : d));
+}
+/** Old saved trips (before ov40) with travel days left empty: do they need filling? */
+export function daysNeedFilling(days = []) {
+  return days.some((d) => d.leg !== 'stay' && dayGolf(d) !== 'none' && !(d.options || []).length) && days.some((d) => (d.options || []).length);
 }
 
 /** The line under an area on the ballot: "Courses: A, B, C, D · Stay: Nowra, Huskisson". */

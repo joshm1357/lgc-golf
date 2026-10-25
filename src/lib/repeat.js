@@ -116,10 +116,13 @@ export function buildRepeat({ plan, rounds = [], games = [], items = [], rsvps =
  */
 export function setupRoundsFromShape(shape, rows, coursesById = {}) {
   if (!shape?.rounds?.length) return rows;
-  return rows.map((row, i) => {
-    const s = shape.rounds.find((r) => r.day === i);
-    if (!s) return row;
-    return { ...row, course_id: coursesById[s.course_id] ? s.course_id : row.course_id, format: s.format || row.format };
+  // ov40: a 36-hole day (two rounds) adds a second row on that date, straight after the first.
+  return rows.flatMap((row, i) => {
+    const s = shape.rounds.find((r) => r.day === i && !r.second);
+    const two = shape.rounds.find((r) => r.day === i && r.second);
+    const first = s ? { ...row, course_id: coursesById[s.course_id] ? s.course_id : row.course_id, format: s.format || row.format } : row;
+    if (!two) return [first];
+    return [first, { ...row, second: true, course_id: coursesById[two.course_id] ? two.course_id : '', format: two.format || row.format }];
   });
 }
 

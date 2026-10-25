@@ -47,10 +47,17 @@ export default function DayPlan() {
   // ov39's wishes (108). Read defensively: the table may not be there yet.
   const loadWishes = useCallback(async () => {
     try {
-      const { data: w, error } = await supabase.from('plan_wishes').select('*').eq('plan_id', planId);
-      setWishRows(error ? [] : w || []);
+      // The organiser reads everyone's rows (with names); a player can only read their own row (108's RLS), so they
+      // get the whole group's answers without names from idea_wish_answers — fit counts then match the organiser's.
+      if (org) {
+        const { data: w, error } = await supabase.from('plan_wishes').select('*').eq('plan_id', planId);
+        setWishRows(error ? [] : w || []);
+      } else {
+        const { data: w, error } = await supabase.rpc('idea_wish_answers', { p_plan: planId });
+        setWishRows(error ? [] : (w || []).map((x, i) => ({ ...x, player_id: `anon:${i}` })));
+      }
     } catch { setWishRows([]); }
-  }, [planId]);
+  }, [planId, org]);
   useEffect(() => { loadWishes(); }, [loadWishes]);
   // Starting points are organisers-only (063); the organiser's view keeps a rounded snapshot in the plan for everyone.
   useEffect(() => {

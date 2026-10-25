@@ -113,3 +113,14 @@ describe('the fit line', () => {
     expect(s).toBe('2 of 5 have said what they’d like · 1 happy to fly · longest drive mostly about 3 h · 1 want a spare day · Friday: 2 later · Sunday: 1 early · 1 want to be home by about 6pm on the last day');
   });
 });
+
+describe('v10.7: a 36-hole day in the whole-trip check', () => {
+  it('is not for the "a round a day" people', async () => {
+    const TF = await import('./tripfit.js');
+    const wishes = TF.cleanWishes([{ player_id: 'a', golf_per_day: 'daily' }, { player_id: 'b', golf_per_day: 'max' }]);
+    const people = [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }];
+    const r = TF.scheduleCheck([1, 2, 1], { people, wishes });
+    expect(r.no.map((n) => n.id)).toEqual(['a']);
+    expect(TF.scheduleCheck([1, 1, 1], { people, wishes }).no).toEqual([]);
+  });
+});

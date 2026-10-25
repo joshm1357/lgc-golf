@@ -68,7 +68,10 @@ export function fridayOf(iso) {
  */
 export function peopleFor({ rsvps = [], wishes = [], players = [], nameOf = (id) => id } = {}) {
   const going = rsvps.filter((r) => r.status === 'in' || r.status === 'maybe').map((r) => r.player_id);
-  const ids = going.length ? going : wishes.length ? wishes.map((w) => w.player_id) : players.filter((p) => p.approved !== false).map((p) => p.id);
+  // v10.7: with no replies yet, everyone in the group counts (answered or not), so "8 of 11" isn't shown as "8 of 8";
+  // anyone who answered but isn't on the list still counts.
+  const group = players.filter((p) => p.approved !== false && p.role !== 'guest').map((p) => p.id);
+  const ids = going.length ? going : group.length ? [...group, ...wishes.map((w) => w.player_id)] : wishes.map((w) => w.player_id);
   return [...new Set(ids)].map((id) => ({ id, name: nameOf(id) || 'Someone' }));
 }
 
@@ -122,8 +125,11 @@ export function golfCheck(rounds, { people = [], wishes = [] } = {}) {
 export function scheduleCheck(golfDays = [], { people = [], wishes = [] } = {}) {
   const w = byId(wishes);
   const spare = golfDays.some((r) => !r);
-  const no = people.filter((p) => (w[p.id]?.golf_per_day === 'spare_day' && !spare && golfDays.length > 1) || (w[p.id]?.golf_per_day === 'max' && spare))
-    .map((p) => ({ id: p.id, why: w[p.id].golf_per_day === 'max' ? 'wants as much golf as possible' : 'wants a spare day' }));
+  const double = golfDays.some((r) => Number(r) >= 2); // v10.7: a 36-hole day isn't "a round a day"
+  const why = (g) => (g === 'max' ? 'wants as much golf as possible' : g === 'daily' ? 'wants a round a day, not 36' : 'wants a spare day');
+  const no = people.filter((p) => (w[p.id]?.golf_per_day === 'spare_day' && !spare && golfDays.length > 1) || (w[p.id]?.golf_per_day === 'max' && spare)
+      || (w[p.id]?.golf_per_day === 'daily' && double))
+    .map((p) => ({ id: p.id, why: why(w[p.id].golf_per_day) }));
   const rounds = golfDays.reduce((a, r) => a + (Number(r) || 0), 0);
   return finish(people, no, (ok) => `${rounds} round${rounds === 1 ? '' : 's'} in ${golfDays.length} day${golfDays.length === 1 ? '' : 's'} — suits ${ok}`);
 }

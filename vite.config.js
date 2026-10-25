@@ -14,6 +14,18 @@ function assetList() {
   };
 }
 
+// ov39: the trip-idea link preview (functions/i/[token].js, a Cloudflare page function) needs the database's public
+// address and publishable key — the same two the app's own code already carries. Written only for Cloudflare builds.
+function previewDb(env) {
+  return {
+    name: 'lgc-preview-db',
+    generateBundle() {
+      if ((env.VITE_BASE || '/lgc-golf/') !== '/' || !env.VITE_SUPABASE_URL || !env.VITE_SUPABASE_KEY) return;
+      this.emitFile({ type: 'asset', fileName: 'preview-db.json', source: JSON.stringify({ url: env.VITE_SUPABASE_URL, key: env.VITE_SUPABASE_KEY }) });
+    },
+  };
+}
+
 const LIVE_DB = 'luogyzvrbedmicjejilr'; // the live L.G.C database (Supabase project ref)
 
 // Dev and staging builds (any database that isn't live) get a small red "TEST" tag on screen and are hidden
@@ -55,7 +67,7 @@ export default defineConfig(({ command, mode }) => {
   }
   return {
     base,
-    plugins: [react(), assetList(), testMarker(env)],
+    plugins: [react(), assetList(), testMarker(env), previewDb(env)],
     build: {
       rollupOptions: {
         output: {

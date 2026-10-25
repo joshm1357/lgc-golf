@@ -242,14 +242,19 @@ describe('configurations', () => {
     expect(voted.rounds[1].course_id).toBe('mh');
     expect(voted.stay.key).toBe('jb');
   });
-  it('a missing day is a gap; the same course twice is not a trip; two weekends', () => {
+  it('a missing day is a gap; the same course twice only when it’s all there is; two weekends', () => {
     const cs = buildConfigurations({ ...base, tees: tees.filter((t) => t.course_id !== 'ge'), weekends: [{ start: '2026-03-13' }, { start: '2026-03-20' }] });
     expect(cs.every((c) => c.weekend.start === '2026-03-13')).toBe(true); // no tee times on the 20th
     expect(cs[0].gaps).toBe(1);
     expect(cs[0].text).toContain('Sun no golf');
     const twice = buildConfigurations({ ...base, days: [{ index: 0, leg: 'stay', options: ['ng'] }, { index: 1, leg: 'stay', options: ['ng'] }],
       tees: [{ play_date: '2026-03-13', course_id: 'ng', times: ['08:00', '08:10', '08:20'] }, { play_date: '2026-03-14', course_id: 'ng', times: ['08:00', '08:10', '08:20'] }] });
-    expect(twice.every((c) => c.rounds.filter((r) => r.course_id === 'ng').length === 1)).toBe(true);
+    // ov40: the same course twice is allowed when it's the only course there is (golf on every day), marked as a repeat.
+    expect(twice[0].repeats).toBe(1);
+    expect(twice[0].gaps).toBe(0);
+    const choice = buildConfigurations({ ...base, days: [{ index: 0, leg: 'stay', options: ['ng', 'ge'] }, { index: 1, leg: 'stay', options: ['ng', 'ge'] }],
+      tees: ['2026-03-13', '2026-03-14'].flatMap((d) => ['ng', 'ge'].map((id) => ({ play_date: d, course_id: id, times: ['08:00', '08:10', '08:20'] }))) });
+    expect(choice.every((c) => c.repeats === 0)).toBe(true); // with two courses, never the same one twice
   });
   it('configText for a one-time block', () => {
     expect(configText({ stay: { name: 'Nowra' }, rounds: [{ index: 1, leg: 'stay', date: '2026-03-14', course_id: 'ng', name: 'Nowra GC', block: { text: '8:00' } }] })).toBe('Stay Nowra · Sat Nowra GC 8:00');

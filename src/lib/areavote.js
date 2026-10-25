@@ -84,7 +84,7 @@ export function areaVoteResults(st = {}, points = {}, { courseMap = {}, detail =
  * start with the group's favourites) and its best-voted places to stay are ticked for step 2 (the ones with votes, up
  * to MAX_STAYS; none voted = the first ones). Nothing else is lost. → the new state
  */
-export function chooseAreaFromVotes(st = {}, area, points = {}, courseMap = {}) {
+export function chooseAreaFromVotes(st = {}, area, points = {}, courseMap = {}, { origin = null } = {}) {
   const [row] = areaVoteResults({ ...st, regionOptions: [area] }, points, { courseMap });
   const courses = row ? row.courses.map((c) => c.id) : [];
   const all = (st.areaStays || {})[area] || [];
@@ -92,7 +92,7 @@ export function chooseAreaFromVotes(st = {}, area, points = {}, courseMap = {}) 
   const voted = row ? row.stays.filter((s) => s.points > 0).length : 0;
   const stays = ranked.slice(0, voted ? Math.min(MAX_STAYS, voted) : MAX_STAYS);
   const map = { ...(st.courses || {}), ...courseMap };
-  const days = prefillStayDays((st.days || []).map((d) => (d.leg === 'stay' ? { ...d, options: [] } : d)), courses, map, { stays, stayMax: st.stayMax });
+  const days = prefillStayDays((st.days || []).map((d) => (d.leg === 'stay' ? { ...d, options: [] } : d)), courses, map, { stays, stayMax: st.stayMax, origin: origin || st.origin || null, detourMax: st.detourMax, fly: (st.dayPlan?.travel?.mode || st.travel) === 'fly' });
   return { ...st, region: area, regionOptions: [area], areaCourses: { ...(st.areaCourses || {}), [area]: courses }, stays, days };
 }
 

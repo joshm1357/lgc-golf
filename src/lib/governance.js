@@ -494,7 +494,10 @@ export function ruleLine(kind, s, committees = []) {
   const who = s.decides === 'committee' ? (committees.find((c) => c.id === s.committee_id)?.name || 'A committee') : DECIDES[s.decides] || s.decides;
   if (kind === 'trip_decision') return `${who} picks the winner of a trip vote`;
   if (kind === 'handicap') {
-    const how = s.decides === 'players_majority' ? 'closes once everyone has voted, or the chair closes it' : s.decides === 'committee' ? 'closes once the committee has voted, or the chair closes it' : 'the chair closes it';
+    // ov38 (106): handicap cases close themselves after "Voting closes after" (sooner once everyone has voted).
+    const h = Number(s.close_hours) || 48;
+    const after = h % 24 === 0 ? `${h / 24} day${h === 24 ? '' : 's'}` : `${h} hours`;
+    const how = s.decides === 'players_majority' ? `closes after ${after}, or once everyone has voted` : s.decides === 'committee' ? `closes after ${after}, or once the committee has voted` : 'the chair closes it';
     return `${s.decides === 'organiser' ? 'The chair (an organiser) decides' : who} · ${how}`;
   }
   const bits = [who];

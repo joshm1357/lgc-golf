@@ -1,0 +1,82 @@
+1. phone-only Al puts a round out → refused: Save your spot first (Google or email) to do this
+2. guest Gus puts a round out → refused: Guests can say if they’re in, but can’t put a round out
+3. Bo makes a call-out by a plain insert → refused: Put a round out from the app (⛳ Put a round out)
+4. Bo: a day that has gone → refused: One of the days has already gone
+5. Bo: nine times → refused: Put out between 1 and 8 times
+6. Bo: another group's course → refused: That course isn’t one of the group’s
+7. Bo puts out Fri arvo, next 2 weeks — 4 spots, whole group, Moore Park → ok made
+8. the call-out → round · callout true · planning · proposed false · spots 4 · Moore Park · invite_all true · organiser = Bo true · extras {"after": "Beers at the Bowlo", "games": true} · note $65 green fee, carts optional
+9. its times (a dates vote) → Option one [arvo] | Fri 8 Nov · arvo [arvo]
+10. Bo is ✓ on both → 2
+11. buzzed (callout_new): not Bo, not the other group → 6 · Al,Dan,Ham,Kurt,Sam,So
+12. the buzz → ⛳ Bo wants a hit — Fri 1 Nov arvo or Fri 8 Nov arvo — Moore Park · 4 spots. Tap to say if you can.
+13. Feed post → 1 · ⛳ Who’s up for a hit? Fri arvo hit — Fri 1 Nov arvo or Fri 8 Nov arvo at Moore Park · 4 spots. Say if you can.
+14. sam yes on option 1 → ok yes
+15. al yes on option 1 → ok yes
+16. kurt yes on option 1 → ok yes
+17. dan yes on option 1 → ok yes
+18. ham yes on option 1 → ok yes
+19. sam yes on option 1 → ok yes
+20. kurt maybe on option 1 → ok maybe
+21. kurt yes on option 1 → ok yes
+22. sam no on option 2 → ok no
+23. so maybe on option 1 → ok maybe
+24. Ham tries to jump the queue → ok true
+25. option 1 ✓ in tick order → Bo,Sam,Al,Dan,Ham,Kurt
+26. Sam tries to lock it in → refused: Only whoever put it out (or an organiser) can lock it in
+27. Bo: a bad tee time → refused: A tee time looks like 13:20
+28. Bo locks in option 1 at 13:20, Sam booking → ok true · in Bo,Sam,Al,Dan · reserve Ham,Kurt
+29. Bo locks it again (a retry) → ok true
+30. the plan → confirmed · true · tee 13:20 · trip made true · booker Sam
+31. the round → Fri arvo hit — Moore Park · stableford · setup · on the trip true · day ok true · course Moore Park
+32. round players (handicaps) → Al 20,Bo 12,Dan 25,Sam 18
+33. replies after lock-in → Al in,Bo in,Dan in,Ham in,Kurt in,Sam in,So maybe
+34. the order → Bo,Sam,Al,Dan,Ham(r1),Kurt(r2)
+35. votes closed → dates closed winner true
+36. buzz: in → Al: ✅ You’re in — Fri 1 Nov 1:20pm, Moore Park / Dan: ✅ You’re in — Fri 1 Nov 1:20pm, Moore Park / Sam: ✅ You’re in — Fri 1 Nov 1:20pm, Moore Park
+37. buzz: reserve → Ham: ⏳ You’re reserve #1 — Fri 1 Nov 1:20pm, Moore Park / Kurt: ⏳ You’re reserve #2 — Fri 1 Nov 1:20pm, Moore Park
+38. buzz: didn't get a spot (maybe) → So: 🙁 Didn’t get a spot this time — Fri 1 Nov 1:20pm, Moore Park
+39. buzz: locked (full) → -
+40. buzz: booker → Sam: 📞 You’re booking: Moore Park, Fri 1 Nov 1:20pm
+41. booking job → Book the tee time — Moore Park, Fri 1 Nov 1:20pm for 4 · Sam · due set true
+42. lock-in Feed post → 1
+43. Al can't make it now → ok out
+44. after Al pulls out: round → Bo,Dan,Ham,Sam
+45. after Al pulls out: order → Bo,Sam,Dan,Ham,Kurt(r1)
+46. buzz: moved up → Ham: 🎉 A spot opened — you’re in: Fri 1 Nov 1:20pm
+47. buzz: Bo told → Bo: ↩️ Al can’t make it now — Fri arvo hit
+48. Al is in again → ok in
+49. Al goes to the back → Bo,Sam,Dan,Ham,Kurt(r1),Al(r2)
+50. Bo makes it 5 spots → ok 
+51. Bo: 1 spot → refused: Spots: from 2 to 72, or no cap
+52. with 5 spots → Bo,Dan,Ham,Kurt,Sam · Bo,Sam,Dan,Ham,Kurt,Al(r1)
+53. buzz: moved up (Kurt now too) → Ham: 🎉 A spot opened — you’re in: Fri 1 Nov 1:20pm / Kurt: 🎉 A spot opened — you’re in: Fri 1 Nov 1:20pm
+54. round live: Dan pulls out → refused: The round has started — ask an organiser to change who's playing
+55. the job at 4pm the day before → {"nudged": 0, "tomorrow": 0}
+56. the job at 6pm the day before → {"nudged": 0, "tomorrow": 1}
+57. the job again → {"nudged": 0, "tomorrow": 0}
+58. buzz: tomorrow → Bo: ⛳ Tomorrow: 1:20pm at Moore Park / Dan: ⛳ Tomorrow: 1:20pm at Moore Park / Ham: ⛳ Tomorrow: 1:20pm at Moore Park / Kurt: ⛳ Tomorrow: 1:20pm at Moore Park / Sam: ⛳ Tomorrow: 1:20pm at Moore Park
+59. Kurt's tomorrow buzz → ⛳ Tomorrow: 1:20pm at Moore Park — With Bo, Sam, Dan and Ham. Can’t make it now? Tap to say so — the first reserve gets your spot.
+60. Bo asks just Sam: Sat 7:30, no cap → ok made
+61. the list → Bo,Sam
+62. a fixed time: no vote, Bo in → 0 votes · Bo in · tee 07:30
+63. buzz: only Sam asked → Sam: ⛳ Bo wants a hit — Sat 2 Nov 7:30am
+64. no Feed post for a list → 0
+65. Kurt (not asked) says he's in → refused: This round is just for the people asked — ask Bo to add you
+66. Sam says he's in → ok in
+67. Bo asks Kurt too → ok 
+68. now Kurt says he's in → ok in
+69. replies closed: the job → {"nudged": 1, "tomorrow": 0}
+70. replies closed: once → {"nudged": 0, "tomorrow": 0}
+71. buzz: lock it in → Bo: ⏰ Replies are in — lock in Sat early
+72. Bo locks the fixed time (course from the library? no — none set) → refused: Pick the course first — the round needs one to score on
+73. Bo locks it at Moore Park → ok Bo,Sam,Kurt
+74. fixed time round → Bo,Kurt,Sam
+75. Bo calls it off → ok 
+76. called off: round gone → cancelled · round none
+77. buzz: called off → Kurt: ✖️ Called off: Sat early / Sam: ✖️ Called off: Sat early
+78. Al reads the invite list → ok 3
+79. Al adds himself to a list → refused: permission denied for table plan_invites
+80. another group reads the invite list → ok 0
+81. another group locks Bo's round → refused: Round not found
+82. clock words → Fri 30 Oct 1:20pm | Sat 31 Oct 7am | Fri 30 Oct arvo

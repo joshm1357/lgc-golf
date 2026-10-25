@@ -35,6 +35,10 @@ export function cardContent(kind, d = {}) {
     const rows = (d.rows || []).slice(0, 6).map((r) => ({ label: String(r.label || '').slice(0, 44), name: String(r.name || '').slice(0, 34), line: String(r.line || '').slice(0, 50) }));
     return { eyebrow: '🍽️ FINES & AWARDS', title: d.title || 'Fines & awards', sub: d.sub || '', rows };
   }
+  // ov39: a trip idea for the group chat — its name, when/where so far, and the ask.
+  if (kind === 'idea') {
+    return { eyebrow: d.eyebrow || '💡 TRIP IDEA', big: String(d.title || 'Trip idea').slice(0, 40), title: String(d.line || '').slice(0, 60), line: String(d.cta || 'Add your dates, areas and courses').slice(0, 60), sub: String(d.sub || '').slice(0, 40) };
+  }
   // Any Tribunal case (Stage 11b): the verdict only, never the discussion.
   if (kind === 'case') return verdictCard(d.case || {}, d.subject || '', d.tally || '');
   return { eyebrow: '', title: '' };
@@ -96,6 +100,27 @@ export async function drawCard(kind, data, look = {}) {
   const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
   if (!blob) throw new Error('Couldn’t make the picture on this phone.');
   return new File([blob], `${kind}.png`, { type: 'image/png' });
+}
+
+/** ov39: the link preview picture for a trip idea (1200 × 630 JPEG — what WhatsApp and Messenger show under a link). */
+export async function drawIdeaPreview(data, look = {}) {
+  const c = cardContent('idea', data);
+  const w = 1200; const h = 630;
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  try { await document.fonts?.ready; } catch { /* system font is fine */ }
+  const gold = look.accent || '#E0B84A';
+  ctx.fillStyle = look.primary || '#0E1F17'; ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = gold; ctx.font = '700 40px Barlow, system-ui, sans-serif'; ctx.fillText(c.eyebrow, 70, 110);
+  ctx.fillStyle = '#fff'; fitText(ctx, c.big, w - 140, 96, 800); ctx.fillText(c.big, 70, 245);
+  ctx.fillStyle = 'rgba(255,255,255,0.85)'; fitText(ctx, c.title || ' ', w - 140, 48, 600); ctx.fillText(c.title || '', 70, 330);
+  ctx.fillStyle = gold; fitText(ctx, c.line, w - 140, 44, 700); ctx.fillText(c.line, 70, 430);
+  ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.font = '600 30px Barlow, system-ui, sans-serif';
+  ctx.fillText([c.sub, 'The Golf Trip ⛳'].filter(Boolean).join('  ·  '), 70, h - 60);
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+  if (!blob) throw new Error('Couldn’t make the picture on this phone.');
+  return new File([blob], 'idea-preview.jpg', { type: 'image/jpeg' });
 }
 
 /** Share the picture (the phone's share sheet), with a line of text and a link; or save it if sharing pictures isn't

@@ -1976,3 +1976,215 @@ for themselves. Organising, money and proposing need a saved account (Google or 
 **Next:** Josh's OK, then apply 102 on staging (after 101) and run supabase/tests/102_saved_accounts.sql there. Before
 live: any L.G.C organiser still on a phone-only account needs to Save their spot first (or the group switches
 `phone_only_limited` off) — 102 stops their organiser changes until they do.
+
+## ov35 — When? / Where? votes, co-organisers, several draft trips (23 Oct 2026, branch `ov35-votes-coorg`, from `v10-5-caddie-plan-link`, migration 104, not applied anywhere)
+**Built**
+- **Two votes, either order** (`lib/votecards.js`, `components/WhenWhere.jsx`, `screens/TripBuilder.jsx`): 📅 When? and 📍 Where? cards in
+  step 1, each with its own Call / status / results / close; "Call both" = one message. Status reads "Not called yet" /
+  "Out now — 3 of 12 voted, closes Mon" / "Closed — Hunter Valley won 2–1" / "Decided — … (no vote)". Buttons say "Close the
+  vote and go with …" and that it posts. Choosing the area no longer settles the weekend. Old combined-vote trips keep the old screen.
+- **Co-organisers** (migration 104, `components/CoOrganisers.jsx`, `lib/coorganisers.js`): "👥 Co-organisers" on the trip
+  (Plan the trip view and the map screen): add 1–3, "📤 Help me plan this" (the trip link + `role=co`), remove / step down;
+  they're told (notify `coorganiser_added`). PlanRole gives a co-organiser the organiser's view of that one trip.
+- **Several drafts** (`components/DraftTrips.jsx`, `lib/planchat.js`, `components/CaddiePlan.jsx`): "🧭 My draft trips" on
+  Trips (last changed, Open, ✨ Chat); the planning chat is kept per trip; the Caddie's Plan tab has a "Planning:" picker;
+  the old per-group chat moves to its trip; "Carry on a plan (2 on the go)".
+**Migration 104** (`supabase/migrations/104_coorganisers.sql`): new table plan_coorganisers (RLS: members read, organisers
+add, organisers or themselves remove, same group, feature planner; max 3, not a guest, same group, not on a finished trip);
+extra permissive "co-organisers add/change/remove" policies on plan_polls, vote_batches, plan_rsvps, plan_items, plan_costs,
+plan_payments, plan_transfers, plan_groups, plan_stays, plan_budget_items, trip_builds, trip_tee_options, trip_start_points,
+plan_options, plan_group_members, and "co-organisers edit" on plans. can_decide replaced (025 + co-organisers). The organiser
+check inside plan_rows_guard, plan_items_stage, plan_stays_guard, plan_items_late_guard, plans_repeat_guard, call_off_plan and
+both put_stays_to_vote is patched the 029 way (live body, only the check changed; re-runs cleanly; fails loudly if the check
+moved). Nothing dropped; no existing policy changed.
+**Tests**: vitest 1,743 pass (new: votecards 16, coorganisers 3, planchat-trips 7). SQL `supabase/tests/104_coorganisers.sql`
+(41 checks, + expected) passes on PGlite with every migration 001–104 (104 applied twice). notify: type-checks, 16 deno tests pass.
+e2e on port 4363: new votes-coorg (all pass); trip-builder and weekends-comps adjusted for the two cards (pass); plan-ux,
+calloff, ov26-votes, trips, caddie, ai-helper(-v2), trip-overview/plan/page/extras, organise-tidy, desktop, tripfinder,
+late-job, runup, view-as, email-votes, nav, hello-maps, phone, features pass.
+**Next**: apply 104 on staging and run its SQL test there; deploy notify (new type); Josh to try it.
+## ov36 — The trip map's courses: pick any, filter, search wider, your own area, on the way (23 Oct 2026, branch `ov36-course-map`, no migration)
+**Audit.** AreaStart built its candidates from `trip_finder_courses` in a box 50 km around the stay pins, kept those within
+`stayMax` (40) of a stay, ranked them (`rankCandidates`) and capped them at 40. The map drew all 40 but the list only the
+first 12 — so 28 dots couldn't be ticked, and a course put on the table from its sheet vanished from the list. Library
+rows carry `mine_avg` / `others_avg` / `played`; course type and rankings only exist as free text in
+`course_research.details.style` / `.rankings` (course_booking_info.features isn't loaded in the builder).
+**Built**
+- `src/lib/coursemap.js` (pure): ratingOf / playedOf / typesOf / rankOf, filterOptions, filterCourses (keeps on-table
+  ones, flagged), filtersOn / filterText, nextReach / showMore / fromText / searchMarginKm, inBox / boxTooBig /
+  roundBox / customAreaName / isCustomArea, onTheWay / onWayLine / corridorBoxes (the drive split into ~100 km boxes so
+  the 400 cap doesn't bite).
+- `AreaStart.jsx`: filters above the list (chips + selects), list = map (paged 12 at a time, on-table always shown,
+  "All N are on the map"), Show more → Search wider, "🔍 This part of the map" panel (filters, tick, Save as an area,
+  "Make <custom area> this part of the map", Back), "🚗 On the way up or back" card (Show/Hide, detour select, rows
+  with ticks; 🚗 dots on the map), research loaded for the candidates (types, "Ranked #18" tags on rows).
+- `BuilderMap.jsx`: `tipAction` (a button on a dot's summary card), `searchHere` (the bottom-centre button, reads the
+  map's bounds), 🚗 before on-the-way names. `PlanMapTools.jsx`: TipCard `action`. CSS in planmap.css / planux.css.
+- `TripBuilder.jsx` (2 tiny edits, ov35 owns this file): passes `starts` to AreaStart; once a custom area is the chosen
+  region, its pins stand in for the (missing) towns when loading courses for the days.
+- State (trip_builds.state, no migration): `courseFilters`, `courseReach{area}`, `onWayDetour`, `customAreas{name: box}`.
+**Tests**
+- Vitest: src/lib/coursemap.test.js (20). Full run 1,737 pass.
+- e2e: new tests/e2e/course-map-test.mjs (47 checks; phone: pick an unlisted dot, filters + remembered after reload,
+  show more, search wider ×2, on the way; laptop: pan to Port Stephens, search this part, filter, save as "Custom:
+  around Nelson Bay"). hello-maps 83, plan-ux 84, trip-builder 71, tripfinder 30, weekends-comps 75 all pass.
+**Next:** Josh to try it on the preview; "on the way up" vs "back" as separate options (by day) if he wants them.
+## ov34 — "Who's up for a hit?": put a round out to the guys (23 Oct 2026, branch `ov34-round-callout`, migration 103, not applied anywhere)
+Built on the trip-planning engine, not beside it: a call-out is a plan (`kind 'round'`, new `callout = true`); a set
+time is In / Maybe / Can't (`plan_rsvps`), several times are a `dates` vote (`plan_polls` / `plan_options` /
+`plan_votes`); locking it in uses 025's guard (makes the trip) and 095 (closes the votes) and then makes ONE round on
+that trip (`rounds` + `round_players`), so scoring, history, handicaps and side games work as normal.
+- **⛳ Put a round out** sheet (`components/CalloutSheet.jsx`, opened from anywhere by `lib/calloutopen.js`, host in
+  App.jsx): course (the group's, the course library, or Course TBC) → when (a set tee time, or chips Thu/Fri/Sat/Sun
+  [+Mon–Wed] × Morning/Midday/Arvo/Twilight/exact time × Next 7 days / Week after / Next 2 weeks / Next 4 weeks, or a
+  type-it box understood on the phone) → remove any option (max 8) → spots (4 / 8 / 12 / other with a reserve list, or
+  no cap) → who's asked (whole group ticked, untick anyone) → replies close (default 24 h before the earliest) → note →
+  "➕ Add to this round" (collapsed). Anyone in the group with a saved account; phone-only gets "Save your spot".
+- **The round screen** (`screens/RoundCallout.jsx`, PlanDetail shows it for a call-out; `?full=1` still opens the
+  trip planner): where it's at, your reply (✓ ? ✗ per time, or I'm in / Maybe / Can't; after lock "I can't make it
+  now"), who's in with Spot 1…N and Reserve #1…, maybe / can't / not replied (headcount.js), details, extras, weather
+  (existing Open-Meteo `TripWeather`, after lock), and Lock it in / Change / Call it off for whoever put it out (or
+  an organiser).
+- **Cards with reply buttons** (`components/CalloutCard.jsx`): "⛳ Rounds going out" on Trips and Home's coming-up
+  area, and on the Feed post (link `/plan/<id>?c=1`).
+- **Lock it in**: the app suggests the most ✓ (then ?), the creator confirms, sets the tee time, picks the course if
+  TBC (the course vote's leader first), "Who's booking?" (a job + buzz), Stableford or Ambrose. Preview of who's in
+  and the reserve order. Everyone asked is told where they stand.
+- **Pull-outs**: the round's players follow the In list by themselves (database), the first reserve moves up and is
+  told; whoever put it out is told.
+- **Buzzes**: written by the database into `notify_queue` (kinds `callout_*`), sent by the notify function
+  (`callout.ts`; app poke `callout_send`; 10-minute job `lgc-round-callouts` → `{"type":"callout"}`). Replies closed →
+  "lock it in" nudge with the suggestion; the evening before (from 5pm Sydney) → "⛳ Tomorrow: 1:20pm at Moore Park —
+  With Bo, Sam and Al". Call-outs are left out of the trip countdown.
+- **Caddie**: "ask the guys for a hit fri arvo" (any "ask/anyone/keen … hit/round/game") opens the sheet filled in by
+  the same local parser (and the course if it's named).
+- **Old "⛳ One-day round"** in Suggest, and "Same time next year?" after a quick round, open the new sheet.
+- **Extension point (not built)**: repeating call-outs ("every Saturday 7:30") — `REPEAT_LATER` in lib/callout.js and
+  the note at the end of 103. "every sat" puts out the next four for now.
+
+Tests: `src/lib/callout.test.js` (47: builder, parser, closes, spots/reserves, lock preview, extras); whole vitest
+1759 pass. `supabase/tests/103_round_callout.sql` (82 checks, run on local Postgres 16 with 001–103; expected file).
+Deno `notify/callout.test.ts` (5) + autoawards/sidegames still pass; `deno check` on notify/index.ts clean.
+e2e `tests/e2e/round-callout-test.mjs` (phone + laptop, 25 checks) passes; trips, calloff, plan-ux, caddie, nav,
+side-games, trip-plan, trip-builder, desktop, phone, wishes, runup, your-round, trip-overview, trip-page, tripfinder,
+games, awards-fines pass; saved-gate passes on the email-code build.
+
+## ov38 — The Handicap Tribunal: posts worth tapping, a closing time, a verdict worth sharing (24 Oct 2026, branch `ov38-tribunal`, from `v10-6-release`, migration 106, not applied anywhere)
+- **Lodged post** (database): "⚖️ Mike's in the dock: “Hit them far too well!” 30 → 26 if guilty. Guilty or not? Vote by
+  Sun 8pm." The charge is tidied and trimmed (90 characters, on a word); the exhibit photo stays on the post.
+- **Defence post**: written or changed → one "🗣️ Mike's defence: “…”" post (140 characters), updated in place, removed
+  if the defence is cleared. A trigger on `tribunal_cases`; `set_defence` is untouched.
+- **Closing time**: `tribunal_cases.closes_at` (new, nullable). A new case gets the group's Handicap "Voting closes
+  after" (governance_settings.close_hours, default 48 h) — now shown in Governance → settings for handicap cases. The
+  chair's sheet has "Or move the closing time" (`set_case_closing`, organisers, 15 min–30 days). Open cases on the day
+  106 runs: 8pm Sydney on the first evening at least 18 h away (Sun 25 Oct 8pm if run on Sat 24 Oct).
+- **The clock**: `lgc-tribunal` every 10 min → `private.tribunal_tick`: closes due cases through `finalise_case`
+  (majority; tie → not guilty; the chair can still close early or overrule). Groups where the chair decides handicap
+  cases are never auto-closed — organisers get one "⚖️ Time's up on Dan's case — the chair closes it." One nudge per
+  case (4 h before, 8am–9pm; or the evening before from 6pm for a morning close) to everyone who can vote and hasn't,
+  one buzz per person: "⚖️ Verdicts at 8pm — 2 votes so far on Chris, 3 on Mike. Have your say." Buzzes go into
+  `notify_queue` (case_closing / case_verdict / case_fallback, already known to notify) and the hourly send delivers
+  them by each person's straight away / digest / only important choice. No edge-function change.
+- **Verdict post**: "⚖️ GUILTY 3–1. Mike goes 30 → 26. The “one-off” defence didn't wash." / "⚖️ NOT GUILTY 2–1.
+  Chris walks free and stays on 27." (+ "The “…” defence did the trick." when there was one; "(Chair's ruling)").
+- **Share**: "📤 Share the verdict" (the existing verdict card) on the case page and, one tap, on the Feed verdict post
+  (`components/VerdictShare.jsx`, its own file so the Feed doesn't load the Tribunal screen).
+- App: case list and case page say when voting closes (`lib/tribunalWords.js`); handicap ruleLine says
+  "closes after 2 days, or once everyone has voted".
+
+Tests: `src/lib/tribunalWords.test.js` (5) + governance.test.js updated; whole vitest 1815 pass.
+`supabase/tests/106_tribunal_clock.sql` (52 checks, local Postgres 16 with 001–106, expected file; 106 re-runs
+cleanly). e2e `tests/e2e/tribunal-clock-test.mjs` (12 checks) passes; governance, governance-hub, dispute,
+rulebook-v3, stage10 pass.
+
+## ov41 — Nights as an input; when to play by First day / Middle days / Last day (25 Oct 2026, branch `ov41-nights-daypos`, from `v10-7-release`, edits migration 108 — unreleased — not applied anywhere)
+
+Josh 21:12: "The number of nights should be an input too. Then it should be first day, middle days, end day I think on when to play."
+- **How many nights?** In the trip idea's quick taps (part of tap 1, under the weekends): 1 / 2 / 3 / 4+ / Not fussed,
+  pick one or more. Saved as `plan_wishes.nights int[]` (1–6; the app saves 4 for "4+"; `[]` = not fussed, null = not
+  answered). Hidden when the organiser has the weekend or the length Set. The organiser's existing length field
+  (`idea_fixed.nights`) is now worded in nights ("How many nights", "🛏️ 2 nights"). Group summary: "most say 2 nights".
+  Fit lines: a weekend on the list "suits 7 of 9 · 2 want 3 nights" (`dateFit` / `fitLine` / `dateWords`);
+  `tripfit.nightsCheck` (and `fitOption({ nights })`), the day plan's trip line ("… · 1 wants 3 nights"), and
+  "What the group said" (`wishesSummary`). The Caddie gets the nights line in its context.
+- **When to play:** rows First day / Middle days / Last day + Home by (Middle hidden for 1–2 day trips; one row "The
+  day" for a day trip). `day_prefs` keys 'first' | 'middle' | 'last' (values unchanged). The day plan maps each trip
+  day by position (`daytiming.dayPosKey`, `planDays().pos`); an old row's weekday key is still read for that weekday
+  (`prefFor`). Same words ("First day", "Middle days", "Last day") in the summary lines.
+- **108 edited in place** (unreleased): `plan_wishes.nights` (+ `add column if not exists` for a database that ran an
+  earlier copy), `private.day_prefs_ok` accepts first/middle/last and the old weekday keys, `idea_wish_answers` returns
+  nights. No check dropped or re-added.
+- Small fix: selected chips on the trip idea showed white text on the light gold (unreadable) — now dark text.
+- Tests: vitest 1961 pass (new: position mapping for 1/2/3/4/6-day trips, old weekday rows, nights cleaning / fit /
+  summary); `supabase/tests/108_trip_ideas.sql` (+8 checks, local Postgres 16 with 001–109) and 109 pass; Deno
+  ai-helper ideas tests pass; e2e trip-ideas, day-plan, plan-ux pass.
+
+## ov40 — The day plan: golf on each day, rough timing in colours, notes on a day (25 Oct 2026, branch `ov40-day-plan`, from `v10-6-release`, migration 109, not applied anywhere)
+
+- **Golf on each day (Josh's top priority).** Every trip day has golf none / 9 / 18 / 36 and a travel-day switch
+  (`st.days[i].golf`, `.travel`; `lib/tripbuilder.js` dayGolf / dayLeg / dayRounds / dayRoleLine). Default 18 every
+  day. **The Blue Mountains one-round cause**: choosing an area only pre-filled the stay days (`prefillStayDays`), so the
+  way-there and way-home days stayed empty and only one round could come out (seen read-only on live: way [] · stay 3 ·
+  home []). Now every day is filled for its role; old trips get their empty travel days filled once when the organiser
+  opens Plan the trip (`st.daysFilled`). 36-hole days make two rounds through "Set it up in the app"
+  (`shapeFromConfig` → `setupRoundsFromShape`); no-golf days aren't gaps; call jobs skip them. A course can repeat only
+  when there aren't enough to go round (`repeats`). Flying trips play near the stay on every day. "How much golf"
+  (max / daily / spare_day / any) sets every day at once (`golfForAmount`, `applyGolfAmount`).
+- **lib/daytiming.js**: travel chains (drive; fly = airport drive + check-in + flight + bags/car + drive, first flights
+  about 6am, last back about 9pm, no fares), the group's social / visitor times read from free text ("Sat after 2, Sun
+  after 11"; unknown → the usual for clubs, unconfirmed), round length (Stableford ~4 h 30 a 4-ball, Ambrose ~4 h, last
+  group later), NOAA sunrise/sunset in the place's own Australian clock, dusk flags, wishes (early / midday / late /
+  morning free / home by), one day as coloured blocks.
+- **lib/tripfit.js**: fit lines ("suits 7 of 8 · tee 12:30pm suits “morning free” (2) · 4 h 35 before dusk") and who
+  it doesn't suit and why; reads ov39's `plan_wishes` defensively (`cleanWishes`, final shape incl. day_prefs, home_by).
+- **lib/dayplan.js**: builder state → each day's inputs, the courses placed for the day's role, the comparison rows,
+  the organiser's pick (`st.dayPlan.picks` + the course on that day's options), a one-day round's times (`calloutTimes`).
+- **Screens**: `screens/DayPlan.jsx` (`/plan/:id/days`, from Plan the trip → Courses & stays, and "🕒 Timing for this
+  day" on each day card): how much golf, getting there (drive / fly with the numbers), day tabs, the timeline
+  (`components/DayTimeline.jsx`: travel blue, golf green, free sand, evening navy, daylight band, dusk line, wish
+  markers), the course comparison (cards on a phone, side by side on a laptop) with usual times, fee, drive, group size,
+  how to book, the fit line and the tee times that fit (★ = suits most wishes; organiser taps to pick), and notes on the
+  day with a wish. Names of who it doesn't suit: organiser only. `components/CalloutDayPlan.jsx` on a one-day round
+  call-out: each time on offer → leave home, tee, in, dusk.
+- **Review fixes (same day):** a **Suggested plan** card first (one line a day, "Use this plan" picks every day,
+  "Change <day>"; `suggestPlan` / `applySuggestion`), each day's travel follows the suggested or picked tee time (no
+  6am drive for a 10am tee), course cards folded to one line with the best 3 shown and "Show N more" (`cardLine`).
+- **Migration 109** (additive): plan_comments.day_date / day_pref / home_by + checks + an index. No policy changes,
+  nothing dropped. `supabase/tests/109_day_plan.sql` (14 checks, run on local Postgres 16 with 001–109; expected file;
+  109 re-runs cleanly).
+
+Tests: vitest 1906 pass (new: daytiming 40, tripfit 14, dayplan 22, tripdays 6, tripdays.long 9; planux, tripbuilder
+updated for the new rules). e2e `tests/e2e/day-plan-test.mjs` (50 checks) passes; trip-builder (updated: travel days
+now start filled), plan-ux, tripfinder, trips, votes-coorg, trip-plan, weekends-comps, trip-page, trip-overview pass;
+round-callout 24/25 — the one failure ("sat or sun morning") is date-dependent (today is a Sunday) and not touched here.
+## ov39 — Trip ideas you can share: COLLECT → SHAPE → DECIDE; the Caddie as a fast idea-giver (25 Oct 2026, branch `ov39-trip-ideas`, from `v10-6-release`, migration 108, not applied anywhere)
+**Built**
+- **💡 Put out a trip idea** (Trips): a name and whatever you know (rough when, where, drive / fly / either, a note). A plan
+  in the existing engine (kind 'trip', planning, proposed unless an organiser) with `idea = true`. Screen `#/idea/<id>`
+  (`screens/TripIdea.jsx`, logic in `lib/ideas.js`).
+- **📣 Share it**: a Feed post + buzz (`idea_shared`), a share card (shareCard.js 'idea'), and a link. On Cloudflare the
+  link is `/i/<token>#/join/<code>?to=/idea/<id>` — a Pages function (`functions/i/[token].js`, logic in
+  `lib/ideapreview.js`) serves the WhatsApp/Messenger preview (title, line, a 1200×630 picture uploaded at share time)
+  and hops people into the app. On GitHub Pages (today's live address) it's the plain app link + picture.
+- **COLLECT**: the link lands on a quick summary — what's Set and what's Open to ideas, the group's answers in one line,
+  In / Maybe / Can't when the weekend is set, "Help plan — 4 quick taps" (`plan_wishes`: weekends I can't do, spend,
+  getting there + longest drive, how much golf + per-day timing + home by, one wish), a suggestion, a comment.
+- **SHAPE**: dates / areas / courses lists, 👍 / 👎, who added what, ✨ Caddie items, fit lines ("suits 9 of 11 · within
+  3 h") — counts for everyone, names for the organiser. Suggestions outside what's Set go to the organiser's queue.
+- **The organiser**: What's set (any mix, each Set / Open to ideas; trips of 1–6 days; how much golf), the queue,
+  📋 Paste the chat / ✨ Ideas from the comments (the Caddie proposes, the organiser taps + Add), 🤝 Hand over organising,
+  ✨ Pull it together (the planning chat on the strong model, group organisers), 🗳️ Tidy up → vote.
+- **DECIDE**: ticks → `idea_tidy` → the trip builder's state (weekends, areas, courses, fit notes) → the v10.6 builder
+  opens with `?call=auto` and calls the When? / Where? vote(s) with the fit lines on each option.
+- **Leftovers**: the Caddie groups what was dropped into 1–3 named parked ideas (or a no-AI grouping); OK / edit / discard
+  each → 💭 Future trip ideas. The main item's suggester has 48 h first refusal, then anyone can claim it. "Or start
+  another trip idea now" stays.
+- **The Caddie on an idea** (`ai-helper` mode `idea_chat`, `ideas.ts`): one call, short reply + up to 3 idea cards, the
+  group's context and answers up front, flying to ONE place (flight time, first / last flights, a flight search link,
+  no fares). Uses `AI_FAST_MODEL` (same provider and key; light thinking), else the usual model. The planning chat may
+  now plan a single flying destination (plan.ts).
+**Tested**: vitest (all 1,853+, new ideas / ideapreview / shareCard tests); Deno ai-helper (158, incl. 9 new) and
+type-checks of ai-helper and notify; `supabase/tests/108_trip_ideas.sql` (85 checks, local Postgres 16 with 001–108,
+expected file; 108 re-runs cleanly); e2e `tests/e2e/trip-ideas-test.mjs` (all pass); votes-coorg, plan-ux,
+trip-builder, trips pass; weekends-comps has 1 date-dependent failure that fails the same on v10-6-release.
+**Next**: Josh's OK; apply 108 on staging; set `AI_FAST_MODEL`; check a real WhatsApp preview on a branch link.

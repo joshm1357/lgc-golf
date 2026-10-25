@@ -34,3 +34,10 @@ describe('dinner awards card', () => {
     expect(c.rows[0]).toEqual({ label: 'AWARD · 0', name: 'Name 0', line: '2 votes' });
   });
 });
+
+describe('the trip idea card (ov39)', () => {
+  it('has the name, the shape so far and the ask', () => {
+    const c = cardContent('idea', { title: 'March fly trip', line: 'March · Somewhere we fly to', sub: 'from Chris', cta: 'Add your dates, areas and courses' });
+    expect(c).toEqual({ eyebrow: '💡 TRIP IDEA', big: 'March fly trip', title: 'March · Somewhere we fly to', line: 'Add your dates, areas and courses', sub: 'from Chris' });
+  });
+});

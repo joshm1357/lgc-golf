@@ -33,7 +33,8 @@ export function tripStage(plan, trip, today = todayISO()) {
     return 'locked';
   }
   if (lastDay(plan) && lastDay(plan) < today) return 'done';
-  return plan.proposed ? 'idea' : 'deciding';
+  // ov39: a trip idea stays an idea until it's sent to the vote, whoever proposed it.
+  return plan.proposed || (plan.idea && !plan.idea_sent_at) ? 'idea' : 'deciding';
 }
 
 /**

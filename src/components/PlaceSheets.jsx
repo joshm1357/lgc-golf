@@ -13,6 +13,7 @@ import * as TB from '../lib/tripbuilder.js';
 import { useCourseResearch, AboutForGroups } from './CourseResearch.jsx';
 import { extraResearchLines, mapLink, nearestCourses, stayIdeasSummary } from '../lib/placeinfo.js';
 import { contactLinks } from '../lib/courseresearch.js';
+import Thinking from './Thinking.jsx';
 
 const BOOKING_COLS = 'course_id,visitor_times,member_times,booking_method,phone,booking_url,email,max_group,max_tee_times,features,notes,source,updated_at';
 
@@ -71,8 +72,12 @@ export function CourseSheet({ id, course, booking: givenBooking, research: given
   }, [hist.last?.id]);
   if (!course) return null;
   const facts = course.facts || {};
+  // v10.5 (Josh: "look it up doesn't work"): it did — it just takes about a minute on the web, with nothing showing.
+  const [looking, setLooking] = useState(false);
   const lookUp = () => run(async () => {
+    setLooking(true);
     const { data, error } = await supabase.functions.invoke('ai-helper', { body: { mode: 'course_lookup', course_id: id, group_id: currentGroup() || undefined } });
+    setLooking(false);
     if (error) throw new Error('Couldn’t reach the Caddie — try again');
     if (data?.error) { setWarning(data.error); setDraft(null); return; }
     setDraft({ ...(booking || {}), ...data.draft, source: 'ai' });
@@ -145,7 +150,13 @@ export function CourseSheet({ id, course, booking: givenBooking, research: given
         {org && !editing && (
           <div className="row" style={{ gap: 8 }}>
             <button type="button" className="btn ghost grow" onClick={() => { setDraft({ ...b }); setEditing(true); }}>✏️ Add or correct</button>
-            {aiOn && <button type="button" className="btn ghost grow" disabled={busy} onClick={lookUp}>✨ Look it up</button>}
+            {aiOn && <button type="button" className="btn ghost grow" disabled={busy} onClick={lookUp}>{looking ? 'Looking it up…' : '✨ Look it up'}</button>}
+          </div>
+        )}
+        {looking && (
+          <div className="stack" style={{ gap: 4 }} data-testid="lookup-progress">
+            <Thinking steps={['Searching the web for the club', 'Reading their booking pages', 'Writing it up for you to check']} />
+            <span className="small muted">This takes about a minute — keep this open.</span>
           </div>
         )}
         {org && editing && <BookingForm id={id} start={draft || b} onDone={() => { setEditing(false); setWarning(''); reloadBooking(); onSaved?.(); }} />}

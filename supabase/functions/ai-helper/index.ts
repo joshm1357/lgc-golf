@@ -28,7 +28,8 @@ import {
   helperRequest, isUuid, zonedStart, zonedToday, planIds, shapeLibrary, shapeOwnCourses, clean, TZ, tripPlanIds, errorKind,
   type Deps, type PlanContext, type History,
 } from './logic.ts';
-import { aiConfig } from './providers.ts';
+import { aiConfig, fastConfig } from './providers.ts';
+import { ideaRequest, ideaDeps } from './ideas.ts';
 import { shapePastTrips, shapeNear } from './plan.ts';
 import { commentaryRequest, commentaryCap } from './commentary.ts';
 import { importRequest } from './import.ts';
@@ -43,6 +44,10 @@ if (!AI.ok) console.warn('ai-helper: AI provider not set up:', AI.reason); // th
 // A/B test of two models (abtest.ts, 075): AI_MODEL_B etc. Commentary and jokes (cron) always use A.
 const AB = abSetup((k) => Deno.env.get(k), AI.ok ? AI.cfg : null);
 if (AB.reason) console.warn('ai-helper: model B not on:', AB.reason);
+
+// ov39: the fast model for the Caddie on a trip idea (AI_FAST_MODEL, same provider and key). Not set: the usual model.
+const FAST = fastConfig((k) => Deno.env.get(k), AI.ok ? AI.cfg : null);
+if (FAST.reason) console.warn('ai-helper: fast model not on:', FAST.reason);
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -317,6 +322,8 @@ Deno.serve(async (req) => {
     // "Bring your history" (import.ts): text and photos read into a proposal the organiser confirms in the app.
     if (body.mode === 'import') return json(await importRequest(body, { ...makeDeps(db, status.group_id, who.user.id, status), visionModel: Deno.env.get('AI_VISION_MODEL') || null }));
     if (body.mode === 'course_lookup') return json(await coursebookRequest(body, coursebookDeps(makeDeps(db, status.group_id, who.user.id, status), db))); // "✨ Look it up" in the trip builder (coursebook.ts)
+    // ov39: the Caddie on a trip idea — quick ideas on the FAST model (ideas.ts). Not A/B tested: it's its own model.
+    if (body.mode === 'idea_chat') return json(await ideaRequest(body, ideaDeps({ ...makeDeps(db, status.group_id, who.user.id, status), status: { ...status }, ai: FAST.cfg, fetchFn: fetch }, db, status.group_id, shapePastTrips)));
     if (/^rules_/.test(String(body.mode))) return json(await rulesRequest(body, rulesDeps(makeDeps(db, status.group_id, who.user.id, status), db, status.group_id))); // The Rulebook's AI jobs (rules.ts)
     return json(await helperRequest(body, makeDeps(db, status.group_id, who.user.id, status)));
   } catch (e) {

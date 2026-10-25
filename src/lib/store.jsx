@@ -277,6 +277,13 @@ export function playerName(p) {
   return p.nickname || p.name;
 }
 
+/** ov35: the same session with a few fields changed, for one part of the screen (a trip's co-organiser). */
+export function SessionOverride({ patch, children }) {
+  const cur = useContext(SessionCtx);
+  const value = useMemo(() => (cur && patch ? { ...cur, status: cur.status ? { ...cur.status, ...patch } : cur.status } : cur), [cur, patch]);
+  return <SessionCtx.Provider value={value}>{children}</SessionCtx.Provider>;
+}
+
 /** For the demo page: supply fixed session + data without touching the database. */
 export function DemoProviders({ session, data, children }) {
   return (

@@ -16,7 +16,7 @@ import { notify } from '../lib/push.js';
 import { must } from '../lib/run.js';
 import { PLAN_EXAMPLE } from '../lib/aihelper.js';
 import { fmtRange } from '../lib/plan.js';
-import { chatBody, cleanQuestions, diffDraft, markFor, removedNames, turnsLeft, draftToPlan, builderStateFromDraft, loadChat, saveChat, clearChat, chatSize, pending } from '../lib/planchat.js';
+import { chatBody, cleanQuestions, diffDraft, markFor, removedNames, turnsLeft, draftToPlan, builderStateFromDraft, loadChat, saveChat, clearChat, chatSize, pending, listPlanChats, carryOnWords } from '../lib/planchat.js';
 import { newState } from '../lib/tripbuilder.js';
 import { startExtras } from '../lib/extras.js';
 import { askHelper, Rate, Remaining } from './AiHelper.jsx';
@@ -30,14 +30,16 @@ export function TripsAi() {
   const planner = useFeature('planner');
   const { status } = useSession();
   if (!on || !planner) return null;
-  const carryOn = chatSize(loadChat(status?.group_id)) || (pending.has(status?.group_id) ? 1 : 0);
+  // ov35: a chat per trip — "Carry on your plan (12 messages)", or "Carry on a plan (3 on the go)" with several.
+  const gid = status?.group_id;
+  const carryOn = carryOnWords(listPlanChats(gid), chatSize(loadChat(gid)) || (pending.has(gid) || [...pending.keys()].some((k) => String(k).startsWith(`${gid}:`)) ? 1 : 0));
   // ov16: "Plan it with the Caddie" IS the Caddie now — this is a shortcut that opens it in ✨ Plan a trip mode (the chat
   // beside the trip screen, which fills in as you talk). PlanWithAiSheet below is kept for older links only.
   return (
     <div className="stack" style={{ gap: 8 }}>
       {status?.is_admin && (
         <button type="button" className="btn ghost block" style={{ minHeight: 52, borderColor: 'var(--navy)', fontWeight: 800 }} onClick={openPlanner} data-testid="plan-with-ai">
-          ✨ {carryOn ? `Carry on your plan (${carryOn} messages)` : 'Plan it with the Caddie'}
+          ✨ {carryOn || 'Plan it with the Caddie'}
         </button>
       )}
       <div style={{ textAlign: 'center' }}><AskChip about="trips" inline /></div>

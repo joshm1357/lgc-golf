@@ -1,0 +1,14 @@
+1. hamish: a note on Saturday with "morning free" → ok morning_free 2027-03-13
+2. hamish: home by 6 on Sunday → ok 18:00
+3. hamish: a plain chat message (old app) → ok no day
+4. hamish: a wish with no day → refused: new row for relation "plan_comments" violates check constraint "plan_comments_day_wish_check"
+5. hamish: a made-up wish → refused: new row for relation "plan_comments" violates check constraint "plan_comments_day_pref_check"
+6. hamish: home_by without "home by" → refused: new row for relation "plan_comments" violates check constraint "plan_comments_home_by_check"
+7. hamish: a bad home_by time → refused: new row for relation "plan_comments" violates check constraint "plan_comments_home_by_check"
+8. hamish: a day centuries away → refused: new row for relation "plan_comments" violates check constraint "plan_comments_day_date_check"
+9. hamish: as Tom → refused: new row violates row-level security policy for table "plan_comments"
+10. tom sees Saturday's notes → ok 1
+11. tom deletes Hamish's note (rows) → ok 0
+12. other group sees the notes → ok 0
+13. other group adds a note → refused: That belongs to another group
+14. organiser deletes Hamish's note (rows) → ok 1

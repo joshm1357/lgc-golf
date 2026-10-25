@@ -5,9 +5,10 @@ import { useData, useRealtime, useSession, playerName } from '../lib/store.jsx';
 import { uploadPhoto } from '../lib/images.js';
 import { usePlayerHistory } from './Profile.jsx';
 import { Header, Avatar, Icon, Sheet, PhotoButtons, timeAgo, toast, Loading } from '../components/ui.jsx';
-import SharePicture from '../components/SharePicture.jsx';
+import { VerdictSharePicture } from '../components/VerdictShare.jsx';
 import { useGovernance, useRaisableKinds, CaseRowNew, RaiseCase } from './Cases.jsx';
 import { gate } from '../lib/savedgate.js';
+import { closingLabel, closingLine, toLocalInput } from '../lib/tribunalWords.js';
 
 function fmtChange(n) {
   const v = Number(n);
@@ -80,7 +81,7 @@ function CaseRow({ c, votes }) {
       <div className="grow">
         <div style={{ fontWeight: 700, fontSize: 17 }}>The Lads v {playerName(p)}</div>
         <div className="small muted">
-          Proposed {fmtChange(c.proposed_change)} · {c.status === 'open' ? `${g}–${n} so far` : `${c.verdict === 'upheld' ? 'GUILTY' : 'NOT GUILTY'} ${c.guilty_votes}–${c.not_guilty_votes}${c.overruled ? ' (chair overruled)' : ''}`}
+          Proposed {fmtChange(c.proposed_change)} · {c.status === 'open' ? `${g}–${n} so far${c.closes_at ? ` · closes ${closingLabel(c.closes_at)}` : ''}` : `${c.verdict === 'upheld' ? 'GUILTY' : 'NOT GUILTY'} ${c.guilty_votes}–${c.not_guilty_votes}${c.overruled ? ' (chair overruled)' : ''}`}
         </div>
       </div>
       {c.status === 'closed' && c.verdict === 'upheld' && <span className="num" style={{ fontSize: 20 }}>{Number(c.old_handicap)}→{Number(c.new_handicap)}</span>}
@@ -285,17 +286,12 @@ export function TribunalCase() {
           {open && isAccused && <span className="small muted">The accused can't vote on their own case.</span>}
           <span className="small muted">
             {open
-              ? 'Closes automatically once everyone has voted, or when the chair closes it. Majority guilty = upheld. Changes apply from the next round.'
+              ? `${closingLine(c)} Majority guilty = upheld; a tie is not guilty. Changes apply from the next round.`
               : `Closed ${timeAgo(c.closed_at)}.${c.overruled ? ' The chair overruled the vote.' : ''}`}
           </span>
           {c.chair_ruling && <div className="court-card card pad"><strong>Chair's ruling:</strong> {c.chair_ruling}</div>}
-          {!open && c.verdict && (
-            <SharePicture label="🖼️ Share the verdict" kind="verdict"
-              data={{ accused: playerName(accused), verdict: c.verdict, oldHcp: c.old_handicap != null ? Number(c.old_handicap) : null, newHcp: c.new_handicap != null ? Number(c.new_handicap) : null,
-                votes: `${c.guilty_votes ?? 0}–${c.not_guilty_votes ?? 0}`, overruled: c.overruled }}
-              text={`⚖️ The Handicap Tribunal: ${playerName(accused)} — ${c.verdict === 'upheld' ? 'GUILTY' : 'NOT GUILTY'}`} />
-          )}
-          {open && status.is_admin && <button type="button" className="btn ghost" onClick={() => setChairOpen(true)}>{Icon.gavel(18)}<span>Chair: close the case</span></button>}
+          {!open && c.verdict && <VerdictSharePicture c={c} accused={accused} />}
+          {open && status.is_admin && <button type="button" className="btn ghost" onClick={() => setChairOpen(true)}>{Icon.gavel(18)}<span>Chair: close the case or move the closing time</span></button>}
         </div>
       </div>
       {chairOpen && <ChairClose c={c} guilty={g.length} notGuilty={n.length} onClose={() => setChairOpen(false)} onDone={reload} />}
@@ -306,6 +302,7 @@ export function TribunalCase() {
 function ChairClose({ c, guilty, notGuilty, onClose, onDone }) {
   const [override, setOverride] = useState('');
   const [ruling, setRuling] = useState('');
+  const [closesAt, setClosesAt] = useState(c.closes_at ? toLocalInput(c.closes_at) : '');
   const majority = guilty > notGuilty ? 'upheld' : 'dismissed';
   return (
     <Sheet title="Close the case" onClose={onClose}>
@@ -323,6 +320,15 @@ function ChairClose({ c, guilty, notGuilty, onClose, onDone }) {
           const { error } = await supabase.rpc('chair_close_case', { p_case: c.id, p_override: override || null, p_ruling: ruling || null });
           if (error) toast(friendlyError(error)); else { toast('Case closed'); onDone(); onClose(); }
         }}>Close the case</button>
+        <span className="label" style={{ marginTop: 8 }}>Or move the closing time</span>
+        <div className="small muted">{c.closes_at ? `Voting closes ${closingLabel(c.closes_at)}. It closes itself then and goes with the vote.` : 'No closing time yet.'}</div>
+        <label className="field"><span>Voting closes</span>
+          <input className="input" type="datetime-local" value={closesAt} onChange={(e) => setClosesAt(e.target.value)} aria-label="Voting closes" />
+        </label>
+        <button type="button" className="btn ghost block" disabled={!closesAt || closesAt === toLocalInput(c.closes_at)} onClick={async () => {
+          const { error } = await supabase.rpc('set_case_closing', { p_case: c.id, p_closes_at: new Date(closesAt).toISOString() });
+          if (error) toast(friendlyError(error)); else { toast(`Voting now closes ${closingLabel(new Date(closesAt))}`); onDone(); onClose(); }
+        }}>Save the closing time</button>
       </div>
     </Sheet>
   );

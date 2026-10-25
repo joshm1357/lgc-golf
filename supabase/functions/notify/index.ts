@@ -24,6 +24,8 @@ import { roundBits, drawOutFor, teeTomorrowFor, swingGap, matchSwing, pointsSwin
 import { proposedBits, proposeProblem, gameProposedMessage } from './sidegames.ts';
 // ov31: automatic awards — the proposed winner in the morning, confirmed, a dispute upheld.
 import { AUTO_AWARD_KINDS, AUTO_AWARD_IMPORTANT, autoAwardSends } from './autoawards.ts';
+// ov34: round call-outs (103) — the database writes the buzzes; this sends them.
+import { CALLOUT_KINDS, CALLOUT_IMPORTANT, calloutSends, absUrl } from './callout.ts';
 
 // The app's web address for links in notifications. Set APP_URL in the function's secrets when the app moves
 // (e.g. https://app.thegolftrip.club/); until then it's the GitHub Pages address.
@@ -71,7 +73,7 @@ const NOT_IN_DIGEST = new Set(['swing']);
 const KIND_FEATURE: Record<string, string> = {
   poll_open: 'planner_tasks', poll_decided: 'planner_tasks', poll_closing: 'planner_tasks', nudge_votes: 'planner_tasks',
   job_assigned: 'planner_tasks', job_due: 'planner_tasks',
-  plan_new: 'planner', plan_proposed: 'planner', trip_locked: 'planner', rsvp_locked: 'planner', rsvp_deadline: 'planner',
+  plan_new: 'planner', plan_proposed: 'planner', idea_shared: 'planner', idea_parked: 'planner', organiser_handover: 'planner', coorganiser_added: 'planner', trip_locked: 'planner', rsvp_locked: 'planner', rsvp_deadline: 'planner',
   nudge_rsvp: 'planner', trip_week: 'planner', trip_tomorrow: 'planner', comment: 'planner',
   nudge_kitty: 'planner_costs', payment_recorded: 'planner_costs', groups_set: 'planner_rooms',
   deposit_ask: 'planner_costs', nudge_deposit: 'planner_costs',
@@ -186,7 +188,7 @@ async function digest() {
     const shown = items.slice(0, 3).map((i) => i.title).join(' · ');
     const more = items.length > 3 ? ` · +${items.length - 3} more` : '';
     const msg = items.length === 1
-      ? { title: items[0].title, body: gname, url: items[0].url || APP }
+      ? { title: items[0].title, body: gname, url: absUrl(items[0].url, APP) } // ov34: '#/plan/…' from the database
       // Only winners in it (054 awards): open the leaderboard, not the planner.
       : { title: `📬 ${gname}: ${items.length} things since your last update`, body: shown + more, url: items.every((i) => i.kind === 'award' || i.kind === 'award_minor' || i.kind === 'commentary') ? `${APP}#/` : `${APP}#/plan`, tag: `digest-${g}` };
     if (items.length) sent += await pushTo([user], msg);
@@ -233,6 +235,31 @@ async function autoAwardsNow() {
   const { send, done } = autoAwardSends(waiting.filter((w) => on.get(w.group_id)), prefs || []);
   let sent = 0;
   for (const s of send) sent += await pushTo([s.user_id], { ...s.msg, url: `${APP}#/feed` });
+  const off = waiting.filter((w) => !on.get(w.group_id)).map((w) => w.id);
+  if (done.length || off.length) await db.from('notify_queue').update({ sent_at: new Date().toISOString() }).in('id', [...done, ...off]);
+  return sent;
+}
+
+// ------------------------------------------------------------------ ov34: round call-outs (migration 103)
+// The database queues every call-out buzz (callout_* kinds) with its words; its 10-minute job calls this with the cron
+// secret ({"type":"callout"}), and the app pokes it after putting one out, locking in or pulling out
+// ({"type":"callout_send"} — only that person's group, and only what the database already queued, so nobody can make
+// up a message). "Straight away" people get them now; digest people at their hour (the hourly send); "only important"
+// people get where they stand. They belong to the Trips planner.
+for (const k of CALLOUT_KINDS) KIND_FEATURE[k] = 'planner';
+for (const k of CALLOUT_IMPORTANT) IMPORTANT.add(k);
+async function calloutNow(onlyGroup?: string) {
+  let q = db.from('notify_queue').select('id,group_id,user_id,kind,title,body,url,created_at').in('kind', CALLOUT_KINDS).is('sent_at', null).order('created_at').limit(2000);
+  if (onlyGroup) q = q.eq('group_id', onlyGroup);
+  const { data: waiting } = await q;
+  if (!waiting?.length) return 0;
+  const groups = [...new Set(waiting.map((w) => w.group_id))];
+  const { data: prefs } = await db.from('notify_prefs').select('group_id,user_id,mode').in('group_id', groups);
+  const on = new Map<string, boolean>();
+  for (const g of groups) on.set(g, (await featureOn(g, 'notifications')) && (await featureOn(g, 'planner')));
+  const { send, done } = calloutSends(waiting.filter((w) => on.get(w.group_id)), prefs || [], APP);
+  let sent = 0;
+  for (const s of send) sent += await pushTo([s.user_id], s.msg);
   const off = waiting.filter((w) => !on.get(w.group_id)).map((w) => w.id);
   if (done.length || off.length) await db.from('notify_queue').update({ sent_at: new Date().toISOString() }).in('id', [...done, ...off]);
   return sent;
@@ -440,7 +467,8 @@ async function dailyFor(g: string) {
   const month = sydneyDate(30);
   for (const [day, label] of [[month, 'is a month away'], [week, 'is a week away'], [tomorrow, 'is tomorrow']] as const) {
     const { data: soon } = await db.from('plans').select('*').eq('group_id', g).eq('start_date', day).neq('status', 'cancelled').eq('proposed', false);
-    for (const pl of plannerOn ? soon || [] : []) {
+    // ov34: a round call-out has its own evening-before buzz (103's job), not the trip countdown.
+    for (const pl of plannerOn ? (soon || []).filter((x) => !x.callout) : []) {
       if (!(await once(`countdown:${pl.id}:${day}:${label}`))) continue;
       const { data: rs } = await db.from('plan_rsvps').select('player_id').eq('plan_id', pl.id).eq('status', 'in');
       const ins = (rs || []).map((r) => r.player_id);
@@ -513,9 +541,9 @@ Deno.serve(async (req) => {
     await loadKeys();
     const body = await req.json().catch(() => ({}));
 
-    if (body.type === 'daily' || body.type === 'digest' || body.type === 'commentary' || body.type === 'evening' || body.type === 'auto_awards') {
+    if (body.type === 'daily' || body.type === 'digest' || body.type === 'commentary' || body.type === 'evening' || body.type === 'auto_awards' || body.type === 'callout') {
       if (!cronSecret || req.headers.get('x-cron-secret') !== cronSecret) return json({ error: 'Not allowed' }, 401);
-      return json({ sent: body.type === 'daily' ? await daily() : body.type === 'commentary' ? await commentaryNow() : body.type === 'evening' ? await evening() : body.type === 'auto_awards' ? await autoAwardsNow() : await digest() });
+      return json({ sent: body.type === 'daily' ? await daily() : body.type === 'commentary' ? await commentaryNow() : body.type === 'evening' ? await evening() : body.type === 'auto_awards' ? await autoAwardsNow() : body.type === 'callout' ? await calloutNow() : await digest() });
     }
 
     // Everyone else must be a signed-in member of the group.
@@ -530,7 +558,13 @@ Deno.serve(async (req) => {
     const g = m.group_id as string;
     const me = { player_id: m.player_id as string | null, is_admin: m.role === 'organiser' };
     const adminOnly = ['plan_new', 'trip_locked', 'rsvp_locked', 'nudge_votes', 'nudge_rsvp', 'nudge_kitty', 'groups_set', 'draw_open', 'deposit_ask', 'nudge_deposit', 'nudge_signin', 'draw_out'];
-    if (adminOnly.includes(body.type) && !me.is_admin) return json({ error: 'Organisers only' }, 403);
+    // ov35 (104): a trip's co-organisers can send that trip's organiser messages (the trip is named by plan_id).
+    const coorg = async (planId: unknown) => {
+      if (!planId || typeof planId !== 'string' || !m.player_id) return false;
+      const { data: c } = await db.from('plan_coorganisers').select('player_id').eq('plan_id', planId).eq('group_id', g).eq('player_id', m.player_id).maybeSingle();
+      return !!c;
+    };
+    if (adminOnly.includes(body.type) && !me.is_admin && !(body.type !== 'plan_new' && await coorg(body.plan_id).catch(() => false))) return json({ error: 'Organisers only' }, 403);
     const from = me.player_id as string | null;
     // Someone who hasn't picked their name yet can't send anything to others (only the test buzz to themselves).
     if (!from && !me.is_admin && body.type !== 'test') return json({ error: 'Pick your name first' }, 403);
@@ -579,7 +613,8 @@ Deno.serve(async (req) => {
         if (!me.is_admin) {
           // The trip's organiser may pick winners when the group allows it.
           const [{ data: gr }, pl0] = await Promise.all([db.from('groups').select('vote_decider').eq('id', g).single(), plan(g, p.plan_id)]);
-          if (gr?.vote_decider !== 'admin_or_organiser' || !from || pl0.organiser_id !== from) return json({ error: 'Organisers only' }, 403);
+          const byOrganiser = gr?.vote_decider === 'admin_or_organiser' && !!from && pl0.organiser_id === from;
+          if (!byOrganiser && !(await coorg(p.plan_id).catch(() => false))) return json({ error: 'Organisers only' }, 403);
         }
         if (!(await once(`poll-decided:${p.id}`))) break;
         const { data: o } = p.winner_option_id ? await db.from('plan_options').select('label').eq('id', p.winner_option_id).eq('group_id', g).maybeSingle() : { data: null };
@@ -665,6 +700,17 @@ Deno.serve(async (req) => {
         sent = await send(g, owe, { title: body.type === 'deposit_ask' ? `🏠 ${pl.name}: accommodation’s booked` : `💳 ${pl.name}: deposit reminder`, body: `Confirm you’re in and pay your ${amt} deposit.`, url: planUrl(pl.id) }, from, body.type);
         break;
       }
+      // ov35 (104): "Hamish made you a co-organiser of March trip" — only whoever added them, within 10 minutes, once.
+      case 'coorganiser_added': {
+        const pl = await plan(g, body.plan_id);
+        const { data: c } = await db.from('plan_coorganisers').select('player_id,added_by,created_at').eq('plan_id', pl.id).eq('group_id', g).eq('player_id', body.player_id).maybeSingle();
+        if (!c || (c.added_by !== from && !me.is_admin)) return json({ error: 'Not yours to send' }, 403);
+        if (Date.now() - new Date(c.created_at).getTime() > 10 * 60 * 1000) break;
+        if (!(await once(`coorg:${pl.id}:${c.player_id}:${c.created_at}`))) break;
+        const ppl = await players(g);
+        sent = await send(g, [c.player_id], { title: `🧰 You’re a co-organiser: ${pl.name}`, body: `${name(ppl.find((p) => p.id === from))} asked you to help plan it — you can change the plan, call the votes and sort the jobs.`, url: `${planUrl(pl.id)}?view=organise` }, from, 'coorganiser_added');
+        break;
+      }
       case 'plan_proposed': {
         const pl = await plan(g, body.plan_id);
         if (!pl?.proposed || (pl.created_by !== from && !me.is_admin)) return json({ error: 'Not your proposal' }, 403);
@@ -678,6 +724,21 @@ Deno.serve(async (req) => {
         const who = name(ppl.find((p) => p.id === from));
         const { count } = await db.from('plan_polls').select('id', { count: 'exact', head: true }).eq('plan_id', pl.id).eq('status', 'open');
         sent = await send(g, 'all', { title: `💡 ${who} has an idea: ${pl.name}`, body: count ? 'Vote on when and where, and say if you’d be in.' : 'Say if you’d be in.', url: planUrl(pl.id, count ? 'vote' : 'people') }, from, 'plan_proposed');
+        break;
+      }
+      case 'idea_shared': {
+        // ov39 (108): "📣 Share it" on a trip idea — once per idea, from whoever proposed it or an organiser of it.
+        const pl = await plan(g, body.plan_id);
+        if (!pl?.idea || !pl.shared_at || pl.status !== 'planning') return json({ error: 'Not a shared idea' }, 403);
+        if (pl.created_by !== from && !me.is_admin && !(await coorg(pl.id).catch(() => false))) return json({ error: 'Not your idea' }, 403);
+        if (!(await once(`idea-shared:${pl.id}`))) break;
+        let room = false;
+        for (let i = 1; i <= 3 && !room; i++) room = await once(`ideas-by:${g}:${from}:${sydneyDate(0)}:${i}`);
+        if (!room) break;
+        const ppl = await players(g);
+        const fx = (pl.idea_fixed || {}) as { weekend?: { start?: string }; area?: string };
+        const shape = [fx.weekend?.start ? fmt(fx.weekend.start) : pl.idea_when, fx.area || pl.idea_where].filter(Boolean).join(', ');
+        sent = await send(g, 'all', { title: `💡 ${name(ppl.find((p) => p.id === pl.created_by))} has a trip idea: ${shape || pl.name}`, body: 'Add your dates, areas and courses — 4 quick taps.', url: `${APP}#/idea/${pl.id}` }, from, 'idea_shared');
         break;
       }
       case 'rule_proposed': {
@@ -786,6 +847,12 @@ Deno.serve(async (req) => {
         break;
       }
       // ---------------------------------------------------------------- end ov29
+      // ---------------------------------------------------------------- ov34 round call-outs (103) — own block for merging
+      case 'callout_send':
+        // Send what the database has queued for this group's call-outs, now (it decided who gets what).
+        sent = await calloutNow(g);
+        break;
+      // ---------------------------------------------------------------- end ov34
       default:
         return json({ error: 'Unknown notification' }, 400);
     }

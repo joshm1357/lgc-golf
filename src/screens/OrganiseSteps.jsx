@@ -29,6 +29,7 @@ import { VoteTab, PeopleTab, ChatTab, PollSheet, CloseSheet, ProposalBanner, Loc
 import './organise.css';
 import { gate } from '../lib/savedgate.js';
 import { OrganiserSaveCard } from '../components/SavedGate.jsx';
+import { CoOrganisersCard } from '../components/CoOrganisers.jsx';
 
 // Laptop-only parts (what was the Trip desk), loaded only on a laptop so phones download nothing new.
 const OrganiseSide = lazyScreen(() => import('./OrganisePanels.jsx'), 'OrganiseSide', { inline: true });
@@ -171,6 +172,8 @@ export function OrganiseView({ pd, stage, trip, wide, desk, onEdit }) {
   const main = (
     <div className="section stack org-main-col" data-testid="organise-steps">
       {organiserName && <span className="small muted" data-testid="organiser-line">Organiser: <strong style={{ color: 'var(--text)' }}>{organiserName}</strong>{plan.budget_pp ? ` · rough budget ${money(plan.budget_pp)} each` : ''}</span>}
+      {/* ov35: 👥 co-organisers — mates who can change this plan like the organiser. */}
+      <CoOrganisersCard plan={plan} compact />
       {/* O1: ONE "where we're up to" line, worked out from real progress — the same on a phone and a laptop. */}
       <div className="small" style={{ fontWeight: 800 }} data-testid="up-to-line">📍 {upToLine(curStep?.key || null)}</div>
       {/* The open step isn't the current one: the Next step still shows, slim, above it — the one big button. */}

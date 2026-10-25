@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, CircleMarker, Marker, Tooltip, Circle, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -17,6 +17,12 @@ export const PIN = { option: '#0E9F8E', other: '#F2A900', voted: '#C8102E' };
 
 function Tap({ onTap }) {
   useMapEvents({ click: (e) => onTap({ lat: e.latlng.lat, lng: e.latlng.lng }) });
+  return null;
+}
+/** Keeps a handle on the Leaflet map, for "Search this part of the map" (ov36). */
+function MapRef({ to }) {
+  const map = useMap();
+  useEffect(() => { to.current = map; return () => { to.current = null; }; }, [map, to]);
   return null;
 }
 function Frame({ points }) {
@@ -41,9 +47,14 @@ const stayIcon = (name, on, sug = false, count = null, hot = false) => L.divIcon
  * origin:  { lat, lng, label } | null
  * info (ov22, optional): usePlaceInfo() from the screen — hover / tap summaries, the pin pointed at, the details sheet.
  * tipFor(kind, item) → { name, lines } for the summary card ('course' | 'stay').
+ * tipAction(kind, item) → { label, onClick, on } | null (ov36): a button on the summary card ("+ Put on the table"), so
+ *   any dot can be picked — not just the ones in the list. way = an "on the way" course (🚗 before its name).
+ * searchHere (ov36): { label, busy, onSearch(box) } — the "🔍 Search this part of the map" button, bottom-centre; box is
+ *   the map as you see it { south, west, north, east }.
  */
-export default function BuilderMap({ courses = [], stays = [], origin = null, onCourse, onStay, onTap, frame, className = 'tb-map', info = null, tipFor = null }) {
+export default function BuilderMap({ courses = [], stays = [], origin = null, onCourse, onStay, onTap, frame, className = 'tb-map', info = null, tipFor = null, tipAction = null, searchHere = null }) {
   const [names, setNames] = useNamesPref();
+  const mapRef = useRef(null);
   // Frame the places to stay you can pick from, and the courses chosen for the day being built.
   const pts = frame?.length ? frame : [...stays, ...courses.filter((c) => c.on)].filter((p) => p && p.lat != null);
   const fallback = pts.length ? pts : [...stays, ...courses].filter((p) => p && p.lat != null).slice(0, 30);
@@ -52,17 +63,21 @@ export default function BuilderMap({ courses = [], stays = [], origin = null, on
   const hotFrom = info?.hot?.from || null;
   const hover = canHover();
   const shownCourses = courses.filter((c) => c.lat != null).sort((a, b) => Number(a.on) - Number(b.on));
-  const hotPoint = hotFrom === 'row' && hot ? (hot.startsWith('c:') ? shownCourses.find((c) => `c:${c.id}` === hot) : stays.find((s) => `s:${s.key}` === hot)) : null;
+  // v10.5 (Josh: "when you put your mouse over the list it moves to it, should instead have a click, then zoom to"):
+  // only a click on a row moves the map (and zooms in); pointing at a row just lights its pin up.
+  const hotPoint = hotFrom === 'row' && hot && info?.hot?.via === 'tap' ? (hot.startsWith('c:') ? shownCourses.find((c) => `c:${c.id}` === hot) : stays.find((s) => `s:${s.key}` === hot)) : null;
   // A click / tap: with the summary cards on, a click opens the details (a phone's first tap shows the summary).
   const clickCourse = (c) => (info ? info.tapPin(`c:${c.id}`) : onCourse?.(c));
   const clickStay = (s) => (info ? info.tapPin(`s:${s.key}`) : onStay?.(s));
-  const handlers = (key, click) => ({
+  // Dropping a pin (onTap set): the dots and 🏠 pins are paused so a tap near a course still drops the pin there.
+  const pinning = !!onTap;
+  const handlers = (key, click) => (pinning ? {} : {
     click,
     ...(info && hover ? { mouseover: () => { if (!touchNow()) info.hot.hoverIn(key, 'pin'); }, mouseout: () => { if (!touchNow()) info.hot.hoverOut(); } } : {}),
   });
   const tip = (kind, item, key) => (info && tipFor && hot === key && hotFrom === 'pin' ? (
     <Tooltip key={`tip-${key}`} permanent interactive direction="top" offset={kind === 'stay' ? [0, -14] : [0, -10]} className="pm-tip">
-      <TipCard tip={tipFor(kind, item)} onMore={() => info.open(key)} onEnter={info.hot.hold} onLeave={info.hot.release} />
+      <TipCard tip={tipFor(kind, item)} onMore={() => info.open(key)} onEnter={info.hot.hold} onLeave={info.hot.release} action={tipAction ? tipAction(kind, item) : null} />
     </Tooltip>
   ) : null);
   const labelDep = `${names}|${hot}|${shownCourses.map((c) => `${c.id}${c.on ? 1 : 0}${c.sug ? 1 : 0}`).join(',')}|${stays.map((s) => `${s.key}${s.on ? 1 : 0}${s.count ?? ''}`).join(',')}`;
@@ -73,7 +88,8 @@ export default function BuilderMap({ courses = [], stays = [], origin = null, on
         <TileLayer url={ESRI_PLACES} maxZoom={18} />
         <Frame points={fallback} />
         <WheelZoom />
-        {hotPoint && <PanTo point={hotPoint} />}
+        <MapRef to={mapRef} />
+        {hotPoint && <PanTo point={hotPoint} zoom={12} />}
         <FitTip dep={hot && hotFrom === 'pin' && info?.hot?.via === 'tap' ? hot : null} />
         {onTap && <Tap onTap={onTap} />}
         {origin?.lat != null && (
@@ -87,15 +103,16 @@ export default function BuilderMap({ courses = [], stays = [], origin = null, on
           return (
             <React.Fragment key={c.id}>
               {isHot && <CircleMarker key={`ring-${c.id}`} center={[c.lat, c.lng]} radius={20} interactive={false} className="pm-ring" pathOptions={{ color: '#F2A900', weight: 3, fill: false }} />}
-              <CircleMarker key={`${c.id}${isHot ? '-hot' : ''}`} center={[c.lat, c.lng]} radius={(c.on ? 10 : 7) + (isHot ? 5 : 0)}
+              <CircleMarker key={`${c.id}${isHot ? '-hot' : ''}${pinning ? '-pin' : ''}`} center={[c.lat, c.lng]} radius={(c.on ? 10 : 7) + (isHot ? 5 : 0)}
+                interactive={!pinning}
                 eventHandlers={onCourse || info ? handlers(key, () => clickCourse(c)) : undefined}
                 className={isHot ? 'pm-hot' : undefined}
-                pathOptions={{ color: isHot ? '#F2A900' : c.on ? '#15202E' : '#fff', weight: isHot ? 4 : c.on ? 3 : 1.5, fillColor: c.top ? PIN.voted : c.on ? PIN.option : PIN.other, fillOpacity: 0.95 }}>
-                {tip('course', c, key) || (!info || !tipFor ? <Tooltip direction="top">{c.sug ? '✨ ' : ''}{c.name}{c.sub ? ` · ${c.sub}` : ''}</Tooltip> : null)}
+                pathOptions={{ color: isHot ? '#F2A900' : c.on ? '#15202E' : '#fff', weight: isHot ? 4 : c.on ? 3 : 1.5, fillColor: c.top ? PIN.voted : c.on ? PIN.option : PIN.other, fillOpacity: pinning ? 0.45 : 0.95, opacity: pinning ? 0.5 : 1 }}>
+                {tip('course', c, key) || (!info || !tipFor ? <Tooltip direction="top">{c.sug ? '✨ ' : c.way ? '🚗 ' : ''}{c.name}{c.sub ? ` · ${c.sub}` : ''}</Tooltip> : null)}
               </CircleMarker>
               {(names || isHot) && !(isHot && hotFrom === 'pin') && (
                 <Marker key={`l-${c.id}${isHot ? '-hot' : ''}`} position={[c.lat, c.lng]} interactive={false} keyboard={false} zIndexOffset={isHot ? 900 : -200}
-                  icon={labelIcon(`${c.sug ? '✨ ' : ''}${shortName(c.name)}`, labelPriority(c, isHot), isHot)} />
+                  icon={labelIcon(`${c.sug ? '✨ ' : c.way ? '🚗 ' : ''}${shortName(c.name)}`, labelPriority(c, isHot), isHot)} />
               )}
             </React.Fragment>
           );
@@ -104,7 +121,8 @@ export default function BuilderMap({ courses = [], stays = [], origin = null, on
           const key = `s:${s.key}`;
           const isHot = hot === key;
           return (
-            <Marker key={`${s.key}${isHot ? '-hot' : ''}`} position={[s.lat, s.lng]} icon={stayIcon(s.name, s.on, s.sug, s.count, isHot)} zIndexOffset={isHot ? 1000 : 0}
+            <Marker key={`${s.key}${isHot ? '-hot' : ''}${pinning ? '-pin' : ''}`} position={[s.lat, s.lng]} icon={stayIcon(s.name, s.on, s.sug, s.count, isHot)} zIndexOffset={isHot ? 1000 : 0}
+              interactive={!pinning} opacity={pinning ? 0.6 : 1}
               eventHandlers={onStay || info ? handlers(key, () => clickStay(s)) : undefined}>
               {tip('stay', s, key)}
             </Marker>
@@ -113,6 +131,15 @@ export default function BuilderMap({ courses = [], stays = [], origin = null, on
         <Declutter dep={labelDep} />
       </MapContainer>
       <NamesToggle on={names} onChange={setNames} />
+      {searchHere && (
+        <button type="button" className="pm-search-here" disabled={!!searchHere.busy} data-testid="search-here"
+          onClick={() => {
+            const m = mapRef.current;
+            if (!m) return;
+            const b = m.getBounds();
+            searchHere.onSearch({ south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() });
+          }}>{searchHere.busy ? 'Searching…' : searchHere.label || '🔍 Search this part of the map'}</button>
+      )}
     </div>
   );
 }

@@ -24,6 +24,12 @@ import { SaveSpotBanner } from '../components/SaveSpot.jsx';
 import { FirstOpen } from '../components/FirstOpen.jsx';
 import Memories from '../components/Memories.jsx';
 import { gate } from '../lib/savedgate.js';
+import { MyDraftTrips } from '../components/DraftTrips.jsx';
+// ov34: "⛳ Put a round out" — a round call-out on the same plans engine (components/CalloutCard.jsx, CalloutSheet.jsx).
+import { openCallout } from '../lib/calloutopen.js';
+import { CalloutStrip } from '../components/CalloutCard.jsx';
+// ov39: trip ideas you can share (screens/TripIdea.jsx).
+import IdeaSheet, { FutureIdeas } from '../components/IdeaSheet.jsx';
 
 const TABLES = ['plans', 'plan_rsvps', 'plan_polls', 'plan_options'];
 
@@ -37,13 +43,20 @@ export default function Trips() {
   const [suggesting, setSuggesting] = useState(() => {
     const q = new URLSearchParams(loc.search);
     if (!q.get('suggest')) return false;
+    if (q.get('kind') !== 'trip') return false; // ov34: a one-day round is a call-out now (opened below)
     const d = q.get('date');
     return { kind: q.get('kind') === 'trip' ? 'trip' : 'round', name: (q.get('name') || '').slice(0, 60), dates: d ? [{ start_date: d, end_date: d }] : [],
       place: (q.get('place') || '').slice(0, 80) || null, share: q.get('share') === '1' };
   });
+  // ov34: "Same time next year?" after a quick round (kind=round) opens ⛳ Put a round out, filled in.
+  useEffect(() => {
+    const q = new URLSearchParams(loc.search);
+    if (q.get('suggest') && q.get('kind') !== 'trip') openCallout({ date: q.get('date') || null, place: (q.get('place') || '').slice(0, 80) || null, name: (q.get('name') || '').slice(0, 60) || null });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const notifyOn = useFeature('notifications');
   const aiOn = useFeature('ai_helper');
-  const [firstCard, setFirstCard] = useState(null); // 'starter' | 'welcome' | null (F1)
+  const [firstCard, setFirstCard] = useState(null);
+  const [idea, setIdea] = useState(false); // ov39: "💡 Trip idea" (components/IdeaSheet.jsx) // 'starter' | 'welcome' | null (F1)
   const votesOn = useFeature('planner_tasks');
   const trophiesOn = useFeature('trophies');
   const load = useCallback(async () => {
@@ -70,7 +83,9 @@ export default function Trips() {
 
   const today = todayISO();
   // Trips added in Admin → Trips (no plan behind them) still belong in the list.
-  const sorted = useMemo(() => (rows ? sortTrips([...rows.plans, ...tripsWithoutPlan(data.trips, rows.plans)], data.trips, today) : null), [rows, data.trips, today]);
+  // ov39: parked ideas (💭 Future trip ideas) have their own strip, not a place in the stages.
+  const sorted = useMemo(() => (rows ? sortTrips([...rows.plans.filter((p) => !p.idea_pool), ...tripsWithoutPlan(data.trips, rows.plans)], data.trips, today) : null), [rows, data.trips, today]);
+  const parked = useMemo(() => (rows?.plans || []).filter((p) => p.idea_pool && p.status === 'planning'), [rows]);
   const photos = usePastPhotos(sorted?.past);
   // ov21: which trip is on right now (a round live or today) — the same pick as the sidebar's sub-items.
   const menu = useMemo(() => tripsMenu({ trips: data.trips, rounds: data.rounds, plans: rows?.plans || [], today }), [data.trips, data.rounds, rows, today]);
@@ -79,7 +94,10 @@ export default function Trips() {
     if (!sorted) return [];
     const onTrip = menu.now?.on ? menu.now.trip.id : null;
     const lift = (x) => (onTrip && x.plan.trip_id === onTrip && x.stage === 'locked' ? { ...x, stage: 'on' } : x);
-    return stageSections({ now: sorted.now && lift(sorted.now), later: sorted.later.map(lift), ideas: sorted.ideas, past: sorted.past });
+    // ov34: open round call-outs have their own cards ("⛳ Rounds going out"); once done or called off they're listed here.
+    const notOut = (x) => !(x.plan.callout && ['idea', 'deciding', 'locked', 'on'].includes(x.stage));
+    const nowX = sorted.now && notOut(sorted.now) ? lift(sorted.now) : null;
+    return stageSections({ now: nowX, later: sorted.later.filter(notOut).map(lift), ideas: sorted.ideas.filter(notOut), past: sorted.past });
   }, [sorted, menu]);
 
   if (!rows) return <div className="page"><Header logo title="Trips" /><Loading /></div>;
@@ -92,7 +110,8 @@ export default function Trips() {
   const starterOn = starting || firstCard === 'starter';
   const suggestButton = (
     <>
-      <button {...gate('propose_trip')} type="button" className="btn gold block" style={{ minHeight: 56 }} onClick={() => setSuggesting(true)}>💡 Suggest a trip or round</button>
+      <button {...gate('propose_trip')} type="button" className="btn gold block" style={{ minHeight: 56 }} onClick={() => setIdea(true)} data-testid="propose-idea">✨ Put out a trip idea <span className="small" style={{ fontWeight: 500 }}>— the group adds to it</span></button>
+      <button {...gate('propose_trip')} type="button" className="btn ghost block" onClick={() => setSuggesting(true)}>💡 Suggest a trip or round</button>
       <span className="small muted" style={{ textAlign: 'center' }}>{votesOn ? 'Everyone votes on when and where; ' : 'Everyone says if they’re in; '}{status.is_admin ? 'you lock it in' : 'an organiser locks it in'}.</span>
     </>
   );
@@ -116,6 +135,16 @@ export default function Trips() {
         {rows.failed && <div className="err">Couldn’t load the trips — check your signal and open Trips again.</div>}
         {/* ov28 (I16, ov28 builder): this time last year, and the six-month nudge to suggest the next trip. */}
         <Memories />
+        {/* ov35: every trip being planned that I can change, each easy to get back to (and its ✨ planning chat). */}
+        <MyDraftTrips />
+        {/* ov34: open call-outs with their reply buttons, and "⛳ Put a round out". */}
+        {!starting && (
+          <CalloutStrip onPutOut={(
+            <button {...gate('propose_trip')} type="button" className="btn ghost block" style={{ minHeight: 52 }} onClick={() => openCallout({})} data-testid="put-round-out">
+              ⛳ Put a round out <span className="small muted" style={{ fontWeight: 500 }}>— who’s up for a hit?</span>
+            </button>
+          )} />
+        )}
 
         {!has('on') && !has('locked') && !starting && (
           <button type="button" className="card pad row" data-testid="trips-plan-it" onClick={openPlanner}
@@ -140,6 +169,7 @@ export default function Trips() {
             {suggestButton}
           </div>
         )}
+        {parked.length > 0 && <FutureIdeas plans={parked} />}
         {!starting && <TripsAi />}
 
         {offList.length > 0 && (
@@ -153,6 +183,7 @@ export default function Trips() {
           </details>
         )}
       </div>
+      {idea && <IdeaSheet onClose={() => setIdea(false)} onSaved={(p) => nav(`/idea/${p.id}`)} />}
       {suggesting && <SuggestSheet initial={typeof suggesting === 'object' ? suggesting : null} onClose={() => setSuggesting(false)} onSaved={(p) => nav(`/plan/${p.id}`)} />}
     </div>
   );
@@ -194,10 +225,10 @@ function StageCard({ x, first, rsvps, me, polls = [], options = [], today, photo
   const ins = rsvps.filter((r) => r.status === 'in');
   const mine = rsvps.find((r) => r.player_id === me);
   const tag = stageTag({ stage, plan, polls, rsvps, today, dayWords: stage === 'on' && trip ? tripDayWords(trip, data.rounds) : null });
-  const to = stage === 'on' && trip ? tripNowPath(trip) : plan.tripOnly ? `/trip/${plan.trip_id}` : `/plan/${plan.id}`;
+  const to = stage === 'on' && trip ? tripNowPath(trip) : plan.tripOnly ? `/trip/${plan.trip_id}` : plan.idea && !plan.idea_sent_at ? `/idea/${plan.id}` : `/plan/${plan.id}`;
   const early = stage === 'idea' || stage === 'deciding';
-  const when = plan.start_date ? tripWhen(plan.tripOnly ? { ...plan, status: plan.trip_status } : plan) : (early ? 'When: to be voted on' : 'Dates to come');
-  const where = plan.location_name || (early ? 'Where: to be voted on' : null);
+  const when = plan.start_date ? tripWhen(plan.tripOnly ? { ...plan, status: plan.trip_status } : plan) : plan.idea && (plan.idea_fixed?.when || plan.idea_when) ? (plan.idea_fixed?.when || plan.idea_when) : (early ? 'When: to be voted on' : 'Dates to come');
+  const where = plan.location_name || (plan.idea && (plan.idea_fixed?.area || plan.idea_where)) || (early ? 'Where: to be voted on' : null);
   const decide = early ? stillToDecide(plan, polls, options, today) : [];
   const who = stage === 'idea' ? data.playersById[plan.organiser_id || plan.created_by] : stage === 'deciding' ? data.playersById[plan.organiser_id] : null;
   // Previous: the main trophy's winner first, then up to two more (the rest are in the Trophy Room).
@@ -268,7 +299,7 @@ function blankDate() { return { start_date: '', end_date: '' }; }
 export function SuggestSheet({ onClose, onSaved, initial = null }) {
   const { status } = useSession();
   // initial: a ready-made idea, e.g. "Same time next year?" after a quick round ({ kind, name, dates }).
-  const [kind, setKind] = useState(initial?.kind || 'trip');
+  const [kind, setKind] = useState(initial?.kind === 'round' ? 'trip' : initial?.kind || 'trip'); // ov34: rounds go to openCallout
   const [name, setName] = useState(initial?.name || '');
   const [dates, setDates] = useState(() => (initial?.dates?.length ? [...initial.dates, blankDate()] : [blankDate(), blankDate()]));
   const [rough, setRough] = useState('');
@@ -310,7 +341,8 @@ export function SuggestSheet({ onClose, onSaved, initial = null }) {
       <div className="stack">
         <div className="seg light" role="group">
           <button type="button" aria-pressed={kind === 'trip'} onClick={() => setKind('trip')}>🧳 Trip (away)</button>
-          <button type="button" aria-pressed={kind === 'round'} onClick={() => setKind('round')}>⛳ One-day round</button>
+          {/* ov34: a one-day round is a call-out now — "⛳ Put a round out". */}
+          <button type="button" aria-pressed={kind === 'round'} onClick={() => { onClose(); openCallout({}); }} data-testid="suggest-one-day-round">⛳ One-day round</button>
         </div>
         <label className="field"><span>Name</span><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={kind === 'trip' ? 'e.g. Autumn trip 2027' : 'e.g. Xmas Ambrose'} /></label>
 

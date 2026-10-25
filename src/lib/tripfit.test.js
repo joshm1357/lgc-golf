@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { cleanWishes, fridayOf, peopleFor, datesCheck, driveCheck, flyCheck, golfCheck, scheduleCheck, teeCheck, costCheck, duskCheck, fitOption, notForLine, rankByFit, wishesSummary } from './tripfit.js';
+import { cleanWishes, fridayOf, peopleFor, datesCheck, driveCheck, flyCheck, golfCheck, scheduleCheck, teeCheck, costCheck, duskCheck, fitOption, notForLine, rankByFit, wishesSummary, nightsCheck, nightsSummary, nightsWords, cleanNights } from './tripfit.js';
 
 const names = { a: 'Al', b: 'Bo', c: 'Cy', d: 'Di', e: 'Ed' };
 const people = Object.entries(names).map(([id, name]) => ({ id, name }));
@@ -122,5 +122,43 @@ describe('v10.7: a 36-hole day in the whole-trip check', () => {
     const r = TF.scheduleCheck([1, 2, 1], { people, wishes });
     expect(r.no.map((n) => n.id)).toEqual(['a']);
     expect(TF.scheduleCheck([1, 1, 1], { people, wishes }).no).toEqual([]);
+  });
+});
+
+describe('nights (ov41, Josh 21:12)', () => {
+  const ws = cleanWishes([
+    { player_id: 'a', nights: [2] }, { player_id: 'b', nights: [2, 3] }, { player_id: 'c', nights: [3] }, { player_id: 'd', nights: [3] },
+    { player_id: 'e', nights: [] },
+  ]);
+  it('cleans the picks: 1–6, 5 and 6 read as 4+, [] = not fussed, junk = not answered', () => {
+    expect(cleanNights([3, 2, 2, 9, 0, 'x', 6])).toEqual([2, 3, 4]);
+    expect(cleanNights([])).toEqual([]);
+    expect(cleanNights(null)).toBe(null);
+    expect(cleanWishes([{ player_id: 'z', nights: 'two' }])[0].nights).toBe(null);
+    expect(nightsWords([2, 3])).toBe('2 or 3 nights');
+    expect(nightsWords([1])).toBe('1 night');
+    expect(nightsWords([1, 2, 4])).toBe('1, 2 or 4+ nights');
+  });
+  it('"suits 3 of 5 · 2 want 3 nights" — not fussed and not answered suit any length', () => {
+    const r = nightsCheck(2, { people, wishes: ws });
+    expect(r.line).toBe('suits 3 of 5 · 2 want 3 nights');
+    expect(r.no).toEqual([{ id: 'c', why: 'wants 3 nights' }, { id: 'd', why: 'wants 3 nights' }]);
+    expect(nightsCheck(3, { people, wishes: ws }).line).toBe('suits 4 of 5 · 1 wants 2 nights');
+    expect(nightsCheck(5, { people, wishes: cleanWishes([{ player_id: 'a', nights: [4] }]) }).line).toBe('suits 5 of 5');
+    expect(nightsCheck(2, { people, wishes: [] }).line).toBe(null);
+  });
+  it('in a fit line and the group summary', () => {
+    const f = fitOption({ nights: 2 }, { people, wishes: ws, nameOf });
+    expect(f.line).toBe('suits 3 of 5 · 2 want 3 nights');
+    expect(notForLine(f.notFor)).toBe('Not for: Cy (wants 3 nights), Di (wants 3 nights)');
+    expect(nightsSummary(ws)).toBe('most say 3 nights');
+    expect(nightsSummary(cleanWishes([{ player_id: 'a', nights: [2] }, { player_id: 'b', nights: [3] }, { player_id: 'c', nights: [1] }]))).toBe('1 says 1 night');
+    expect(wishesSummary(ws, people)).toContain('most say 3 nights');
+  });
+  it('the day lines say first / middle / last, and old weekday rows still count', () => {
+    const s = wishesSummary(cleanWishes([{ player_id: 'a', day_prefs: { first: 'late', middle: 'early' } }, { player_id: 'b', day_prefs: { first: 'late', fri: 'early' } }]), people);
+    expect(s).toContain('First day: 2 later');
+    expect(s).toContain('Middle days: 1 early');
+    expect(s).toContain('Friday: 1 early');
   });
 });

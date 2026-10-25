@@ -3,6 +3,7 @@ import {
   fridayOf, upcomingFridays, tripDayKeys, toggleCant, wishRow, summariseWishes, dateFit, travelFit, spendFit, fitLine,
   tally, nextReaction, lists, outsideDefinition, newItem, itemsFromIdea, builderFromPicks, voteToCall, leftovers,
   ideaShape, feedLine, shareMessage, ideaCard, ideaLink, pullTogetherText, homeBase, areaDrive, itemFit, tapsDone, caddieContext,
+  tripDayCount, NIGHTS, toggleNights, dateWords,
 } from './ideas.js';
 
 const stayAreas = [
@@ -25,12 +26,30 @@ describe('dates', () => {
     expect(upcomingFridays('2026-10-25', 3)).toEqual(['2026-10-30', '2026-11-06', '2026-11-13']);
     expect(upcomingFridays('2026-10-30', 1)).toEqual(['2026-10-30']);
   });
-  it('knows the trip’s days', () => {
-    expect(tripDayKeys({})).toEqual(['fri', 'sat', 'sun']);
-    expect(tripDayKeys({ nights: 3 })).toEqual(['fri', 'sat', 'sun', 'mon']);
-    expect(tripDayKeys({ nights: 0 })).toEqual(['sat']);
-    expect(tripDayKeys({ nights: 5 })).toEqual(['thu', 'fri', 'sat', 'sun', 'mon']);
-    expect(tripDayKeys({ weekend: { start: '2027-03-13', end: '2027-03-14' } })).toEqual(['sat', 'sun']);
+  it('knows the trip’s days: first / middle / last (ov41), no middle for a 1–2 day trip', () => {
+    expect(tripDayKeys({})).toEqual(['first', 'middle', 'last']);
+    expect(tripDayKeys({ nights: 3 })).toEqual(['first', 'middle', 'last']);
+    expect(tripDayKeys({ nights: 2 })).toEqual(['first', 'middle', 'last']);
+    expect(tripDayKeys({ nights: 1 })).toEqual(['first', 'last']);
+    expect(tripDayKeys({ nights: 0 })).toEqual(['first']);
+    expect(tripDayKeys({ weekend: { start: '2027-03-13', end: '2027-03-14' } })).toEqual(['first', 'last']);
+    expect(tripDayKeys({ weekend: { start: '2027-03-12', end: '2027-03-14' } })).toEqual(['first', 'middle', 'last']);
+    expect(tripDayKeys({}, [1])).toEqual(['first', 'last']); // I said 1 night only
+    expect(tripDayKeys({}, [1, 2])).toEqual(['first', 'middle', 'last']);
+    expect(tripDayCount({ nights: 4 })).toBe(5);
+    expect(tripDayCount({})).toBe(null);
+  });
+  it('"How many nights?": multi-pick, 4+, not fussed', () => {
+    expect(NIGHTS.map((o) => o.label)).toEqual(['1', '2', '3', '4+', 'Not fussed']);
+    expect(toggleNights(null, 2)).toEqual([2]);
+    expect(toggleNights([2], 3)).toEqual([2, 3]);
+    expect(toggleNights([2, 3], 2)).toEqual([3]);
+    expect(toggleNights([3], 3)).toBe(null);
+    expect(toggleNights([2, 3], 'any')).toEqual([]);
+    expect(toggleNights([], 'any')).toBe(null);
+    expect(toggleNights([], 4)).toEqual([4]);
+    expect(tapsDone({ nights: [] })).toBe(1);
+    expect(tapsDone({ nights: [2] })).toBe(1);
   });
   it('toggles a weekend I can’t do', () => {
     expect(toggleCant(['2027-03-19'], '2027-03-12')).toEqual(['2027-03-12', '2027-03-19']);
@@ -40,8 +59,10 @@ describe('dates', () => {
 
 describe('the 4 quick taps', () => {
   it('cleans a row to the database’s shape', () => {
-    const r = wishRow('p', 'me', { cant_dates: ['2027-03-12', '2027-03-13', '2027-03-12'], spend_band: 'heaps', travel: 'fly', max_drive_min: '180', golf_per_day: 'daily', day_prefs: { fri: 'late', sun: 'early', tue: 'early', sat: 'brunch' }, home_by: '16:00:00', wish: '  Barnbougle please ' });
-    expect(r).toEqual({ plan_id: 'p', player_id: 'me', cant_dates: ['2027-03-12'], spend_band: null, travel: 'fly', max_drive_min: 180, golf_per_day: 'daily', day_prefs: { fri: 'late', sun: 'early' }, home_by: '16:00', wish: 'Barnbougle please' });
+    const r = wishRow('p', 'me', { cant_dates: ['2027-03-12', '2027-03-13', '2027-03-12'], spend_band: 'heaps', travel: 'fly', max_drive_min: '180', golf_per_day: 'daily', day_prefs: { first: 'late', middle: 'midday', last: 'early', fri: 'late', tue: 'early', sat: 'brunch', second: 'early' }, home_by: '16:00:00', nights: [3, 2, 2, 9, 6], wish: '  Barnbougle please ' });
+    expect(r).toEqual({ plan_id: 'p', player_id: 'me', cant_dates: ['2027-03-12'], spend_band: null, travel: 'fly', max_drive_min: 180, golf_per_day: 'daily', day_prefs: { first: 'late', middle: 'midday', last: 'early', fri: 'late' }, home_by: '16:00', nights: [2, 3, 4], wish: 'Barnbougle please' });
+    expect(wishRow('p', 'me', {}).nights).toBe(null);
+    expect(wishRow('p', 'me', { nights: [] }).nights).toEqual([]);
   });
   it('counts the taps done', () => {
     expect(tapsDone({ spend_band: 'any', travel: 'drive' })).toBe(2);
@@ -50,9 +71,9 @@ describe('the 4 quick taps', () => {
   });
   it('sums up the group’s answers in one line', () => {
     const ws = [
-      W({ cant_dates: ['2027-03-12'], travel: 'fly', spend_band: '500_800', golf_per_day: 'daily', day_prefs: { sat: 'midday' }, max_drive_min: 180, wish: 'Barnbougle' }),
-      W({ cant_dates: ['2027-03-12'], travel: 'either', spend_band: '500_800', golf_per_day: 'daily', day_prefs: { sat: 'midday' }, max_drive_min: 240, home_by: '17:00' }),
-      W({ travel: 'drive', spend_band: 'lt500', golf_per_day: 'max', max_drive_min: 120, home_by: '15:30' }),
+      W({ cant_dates: ['2027-03-12'], travel: 'fly', spend_band: '500_800', golf_per_day: 'daily', day_prefs: { middle: 'midday' }, max_drive_min: 180, wish: 'Barnbougle', nights: [2, 3] }),
+      W({ cant_dates: ['2027-03-12'], travel: 'either', spend_band: '500_800', golf_per_day: 'daily', day_prefs: { middle: 'midday' }, max_drive_min: 240, home_by: '17:00', nights: [2] }),
+      W({ travel: 'drive', spend_band: 'lt500', golf_per_day: 'max', max_drive_min: 120, home_by: '15:30', nights: [] }),
     ];
     const s = summariseWishes(ws);
     expect(s.answered).toBe(3);
@@ -60,7 +81,8 @@ describe('the 4 quick taps', () => {
     expect(s.fly).toBe(2);
     expect(s.maxDrive).toBe(180);
     expect(s.homeBy).toBe('15:30');
-    expect(s.line).toBe('3 answered · most can’t do 12 Mar · 2 happy to fly · most say $500–800 · most want a round a day, play midday Sat');
+    expect(s.nights).toBe('most say 2 nights');
+    expect(s.line).toBe('3 answered · most can’t do 12 Mar · most say 2 nights · 2 happy to fly · most say $500–800 · most want a round a day, play midday on the middle days');
     expect(summariseWishes([]).line).toBe('Nobody’s answered yet');
   });
   it('with the weekend fixed, says who can make it instead', () => {
@@ -71,7 +93,16 @@ describe('the 4 quick taps', () => {
 
 describe('fit lines', () => {
   const ws = [W({ cant_dates: ['2027-03-12'], travel: 'drive', max_drive_min: 120, spend_band: 'lt500' }), W({ travel: 'fly', max_drive_min: 240, spend_band: '800_1200' }), W({})];
-  it('a weekend: who can do it', () => expect(dateFit({ start_date: '2027-03-13' }, ws)).toEqual({ can: 2, of: 3 }));
+  it('a weekend: who can do it', () => expect(dateFit({ start_date: '2027-03-13' }, ws)).toEqual({ can: 2, of: 3, suits: 2, want: '' }));
+  it('a weekend: and whose nights it suits (ov41)', () => {
+    const wn = [W({ nights: [2] }), W({ nights: [3] }), W({ nights: [3, 4] }), W({ nights: [] }), W({ cant_dates: ['2027-03-12'], nights: [3] }), W({})];
+    const f = dateFit({ start_date: '2027-03-12', end_date: '2027-03-14' }, wn);
+    expect(f).toEqual({ can: 5, of: 6, suits: 3, want: '1 wants 3 nights, 1 wants 3 or 4+ nights' });
+    expect(fitLine({ fit: f })).toBe('suits 3 of 6 · 1 wants 3 nights, 1 wants 3 or 4+ nights');
+    expect(dateWords({ start_date: '2027-03-12', end_date: '2027-03-14' }, { answers: wn })).toBe('1 can’t do it · 1 wants 3 nights, 1 wants 3 or 4+ nights');
+    // 5 nights suits "4+"
+    expect(dateFit({ start_date: '2027-03-12', end_date: '2027-03-17' }, [W({ nights: [4] })]).suits).toBe(1);
+  });
   it('travel: within their drive, or happy to fly', () => {
     expect(travelFit({ driveMin: 170 }, ws)).toEqual({ fits: 2, of: 3 });
     expect(travelFit({ fly: true }, ws)).toEqual({ fits: 2, of: 3 });
@@ -216,12 +247,12 @@ describe('the definition, flights and names (Josh 19:34)', () => {
     const f = defPayload({ when: 'This weekend', from: 'Sydney', within_min: 180, nights: 1, golf: 'max', set: { weekend: true, area: true, golf: true } });
     expect(f).toEqual({ when: 'This weekend', from: 'Sydney', within_min: 180, nights: 1, golf: 'max', set: ['weekend', 'golf'] });
     expect(isSet(f, 'weekend')).toBe(true);
-    expect(defLines(f).map((l) => `${l.label}${l.set ? ' [set]' : ''}`)).toEqual(['📅 This weekend [set]', '📍 within 3 h of Sydney', '🛏️ 2 days', '⛳ As much as possible [set]']);
+    expect(defLines(f).map((l) => `${l.label}${l.set ? ' [set]' : ''}`)).toEqual(['📅 This weekend [set]', '📍 within 3 h of Sydney', '🛏️ 1 night', '⛳ As much as possible [set]']);
     const g = defPayload({ weekendStart: '2027-06-04', nights: 3, area: 'Melbourne', travel: 'fly', set: { weekend: true, area: true, travel: true } });
     expect(g.weekend).toEqual({ start: '2027-06-04', end: '2027-06-07' });
     expect(g.set).toEqual(['weekend', 'area', 'travel']);
     expect(defLines({ nights: 0 })[0].label).toBe('🛏️ A day trip');
-    expect(defLines({ nights: 5 })[0].label).toBe('🛏️ 6 days');
+    expect(defLines({ nights: 5 })[0].label).toBe('🛏️ 5 nights');
   });
   it('flights: time and first/last flights, a search link, no fares', async () => {
     const { flightLine, flightSearchLink } = await import('./ideas.js');

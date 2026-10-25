@@ -183,6 +183,25 @@ function Chips({ options, value, onPick, label }) {
   );
 }
 
+/** "How many nights?" — pick one or more ("2 or 3"); "Not fussed" clears them (ov41, Josh 21:12). */
+function NightsChips({ value, onPick }) {
+  const picks = Array.isArray(value) ? value : null;
+  const on = (o) => (o.value === 'any' ? !!picks && !picks.length : !!picks && picks.includes(o.value));
+  return (
+    <div className="stack" style={{ gap: 4, marginTop: 4 }} data-testid="nights-chips">
+      <span className="small" style={{ fontWeight: 700 }}>How many nights? <span className="muted" style={{ fontWeight: 400 }}>Pick one or more</span></span>
+      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }} role="group" aria-label="How many nights">
+        {I.NIGHTS.map((o) => (
+          <button key={String(o.value)} type="button" className="chip" aria-pressed={on(o)} onClick={() => onPick(o.value)}
+            style={{ minHeight: 40, minWidth: 44, fontWeight: on(o) ? 800 : 500, background: on(o) ? 'var(--gold-soft)' : undefined, borderColor: on(o) ? 'var(--gold)' : undefined }}>
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** Smaller chips in one wrapping row (the per-day timings). */
 function MiniChips({ options, value, onPick, label }) {
   return (
@@ -217,7 +236,8 @@ function WishTaps({ plan, me, fixed, reload, compact }) {
   const offer = I.weekendsToOffer(plan, todayISO());
   const fridays = [...offer, ...(more ? I.upcomingFridays(TB.addDays(offer[offer.length - 1], 7), more) : [])];
   const nights = fixed.nights ?? 2;
-  const days = I.tripDayKeys(fixed);
+  const days = I.tripDayKeys(fixed, w.nights);
+  const askNights = !weekendSet && !I.isSet(fixed, 'nights'); // ov41: "How many nights?" unless the organiser set it
   return (
     <div className="card pad stack" style={{ gap: 10 }} data-testid="wish-taps">
       <button type="button" className="row between" style={{ background: 'none', border: 0, padding: 0, color: 'inherit', textAlign: 'left', minHeight: 40 }} onClick={() => setOpen(!open)} aria-expanded={open}>
@@ -243,6 +263,7 @@ function WishTaps({ plan, me, fixed, reload, compact }) {
               </div>
               <span className="small muted row between" style={{ gap: 6 }}><span>Fridays — tap the weekends you’re out.</span>
                 <button type="button" className="chip" style={{ minHeight: 32 }} onClick={() => setMore(more + 8)} data-testid="more-weekends">Show more</button></span>
+              {askNights && <NightsChips value={w.nights} onPick={(v) => save({ nights: I.toggleNights(w.nights, v) })} />}
             </div>
           )}
           <div className="stack" style={{ gap: 4 }}>
@@ -266,10 +287,11 @@ function WishTaps({ plan, me, fixed, reload, compact }) {
           <details data-testid="wish-more">
             <summary className="small" style={{ fontWeight: 700, cursor: 'pointer', minHeight: 32 }}>More (optional) — how you’d like the days, home by, one wish</summary>
             <div className="stack" style={{ gap: 6, marginTop: 6 }}>
+            <span className="small muted">When to play</span>
             {days.map((k) => (
               <div key={k} className="row" style={{ gap: 4, alignItems: 'center', flexWrap: 'wrap' }} data-testid={`day-pref-${k}`}>
-                <span className="small" style={{ width: 30, fontWeight: 700 }}>{I.DAY_NAME[k].slice(0, 3)}</span>
-                <MiniChips label={`${I.DAY_NAME[k]} timing`} options={I.DAY_PREF} value={w.day_prefs?.[k] || null}
+                <span className="small" style={{ width: 92, fontWeight: 700 }}>{days.length === 1 ? 'The day' : I.DAY_NAME[k]}</span>
+                <MiniChips label={`${days.length === 1 ? 'The day' : I.DAY_NAME[k]} timing`} options={I.DAY_PREF} value={w.day_prefs?.[k] || null}
                   onPick={(v) => { const dp = { ...(w.day_prefs || {}) }; if (v) dp[k] = v; else delete dp[k]; save({ day_prefs: dp }); }} />
               </div>
             ))}
@@ -549,8 +571,8 @@ function DefinitionEdit({ plan, fixed, reload, onDone }) {
         <label className="field grow"><span>of</span><input className="input" value={f.from} onChange={(e) => up({ from: e.target.value })} placeholder="Sydney" aria-label="Of where" /></label>
       </div>
       <div className="row" style={{ gap: 6, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-        <label className="field grow"><span>How long</span><select className="select" value={f.nights} onChange={(e) => up({ nights: e.target.value === '' ? '' : Number(e.target.value) })} aria-label="How long">
-          <option value="">Not sure</option>{I.DAYS.map((d) => <option key={d} value={d - 1}>{I.daysWord(d - 1)}</option>)}</select></label>
+        <label className="field grow"><span>How many nights</span><select className="select" value={f.nights} onChange={(e) => up({ nights: e.target.value === '' ? '' : Number(e.target.value) })} aria-label="How many nights">
+          <option value="">Not sure</option>{I.DAYS.map((d) => <option key={d} value={d - 1}>{I.nightsWord(d - 1)}</option>)}</select></label>
         <SetToggle k="nights" />
       </div>
       <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>

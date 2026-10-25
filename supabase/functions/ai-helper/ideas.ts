@@ -174,8 +174,8 @@ export function ideaContextIn(raw: Any) {
       answered: num(w.answered, 0, 500) ?? 0, line: clean(w.line, 200), happy_to_fly: num(w.happy_to_fly, 0, 500), drive_only: num(w.drive_only, 0, 500),
       max_drive_min: num(w.max_drive_min, 0, 1000), spend: clean(w.spend, 12) || null, golf: clean(w.golf, 12) || null,
       cant: (Array.isArray(w.cant) ? w.cant : []).slice(0, 6).map((x: Any) => ({ fri: isoDate(x?.fri), n: num(x?.n, 0, 500) })).filter((x: Any) => x.fri),
-      day_prefs: Object.fromEntries(Object.entries(w.day_prefs && typeof w.day_prefs === 'object' ? w.day_prefs : {}).slice(0, 5).map(([k, v]) => [clean(k, 4), clean(v, 14)])),
-      home_by: clean(w.home_by, 5) || null,
+      day_prefs: Object.fromEntries(Object.entries(w.day_prefs && typeof w.day_prefs === 'object' ? w.day_prefs : {}).slice(0, 8).map(([k, v]) => [clean(k, 6), clean(v, 14)])),
+      home_by: clean(w.home_by, 5) || null, nights: clean(w.nights, 40) || null,
       wishes: list(w.wishes, 8).map((x) => clean(x, 120)),
     } : null,
     home: c.home && Number.isFinite(Number(c.home.lat)) && Number.isFinite(Number(c.home.lng))

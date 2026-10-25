@@ -128,10 +128,12 @@ Deno.test('idea chat: the prompt allows flying to one place and says multi-stop 
 });
 
 Deno.test('idea chat: the app’s context is cleaned again', () => {
-  const c = ideaContextIn({ lists: { areas: ['<b>Hunter</b>', '', 'Kiama'] }, wishes: { answered: '9', cant: [{ fri: '2027-03-12', n: 5 }, { fri: 'bad' }], day_prefs: { fri: 'late' } }, idea: { fixed: { weekend: { start: '2027-03-12', end: '2027-03-14' }, nights: 99 } }, home: { lat: -33.8812, lng: 'x' } });
+  const c = ideaContextIn({ lists: { areas: ['<b>Hunter</b>', '', 'Kiama'] }, wishes: { answered: '9', cant: [{ fri: '2027-03-12', n: 5 }, { fri: 'bad' }], day_prefs: { fri: 'late', middle: 'midday' }, nights: 'most say 2 nights' }, idea: { fixed: { weekend: { start: '2027-03-12', end: '2027-03-14' }, nights: 99 } }, home: { lat: -33.8812, lng: 'x' } });
   assertEquals(c.lists!.areas, ['b Hunter /b', 'Kiama']);
   assertEquals(c.wishes!.answered, 9);
   assertEquals(c.wishes!.cant, [{ fri: '2027-03-12', n: 5 }]);
+  assertEquals(c.wishes!.day_prefs, { fri: 'late', middle: 'midday' }); // ov41: first / middle / last keys
+  assertEquals(c.wishes!.nights, 'most say 2 nights');
   assertEquals(c.fixed.nights, null);
   assertEquals(c.home, null);
   assertEquals(validateIdeaReply({ message: '', ideas: [] }).message, '');

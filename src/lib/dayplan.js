@@ -9,8 +9,8 @@
 // using the course's visitor / social times for that weekday and the per-day wishes.
 import * as TB from './tripbuilder.js';
 import { weekday } from './tripfinder.js';
-import { courseWindows, windowsText, golfLength, dayPlan, dayPrefs, slotLine, hm, dur, FLY_DEFAULTS, USUAL_GROUP } from './daytiming.js';
-import { fitOption, notForLine, scheduleCheck } from './tripfit.js';
+import { courseWindows, windowsText, golfLength, dayPlan, dayPrefs, dayPosKey, slotLine, hm, dur, FLY_DEFAULTS, USUAL_GROUP } from './daytiming.js';
+import { fitOption, notForLine, scheduleCheck, nightsCheck } from './tripfit.js';
 import { sunTimes, DEFAULT_LEAVE_STAY } from './daytiming.js';
 
 export const MAX_COMPARE = 6;
@@ -35,7 +35,8 @@ const centreOf = (pts) => {
   return p.length ? { lat: p.reduce((a, x) => a + x.lat, 0) / p.length, lng: p.reduce((a, x) => a + x.lng, 0) / p.length } : null;
 };
 
-/** The trip's days as the day plan shows them: [{ index, slot, leg, golf, rounds, name, role, date, dates, last }]. */
+/** The trip's days as the day plan shows them: [{ index, slot, leg, golf, rounds, name, role, date, dates, last, pos }].
+ *  pos: the day's place for the wishes ('first' | 'middle' | 'last', ov41). */
 export function planDays(st = {}) {
   const weekends = st.weekends || [];
   const all = TB.tripDays(st.nights);
@@ -46,6 +47,7 @@ export function planDays(st = {}) {
     return {
       index: d.index, slot: d.leg, leg, golf: TB.dayGolf(day), rounds: TB.dayRounds(day), options: saved.options || [],
       name: d.name.replace(/ —.*/, ''), role: TB.dayRoleLine(day), last: d.index === all.length - 1 && all.length > 1,
+      pos: dayPosKey(d.index, all.length), single: all.length === 1,
       date: weekends[0] ? TB.dayDate(weekends[0], d.index) : null, dates: weekends.map((w) => TB.dayDate(w, d.index)).filter(Boolean),
     };
   });
@@ -92,7 +94,8 @@ export function buildDay(day, ctx = {}) {
   const dow = date ? weekday(date) : null;
   const travel = travelOf(st);
   const golf = dayGolfLength(st, day, players);
-  const prefs = date ? dayPrefs(date, { comments, wishes, last: day.last }) : [];
+  const pos = day.pos || null;
+  const prefs = date || pos ? dayPrefs(date, { comments, wishes, last: day.last, pos, single: !!day.single }) : [];
   const stayAt = centreOf(stays);
   const cands = dayCourses(day, { st, courseMap, starts, stays }).slice(0, MAX_COMPARE + day.options.length);
   const courses = cands.map(({ course: c, onDay, drive }) => {
@@ -237,9 +240,13 @@ export function applyGolfAmount(st = {}, amount = 'daily', { players = 8 } = {})
 export function scheduleLine(st = {}, { people = [], wishes = [], nameOf = (id) => id, names = false } = {}) {
   const days = planDays(st);
   const r = scheduleCheck(days.map((d) => d.rounds), { people, wishes });
-  const no = r.no.map((n) => ({ ...n, name: nameOf(n.id) }));
+  // ov41: how many nights people said ("2 want 3 nights").
+  const nc = st.nights != null ? nightsCheck(st.nights, { people, wishes }) : { no: [], want: '' };
+  const why = new Map();
+  for (const n of [...r.no, ...nc.no]) why.set(n.id, [...(why.get(n.id) || []), n.why]);
+  const no = [...why.entries()].map(([id, w]) => ({ id, why: w.join(', '), name: nameOf(id) }));
   const tail = !no.length ? '' : names ? ` · Not for: ${no.map((n) => `${n.name} (${n.why})`).join(', ')}` : ` · not for ${no.length}`;
-  return `${r.line}${tail}`;
+  return `${r.line}${nc.want ? ` · ${nc.want}` : ''}${tail}`;
 }
 // ------------------------------------------------------------------ the suggested plan (one line per day)
 

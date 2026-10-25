@@ -9,6 +9,8 @@
 // to the organiser's queue (the database marks them 'queued'); inside it, straight onto the lists.
 // Pure functions only — screens/TripIdea.jsx and the tests use these.
 import { addDays, dateOf, isoOf, weekendLabel, driveBetween, regionsFrom, matchRegions } from './tripbuilder.js';
+import { cleanNights, nightsSuit, nightsWant, nightsSummary } from './tripfit.js';
+import { DAY_POS, DAY_POS_NAME } from './daytiming.js';
 
 // ------------------------------------------------------------------ the 4 quick taps
 
@@ -38,6 +40,24 @@ export const GOLF = [
 /** Trips are 1–6 days (nights 0–5). */
 export const DAYS = [1, 2, 3, 4, 5, 6];
 export const daysWord = (nights) => { const d = Number(nights) + 1; return d === 1 ? 'A day trip' : `${d} days`; };
+/** The organiser's length in nights (ov41: the same words as the people's "How many nights?"). 0 → "A day trip". */
+export const nightsWord = (nights) => { const n = Number(nights); return n <= 0 ? 'A day trip' : `${n} night${n === 1 ? '' : 's'}`; };
+/** "How many nights?" (ov41, Josh 21:12) — pick one or more ("2 or 3"); 4 means 4+; "Not fussed" saves []. */
+export const NIGHTS = [
+  { value: 1, label: '1' },
+  { value: 2, label: '2' },
+  { value: 3, label: '3' },
+  { value: 4, label: '4+' },
+  { value: 'any', label: 'Not fussed' },
+];
+/** Tap a nights chip: a number toggles it in the list; "Not fussed" → [] (tap again → not answered). */
+export function toggleNights(list, v) {
+  if (v === 'any') return Array.isArray(list) && !list.length ? null : [];
+  const l = cleanNights(list) || [];
+  const n = Math.min(4, Number(v));
+  const next = l.includes(n) ? l.filter((x) => x !== n) : [...l, n].sort((a, b) => a - b);
+  return next.length ? next : null;
+}
 /** The parts of "the definition" the organiser can set, and can mark "Set" (vs "Open to ideas"). */
 export const DEF_PARTS = ['weekend', 'area', 'nights', 'travel', 'golf'];
 export const DAY_PREF = [
@@ -46,9 +66,11 @@ export const DAY_PREF = [
   { value: 'late', label: 'Late' },
   { value: 'morning_free', label: 'Morning free' },
 ];
-export const DAY_KEYS = ['thu', 'fri', 'sat', 'sun', 'mon'];
-export const DAY_NAME = { thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday', mon: 'Monday' };
-const KEY_OF_DOW = { 4: 'thu', 5: 'fri', 6: 'sat', 0: 'sun', 1: 'mon' };
+// When to play (ov41, Josh 21:12: "first day, middle days, end day"): day_prefs keyed by the day's place in the trip.
+export const DAY_KEYS = DAY_POS;
+export const DAY_NAME = DAY_POS_NAME;
+/** Old rows were keyed by weekday — still kept when a row is saved again, and read for that weekday. */
+const OLD_DAY_KEYS = ['thu', 'fri', 'sat', 'sun', 'mon'];
 /** Tagging people in comments inside organising — a named extension point only (Josh 19:22: "future"). */
 export const IDEA_TAGS_LATER = 'idea_comment_tags';
 
@@ -77,19 +99,20 @@ export function upcomingFridays(today, count = 16) {
 /** "13 Mar" for a weekend's Friday, "Fri 13 – Sun 15 Mar" with nights. */
 export const fridayLabel = (fri, nights = 2) => weekendLabel({ start: fri, end: addDays(fri, Math.max(1, nights)) });
 
-/** The trip's days for "how I'd like the days": the fixed weekend's days, else Fri–Sun (Fri–Mon with 3 nights). */
-export function tripDayKeys(fixed = {}) {
+/** How many days the trip is, if known: the fixed weekend, else the organiser's nights, else (when everything I picked
+ *  is 1 night) 2. null = not known. myNights: my own "How many nights?" picks. */
+export function tripDayCount(fixed = {}, myNights = null) {
   const w = fixed?.weekend;
-  if (w?.start) {
-    const out = [];
-    for (let i = 0, d = w.start; d && d <= (w.end || w.start) && i < 7; i++, d = addDays(d, 1)) {
-      const k = KEY_OF_DOW[dateOf(d).getDay()];
-      if (k && !out.includes(k)) out.push(k);
-    }
-    if (out.length) return out;
-  }
-  const n = fixed?.nights == null ? 2 : Number(fixed.nights);
-  return n <= 0 ? ['sat'] : n === 1 ? ['sat', 'sun'] : n === 2 ? ['fri', 'sat', 'sun'] : n === 3 ? ['fri', 'sat', 'sun', 'mon'] : ['thu', 'fri', 'sat', 'sun', 'mon'];
+  if (w?.start) return Math.max(1, Math.round((dateOf(w.end || w.start) - dateOf(w.start)) / 86400000) + 1);
+  if (fixed?.nights != null) return Number(fixed.nights) + 1;
+  const mine = cleanNights(myNights);
+  if (mine && mine.length && Math.max(...mine) <= 1) return 2;
+  return null;
+}
+/** The rows for "when to play": First day / Middle days / Last day — no middle for a 1–2 day trip, one row for a day trip. */
+export function tripDayKeys(fixed = {}, myNights = null) {
+  const n = tripDayCount(fixed, myNights);
+  return n === 1 ? ['first'] : n === 2 ? ['first', 'last'] : ['first', 'middle', 'last'];
 }
 
 /** Is this part of the definition "Set" (people say in / out; other suggestions queue) rather than open to ideas? */
@@ -103,7 +126,7 @@ export function defLines(fixed = {}) {
   if (when) out.push({ key: 'weekend', label: `📅 ${when}`, set: isSet(f, 'weekend') });
   const where = [f.area, f.within_min ? `within ${hours(f.within_min)}${f.from ? ` of ${f.from}` : ''}` : (f.from ? `from ${f.from}` : '')].filter(Boolean).join(', ');
   if (where) out.push({ key: 'area', label: `📍 ${where}`, set: isSet(f, 'area') && !!f.area });
-  if (f.nights != null) out.push({ key: 'nights', label: `🛏️ ${daysWord(f.nights)}`, set: isSet(f, 'nights') });
+  if (f.nights != null) out.push({ key: 'nights', label: `🛏️ ${nightsWord(f.nights)}`, set: isSet(f, 'nights') });
   if (f.travel) out.push({ key: 'travel', label: f.travel === 'fly' ? '✈️ Flying' : f.travel === 'drive' ? '🚗 Driving' : '🚗✈️ Drive or fly', set: isSet(f, 'travel') });
   if (f.golf) out.push({ key: 'golf', label: `⛳ ${label(GOLF, f.golf)}`, set: isSet(f, 'golf') });
   return out;
@@ -136,7 +159,7 @@ export function toggleCant(list = [], fri) {
 export function wishRow(planId, playerId, w = {}) {
   const pick = (v, list) => (list.some((o) => o.value === v) ? v : null);
   const prefs = {};
-  for (const [k, v] of Object.entries(w.day_prefs || {})) if (DAY_KEYS.includes(k) && ['early', 'midday', 'late', 'morning_free', 'any'].includes(v)) prefs[k] = v;
+  for (const [k, v] of Object.entries(w.day_prefs || {})) if ((DAY_KEYS.includes(k) || OLD_DAY_KEYS.includes(k)) && ['early', 'midday', 'late', 'morning_free', 'any'].includes(v)) prefs[k] = v;
   const md = Number(w.max_drive_min);
   return {
     plan_id: planId, player_id: playerId,
@@ -145,14 +168,15 @@ export function wishRow(planId, playerId, w = {}) {
     max_drive_min: Number.isFinite(md) && md >= 30 && md <= 720 ? Math.round(md) : null,
     golf_per_day: pick(w.golf_per_day, GOLF), day_prefs: prefs,
     home_by: /^\d{2}:\d{2}/.test(String(w.home_by || '')) ? String(w.home_by).slice(0, 5) : null,
+    nights: cleanNights(w.nights),
     wish: String(w.wish || '').trim().slice(0, 300) || null,
   };
 }
 
-/** How many of the 4 taps someone's done (dates · spend · getting there · golf); the wish is extra. */
+/** How many of the 4 taps someone's done (dates and nights · spend · getting there · golf); the wish is extra. */
 export function tapsDone(w = {}, { weekendFixed = false, rsvp = null } = {}) {
   if (!w && !rsvp) return 0;
-  return [weekendFixed ? !!rsvp : (w?.cant_dates || []).length > 0 || !!w?.dates_ok, !!w?.spend_band, !!w?.travel, !!w?.golf_per_day].filter(Boolean).length;
+  return [weekendFixed ? !!rsvp : (w?.cant_dates || []).length > 0 || !!w?.dates_ok || Array.isArray(w?.nights), !!w?.spend_band, !!w?.travel, !!w?.golf_per_day].filter(Boolean).length;
 }
 
 const mode = (vals) => {
@@ -201,22 +225,28 @@ export function summariseWishes(wishes = [], { rsvps = [], fixed = {} } = {}) {
   parts.unshift(`${answered} answered`);
   if (!weekendFixed && cant[0] && cant[0].n >= Math.max(2, Math.ceil(answered / 2))) parts.push(`most can’t do ${short(cant[0].fri)}`);
   else if (!weekendFixed && cant[0]) parts.push(`${cant[0].n} can’t do ${short(cant[0].fri)}`);
+  const nightsLine = isSet(fixed, 'nights') || weekendFixed ? null : nightsSummary(rows);
+  if (nightsLine) parts.push(nightsLine);
   if (fly) parts.push(`${fly} happy to fly`);
   if (spend && spend.n * 2 >= answered) parts.push(`most ${spend.value === 'lt500' ? 'want under $500' : `say ${label(SPEND, spend.value)}`}`);
   const golfWords = golf && golf.n * 2 >= answered ? `most want ${label(GOLF, golf.value).toLowerCase()}` : '';
-  const dayWords = Object.entries(dayPrefs).filter(([, m]) => m.n * 2 >= answered).map(([k, m]) => `${label(DAY_PREF, m.value).toLowerCase()} ${DAY_NAME[k].slice(0, 3)}`);
+  const dayWords = Object.entries(dayPrefs).filter(([, m]) => m.n * 2 >= answered).map(([k, m]) => `${label(DAY_PREF, m.value).toLowerCase()} on the ${(DAY_NAME[k] || k).toLowerCase()}`);
   if (golfWords || dayWords.length) parts.push([golfWords, dayWords.length ? `play ${dayWords.join(', ')}` : ''].filter(Boolean).join(', '));
-  return { answered, cant, fly, driveOnly, maxDrive, spend, golf, dayPrefs, homeBy, wishes: wishList, line: answered ? parts.join(' · ') : 'Nobody’s answered yet' };
+  return { answered, cant, nights: nightsLine, fly, driveOnly, maxDrive, spend, golf, dayPrefs, homeBy, wishes: wishList, line: answered ? parts.join(' · ') : 'Nobody’s answered yet' };
 }
 
 // ------------------------------------------------------------------ fit lines
 
-/** A weekend: how many who answered can do it. → { can, of } */
+/** A weekend: how many who answered can do it, and (ov41) how many it suits once their nights count too.
+ *  → { can, of, suits, want: '2 want 3 nights' } */
 export function dateFit(item, wishes = []) {
   const fri = fridayOf(item?.start_date);
   const rows = (wishes || []).filter(Boolean);
-  const out = rows.filter((w) => (w.cant_dates || []).includes(fri)).length;
-  return { can: rows.length - out, of: rows.length };
+  const n = item?.start_date && item?.end_date ? Math.round((dateOf(item.end_date) - dateOf(item.start_date)) / 86400000) : null;
+  const cant = (w) => (w.cant_dates || []).includes(fri);
+  const off = rows.filter((w) => !cant(w) && n != null && !nightsSuit(n, w.nights));
+  const can = rows.filter((w) => !cant(w)).length;
+  return { can, of: rows.length, suits: can - off.length, want: nightsWant(off.map((w) => w.nights)) };
 }
 
 /** An area or idea: { driveMin } (by road) or { fly: true }. → { fits, of } — within their max drive / happy to fly. */
@@ -237,7 +267,8 @@ export function spendFit(costEach, wishes = []) {
 /** "suits 9 of 11 · within 3 h · about $750 each" (only the parts known). Counts only — names are the organiser's. */
 export function fitLine({ fit = null, driveMin = null, fly = null, costEach = null } = {}) {
   const parts = [];
-  if (fit && fit.of) parts.push(`suits ${fit.can ?? fit.fits} of ${fit.of}`);
+  if (fit && fit.of) parts.push(`suits ${fit.suits ?? fit.can ?? fit.fits} of ${fit.of}`);
+  if (fit?.want) parts.push(fit.want);
   if (fly) parts.push(fly.flightMin ? `${dur(fly.flightMin)} flight` : 'a flight');
   else if (driveMin != null) parts.push(`within ${hours(Math.ceil(driveMin / 30) * 30)}`);
   // Josh 19:34: no fare guesses — a cost line only for driving ideas (stay and golf).
@@ -474,7 +505,7 @@ export function caddieContext({ plan = {}, lists: l = null, summary = null, base
       answered: summary.answered, line: summary.line, happy_to_fly: summary.fly, drive_only: summary.driveOnly,
       max_drive_min: summary.maxDrive, spend: summary.spend?.value || null, golf: summary.golf?.value || null,
       cant: (summary.cant || []).slice(0, 6), day_prefs: Object.fromEntries(Object.entries(summary.dayPrefs || {}).map(([k, m]) => [k, m.value])),
-      home_by: summary.homeBy, wishes: (summary.wishes || []).slice(0, 8),
+      home_by: summary.homeBy, nights: summary.nights || null, wishes: (summary.wishes || []).slice(0, 8),
     } : null,
     home: base ? { lat: Math.round(base.lat * 100) / 100, lng: Math.round(base.lng * 100) / 100, name: baseName || null } : null,
   };
@@ -489,7 +520,7 @@ export function pullTogetherText({ plan = {}, lists: l = { date: [], area: [], c
     f.weekend?.start ? `The weekend${isSet(f, 'weekend') ? ' is set' : ' we’re thinking of'}: ${weekendLabel({ start: f.weekend.start, end: f.weekend.end })}.` : f.when ? `When: ${f.when}.` : (l.date.length ? `Weekends: ${top(l.date)}.` : plan.idea_when ? `Roughly: ${plan.idea_when}.` : ''),
     f.area ? `The area${isSet(f, 'area') ? ' is set' : ' we’re thinking of'}: ${f.area}.` : f.within_min ? `Within ${hours(f.within_min)}${f.from ? ` of ${f.from}` : ''}.` : (l.area.length ? `Areas: ${top(l.area)}.` : plan.idea_where ? `Where: ${plan.idea_where}.` : ''),
     l.course.length ? `Courses: ${top(l.course, 8)}.` : '',
-    f.nights != null ? `${daysWord(f.nights)}${f.nights ? ` (${f.nights} night${f.nights === 1 ? '' : 's'})` : ''}.` : '',
+    f.nights != null ? `${daysWord(f.nights)}${f.nights ? ` (${f.nights} night${f.nights === 1 ? '' : 's'})` : ''}.` : (summary?.nights ? `Nights: ${summary.nights}.` : ''),
     f.golf ? `Golf: ${label(GOLF, f.golf).toLowerCase()}.` : '',
     (f.travel || plan.idea_travel) === 'fly' ? 'We’d fly to one place.' : '',
     summary?.answered ? `The group's answers: ${summary.line}.` : '',
@@ -569,10 +600,11 @@ export function dateWords(item, { answers = [], rows = [], nameOf = null } = {})
   if (!(answers || []).length) return '';
   const f = dateFit(item, answers);
   const out = f.of - f.can;
-  if (!out) return f.of === 1 ? 'The one who’s answered can do it' : `All ${f.of} who’ve answered can do it`;
+  const tail = f.want ? ` · ${f.want}` : ''; // ov41: "· 2 want 3 nights"
+  if (!out) return `${f.of === 1 ? 'The one who’s answered can do it' : `All ${f.of} who’ve answered can do it`}${tail}`;
   if (nameOf) {
     const names = whoCant(item, rows, nameOf);
-    if (names.length) return `${names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`} can’t do this one`;
+    if (names.length) return `${names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`} can’t do this one${tail}`;
   }
-  return `${out} can’t do it`;
+  return `${out} can’t do it${tail}`;
 }

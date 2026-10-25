@@ -7,11 +7,12 @@
 //
 //   plan_wishes (108, one row per person per plan): { plan_id, player_id, cant_dates: date[] (Fridays of weekends they
 //   can't do), spend_band: 'lt500' | '500_800' | '800_1200' | 'any' | null, travel: 'drive' | 'fly' | 'either' | null,
-//   max_drive_min: int | null, golf_per_day: 'max' | 'daily' | 'spare_day' | 'any' | null, day_prefs: jsonb keyed by weekday
-//   ('fri', 'sat', 'sun', 'mon') → 'early' | 'midday' | 'late' | 'morning_free' | 'any', home_by: time (the last day),
-//   wish: text | null, updated_at }
+//   max_drive_min: int | null, golf_per_day: 'max' | 'daily' | 'spare_day' | 'any' | null, day_prefs: jsonb keyed by the
+//   day's place in the trip ('first', 'middle', 'last'; old rows by weekday 'fri', 'sat'…) → 'early' | 'midday' | 'late' |
+//   'morning_free' | 'any', home_by: time (the last day), nights: int[] | null (the trip lengths they'd do, 1–6, 4 = "4+";
+//   [] = not fussed, ov41), wish: text | null, updated_at }
 //   Read defensively (cleanWishes): the table may not be there yet, rows may be partial.
-import { suits, dur, hm, r5, PREF_LABEL } from './daytiming.js';
+import { suits, dur, hm, r5, PREF_LABEL, DAY_POS, DAY_POS_NAME } from './daytiming.js';
 import { dateOf, isoOf } from './tripbuilder.js';
 
 export const SPEND_MAX = { lt500: 500, '500_800': 800, '800_1200': 1200, any: Infinity };
@@ -38,18 +39,68 @@ export function cleanWishes(rows) {
       golf_per_day: pick(r.golf_per_day, GOLFS),
       day_prefs: cleanDayPrefs(r.day_prefs),
       home_by: /^([01]\d|2[0-3]):[0-5]\d/.test(String(r.home_by || '')) ? String(r.home_by).slice(0, 5) : null,
+      nights: cleanNights(r.nights),
       wish: typeof r.wish === 'string' && r.wish.trim() ? r.wish.trim().slice(0, 500) : null,
     });
   }
   return [...by.values()];
 }
 
-/** { fri: 'late', sat: 'junk', xyz: 'early' } → { fri: 'late' } (a JSON string is read too). */
+/** { first: 'late', fri: 'late', sat: 'junk', xyz: 'early' } → { first: 'late', fri: 'late' } (a JSON string is read too). */
 export function cleanDayPrefs(v) {
   let o = v;
   if (typeof o === 'string') { try { o = JSON.parse(o); } catch { o = null; } }
   if (!o || typeof o !== 'object' || Array.isArray(o)) return {};
-  return Object.fromEntries(Object.entries(o).filter(([k, x]) => WEEKDAYS.includes(k) && DAYPREFS.includes(x)));
+  return Object.fromEntries(Object.entries(o).filter(([k, x]) => (DAY_POS.includes(k) || WEEKDAYS.includes(k)) && DAYPREFS.includes(x)));
+}
+
+// ------------------------------------------------------------------ nights (ov41, Josh 25 Oct 21:12)
+
+/** [3, 2, 2, 9, 'x'] → [2, 3]; [] stays [] (not fussed); anything else → null (not answered). 4 means "4+". */
+export function cleanNights(v) {
+  if (!Array.isArray(v)) return null;
+  return [...new Set(v.map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 6).map((n) => Math.min(4, n)))].sort((a, b) => a - b);
+}
+/** "2", "4+" */
+export const nightLabel = (n) => (Number(n) >= 4 ? '4+' : String(n));
+/** [2, 3] → "2 or 3 nights"; [1] → "1 night"; [4] → "4+ nights". */
+export function nightsWords(list = []) {
+  const l = cleanNights(list) || [];
+  if (!l.length) return '';
+  const w = l.map(nightLabel);
+  const words = w.length === 1 ? w[0] : `${w.slice(0, -1).join(', ')} or ${w[w.length - 1]}`;
+  return `${words} night${l.length === 1 && l[0] === 1 ? '' : 's'}`;
+}
+/** Would a trip of `nights` suit someone who said `picks`? Not answered / not fussed → yes. 4 = "4 or more". */
+export function nightsSuit(nights, picks) {
+  const l = cleanNights(picks);
+  if (!l || !l.length || nights == null) return true;
+  const n = Number(nights);
+  return l.includes(n) || (n >= 4 && l.includes(4));
+}
+/** "2 want 3 nights, 1 wants 4+ nights" from the picks of those it doesn't suit. */
+export function nightsWant(picksList = []) {
+  const c = new Map();
+  for (const p of picksList) { const k = nightsWords(p); if (k) c.set(k, (c.get(k) || 0) + 1); }
+  return [...c.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k, n]) => `${n} want${n === 1 ? 's' : ''} ${k}`).join(', ');
+}
+/** The trip's length against what people said. → { ok, no, line: 'suits 7 of 9 · 2 want 3 nights', want: '2 want 3 nights' } */
+export function nightsCheck(nights, { people = [], wishes = [] } = {}) {
+  const w = byId(wishes);
+  if (nights == null) return { ok: people.map((p) => p.id), no: [], line: null, want: '' };
+  const no = people.filter((p) => !nightsSuit(nights, w[p.id]?.nights)).map((p) => ({ id: p.id, why: `wants ${nightsWords(w[p.id].nights)}` }));
+  const want = nightsWant(no.map((n) => w[n.id].nights));
+  if (!people.some((p) => (w[p.id]?.nights || []).length)) return { ok: people.map((p) => p.id), no: [], line: null, want: '' };
+  return { ...finish(people, no, (ok) => `suits ${ok} of ${people.length}${want ? ` · ${want}` : ''}`), want };
+}
+/** "most say 2 nights" / "3 say 2 nights" (null when nobody said). */
+export function nightsSummary(wishes = []) {
+  const said = (wishes || []).map((w) => cleanNights(w?.nights)).filter((l) => l && l.length);
+  if (!said.length) return null;
+  const c = new Map();
+  for (const l of said) for (const n of l) c.set(n, (c.get(n) || 0) + 1);
+  const [top, k] = [...c.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0];
+  return `${k * 2 >= said.length ? 'most say' : `${k} say${k === 1 ? 's' : ''}`} ${nightsWords([top])}`;
 }
 
 /** The Friday of a weekend (how cant_dates are kept): Thu → the next day, Sat → the day before, Sun → two before. */
@@ -176,6 +227,7 @@ export function fitOption(opt = {}, ctx = {}) {
   const parts = [];
   if (opt.weekend) parts.push(datesCheck(opt.weekend, ctx));
   if (opt.fly) { const f = flyCheck(ctx); parts.push(f.allowed ? f : { ...f, line: `${f.line} — not enough for flying` }); } else if (opt.drive != null) parts.push(driveCheck(opt.drive, ctx));
+  if (opt.nights != null) { const n = nightsCheck(opt.nights, ctx); parts.push({ ...n, line: n.want || null }); }
   if (opt.rounds != null) parts.push(golfCheck(opt.rounds, ctx));
   if (opt.tee != null) parts.push(teeCheck(opt.tee, { ...ctx, finish: opt.finish ?? null, driveHome: opt.driveHome || 0 }));
   if (opt.duskMargin !== undefined) parts.push(duskCheck(opt.duskMargin));
@@ -211,15 +263,16 @@ export function wishesSummary(wishes = [], people = []) {
     n((w) => w.golf_per_day === 'max') ? `${n((w) => w.golf_per_day === 'max')} want as much golf as possible` : null,
     n((w) => w.golf_per_day === 'daily') ? `${n((w) => w.golf_per_day === 'daily')} want a round a day` : null,
     n((w) => w.golf_per_day === 'spare_day') ? `${n((w) => w.golf_per_day === 'spare_day')} want a spare day` : null,
-    ...['fri', 'sat', 'sun', 'mon'].map((d) => dayWishLine(d, wishes)),
+    nightsSummary(wishes),
+    ...[...DAY_POS, 'thu', 'fri', 'sat', 'sun', 'mon'].map((d) => dayWishLine(d, wishes)),
     n((w) => w.home_by) ? `${n((w) => w.home_by)} want to be home by about ${hm(Math.min(...wishes.filter((w) => w.home_by).map((w) => toMinutes(w.home_by))))} on the last day` : null,
   ].filter(Boolean);
   return bits.join(' · ');
 }
 
-const DAY_NAME = { fri: 'Friday', sat: 'Saturday', sun: 'Sunday', mon: 'Monday' };
+const DAY_NAME = { ...DAY_POS_NAME, thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday', mon: 'Monday' };
 const PREF_WORDS = { early: 'early', midday: 'midday', late: 'later', morning_free: 'with the morning free' };
-/** "Friday: 3 later, 1 early" — what people said for that weekday. */
+/** "First day: 3 later, 1 early" — what people said for that day (old rows: that weekday). */
 function dayWishLine(d, wishes) {
   const c = {};
   for (const w of wishes) { const p = w.day_prefs?.[d]; if (p && p !== 'any') c[p] = (c[p] || 0) + 1; }

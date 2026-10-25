@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planDays, startPoints, snapStarts, buildDay, applyPick, setDay, bestSlot, feeFor, pickLine, dayGolfLength, travelOf, dayCourses, calloutTimes, suggestPlan, applySuggestion, cardLine } from './dayplan.js';
+import { planDays, startPoints, snapStarts, buildDay, applyPick, setDay, bestSlot, feeFor, pickLine, dayGolfLength, travelOf, dayCourses, calloutTimes, suggestPlan, applySuggestion, cardLine, scheduleLine } from './dayplan.js';
 import { cleanWishes } from './tripfit.js';
 
 const stay = { key: 'Cessnock', name: 'Cessnock', lat: -32.83, lng: 151.36 };
@@ -40,6 +40,31 @@ describe('the days', () => {
   it('travel: flying from the trip idea', () => {
     expect(travelOf({ travel: 'fly' }).mode).toBe('fly');
     expect(travelOf({}).mode).toBe('drive');
+  });
+});
+
+describe('first / middle / last days (ov41)', () => {
+  it('each day knows its place: 2, 3, 4 and 6-day trips', () => {
+    const pos = (n) => planDays({ nights: n - 1 }).map((d) => d.pos);
+    expect(pos(2)).toEqual(['first', 'last']);
+    expect(pos(3)).toEqual(['first', 'middle', 'last']);
+    expect(pos(4)).toEqual(['first', 'middle', 'middle', 'last']);
+    expect(pos(6)).toEqual(['first', 'middle', 'middle', 'middle', 'middle', 'last']);
+    expect(planDays({ nights: 0 }).map((d) => [d.pos, d.single])).toEqual([['first', true]]);
+  });
+  it('the middle day reads "middle" wishes and old Saturday ones; the last day reads "last"', () => {
+    const wishes = cleanWishes([{ player_id: 'a', day_prefs: { middle: 'morning_free' } }, { player_id: 'b', day_prefs: { sat: 'early' } }, { player_id: 'c', day_prefs: { last: 'early', first: 'late' } }]);
+    const ctx = { st, courseMap, starts: startPoints(st), stays: [stay], wishes, people, nameOf, players: 8 };
+    const [d0, d1, d2] = planDays(st);
+    expect(buildDay(d1, ctx).prefs.map((p) => `${p.who}:${p.pref}`)).toEqual(['a:morning_free', 'b:early']);
+    expect(buildDay(d0, ctx).prefs.map((p) => `${p.who}:${p.pref}`)).toEqual(['c:late']);
+    expect(buildDay({ ...d2, golf: '18' }, ctx).prefs.map((p) => `${p.who}:${p.pref}`)).toEqual(['c:early']);
+  });
+  it('the trip\'s golf line says how many want other nights', () => {
+    const wishes = cleanWishes([{ player_id: 'a', nights: [3] }, { player_id: 'b', nights: [2, 3] }, { player_id: 'c', nights: [3] }]);
+    const line = scheduleLine(st, { people, wishes, nameOf, names: true });
+    expect(line).toContain('2 want 3 nights');
+    expect(line).toContain('Al (wants 3 nights)');
   });
 });
 

@@ -500,22 +500,42 @@ function travelChainBack(from, travel) {
 // ------------------------------------------------------------------ wishes for a day (comments + plan_wishes)
 
 const WD = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-/** '2027-03-12' → 'fri' (the key plan_wishes.day_prefs uses). */
+// ov41 (Josh 25 Oct 21:12: "first day, middle days, end day I think on when to play"): plan_wishes.day_prefs is keyed
+// by the day's place in the trip. Old rows keyed by weekday ('fri', 'sun') are still read for that weekday.
+export const DAY_POS = ['first', 'middle', 'last'];
+export const DAY_POS_NAME = { first: 'First day', middle: 'Middle days', last: 'Last day' };
+/** A trip day's place: day 1 → 'first', the last day → 'last', the rest 'middle'. A one-day trip is its 'first' day
+ *  (and its last: dayPrefs reads both). index from 0; count = the number of days. */
+export function dayPosKey(index, count) {
+  const i = Number(index) || 0;
+  const n = Math.max(1, Number(count) || 1);
+  return i <= 0 ? 'first' : i >= n - 1 ? 'last' : 'middle';
+}
+/** One person's wish for a day from their day_prefs: the day's place first, then the old weekday key. */
+export function prefFor(dayPrefsObj, { pos = null, date = null, single = false } = {}) {
+  const o = dayPrefsObj && typeof dayPrefsObj === 'object' ? dayPrefsObj : {};
+  const keys = [pos, single && pos === 'first' ? 'last' : null, date ? weekdayKey(date) : null].filter(Boolean);
+  for (const k of keys) if (o[k] && o[k] !== 'any') return o[k];
+  return null;
+}
+/** '2027-03-12' → 'fri' (the key old plan_wishes.day_prefs rows used). */
 export function weekdayKey(iso) {
   const [y, m, d] = dateParts(iso);
   return y ? WD[new Date(Date.UTC(y, m - 1, d)).getUTCDay()] : null;
 }
 /**
  * Each person's wish for one day. Their latest note on that day with a preference wins; else plan_wishes: the
- * day_prefs entry for that weekday ({ fri: 'late', sun: 'early' }), and on the last day their home_by.
+ * day_prefs entry for the day's place in the trip (pos: 'first' | 'middle' | 'last'; { first: 'late', last: 'early' }),
+ * else an old row's entry for that weekday ({ fri: 'late' }), and on the last day their home_by. single: a one-day
+ * trip (its 'first' day is its last too).
  * → [{ who: player_id, pref, homeBy, source: 'note' | 'wishes' }]
  */
-export function dayPrefs(date, { comments = [], wishes = [], last = false } = {}) {
-  const key = weekdayKey(date);
+export function dayPrefs(date, { comments = [], wishes = [], last = false, pos = null, single = false } = {}) {
+  const where = pos || (last ? 'last' : null);
   const by = new Map();
   for (const w of wishes) {
     if (!w?.player_id) continue;
-    const p = (w.day_prefs && typeof w.day_prefs === 'object' ? w.day_prefs[key] : null) || null;
+    const p = prefFor(w.day_prefs, { pos: where, date, single });
     if (p && p !== 'any') by.set(w.player_id, { who: w.player_id, pref: p, homeBy: null, source: 'wishes' });
     else if (last && w.home_by) by.set(w.player_id, { who: w.player_id, pref: 'home_by', homeBy: String(w.home_by).slice(0, 5), source: 'wishes' });
   }

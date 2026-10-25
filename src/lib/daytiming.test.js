@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   sunTimes, auOffset, auZone, auDst, windowsFor, phraseWindows, courseWindows, windowsText, golfLength, travelChain, leaveBy,
-  duskFlag, suits, courseFit, slotLine, dayPlan, dayPrefs, prefsLine, hm, dur,
+  duskFlag, suits, courseFit, slotLine, dayPlan, dayPrefs, prefsLine, hm, dur, dayPosKey, prefFor, DAY_POS_NAME,
 } from './daytiming.js';
 
 const SYD = { lat: -33.87, lng: 151.21 };
@@ -297,6 +297,31 @@ describe('wishes for a day', () => {
     expect(prefs.find((p) => p.who === 'p4')).toBe(undefined); // only said Friday
     expect(prefsLine(prefs)).toBe('1 want the morning free · 1 want to play midday');
     expect(dayPrefs('2026-03-13', { wishes }).filter((p) => p.pref === 'late').length).toBe(2); // Friday: late
+  });
+  it('first / middle / last by the day\'s place in the trip (ov41): 1, 2, 3, 4 and 6-day trips', () => {
+    const map = (n) => Array.from({ length: n }, (_, i) => dayPosKey(i, n));
+    expect(map(1)).toEqual(['first']);
+    expect(map(2)).toEqual(['first', 'last']);
+    expect(map(3)).toEqual(['first', 'middle', 'last']);
+    expect(map(4)).toEqual(['first', 'middle', 'middle', 'last']);
+    expect(map(6)).toEqual(['first', 'middle', 'middle', 'middle', 'middle', 'last']);
+    expect(DAY_POS_NAME).toEqual({ first: 'First day', middle: 'Middle days', last: 'Last day' });
+  });
+  it('reads the day\'s place first, then an old row\'s weekday', () => {
+    expect(prefFor({ first: 'late', fri: 'early' }, { pos: 'first', date: '2026-03-13' })).toBe('late');
+    expect(prefFor({ fri: 'early' }, { pos: 'first', date: '2026-03-13' })).toBe('early'); // old row, a Friday
+    expect(prefFor({ fri: 'early' }, { pos: 'first', date: '2026-03-14' })).toBe(null);
+    expect(prefFor({ middle: 'any', sat: 'midday' }, { pos: 'middle', date: '2026-03-14' })).toBe('midday');
+    expect(prefFor({ last: 'early' }, { pos: 'first', single: true })).toBe('early'); // a day trip's day is its last too
+    // dayPrefs with pos: new rows and old weekday rows both count. 2026-03-14 is a Saturday, the middle day.
+    const wishes = [
+      { player_id: 'a', day_prefs: { middle: 'morning_free' } }, { player_id: 'b', day_prefs: { sat: 'morning_free' } },
+      { player_id: 'c', day_prefs: { first: 'late' } }, { player_id: 'd', day_prefs: { last: 'early' }, home_by: '17:00' },
+    ];
+    expect(dayPrefs('2026-03-14', { wishes, pos: 'middle' }).map((p) => `${p.who}:${p.pref}`)).toEqual(['a:morning_free', 'b:morning_free']);
+    expect(dayPrefs('2026-03-13', { wishes, pos: 'first' }).map((p) => `${p.who}:${p.pref}`)).toEqual(['c:late']);
+    expect(dayPrefs('2026-03-15', { wishes, pos: 'last', last: true }).map((p) => `${p.who}:${p.pref}`)).toEqual(['d:early']);
+    expect(dayPrefs('2026-03-15', { wishes: [{ player_id: 'e', home_by: '16:00' }], last: true })[0]).toMatchObject({ pref: 'home_by', homeBy: '16:00' });
   });
   it('home_by counts on the last day only', () => {
     const wishes = [{ player_id: 'p1', home_by: '18:00:00' }, { player_id: 'p2', home_by: '17:30' }];

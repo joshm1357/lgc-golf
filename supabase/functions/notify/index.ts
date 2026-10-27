@@ -301,13 +301,12 @@ async function openPollNonVoters(g: string, planId: string, pollId?: string) {
   // ov23 (092): nobody is nudged for skipping the optional detail (an area's courses / places to stay).
   const pollIds = (polls || []).filter((p) => p.optional !== true).map((p) => p.id);
   if (!pollIds.length) return [];
-  const [{ data: opts }, { data: votes }, people] = await Promise.all([
-    db.from('plan_options').select('id,poll_id').in('poll_id', pollIds),
-    db.from('plan_votes').select('option_id,player_id').in('poll_id', pollIds),
+  const [{ data: votes }, people] = await Promise.all([
+    db.from('plan_votes').select('poll_id,player_id').in('poll_id', pollIds),
     players(g),
   ]);
-  const need = (opts || []).length;
-  return people.filter((p) => (votes || []).filter((v) => v.player_id === p.id).length < need).map((p) => p.id);
+  // 27 Oct (Josh): a partial vote counts — anyone who has answered something on every open question isn't nudged.
+  return people.filter((p) => pollIds.some((id) => !(votes || []).some((v) => v.player_id === p.id && v.poll_id === id))).map((p) => p.id);
 }
 // Same maths as src/lib/plan.js kitty(): balance = share − fronted − paid − sent + received.
 async function kittyOwing(planId: string) {

@@ -26,8 +26,10 @@ describe('date / location votes', () => {
   it('has no leader when nobody has voted', () => {
     expect(tallyPoll(options, []).some((r) => r.leading)).toBe(false);
   });
-  it('lists people who haven’t answered every option', () => {
-    expect(nonVoters(options, votes, ['p1', 'p2', 'p3'])).toEqual(['p2', 'p3']);
+  it('lists only people who haven’t answered at all — a partial vote counts (27 Oct)', () => {
+    expect(nonVoters(options, votes, ['p1', 'p2', 'p3'])).toEqual(['p3']);
+    expect(nonVoters(options, [{ option_id: 'c', player_id: 'p3', response: 'yes' }], ['p3'])).toEqual([]);
+    expect(nonVoters([], votes, ['p3'])).toEqual([]);
   });
 });
 

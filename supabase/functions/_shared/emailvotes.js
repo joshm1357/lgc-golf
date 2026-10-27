@@ -113,7 +113,7 @@ export function planVoteSends({ players = [], members = [], prefs = [], groupDef
   return out;
 }
 
-/** Has this player answered every option of these polls? (Single-choice polls: any one option counts.) */
+/** Has this player answered these polls? 27 Oct (Josh): a partial vote counts — any one option per question. */
 export function hasAnswered({ polls = [], options = [], votes = [], playerId }) {
   if (!polls.length) return true;
   // ov23 (092): an optional detail question (an area's courses / places to stay) never holds anyone up.
@@ -121,8 +121,7 @@ export function hasAnswered({ polls = [], options = [], votes = [], playerId }) 
     const opts = options.filter((o) => o.poll_id === poll.id);
     const mine = votes.filter((v) => v.poll_id === poll.id && v.player_id === playerId);
     if (!opts.length) return true;
-    if (poll.choice === 'single') return mine.length > 0;
-    return opts.every((o) => mine.some((v) => v.option_id === o.id));
+    return mine.length > 0;
   });
 }
 

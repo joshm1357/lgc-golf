@@ -74,11 +74,11 @@ describe('who gets a vote how', () => {
 describe('reminders', () => {
   const polls = [{ id: 'q1' }, { id: 'q2', choice: 'single' }];
   const options = [{ id: 'a', poll_id: 'q1' }, { id: 'b', poll_id: 'q1' }, { id: 'c', poll_id: 'q2' }, { id: 'd', poll_id: 'q2' }];
-  it('answered = every option of a ✓/?/✗ poll, any one option of a single-choice poll', () => {
+  it('answered = any one option on every question — a partial vote counts (27 Oct)', () => {
     const votes = [{ poll_id: 'q1', option_id: 'a', player_id: 'x' }, { poll_id: 'q1', option_id: 'b', player_id: 'x' }, { poll_id: 'q2', option_id: 'd', player_id: 'x' }];
     expect(hasAnswered({ polls, options, votes, playerId: 'x' })).toBe(true);
     expect(hasAnswered({ polls, options, votes: votes.slice(0, 2), playerId: 'x' })).toBe(false);
-    expect(hasAnswered({ polls, options, votes: votes.slice(1), playerId: 'x' })).toBe(false);
+    expect(hasAnswered({ polls, options, votes: votes.slice(1), playerId: 'x' })).toBe(true);
   });
   it('only people on email who haven’t answered and haven’t had a reminder', () => {
     const emailPeople = [{ player_id: 'x' }, { player_id: 'y' }, { player_id: 'z' }];

@@ -82,11 +82,10 @@ export function tallyPoll(options, votes) {
 
 /** Players (from `playerIds`) who haven't answered every option in the poll. */
 export function nonVoters(options, votes, playerIds) {
+  // Josh, 27 Oct 2026: a partial vote counts. Ticking any one option (like a Messenger poll) means you've voted —
+  // only people with no answer at all on this question are "still to vote".
   const optionIds = new Set(options.map((o) => o.id));
-  return playerIds.filter((pid) => {
-    const answered = new Set(votes.filter((v) => v.player_id === pid && optionIds.has(v.option_id)).map((v) => v.option_id));
-    return options.length > 0 && answered.size < options.length;
-  });
+  return playerIds.filter((pid) => options.length > 0 && !votes.some((v) => v.player_id === pid && optionIds.has(v.option_id)));
 }
 
 const cents = (x) => Math.round(x * 100) / 100;

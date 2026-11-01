@@ -18,7 +18,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: What to publish
         id: what
         run: |
@@ -29,14 +29,14 @@ jobs:
             echo "path=move-to-app-domain" >> "$GITHUB_OUTPUT"
           else echo "path=dist" >> "$GITHUB_OUTPUT"; fi
       - if: steps.what.outputs.path == 'dist'
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version-file: .node-version
           cache: npm
       - if: steps.what.outputs.path == 'dist'
         run: npm ci && npm test && npm run build
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: ${{ steps.what.outputs.path }}
   deploy:
@@ -47,4 +47,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

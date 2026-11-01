@@ -49,7 +49,7 @@ jobs:
       FROM: ${{ inputs.from }}
       CONFIRM: ${{ inputs.confirm }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Check
         run: |
           set -euo pipefail
@@ -95,7 +95,7 @@ jobs:
             if [ "$code" -ge 300 ]; then echo "::error title=Rehearsal failed::$(sed -n "${i}p" pending.txt) fails: $(head -c 1500 out.json)"; exit 1; fi
           done
           exit 1
-      - uses: supabase/setup-cli@v1
+      - uses: supabase/setup-cli@v3
         if: inputs.mode == 'apply' && inputs.deploy_functions
         with:
           version: latest

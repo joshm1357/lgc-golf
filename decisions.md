@@ -190,3 +190,5 @@
 - Full moves the round (same round, new date/time) to the next best window; whoever can make it is in, in reply order.
 - Default replies close: 2 days, by 6pm the day before the first date, never under 12 hours.
 - The ⛳ sheet opens on "Ask when they can"; "I've got times" keeps the ov34 set-time / options sheet unchanged.
+- Front door (Josh 12 Nov): signed in and opening the app with no link → Your groups (each group, Start a new group, ⛳ Ask some mates), even with one group. A group's link goes straight in; a group picked this visit stays picked (sessionStorage). Phone-only people are unchanged (straight in). "Who are you?" has a way out to ⛳ Ask some mates.
+- Answering by link needs a name and an email or mobile; signing in afterwards claims the answer. Asking with no group = a hidden quick group.

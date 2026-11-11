@@ -9,6 +9,7 @@
 // are rooms and cars — not groups — and are never filtered here.
 
 import { clearAsk } from './aihelper.js';
+import { markPicked } from './home.js';
 const KEY = 'lgc-group';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -72,8 +73,11 @@ let current = (() => {
 export const currentGroup = () => current;
 
 /** Remember the group this phone is working in. Returns true if it changed. */
-export function setCurrentGroup(id) {
+export function setCurrentGroup(id, { auto = false } = {}) {
   const next = id && UUID.test(id) ? id : null;
+  // ov43: choosing a group (any way) keeps you in it this visit; clearing it sends you to Your groups. The app's own
+  // catch-up to the database's group (auto) isn't a choice.
+  if (!auto) markPicked(!!next);
   if (next === current) return false;
   current = next;
   clearAsk(); // the Ask conversation belongs to the group (and the person) it was asked in

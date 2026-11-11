@@ -25,7 +25,7 @@ import { loadJoinCode } from './lib/joincode.js';
 import Join, { InviteJoin } from './screens/Join.jsx';
 import { inviteCode } from './lib/invite.js';
 import { signInProblemFromUrl, SIGN_IN } from './lib/auth.js';
-import { frontDoor, isFreshSignIn, clearFreshSignIn, takeReturn, choosesItsOwnWay } from './lib/home.js';
+import { frontDoor, isFreshSignIn, clearFreshSignIn, takeReturn, choosesItsOwnWay, wasPicked } from './lib/home.js';
 import YourGroups, { YourGroupsInside } from './screens/YourGroups.jsx';
 import PersonalLink from './screens/PersonalLink.jsx';
 import { personalCode } from './lib/personal.js';
@@ -247,7 +247,8 @@ function Gate() {
   const banner = problem && <div className="err" role="alert" style={{ margin: 0, borderRadius: 0 }}>{problem}</div>;
   // The front door: sign in first (when it's switched on in this build), then Your groups, then into a group.
   // With sign-in off (the live L.G.C build): not in a group → the link-first screen (no PINs, 083).
-  const door = frontDoor({ signInOn: SIGN_IN.length > 0, status, fresh: isFreshSignIn(), hasInvite: !!inviteCode(window.location.hash) });
+  const door = frontDoor({ signInOn: SIGN_IN.length > 0, status, fresh: isFreshSignIn(), hasInvite: !!inviteCode(window.location.hash),
+    picked: wasPicked(), link: !/^#?\/?(\?.*)?$/.test(window.location.hash) }); // ov43: no link → Your groups
   if (door === 'join' || door === 'home') return <>{banner}<Join /></>;
   if (door === 'your-groups') return <>{banner}<YourGroups /></>;
   return (

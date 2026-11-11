@@ -211,16 +211,30 @@ const tapSize = async (page, locator, label) => {
   await ctx.close();
 }
 
-// 4. Just signed in with one group: straight in, no extra tap.
+// 4. ov43 (Josh 12 Nov): signed in, opening the app with no link → Your groups (the group, Start a new group, Ask some
+//    mates), even with one group. Tap the group → in, and stay in it this visit. A group's link goes straight in.
 {
   STATUS.v = member(GROUPS[0], [GROUPS[0]]);
   const { ctx, page } = await phone({ session: 'signed' });
   await ctx.addInitScript(() => localStorage.setItem('tgt-fresh-sign-in', String(Date.now())));
   await page.goto(SIGNIN);
+  await page.getByText('Your groups').first().waitFor({ timeout: 15000 });
+  check(!(await insideNow(page)), 'one group, no link: Your groups first (not straight in)');
+  check(await page.getByTestId('groups-ask').isVisible(), 'Your groups: ⛳ Ask some mates for a round');
+  await page.screenshot({ path: `${SHOTS}/s7-your-groups-one.png`, fullPage: true });
+  await page.getByRole('button', { name: new RegExp(GROUPS[0].name) }).first().click();
   await page.getByRole('link', { name: 'Leaderboard' }).first().waitFor({ timeout: 10000 }).catch(() => null);
-  check(await insideNow(page), 'one group: straight in (tab bar showing)');
+  check(await insideNow(page), 'tap the group: in (tab bar showing)');
   check(await page.evaluate(() => localStorage.getItem('tgt-fresh-sign-in')) === null, 'one group: "just signed in" cleared once inside');
+  await page.goto(`${SIGNIN}#/`); await page.reload();
+  await page.getByRole('link', { name: 'Leaderboard' }).first().waitFor({ timeout: 10000 }).catch(() => null);
+  check(await insideNow(page), 'picked this visit: stays in the group');
   await ctx.close();
+  const again = await phone({ session: 'signed' });
+  await again.page.goto(`${SIGNIN}#/plan`);
+  await again.page.getByRole('link', { name: 'Leaderboard' }).first().waitFor({ timeout: 10000 }).catch(() => null);
+  check(await insideNow(again.page), 'a group link (deep link): straight in');
+  await again.ctx.close();
 }
 
 // 5. A guest opens an invite link: sign in first, as part of joining (ov13); "Just this phone: scoring and voting only" underneath.

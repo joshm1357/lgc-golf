@@ -18,7 +18,7 @@ const FRESH_FOR_MS = 15 * 60 * 1000; // a sign-in left half-done (e.g. Google ca
  *  - 'your-groups' the list of groups you're in (or "You're not in a group yet")
  *  - 'inside'      straight into the current group
  */
-export function frontDoor({ signInOn, status, fresh = false, hasInvite = false }) {
+export function frontDoor({ signInOn, status, fresh = false, hasInvite = false, picked = true, link = false }) {
   const member = !!status?.is_member;
   if (!signInOn) return member ? 'inside' : 'join';
   // An invite link always wins: it's how a guest gets to the first tee without an account.
@@ -26,7 +26,11 @@ export function frontDoor({ signInOn, status, fresh = false, hasInvite = false }
   const signedIn = !!status?.signed_in;
   const groups = status?.groups || [];
   if (signedIn && !member) return 'your-groups'; // signed in but in no group: "You're not in a group yet"
+  // ov43 (Josh 12 Nov: "it should say new group or go to LGC, i.e. my list of groups … always, unless I open an LGC
+  // link"): a signed-in person opening the app with no link starts on Your groups — their groups, Start a new group,
+  // Ask some mates. A group's link (deep link) goes straight in, and so does a group already picked this visit.
   if (signedIn && fresh && groups.length > 1) return 'your-groups'; // just signed in, several groups: pick one
+  if (signedIn && !picked && !link) return 'your-groups';
   return member ? 'inside' : 'home';
 }
 
@@ -109,4 +113,14 @@ export function groupLook(g, current = null) {
 
 function safeStore() {
   try { return typeof localStorage !== 'undefined' ? localStorage : null; } catch { return null; }
+}
+
+// ov43: a group picked during this visit (Your groups, a group's link, Make the link…). Kept for the tab / app session
+// only, so opening the app again starts on Your groups.
+const PICKED_KEY = 'tgt-picked-group';
+export function markPicked(on = true) {
+  try { if (on) sessionStorage.setItem(PICKED_KEY, '1'); else sessionStorage.removeItem(PICKED_KEY); } catch { /* fine */ }
+}
+export function wasPicked() {
+  try { return sessionStorage.getItem(PICKED_KEY) === '1'; } catch { return true; }
 }

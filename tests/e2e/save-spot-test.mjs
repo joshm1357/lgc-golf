@@ -336,8 +336,10 @@ async function joinAsKurt(page, base) {
   await page.screenshot({ path: `${SHOTS}/10-wrong-password.png`, fullPage: true });
   await page.getByLabel('Password', { exact: true }).fill('fairway123');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  // ov43: signed in with no link → Your groups first; tap the group → in.
+  await page.getByRole('button', { name: /Test Group B/ }).first().click({ timeout: 10000 });
   await page.getByRole('link', { name: 'Leaderboard' }).first().waitFor({ timeout: 10000 }).catch(() => null);
-  check(await page.getByRole('link', { name: 'Trips', exact: true }).first().isVisible().catch(() => false), 'signed in: straight back into the group');
+  check(await page.getByRole('link', { name: 'Trips', exact: true }).first().isVisible().catch(() => false), 'signed in: Your groups → the group');
   const st = S.calls.filter((c) => c.p === '/rest/v1/rpc/my_status').pop();
   check(st?.sub === UID, 'same user id on the new phone, so the same group and player');
   await page.goto(`${PW}#/more`);
@@ -363,6 +365,7 @@ async function joinAsKurt(page, base) {
   await page.getByLabel('New password').fill('newpass123');
   await page.screenshot({ path: `${SHOTS}/11-reset.png`, fullPage: true });
   await page.getByRole('button', { name: 'Save new password and sign in' }).click();
+  await page.getByRole('button', { name: /Test Group B/ }).first().click({ timeout: 10000 }); // ov43: Your groups first
   await page.getByRole('link', { name: 'Leaderboard' }).first().waitFor({ timeout: 10000 }).catch(() => null);
   const v = S.calls.find((c) => c.p === '/auth/v1/verify');
   check(v?.body.type === 'recovery', 'the code is checked as a password reset');

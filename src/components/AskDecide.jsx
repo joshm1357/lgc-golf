@@ -10,9 +10,10 @@ import { notify } from '../lib/push.js';
 import { useRun, must } from '../lib/run.js';
 import { gate } from '../lib/savedgate.js';
 import {
-  askCells, rankCells, decideReady, voteChoices, nextBest, cellSpots, cellWords, leaderLine, teeFor, groupSize, teeTimes,
-  courseCheck, whereSummary, prefill, answerSlots, funnel, funnelReading, againAsk, WHERE_WISHES, ASK_PARTS,
+  askCells, rankCells, decideReady, voteChoices, nextBest, cellSpots, cellWords, leaderLine, teeFor, teeTimes, teeWords,
+  courseCheck, whereSummary, prefill, answerSlots, funnel, funnelReading, againAsk, ASK_PARTS, rankCourses, centreOf, fromFor,
 } from '../lib/ask.js';
+import { fmtDrive } from '../lib/tripfinder.js';
 import { courseWindows } from '../lib/daytiming.js';
 import { clock, dayLabel, dowOf, sydneyToday, cleanTime } from '../lib/callout.js';
 import { openCallout } from '../lib/calloutopen.js';
@@ -49,26 +50,28 @@ export function AskBoard({ plan, asked = [], ad, manage, onChoose, onVote }) {
   const probably = useMemo(() => ad.probably.map((p) => ({ player_id: p.player_id, slots: answerSlots(cells, prefill(cells, { pattern: p.pattern }).picks) })), [ad.probably, cells]);
   const ranked = useMemo(() => rankCells(cells, ad.answers, { probably, full: plan.ask_full || [] }), [cells, ad.answers, probably, plan.ask_full]);
   const top = ranked[0];
-  const ready = decideReady(ranked, { spots: plan.spots, closesAt: plan.closes_at });
-  const shown = ranked.filter((r) => r.can.length || r.probably.length).slice(0, 5);
+  const ready = decideReady(ranked, { closesAt: plan.closes_at });
+  const shown = ranked.filter((r) => r.can.length || r.maybe.length || r.probably.length).slice(0, 5);
   const answered = new Set(ad.answers.map((a) => a.player_id));
   const cant = ad.answers.filter((a) => a.cant).map((a) => a.player_id);
   const noReply = asked.filter((id) => !answered.has(id));
-  const where = whereSummary(ad.answers);
+  const where = { ...whereSummary(ad.answers), avoid: avoidSummary(ad.answers) };
   return (
     <div className="card pad stack" style={{ gap: 10 }} data-testid="ask-board">
-      <div className="row between"><strong>Who can make what</strong><span className="small muted">{groupSize(plan.spots)} make{groupSize(plan.spots) === 1 ? 's' : ''} a group</span></div>
+      <div className="row between"><strong>Who can make what</strong><span className="small muted">{plan.spots ? `max ${plan.spots}` : 'only ✓ counts'}</span></div>
       <div className={`ask-leader${ready.ready ? ' ready' : ''}`} data-testid="ask-leader">
-        <span className="label">{ready.why === 'full' ? '✅ That’s a group' : ready.why === 'closed' ? '⏰ Replies closed' : 'Leading'}</span>
+        <span className="label">{ready.why === 'full' ? '✅ A 4-ball can play' : ready.why === 'closed' ? '⏰ Replies closed' : 'Leading'}</span>
         <strong>{leaderLine(top)}</strong>
+        {top && top.can.length > 0 && <span className="small" data-testid="ask-tee-words">{teeWords(top.can.length, plan.spots)}</span>}
       </div>
       {shown.map((r, i) => {
         const sp = cellSpots(r, plan.spots);
         return (
           <div key={r.cell.key} className="ask-slot" data-testid="ask-slot">
             <div className="grow" style={{ minWidth: 0 }}>
-              <strong>{cellWords(r.cell)}</strong> <span className="small muted">{windowWords(r.cell)} · {r.can.length} can</span>
+              <strong>{cellWords(r.cell)}</strong> <span className="small muted">{windowWords(r.cell)} · {r.can.length} can{r.maybe.length ? ` · ${r.maybe.length} maybe` : ''}</span>
               <div className="small">{names(sp.in, byId) || '—'}{sp.reserve.length ? <span className="muted"> · reserve: {names(sp.reserve, byId)}</span> : null}</div>
+              {r.maybe.length > 0 && <div className="small muted">? maybe: {names(r.maybe, byId)}</div>}
               {r.probably.length > 0 && <div className="small muted">+ probably (usual week, unconfirmed): {names(r.probably, byId)}</div>}
               {r.notes.length > 0 && <div className="small muted">📝 {r.notes.map((n) => `${playerName(byId[n.player_id])}: ${n.note}`).join(' · ')}</div>}
             </div>
@@ -83,8 +86,8 @@ export function AskBoard({ plan, asked = [], ad, manage, onChoose, onVote }) {
       <span className="small muted" data-testid="ask-noreply">
         {noReply.length ? `Not answered: ${names(noReply, byId)}` : 'Everyone asked has answered.'}{cant.length ? ` · Can’t this round: ${names(cant, byId)}` : ''}
       </span>
-      {(where.courses.length > 0 || Object.keys(where.wishes).length > 0) && (
-        <span className="small muted">📍 Asked for: {[...where.courses.map((c) => `${c.name} (${c.n})`), ...Object.entries(where.wishes).map(([kk, n]) => `${WHERE_WISHES.find((w) => w.key === kk)?.label.toLowerCase()} (${n})`)].join(' · ')}</span>
+      {(where.courses.length > 0 || where.avoid.length > 0) && (
+        <span className="small muted" data-testid="ask-where-summary">📍 {[...where.courses.map((c) => `${c.name} (${c.n})`), ...where.avoid.map((a) => `not ${a.name} (${a.n})`)].join(' · ')}</span>
       )}
       {manage && <GuestContacts plan={plan} />}
       {manage && top && top.can.length > 0 && <CourseChecks plan={plan} r={top} answers={ad.answers} />}
@@ -93,21 +96,48 @@ export function AskBoard({ plan, asked = [], ad, manage, onChoose, onVote }) {
   );
 }
 
-/** The app's check per course for the leading window: visitor times, daylight, booking link. */
+/** "Not Moore Park" counts, from everyone's answers. */
+function avoidSummary(answers = []) {
+  const m = new Map();
+  for (const a of answers) if (!a.cant) for (const x of a.where?.avoid || []) { const k = String(x).toLowerCase(); m.set(k, { name: x, n: (m.get(k)?.n || 0) + 1 }); }
+  return [...m.values()].sort((a, b) => b.n - a.n);
+}
+
+/** The app's check per course for the leading window: ranked by total drive for the people who ✓ it (anyone over their
+ *  max flagged), then visitor times, daylight, booking link. */
 function CourseChecks({ plan, r, answers }) {
   const data = useData();
+  const people = useMemo(() => r.can.map((id) => ({ player_id: id, where: answers.find((a) => a.player_id === id)?.where || {} })), [r.can, answers]);
+  const places = people.flatMap((p) => fromFor(p.where, r.cell.date)).filter((f) => f.lat != null);
+  const centre = centreOf(places);
+  const [nearby, setNearby] = useState([]);
+  useEffect(() => {
+    if (!centre || !plan.ask_token) { setNearby([]); return; }
+    supabase.rpc('ask_courses_near', { p_token: plan.ask_token, p_lat: centre.lat, p_lng: centre.lng, p_limit: 12 }).then(({ data: d }) => setNearby(d || []), () => {});
+  }, [centre?.lat, centre?.lng, plan.ask_token]); // eslint-disable-line react-hooks/exhaustive-deps
+  const avoid = new Set(avoidSummary(answers).filter((a) => a.n * 2 > people.length).map((a) => a.name.toLowerCase()));
   const list = useMemo(() => {
     const out = [];
-    const add = (libId, name) => { if (libId && !out.some((x) => x.libId === libId)) out.push({ libId, name }); };
+    const add = (libId, name, lat = null, lng = null) => {
+      if (!libId) return;
+      const have = out.find((x) => x.libId === libId);
+      if (have) { if (have.lat == null && lat != null) { have.lat = lat; have.lng = lng; } return; }
+      out.push({ libId, id: libId, name, lat, lng });
+    };
     if (plan.course_id) add(data.coursesById[plan.course_id]?.library_id, plan.location_name);
     if (plan.library_course_id) add(plan.library_course_id, plan.location_name);
     for (const c of whereSummary(answers).courses) add(c.kind === 'library' ? c.id : data.coursesById[c.id]?.library_id, c.name);
+    for (const c of nearby) add(c.id, c.name, c.lat, c.lng);
     if (!out.length) for (const c of data.courses.filter((x) => x.library_id).slice(0, 3)) add(c.library_id, c.name);
-    return out.slice(0, 4);
-  }, [plan, answers, data.courses, data.coursesById]);
+    const known = new Map(nearby.map((c) => [c.id, c]));
+    for (const x of out) if (x.lat == null && known.has(x.libId)) { x.lat = known.get(x.libId).lat; x.lng = known.get(x.libId).lng; }
+    const ranked = rankCourses(out.filter((x) => x.lat != null && !avoid.has(String(x.name).toLowerCase())), people, r.cell.date);
+    const rest = out.filter((x) => x.lat == null && !avoid.has(String(x.name).toLowerCase())).map((course) => ({ course, total: null, known: 0, drives: [], over: [] }));
+    return [...ranked, ...rest].slice(0, 5);
+  }, [plan, answers, data.courses, data.coursesById, nearby, people, r.cell.date]); // eslint-disable-line react-hooks/exhaustive-deps
   const [info, setInfo] = useState({});
   useEffect(() => {
-    const ids = list.map((x) => x.libId);
+    const ids = list.map((x) => x.course.libId);
     if (!ids.length) return;
     Promise.all([
       supabase.from('course_booking_info').select('course_id,visitor_times,booking_url,phone').in('course_id', ids),
@@ -117,26 +147,31 @@ function CourseChecks({ plan, r, answers }) {
       for (const id of ids) m[id] = { booking: (b.data || []).find((x) => x.course_id === id) || null, research: (rs.data || []).find((x) => x.library_id === id) || null };
       setInfo(m);
     }, () => {});
-  }, [list.map((x) => x.libId).join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [list.map((x) => x.course.libId).join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!list.length) return null;
   const nine = r.nine.length > 0 && r.nine.length === r.can.length;
   return (
     <details className="co-more" data-testid="ask-course-check" open>
-      <summary>🔎 The courses for {cellWords(r.cell)}</summary>
+      <summary>🔎 Courses for {cellWords(r.cell)} — by drive for the {r.can.length} who can</summary>
       <div className="stack" style={{ gap: 6 }}>
-        {list.map((c) => {
+        {!people.some((p) => (p.where.from || []).length) && <span className="small muted">Nobody’s said where they’re leaving from yet — drive times show once they do.</span>}
+        {list.map((row) => {
+          const c = row.course;
           const i = info[c.libId] || {};
           const w = courseWindows(dowOf(r.cell.date), { booking: i.booking, research: i.research });
           const link = i.booking?.booking_url || i.research?.booking_url || (i.booking?.phone || i.research?.phone ? `tel:${i.booking?.phone || i.research?.phone}` : null);
           const chk = courseCheck({ cell: r.cell, windows: w, booking: link, nine });
           return (
             <div key={c.libId} className="small" data-testid="ask-course-row">
-              <strong>{c.name}</strong>: <span className={chk.visitors === 'no' ? 'err' : ''}>{chk.words}</span>
+              <strong>{c.name}</strong>
+              {row.known > 0 && <span> · 🚗 {fmtDrive(row.total / row.known)} average{row.over.length ? <span className="err"> · ⚠ over the max for {names(row.over, data.playersById)}</span> : ''}</span>}
+              <div className="small muted">{row.drives.filter((d) => d.min != null).map((d) => `${playerName(data.playersById[d.player_id]) || 'guest'} ${fmtDrive(d.min)}`).join(' · ')}</div>
+              <span className={chk.visitors === 'no' ? 'err' : ''}>{chk.words}</span>
               {link && <> · <a href={link} target="_blank" rel="noreferrer">{link.startsWith('tel:') ? 'call' : 'book'} ↗</a></>}
             </div>
           );
         })}
-        <span className="small muted">Unconfirmed = a guess from what’s usual for clubs that day.</span>
+        <span className="small muted">Drives are about, in a straight line plus roads. Unconfirmed = a guess from what’s usual for clubs that day.</span>
       </div>
     </details>
   );

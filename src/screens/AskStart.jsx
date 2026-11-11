@@ -10,8 +10,8 @@ import { Toaster } from '../components/ui.jsx';
 import { useRun, must } from '../lib/run.js';
 import { GolfTripCrest } from '../components/Logo.jsx';
 import { SignInButtons } from './Join.jsx';
-import { ASK_DAYS, ASK_PART_KEYS, ASK_PARTS, RANGE_CHOICES, askCells, askWords, cleanAsk, askCloses, dayWord } from '../lib/ask.js';
-import { DAY_KEYS, sydneyToday } from '../lib/callout.js';
+import { ASK_PART_KEYS, ASK_PARTS, RANGE_CHOICES, askCells, askWords, cleanAsk, askCloses, dayWord, DEFAULT_ASK, WEEK_DAYS } from '../lib/ask.js';
+import { sydneyToday } from '../lib/callout.js';
 import '../components/callout.css';
 
 export default function AskStart() {
@@ -19,16 +19,14 @@ export default function AskStart() {
   const signedIn = !!user && !user.is_anonymous;
   const today = sydneyToday();
   const [name, setName] = useState(() => String(user?.user_metadata?.full_name || user?.user_metadata?.name || '').split(' ')[0].slice(0, 30));
-  const [days, setDays] = useState(ASK_DAYS);
+  const [days, setDays] = useState(WEEK_DAYS.slice()); // v2.1: every day, any time, next 4 weeks; no group size
   const [parts, setParts] = useState([]);
-  const [range, setRange] = useState({ kind: 'next', days: 14 });
-  const [spots, setSpots] = useState(4);
+  const [range, setRange] = useState(DEFAULT_ASK.range);
   const [busy, run] = useRun();
   const ask = useMemo(() => cleanAsk({ days: days.length === 7 ? [] : days, parts, range, times: [] }), [days, parts, range]);
   const n = askCells(ask, today).length;
-  const toggle = (list, set, x) => set(list.includes(x) ? list.filter((y) => y !== x) : [...list, x]);
   const go = () => run(async () => {
-    const r = await must(supabase.rpc('start_round_ask', { p_my_name: name.trim(), p_ask: ask, p_spots: spots, p_closes_at: askCloses(ask, today).toISOString() }));
+    const r = await must(supabase.rpc('start_round_ask', { p_my_name: name.trim(), p_ask: ask, p_spots: null, p_closes_at: askCloses(ask, today).toISOString() }));
     setCurrentGroup(r.group_id);
     window.location.hash = `#/plan/${r.plan_id}`;
     window.location.reload();
@@ -52,26 +50,22 @@ export default function AskStart() {
           <div className="co-step">
             <span className="label">Days</span>
             <div className="co-chips" data-testid="ask-start-days">
-              {[...ASK_DAYS].map((d) => <button key={d} type="button" className="chip" aria-pressed={days.includes(d)} onClick={() => toggle(days, setDays, d)}>{dayWord(d)}</button>)}
-              <button type="button" className="chip" aria-pressed={days.length === 7} onClick={() => setDays(days.length === 7 ? ASK_DAYS : DAY_KEYS.slice())}>Any</button>
+              <button type="button" className="chip" aria-pressed={days.length === 7} onClick={() => setDays(WEEK_DAYS.slice())}>Every day</button>
+              {WEEK_DAYS.map((d) => <button key={d} type="button" className="chip" aria-pressed={days.length < 7 && days.includes(d)} onClick={() => setDays(days.length === 7 ? [d] : days.includes(d) && days.length === 1 ? WEEK_DAYS.slice() : days.includes(d) ? days.filter((x) => x !== d) : [...days, d])}>{dayWord(d)}</button>)}
             </div>
           </div>
           <div className="co-step">
             <span className="label">Times</span>
             <div className="co-chips">
-              {ASK_PART_KEYS.map((p) => <button key={p} type="button" className="chip" aria-pressed={!parts.length || parts.includes(p)} onClick={() => setParts(!parts.length ? ASK_PART_KEYS.filter((x) => x !== p) : parts.includes(p) ? (parts.length === 1 ? [] : parts.filter((x) => x !== p)) : parts.length + 1 === ASK_PART_KEYS.length ? [] : [...parts, p])}>{ASK_PARTS[p].label}</button>)}
-              <button type="button" className="chip" aria-pressed={!parts.length} onClick={() => setParts([])}>Any</button>
+              <button type="button" className="chip" aria-pressed={!parts.length} onClick={() => setParts([])}>Any time</button>
+              {ASK_PART_KEYS.map((p) => <button key={p} type="button" className="chip" aria-pressed={parts.includes(p)} onClick={() => setParts(!parts.length ? [p] : parts.includes(p) ? parts.filter((x) => x !== p) : parts.length + 1 === ASK_PART_KEYS.length ? [] : [...parts, p])}>{ASK_PARTS[p].label}</button>)}
             </div>
           </div>
           <div className="co-step">
             <span className="label">How far ahead</span>
             <div className="co-chips">{RANGE_CHOICES.map((c) => <button key={c.key} type="button" className="chip" aria-pressed={range.kind === c.range.kind && (c.range.kind === 'open' || range.days === c.range.days)} onClick={() => setRange(c.range)}>{c.label}</button>)}</div>
           </div>
-          <div className="co-step">
-            <span className="label">Group size</span>
-            <div className="co-chips">{[4, 8, 12].map((x) => <button key={x} type="button" className="chip" aria-pressed={spots === x} onClick={() => setSpots(x)}>{x}</button>)}</div>
-          </div>
-          <div className="small muted">{askWords(ask)} · {n} squares to tick</div>
+          <div className="small muted">{askWords(ask)} · they say when they can; you hear the first time a 4-ball can play</div>
           <button type="button" className="btn gold block" style={{ minHeight: 56 }} disabled={busy || !name.trim() || !n} onClick={go} data-testid="ask-start-go">⛳ Make the link</button>
           <span className="small muted">Next you share it to the group chat. You’ll see who can make what as they answer.</span>
         </div>

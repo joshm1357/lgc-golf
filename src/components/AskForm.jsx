@@ -1,7 +1,8 @@
-// ov43 — step 1 of "Anyone keen for a round?": the organiser's 10-second ask. Ticks the days and times on offer
-// (Thu / Fri / Sat / Sun / any; early / morning / arvo / twilight / any), how far ahead (a range, specific dates, or
-// "until we play"), and when it closes. "Same as last time" is one tap; exact times can be added; "Send to myself"
-// previews the reply screen and the WhatsApp message. Lives inside CalloutSheet (the set-time call-out is unchanged).
+// ov43 — step 1 of "Anyone keen for a round?": the organiser's 10-second ask. v2.1 (Josh 12 Nov): every day, any time,
+// next 4 weeks by default — the organiser narrows only if they want to. No group size: that's the answer, said in tee
+// times on the board; an optional "max players" sits under More (e.g. only 2 tee times to be had). "Same as last time"
+// is one tap; exact times can be added; "Send to myself" previews the reply screen and the WhatsApp message.
+// Lives inside CalloutSheet (the set-time call-out is unchanged).
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { useData, useSession, useFeature, playerName } from '../lib/store.jsx';
@@ -10,14 +11,15 @@ import { notify } from '../lib/push.js';
 import { useRun, must } from '../lib/run.js';
 import { gate } from '../lib/savedgate.js';
 import {
-  ASK_DAYS, ASK_PART_KEYS, ASK_PARTS, RANGE_CHOICES, askCells, askWords, cleanAsk, askCloses, askShareText, dayWord, isLong,
+  ASK_PART_KEYS, ASK_PARTS, RANGE_CHOICES, askCells, askWords, cleanAsk, askCloses, askShareText, dayWord, weekFirst,
+  DEFAULT_ASK, WEEK_DAYS,
 } from '../lib/ask.js';
-import { DAY_KEYS, sydneyToday, askable, closesWords, clock, dayLabel, cleanTime } from '../lib/callout.js';
+import { sydneyToday, askable, closesWords, clock, dayLabel, cleanTime } from '../lib/callout.js';
 import { CourseFinder } from './CalloutSheet.jsx';
 import AskReply from './AskReply.jsx';
 import './callout.css';
 
-const SPOT_CHOICES = [4, 8, 12];
+const MAX_CHOICES = [4, 8, 12]; // optional max players (a cap, never a target)
 const pad = (n) => String(n).padStart(2, '0');
 const toInput = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
@@ -28,16 +30,15 @@ export default function AskForm({ prefill = {}, onSaved }) {
   const today = sydneyToday();
   const [busy, run] = useRun();
   const start = prefill.ask ? cleanAsk(prefill.ask) : null;
-  const [days, setDays] = useState(start?.days?.length ? start.days : ['thu', 'fri', 'sat', 'sun']);
-  const [moreDays, setMoreDays] = useState(() => (start?.days || []).some((d) => !ASK_DAYS.includes(d)));
+  const [days, setDays] = useState(start?.days?.length ? start.days : WEEK_DAYS.slice());
   const [parts, setParts] = useState(start?.parts || []);
-  const [range, setRange] = useState(start?.range || { kind: 'next', days: 14 });
+  const [range, setRange] = useState(start?.range || DEFAULT_ASK.range);
   const [dates, setDates] = useState(start?.range?.kind === 'dates' ? start.range.dates : []);
   const [times, setTimes] = useState(start?.times || []);
   const [newT, setNewT] = useState({ date: '', at: '' });
   const [course, setCourse] = useState(prefill.course || null);
   const [finding, setFinding] = useState(false);
-  const [spots, setSpots] = useState(prefill.spots === null ? 'none' : prefill.spots || 4);
+  const [spots, setSpots] = useState(Number(prefill.spots) >= 2 ? Number(prefill.spots) : 'none');
   const people = useMemo(() => askable(data.players).sort((a, b) => playerName(a).localeCompare(playerName(b))), [data.players]);
   const [everyone, setEveryone] = useState(!prefill.invite);
   const [picked, setPicked] = useState(() => new Set(prefill.invite || people.map((p) => p.id)));
@@ -63,8 +64,8 @@ export default function AskForm({ prefill = {}, onSaved }) {
 
   const sameAsLast = () => {
     const a = cleanAsk(last.ask);
-    setDays(a.days.length ? a.days : DAY_KEYS.slice()); setParts(a.parts); setRange(a.range.kind === 'dates' ? { kind: 'next', days: 14 } : a.range);
-    setTimes([]); setSpots(last.spots ?? 'none');
+    setDays(a.days.length ? a.days : WEEK_DAYS.slice()); setParts(a.parts); setRange(a.range.kind === 'dates' ? DEFAULT_ASK.range : a.range);
+    setTimes([]); setSpots(Number(last.spots) >= 2 ? Number(last.spots) : 'none');
     if (last.course_id) setCourse({ kind: 'group', id: last.course_id, name: last.location_name });
     toast('Filled in from last time');
   };
@@ -81,26 +82,24 @@ export default function AskForm({ prefill = {}, onSaved }) {
   });
 
   const ready = cells.length > 0 && askedCount >= 2 && (range.kind !== 'dates' || dates.length > 0);
-  const shownDays = moreDays ? ['mon', 'tue', 'wed', ...ASK_DAYS] : ASK_DAYS;
   return (
     <div className="stack" data-testid="ask-form" style={{ gap: 16 }}>
-      <span className="small muted">Ask when they can play. The app finds the first time that fills a group — you choose, or put a few to a vote.</span>
+      <span className="small muted">Ask when they can play. Every day, any time, next 4 weeks — narrow it only if you want to. You hear the first time a 4-ball can play; you choose, or put a few to a vote.</span>
       {last && <button type="button" className="chip" style={{ alignSelf: 'flex-start' }} onClick={sameAsLast} data-testid="ask-same">↺ Same as last time</button>}
 
       <div className="co-step">
         <span className="label">Days</span>
         <div className="co-chips" role="group" aria-label="Days" data-testid="ask-days">
-          {shownDays.map((d) => <button key={d} type="button" className="chip" aria-pressed={days.includes(d)} onClick={() => toggle(days, setDays, d)}>{dayWord(d)}</button>)}
-          <button type="button" className="chip" aria-pressed={days.length === 7} onClick={() => { setDays(days.length === 7 ? ASK_DAYS : DAY_KEYS.slice()); setMoreDays(true); }}>Any</button>
-          {!moreDays && <button type="button" className="chip" onClick={() => setMoreDays(true)}>Mon–Wed</button>}
+          <button type="button" className="chip" aria-pressed={days.length === 7} onClick={() => setDays(WEEK_DAYS.slice())}>Every day</button>
+          {WEEK_DAYS.map((d) => <button key={d} type="button" className="chip" aria-pressed={days.length < 7 && days.includes(d)} onClick={() => setDays(days.length === 7 ? [d] : days.includes(d) && days.length === 1 ? WEEK_DAYS.slice() : days.includes(d) ? days.filter((x) => x !== d) : [...days, d])}>{dayWord(d)}</button>)}
         </div>
       </div>
 
       <div className="co-step">
         <span className="label">Times</span>
         <div className="co-chips" role="group" aria-label="Times of day" data-testid="ask-parts">
-          {ASK_PART_KEYS.map((p) => <button key={p} type="button" className="chip" aria-pressed={!parts.length || parts.includes(p)} onClick={() => setParts(!parts.length ? ASK_PART_KEYS.filter((x) => x !== p) : parts.includes(p) && parts.length === 1 ? [] : parts.includes(p) ? parts.filter((x) => x !== p) : parts.length + 1 === ASK_PART_KEYS.length ? [] : [...parts, p])}>{ASK_PARTS[p].label}</button>)}
-          <button type="button" className="chip" aria-pressed={!parts.length} onClick={() => setParts([])}>Any</button>
+          <button type="button" className="chip" aria-pressed={!parts.length} onClick={() => setParts([])}>Any time</button>
+          {ASK_PART_KEYS.map((p) => <button key={p} type="button" className="chip" aria-pressed={parts.includes(p)} onClick={() => setParts(!parts.length ? [p] : parts.includes(p) ? parts.filter((x) => x !== p) : parts.length + 1 === ASK_PART_KEYS.length ? [] : [...parts, p])}>{ASK_PARTS[p].label}</button>)}
         </div>
       </div>
 
@@ -118,18 +117,6 @@ export default function AskForm({ prefill = {}, onSaved }) {
         )}
       </div>
 
-      <details className="co-more" data-testid="ask-exact-times">
-        <summary>➕ Exact times{times.length ? ` (${times.length})` : ''} <span className="small muted" style={{ marginLeft: 6 }}>(optional — e.g. a tee time you can get)</span></summary>
-        <div className="stack" style={{ gap: 6 }}>
-          <div className="row" style={{ gap: 6 }}>
-            <input className="input grow" type="date" min={today} value={newT.date} onChange={(e) => setNewT({ ...newT, date: e.target.value })} aria-label="Exact time day" />
-            <input className="input" type="time" value={newT.at} onChange={(e) => setNewT({ ...newT, at: e.target.value })} aria-label="Exact time" style={{ maxWidth: 120 }} />
-            <button type="button" className="btn ghost sm" disabled={!newT.date || !cleanTime(newT.at)} onClick={() => { setTimes([...times, { date: newT.date, at: cleanTime(newT.at) }].slice(0, 12)); setNewT({ date: '', at: '' }); }}>Add</button>
-          </div>
-          <div className="co-chips">{times.map((t, i) => <button key={`${t.date}${t.at}`} type="button" className="chip" aria-pressed="true" onClick={() => setTimes(times.filter((_, j) => j !== i))}>{dayLabel(t.date)} {clock(t.at)} ✕</button>)}</div>
-        </div>
-      </details>
-
       <div className="co-step">
         <span className="label">Course <span className="small muted">optional — or let them say where</span></span>
         <div className="co-chips" data-testid="ask-course">
@@ -139,15 +126,6 @@ export default function AskForm({ prefill = {}, onSaved }) {
           <button type="button" className="chip" aria-pressed={finding} onClick={() => setFinding(!finding)}>🔎 Another</button>
         </div>
         {finding && <CourseFinder onPick={(c) => { setCourse(c); setFinding(false); }} />}
-      </div>
-
-      <div className="co-step">
-        <span className="label">Group size</span>
-        <div className="co-chips" role="group" aria-label="Spots" data-testid="ask-spots">
-          {SPOT_CHOICES.map((n) => <button key={n} type="button" className="chip" aria-pressed={spots === n} onClick={() => setSpots(n)}>{n}</button>)}
-          <button type="button" className="chip" aria-pressed={spots === 'none'} onClick={() => setSpots('none')}>No cap</button>
-        </div>
-        <span className="small muted">{cap ? `You hear as soon as ${cap} can make the same time. Extras go on reserve, in the order they answered.` : 'You hear as soon as 4 can make the same time.'}</span>
       </div>
 
       <div className="co-step">
@@ -166,13 +144,36 @@ export default function AskForm({ prefill = {}, onSaved }) {
         </details>
       </div>
 
-      <label className="field"><span>Replies close</span>
-        <input className="input" type="datetime-local" value={closes || toInput(autoCloses)} onChange={(e) => setCloses(e.target.value)} data-testid="ask-closes" /></label>
-      <span className="small muted" style={{ marginTop: -10 }}>{closesWords(closesAt)} — or sooner, the moment a time fills a group.</span>
-      <label className="field"><span>Note (optional)</span><input className="input" value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder="On a budget — twilight rates?" /></label>
-
+      <details className="co-more" data-testid="ask-more">
+        <summary>More — max players, exact times, when replies close, a note</summary>
+        <div className="stack" style={{ gap: 14, paddingTop: 8 }}>
+          <div className="co-step">
+            <span className="label">Max players <span className="small muted">optional — e.g. you can only get 2 tee times</span></span>
+            <div className="co-chips" role="group" aria-label="Max players" data-testid="ask-max">
+              <button type="button" className="chip" aria-pressed={spots === 'none'} onClick={() => setSpots('none')}>No max</button>
+              {MAX_CHOICES.map((x) => <button key={x} type="button" className="chip" aria-pressed={spots === x} onClick={() => setSpots(x)}>{x} ({x / 4} tee time{x === 4 ? '' : 's'})</button>)}
+            </div>
+            <span className="small muted">{cap ? `First ${cap} in, in the order they answered; the rest go on reserve.` : 'No cap — the app says it in tee times as people answer.'}</span>
+          </div>
+        <details className="co-more" data-testid="ask-exact-times">
+          <summary>➕ Exact times{times.length ? ` (${times.length})` : ''} <span className="small muted" style={{ marginLeft: 6 }}>(optional — e.g. a tee time you can get)</span></summary>
+          <div className="stack" style={{ gap: 6 }}>
+            <div className="row" style={{ gap: 6 }}>
+              <input className="input grow" type="date" min={today} value={newT.date} onChange={(e) => setNewT({ ...newT, date: e.target.value })} aria-label="Exact time day" />
+              <input className="input" type="time" value={newT.at} onChange={(e) => setNewT({ ...newT, at: e.target.value })} aria-label="Exact time" style={{ maxWidth: 120 }} />
+              <button type="button" className="btn ghost sm" disabled={!newT.date || !cleanTime(newT.at)} onClick={() => { setTimes([...times, { date: newT.date, at: cleanTime(newT.at) }].slice(0, 12)); setNewT({ date: '', at: '' }); }}>Add</button>
+            </div>
+            <div className="co-chips">{times.map((t, i) => <button key={`${t.date}${t.at}`} type="button" className="chip" aria-pressed="true" onClick={() => setTimes(times.filter((_, j) => j !== i))}>{dayLabel(t.date)} {clock(t.at)} ✕</button>)}</div>
+          </div>
+        </details>
+        <label className="field"><span>Replies close</span>
+          <input className="input" type="datetime-local" value={closes || toInput(autoCloses)} onChange={(e) => setCloses(e.target.value)} data-testid="ask-closes" /></label>
+        <span className="small muted" style={{ marginTop: -10 }}>{closesWords(closesAt)} — or sooner, the moment a time fills a group.</span>
+        <label className="field"><span>Note (optional)</span><input className="input" value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder="On a budget — twilight rates?" /></label>
+        </div>
+      </details>
       <div className="card pad small" style={{ background: 'var(--ground)' }} data-testid="ask-summary">
-        <strong>{askWords(ask)}</strong> · {cells.length} square{cells.length === 1 ? '' : 's'} to tick{isLong(ask, today) ? ' (shown as one row per day)' : ''}
+        <strong>{askWords(ask)}</strong>{cap ? ` · max ${cap}` : ''} · {weekFirst(ask, today) ? 'they fill in their usual week, then any odd dates' : `${cells.length} square${cells.length === 1 ? '' : 's'}`} · you hear the first time a 4-ball can play
       </div>
       <div className="row" style={{ gap: 8 }}>
         <button type="button" className="btn ghost" disabled={!cells.length} onClick={() => setPreview(true)} data-testid="ask-preview">👀 Send to myself</button>

@@ -13,7 +13,7 @@ import { useRun, must } from '../lib/run.js';
 import { GolfTripCrest } from '../components/Logo.jsx';
 import { SignInButtons } from './Join.jsx';
 import AskReply from '../components/AskReply.jsx';
-import { askCells, askWords, rankCells, cellWords, leaderLine, groupSize, contactOf, guestKeyName } from '../lib/ask.js';
+import { askCells, askWords, rankCells, cellWords, leaderLine, teeWords, contactOf, guestKeyName } from '../lib/ask.js';
 import { dayLabel, clock, sydneyToday } from '../lib/callout.js';
 import '../components/callout.css';
 
@@ -120,7 +120,7 @@ export default function AskPublic({ token }) {
             </div>
           )}
           <strong>When can you play?</strong>
-          <AskReply plan={plan} guest={{ submit }} answer={me?.answer ? { ...me.answer, updated_at: 'x' } : null} onSent={load} />
+          <AskReply plan={plan} guest={{ submit, key }} token={token} answer={me?.answer ? { ...me.answer, updated_at: 'x' } : null} onSent={load} />
         </div>
       ))}
 
@@ -128,8 +128,9 @@ export default function AskPublic({ token }) {
       {me && open && (
         <div className="card pad stack" style={{ gap: 6 }} data-testid="ask-public-board">
           <strong>Who can make what</strong>
-          <span>{leaderLine(top)}{top && top.can.length >= groupSize(d.spots) ? ' — that’s a group' : ''}</span>
-          {ranked.filter((r) => r.can.length).slice(0, 3).map((r) => <span key={r.cell.key} className="small"><strong>{cellWords(r.cell)}</strong>: {names(r.can)}</span>)}
+          <span>{leaderLine(top)}</span>
+          {top && top.can.length > 0 && <span className="small muted" data-testid="ask-public-tee">{teeWords(top.can.length, d.spots)}</span>}
+          {ranked.filter((r) => r.can.length).slice(0, 3).map((r) => <span key={r.cell.key} className="small"><strong>{cellWords(r.cell)}</strong>: {names(r.can)}{r.maybe.length ? <span className="muted"> · maybe: {names(r.maybe)}</span> : null}</span>)}
         </div>
       )}
 

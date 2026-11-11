@@ -1,0 +1,93 @@
+1. phone-only Al asks → refused: Save your spot first (Google or email) to do this
+2. Bo: no range → refused: Say how far ahead
+3. Bo asks: two Saturdays, any time, 3 spots, Moore Park → ok made
+4. Bo makes a plain fixed-time call-out too (103, unchanged) → ok made
+5. the ask → Anyone keen for a round? · callout true · planning · start - · Moore Park · spots 3 · range dates
+6. asked events → 7
+7. buzzed → Al: ⛳ Bo: anyone keen for a round? / Dan: ⛳ Bo: anyone keen for a round? / Ham: ⛳ Bo: anyone keen for a round? / Kurt: ⛳ Bo: anyone keen for a round? / Sam: ⛳ Bo: anyone keen for a round? / So: ⛳ Bo: anyone keen for a round?
+8. Sam answers → ok {"cant": false, "slots": 1}
+9. Kurt answers → ok {"cant": false, "slots": 2}
+10. phone-only Al answers → ok {"cant": false, "slots": 1}
+11. Dan (can't this round) answers → ok {"cant": true, "slots": 0}
+12. Ham answers → ok {"cant": false, "slots": 1}
+13. Bo answers → ok {"cant": false, "slots": 1}
+14. guest Gus (not asked) answers → ok {"cant": false, "slots": 1}
+15. Oz (other group) answers → refused: Round not found
+16. Sam: a bad window answers → refused: A time window looks like 11:30–15:00
+17. Sam: nothing ticked answers → refused: Tick at least one time, or say you can’t
+18. Sam adds Sat 9 early answers → ok {"cant": false, "slots": 2}
+19. can: Sat 2 arvo (reply order) → Sam,Kurt,Al,Bo,Gus
+20. can: Sat 9 morning → Kurt,Ham
+21. can: Sat 2 at 1:20pm (an exact time) → Sam,Kurt,Al,Bo,Gus
+22. best so far → 2030-11-02 arvo · 5
+23. Al's note kept → 9 holes only / nine true
+24. usual week saved for Ham only → Ham
+25. Sam reads usual weeks → ok 0
+26. Sam writes an answer directly → refused: permission denied for table callout_answers
+27. Ham reads usual weeks → ok 1
+28. Oz reads the answers → ok 0
+29. ask tick (group of 3 fills) → {"again": 0, "ready": 1, "nudged": 0}
+30. ready card → Bo: ⏰ Sat 2 arvo · 5 can
+31. ask tick again (once only) → {"again": 0, "ready": 0, "nudged": 0}
+32. 103 tick: fixed-time nudged, the ask left alone → {"nudged": 1, "tomorrow": 0}
+33. 103 nudge on the fixed one → Bo: ⏰ Replies are in — lock in Sat 1:20
+34. Bo asks again → ok made
+35. probably on the second ask → ok Ham {"sat|morning": true}
+36. Sam chooses (not his) → refused: Only whoever put it out (or an organiser) can choose
+37. Bo: tee time outside the window → refused: Pick a tee time inside 11:30am–3pm
+38. Bo chooses Sat 2 arvo, 1:20pm, Sam booking → ok true
+39. Kurt answers after lock-in answers → refused: This one’s decided — ask whoever put it out
+40. locked → confirmed · 2030-11-02 13:20 · chosen arvo
+41. in / reserve → Sam,Kurt,Al,Bo(r1),Gus(r2)
+42. round players → Al,Kurt,Sam
+43. you're in buzzes → Al: ✅ You’re in — Sat 2 Nov 1:20pm, Moore Park / Kurt: ✅ You’re in — Sat 2 Nov 1:20pm, Moore Park / Sam: ✅ You’re in — Sat 2 Nov 1:20pm, Moore Park
+44. reserve buzz → Gus: ⏳ You’re reserve #2 — Sat 2 Nov 1:20pm, Moore Park
+45. booking job → Book the tee time — Moore Park, Sat 2 Nov 1:20pm for 3 · Sam
+46. Dan moves it (not his) → refused: Only whoever put it out, an organiser or whoever’s booking can move it
+47. Sam (booking) says full → Sat 9 morning → ok {"in": ["00000000-0000-4000-8000-0000011a0b05", "00000000-0000-4000-8000-0000011a0b07"], "out": ["00000000-0000-4000-8000-0000011a0b03", "00000000-0000-4000-8000-0000011a0b02", "00000000-0000-4000-8000-0000011a0b08", "00000000-0000-4000-8000-0000011a0b04"], "reserve": []}
+48. moved → 2030-11-09 08:40 · full 2030-11-02|arvo · round on 2030-11-09
+49. in / reserve after the move → Kurt,Ham
+50. round players after the move → Ham,Kurt
+51. told they're out → Al: 📅 Moved to Sat 9 Nov 8:40am — you said you couldn’t make that / Bo: 📅 Moved to Sat 9 Nov 8:40am — you said you couldn’t make that / Gus: 📅 Moved to Sat 9 Nov 8:40am — you said you couldn’t make that
+52. Ham says booked (not his) → refused: Only whoever’s booking (or whoever put it out) can say it’s booked
+53. Ham: was that easy? 👍 → ok 
+54. Ham: again (once only) → ok 
+55. Sam says booked → ok 
+56. booked → true · job done true
+57. Caddie's inbox → like · [Round ask] Was that easy to organise? 👍 — dead easy
+58. funnel → asked=7 booked=1 easy_yes=1 locked=1 moved=1 opened=7 played=1 replied=7
+59. Sam answers ask 2 answers → ok {"cant": false, "slots": 2}
+60. Kurt answers ask 2 answers → ok {"cant": false, "slots": 1}
+61. Bo: one window isn't a vote → refused: Put 2 or 3 times to the vote
+62. Bo puts 2 to a vote → ok 2
+63. Bo then tries Choose → refused: It’s gone to a vote — lock it in from the vote
+64. the vote, pre-ticked → Sat 2 arvo (11:30am–3pm) [arvo] ✓ Sam
+Sat 9 arvo (11:30am–3pm) [arvo] ✓ Sam,Kurt
+65. Bo asks just Sam (an invite list) → ok made
+66. the ask has a 16-letter link → true
+67. anon: a wrong link → refused: That link isn’t working — ask whoever sent it for a new one
+68. anon: the link shows the ask → ok Bo · course TBC · planning · answers 0 · member false
+69. anon: no email or mobile → refused: Add an email or mobile so Bo can reach you
+70. anon: a bad email → refused: That email doesn’t look right
+71. anon: Pete answers Sat 2 arvo → ok key kept
+72. anon: Pete changes his answer with his key (same person) → ok 2
+73. anon: the link with his key shows his answer → ok Pete Guest · slots 2
+74. anon: reads the guests table → refused: permission denied for table callout_guests
+75. anon: reads players → ok 0
+76. anon: Bo's organiser tools → refused: permission denied for function ask_contacts
+77. Pete: a player waiting for approval (normal group), on the invite list → Pete Guest · approved false · invited true · pete@example.com / 0400 000 000
+78. Bo sees the contacts → ok Pete Guest pete@example.com 0400 000 000
+79. Sam (not running it) sees the contacts → ok 0
+80. Sam answers Sat 2 arvo → ok {"cant": false, "slots": 1}
+81. Bo answers and chooses Sat 2 arvo → ok {"cant": false, "slots": 1} true
+82. the round includes Pete (answered from the link) → Bo,Pete Guest,Sam
+83. anon: Pete sees he's in → ok {"place": 1, "has_spot": true}
+84. phone-only claims Pete's answer → refused: Sign in with Google or an email code first
+85. Pete signs in (Google) and claims it → ok true
+86. a wrong key → refused: That answer isn’t on this phone any more
+87. Pete is in the group now → guest · Pete Guest
+88. phone-only starts an ask with no group → refused: Sign in with Google or an email code first — then you can see the answers come in
+89. Ann (signed in, in no group) asks some mates → ok made
+90. Ann's ask → Ann’s rounds · quick true · organiser organiser · ask_* on 4 · has a link true
+91. anon: a mate answers Ann's ask → ok 0
+92. Mo: approved straight away (quick group), can't this round → Mo · approved true · cant true

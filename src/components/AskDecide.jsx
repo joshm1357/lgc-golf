@@ -86,6 +86,7 @@ export function AskBoard({ plan, asked = [], ad, manage, onChoose, onVote }) {
       {(where.courses.length > 0 || Object.keys(where.wishes).length > 0) && (
         <span className="small muted">📍 Asked for: {[...where.courses.map((c) => `${c.name} (${c.n})`), ...Object.entries(where.wishes).map(([kk, n]) => `${WHERE_WISHES.find((w) => w.key === kk)?.label.toLowerCase()} (${n})`)].join(' · ')}</span>
       )}
+      {manage && <GuestContacts plan={plan} />}
       {manage && top && top.can.length > 0 && <CourseChecks plan={plan} r={top} answers={ad.answers} />}
       {manage && <FunnelLine events={ad.events} asked={asked.length} />}
     </div>
@@ -136,6 +137,27 @@ function CourseChecks({ plan, r, answers }) {
           );
         })}
         <span className="small muted">Unconfirmed = a guess from what’s usual for clubs that day.</span>
+      </div>
+    </details>
+  );
+}
+
+/** People who answered from the link (no sign-in): how to reach them (whoever runs it, and the booker). */
+export function GuestContacts({ plan }) {
+  const [rows, setRows] = useState([]);
+  useEffect(() => { supabase.rpc('ask_contacts', { p_plan: plan.id }).then(({ data }) => setRows(data || []), () => {}); }, [plan.id, plan.status]);
+  if (!rows.length) return null;
+  return (
+    <details className="co-more" data-testid="ask-contacts">
+      <summary>📇 Answered from the link ({rows.length})</summary>
+      <div className="stack" style={{ gap: 4 }}>
+        {rows.map((r) => (
+          <span key={r.player_id} className="small">
+            <strong>{r.name}</strong>{r.signed_in ? ' · signed in' : ''}
+            {r.email && <> · <a href={`mailto:${r.email}`}>{r.email}</a></>}
+            {r.phone && <> · <a href={`tel:${r.phone.replace(/\s+/g, '')}`}>{r.phone}</a></>}
+          </span>
+        ))}
       </div>
     </details>
   );
@@ -296,6 +318,7 @@ export function BookingCard({ plan, ad, manage, inCount }) {
       {!plan.booked_at && !canAct && !plan.booker_id && me && (
         <button type="button" className="btn ghost block" disabled={busy} onClick={() => run(async () => { await must(supabase.rpc('callout_take_booking', { p_plan: plan.id })); await data.reload?.(); }, 'It’s yours to book')}>I’ll book it</button>
       )}
+      {canAct && <GuestContacts plan={plan} />}
       {next && !plan.booked_at && canAct && <span className="small muted">“Full” moves it to {cellWords(next.cell)} ({next.can.length} can) and tells everyone where they stand.</span>}
     </div>
   );

@@ -28,12 +28,13 @@ const db = {
   courses: [{ id: COURSE, group_id: GROUP, name: 'Moore Park', holes, created_at: now() }],
   trips: [], rounds: [], round_players: [], teams: [], team_players: [], trophies: [], quick_results: [], honour_board: [], scores: [],
   plans: [], plan_polls: [], plan_options: [], plan_votes: [], plan_rsvps: [], plan_invites: [], plan_items: [], plan_costs: [], plan_payments: [],
-  callout_answers: [], callout_events: [], player_usual_weeks: [], beta_feedback: [], course_booking_info: [], course_research: [], plan_groups: [], plan_group_members: [], plan_transfers: [], plan_comments: [], posts: [], comments: [], reactions: [], tee_groups: [],
+  callout_answers: [], callout_guests: [], callout_events: [], player_usual_weeks: [], beta_feedback: [], course_booking_info: [], course_research: [], plan_groups: [], plan_group_members: [], plan_transfers: [], plan_comments: [], posts: [], comments: [], reactions: [], tee_groups: [],
   group_features: ['planner', 'planner_tasks', 'feed', 'notifications', 'games', 'trophies'].map((k) => ({ group_id: GROUP, feature_key: k, enabled: true }))
     .concat(['weather', 'ai_helper'].map((k) => ({ group_id: GROUP, feature_key: k, enabled: false }))),
 };
 let me = { player_id: BO, is_admin: false, role: 'player' };
 const notifies = [];
+const startCalls = [];
 
 // ---------------------------------------------------------------- what 103 does
 function stampRsvp(row, old) {
@@ -120,7 +121,8 @@ function putRoundAsk(a) {
   const c = db.courses.find((x) => x.id === a.p_course);
   db.plans.push({ id, group_id: GROUP, kind: 'round', callout: true, name: 'Anyone keen for a round?', status: 'planning', proposed: false, created_by: me.player_id,
     organiser_id: me.player_id, start_date: null, end_date: null, tee_time: null, location_name: c?.name || null, course_id: a.p_course || null, spots: a.p_spots,
-    closes_at: a.p_closes_at, brief: a.p_note, invite_all: !a.p_invite, extras: {}, ask: a.p_ask, ask_full: [], trip_id: null, round_id: null, created_at: now() });
+    closes_at: a.p_closes_at, brief: a.p_note, invite_all: !a.p_invite, extras: {}, ask: a.p_ask, ask_full: [], trip_id: null, round_id: null, created_at: now(),
+    ask_token: Array.from({ length: 16 }, () => 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[crypto.randomInt(31)]).join('') });
   for (const p of db.players) ev(id, 'asked', p.id);
   db.posts.push({ id: crypto.randomUUID(), group_id: GROUP, kind: 'user', player_id: me.player_id, body: '⛳ Anyone keen for a round? Tap the times you can play.', link: `/plan/${id}?c=1`, created_at: now() });
   return id;
@@ -167,6 +169,37 @@ function askMove(a) {
   return {};
 }
 
+
+function askPublic(b, signedIn) {
+  const p = db.plans.find((x) => x.ask_token === String(b.p_token).toUpperCase());
+  if (!p) return { error: 'That link isn’t working — ask whoever sent it for a new one' };
+  const g = b.p_key ? db.callout_guests.find((x) => x.plan_id === p.id && x.key === b.p_key) : null;
+  const first = (id) => (db.players.find((x) => x.id === id)?.nickname || db.players.find((x) => x.id === id)?.name || '').split(' ')[0];
+  const ans = db.callout_answers.filter((a) => a.plan_id === p.id);
+  return { plan_id: p.id, group_id: GROUP, name: p.name, status: p.status, ask: p.ask, ask_full: p.ask_full || [], closes_at: p.closes_at, spots: p.spots,
+    course: p.location_name, by: first(p.created_by), start_date: p.start_date, tee_time: p.tee_time, booked: !!p.booked_at, member: signedIn,
+    voting: db.plan_polls.some((x) => x.plan_id === p.id && x.kind === 'dates'),
+    answers: ans.map((a) => ({ player_id: a.player_id, name: first(a.player_id), slots: a.slots, cant: a.cant, first_at: a.first_at })),
+    me: g ? { player_id: g.player_id, name: db.players.find((x) => x.id === g.player_id).name, claimed: false,
+      answer: (() => { const a = ans.find((x) => x.player_id === g.player_id); return a ? { slots: a.slots, cant: a.cant, where: a.where } : null; })(), standing: null } : null };
+}
+function guestAnswer(b) {
+  const p = db.plans.find((x) => x.ask_token === String(b.p_token).toUpperCase());
+  let g = b.p_key ? db.callout_guests.find((x) => x.plan_id === p.id && x.key === b.p_key) : null;
+  if (!g) {
+    if (!b.p_name) return { error: 'Your name, please' };
+    if (!b.p_email && !b.p_phone) return { error: 'Add an email or mobile so Bo can reach you' };
+    const pl = { id: crypto.randomUUID(), group_id: GROUP, name: b.p_name, approved: false, created_at: now() };
+    db.players.push(pl);
+    g = { player_id: pl.id, plan_id: p.id, email: b.p_email, phone: b.p_phone, key: crypto.randomUUID() };
+    db.callout_guests.push(g);
+  }
+  const old = db.callout_answers.find((x) => x.plan_id === p.id && x.player_id === g.player_id);
+  const row = { plan_id: p.id, player_id: g.player_id, group_id: GROUP, slots: b.p_cant ? [] : b.p_slots, cant: !!b.p_cant, where: b.p_where || {}, first_at: old?.first_at || now(), updated_at: now() };
+  if (old) Object.assign(old, row); else db.callout_answers.push(row);
+  return { key: g.key, player_id: g.player_id, slots: row.slots.length };
+}
+
 // ---------------------------------------------------------------- the fake Supabase
 const eqOf = (params, k) => { const v = params.get(k); return v && v.startsWith('eq.') ? v.slice(3) : null; };
 function matches(r, params) {
@@ -199,6 +232,10 @@ async function fake(route) {
     if (fn === 'callout_lock') { const r = calloutLock(body()); return r.error ? json({ message: r.error, code: 'P0001' }, 400) : json(r); }
     if (fn === 'find_courses') return json([]);
     if (fn === 'put_round_ask') return json(putRoundAsk(body()));
+    if (fn === 'ask_public') { const r = askPublic(body(), /Bearer [^ ]+\.[^ ]+\./.test(req.headers().authorization || '')); return r.error ? json({ message: r.error, code: 'P0001' }, 400) : json(r); }
+    if (fn === 'ask_guest_answer') { const r = guestAnswer(body()); return r.error ? json({ message: r.error, code: 'P0001' }, 400) : json(r); }
+    if (fn === 'ask_contacts') { const b = body(); return json(db.callout_guests.filter((g) => g.plan_id === b.p_plan).map((g) => ({ player_id: g.player_id, name: db.players.find((x) => x.id === g.player_id).name, email: g.email, phone: g.phone, signed_in: false }))); }
+    if (fn === 'start_round_ask') { const b = body(); const id = putRoundAsk({ p_ask: b.p_ask, p_spots: b.p_spots, p_closes_at: b.p_closes_at }); startCalls.push(b); return json({ group_id: GROUP, plan_id: id, token: db.plans.find((x) => x.id === id).ask_token }); }
     if (fn === 'callout_answer') return json(calloutAnswer(body()));
     if (fn === 'callout_seen') { ev(body().p_plan, 'opened'); return json(null); }
     if (fn === 'callout_probably') { const b = body(); const answered = new Set(db.callout_answers.filter((x) => x.plan_id === b.p_plan).map((x) => x.player_id)); return json(db.player_usual_weeks.filter((u) => !answered.has(u.player_id)).map((u) => ({ player_id: u.player_id, pattern: u.usual.pattern }))); }
@@ -401,6 +438,54 @@ db.group_features.push({ group_id: GROUP, feature_key: 'ask_notes', enabled: fal
 await as(phone, who(SAM), `/plan/${id2}`);
 await phone.getByTestId('ask-grid').waitFor();
 check(!(await phone.getByTestId('ask-hint').isVisible().catch(() => false)), 'switch: notes off hides the note hint');
+
+// 13. The ask's own link on a phone that has never used the app: straight onto the grid — no "Who are you?", no sign-in.
+me = BO_ME;
+const id3 = putRoundAsk({ p_ask: { days: ['sat', 'sun'], parts: [], range: { kind: 'next', days: 14 }, times: [] }, p_spots: 4, p_course: COURSE, p_closes_at: new Date(Date.now() + 86400000).toISOString() });
+const tok3 = db.plans.find((x) => x.id === id3).ask_token;
+const fresh = await (async () => {
+  const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await ctx.route('https://*.supabase.co/**', fake);
+  await ctx.addInitScript(() => { localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-first-open', JSON.stringify({ done: true })); });
+  const pg = await ctx.newPage(); pg.on('pageerror', (e) => fails.push(`page error (guest): ${e}`)); return pg;
+})();
+await fresh.goto(`${BASE}#/a/${tok3}`);
+await fresh.getByTestId('ask-public').waitFor({ timeout: 20000 });
+check(/Bo: anyone keen for a round\?/.test(await fresh.getByTestId('ask-public').innerText()), 'link: opens on the ask (“Bo: anyone keen for a round?”), no group, no sign-in');
+check(!(await fresh.getByText(/Who are you/i).isVisible().catch(() => false)), 'link: no “Who are you?”');
+await fresh.getByTestId('ask-public-name').fill('Pete');
+await fresh.getByTestId('ask-quick').getByRole('button', { name: 'Weekends only' }).click();
+await fresh.getByTestId('ask-send').click();
+await fresh.waitForTimeout(600);
+check(!db.callout_answers.some((a) => a.plan_id === id3), 'link: no email or mobile → not sent (asks for one)');
+await fresh.getByTestId('ask-public-contact').fill('pete@example.com');
+await fresh.screenshot({ path: `${SHOTS}/10-link-answer.png`, fullPage: true });
+await fresh.getByTestId('ask-send').click();
+await fresh.getByTestId('ask-public-mine').waitFor({ timeout: 10000 });
+const pete = db.callout_guests.find((g) => g.plan_id === id3);
+check(pete?.email === 'pete@example.com' && db.callout_answers.some((a) => a.plan_id === id3 && a.player_id === pete.player_id && a.slots.length > 0), 'link: Pete answered with his email');
+check(await fresh.getByTestId('ask-public-signin').isVisible(), 'link: then the nudge to sign in (buzz when it’s locked in)');
+check(await fresh.getByTestId('ask-public-board').isVisible(), 'link: after answering he sees who can make what');
+await fresh.screenshot({ path: `${SHOTS}/11-link-sent.png`, fullPage: true });
+await fresh.reload();
+await fresh.getByTestId('ask-public-mine').waitFor({ timeout: 10000 });
+check(/Pete/.test(await fresh.getByTestId('ask-public-mine').innerText()), 'link: this phone remembers his answer (he can change it)');
+
+// 14. Bo sees how to reach him.
+await as(phone, BO_ME, `/plan/${id3}`);
+await phone.getByTestId('ask-contacts').waitFor({ timeout: 10000 });
+await phone.getByTestId('ask-contacts').locator('summary').click();
+check(/pete@example\.com/.test(await phone.getByTestId('ask-contacts').innerText()), 'Bo: “Answered from the link” — Pete’s email');
+
+// 15. No group needed: signed in, #/ask → make the link → straight to the ask with Share.
+await as(laptop, who(JOSH), '/ask');
+await laptop.goto(`${BASE}#/ask`);
+await laptop.getByTestId('ask-start').waitFor({ timeout: 15000 });
+await laptop.getByTestId('ask-start-name').fill('Josh');
+await laptop.screenshot({ path: `${SHOTS}/12-ask-start.png`, fullPage: true });
+await laptop.getByTestId('ask-start-go').click();
+await laptop.waitForTimeout(1500);
+check(startCalls.length === 1 && startCalls[0].p_my_name === 'Josh' && startCalls[0].p_ask?.range?.kind === 'next', 'no group: “Make the link” starts an ask as Josh');
 
 await browser.close();
 console.log(fails.length ? `\n${fails.length} FAILED:\n- ${fails.join('\n- ')}` : '\nAll checks passed.');

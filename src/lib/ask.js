@@ -504,3 +504,17 @@ export function askShareText({ who = '', ask = null, courseName = '', link = '' 
   const when = ask ? askWords(ask) : '';
   return [head, [when, courseName].filter(Boolean).join(' · '), `Tap the times you can play (10 seconds): ${link}`.trim()].filter(Boolean).join('\n');
 }
+
+// ------------------------------------------------------------------ answering from the link (no sign-in)
+/** "Email or mobile" in one box → { email } | { phone } | null (not readable yet). */
+export function contactOf(text) {
+  const s = String(text || '').trim();
+  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s)) return { email: s.toLowerCase() };
+  const digits = s.replace(/[^0-9+]/g, '');
+  if (/^[0-9 +()-]{8,20}$/.test(s) && digits.replace(/\D/g, '').length >= 8) return { phone: s };
+  return null;
+}
+/** Where this phone keeps the key for an answer it sent from a link (so it can change it, or claim it after signing in). */
+export const guestKeyName = (token) => `tgt-ask-key:${String(token || '').toUpperCase()}`;
+/** The ask's own link. */
+export const askLink = (token, base = '') => `${base}#/a/${token}`;

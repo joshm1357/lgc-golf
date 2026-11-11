@@ -227,3 +227,16 @@ describe('sharing', () => {
     expect(askShareText({ who: 'Bo', ask: ASK, link: 'https://x/#/plan/1?c=1' })).toBe('⛳ Bo: anyone keen for a round?\nThu, Fri, Sat, Sun · any time · next 2 weeks\nTap the times you can play (10 seconds): https://x/#/plan/1?c=1');
   });
 });
+
+describe('answering from the link', () => {
+  it('reads an email or a mobile from one box', async () => {
+    const { contactOf, askLink, guestKeyName } = await import('./ask.js');
+    expect(contactOf('Pete@Example.com ')).toEqual({ email: 'pete@example.com' });
+    expect(contactOf('0412 345 678')).toEqual({ phone: '0412 345 678' });
+    expect(contactOf('+61 412 345 678')).toEqual({ phone: '+61 412 345 678' });
+    expect(contactOf('pete')).toBeNull();
+    expect(contactOf('1234')).toBeNull();
+    expect(askLink('ABC', 'https://x/')).toBe('https://x/#/a/ABC');
+    expect(guestKeyName('abc')).toBe('tgt-ask-key:ABC');
+  });
+});

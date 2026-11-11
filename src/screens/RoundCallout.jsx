@@ -141,7 +141,7 @@ export default function RoundCallout({ pd }) {
         )}
         {v.asking && manage && !cancelled && (
           <button type="button" className="btn ghost block" data-testid="ask-share"
-            onClick={async () => { const r = await shareText(askShareText({ who: by ? playerName(by) : '', ask: plan.ask, courseName: plan.location_name || '', link: `${window.location.origin}${import.meta.env.BASE_URL}#/plan/${plan.id}?c=1` })); if (r === 'copied') toast('Copied — paste it in the group chat'); }}>
+            onClick={async () => { const r = await shareText(askShareText({ who: by ? playerName(by) : '', ask: plan.ask, courseName: plan.location_name || '', link: plan.ask_token ? `${window.location.origin}${import.meta.env.BASE_URL}#/a/${plan.ask_token}` : `${window.location.origin}${import.meta.env.BASE_URL}#/plan/${plan.id}?c=1` })); if (r === 'copied') toast('Copied — paste it in the group chat'); }}>
             💬 Share to the group chat
           </button>
         )}

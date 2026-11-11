@@ -45,6 +45,8 @@ const SetupGuide = lazyScreen(() => import('./screens/SetupGuide.jsx'));
 const Privacy = lazyScreen(() => import('./screens/Legal.jsx'), 'Privacy');
 const Terms = lazyScreen(() => import('./screens/Legal.jsx'), 'Terms');
 const VoteLink = lazyScreen(() => import('./screens/VoteLink.jsx'));
+const AskPublic = lazyScreen(() => import('./screens/AskPublic.jsx')); // ov43: a round ask's own link, no group or sign-in
+const AskStart = lazyScreen(() => import('./screens/AskStart.jsx')); // ov43: ask some mates, no group needed
 const Profile = lazyScreen(() => import('./screens/Profile.jsx'));
 const Comps = lazyScreen(() => import('./screens/Comps.jsx'));
 const MapScreen = lazyScreen(() => import('./screens/MapScreen.jsx'));
@@ -221,6 +223,10 @@ function Gate() {
   if (loc.pathname === '/start' || loc.pathname.startsWith('/start/')) return <StartOrClosed />;
   // Privacy and terms (drafts): anyone can read them.
   if (loc.pathname === '/privacy') return <LazyArea resetKey="privacy" fallback={<Loading />}><Privacy /></LazyArea>;
+  // ov43: "Anyone keen for a round?" — its link opens straight on the grid (no group, no "Who are you?", no sign-in),
+  // and anyone signed in can ask some mates with no group.
+  if (loc.pathname.startsWith('/a/')) return <LazyArea resetKey="ask-link" fallback={<Loading />}><AskPublic token={loc.pathname.split('/')[2] || ''} /></LazyArea>;
+  if (loc.pathname === '/ask') return <LazyArea resetKey="ask-start" fallback={<Loading />}><AskStart /></LazyArea>;
   if (loc.pathname.startsWith('/v/')) return <LazyArea resetKey="vote-link" fallback={<Loading />}><Routes><Route path="/v/:token" element={<VoteLink />} /></Routes></LazyArea>; // 079: vote email answers, no sign-in
   if (loc.pathname === '/terms') return <LazyArea resetKey="terms" fallback={<Loading />}><Terms /></LazyArea>;
   // The clubhouse TV: read-only, no sign-in.

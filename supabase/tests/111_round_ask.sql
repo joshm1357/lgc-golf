@@ -6,10 +6,10 @@
 -- oz — another group.
 
 create temp table t_results (n serial, label text, result text);
-grant all on t_results to authenticated;
-grant all on sequence t_results_n_seq to authenticated;
+grant all on t_results to anon, authenticated;
+grant all on sequence t_results_n_seq to anon, authenticated;
 create temp table t_ids (k text primary key, v uuid);
-grant all on t_ids to authenticated;
+grant all on t_ids to anon, authenticated;
 
 create function pg_temp.try(p_label text, p_sql text) returns void language plpgsql as $$
 declare v text;
@@ -21,20 +21,20 @@ begin
     insert into t_results (label, result) values (p_label, 'refused: ' || sqlerrm);
   end;
 end $$;
-grant execute on function pg_temp.try(text, text) to authenticated;
+grant execute on function pg_temp.try(text, text) to anon, authenticated;
 create function pg_temp.as_user(p_user text, p_anon boolean) returns void language sql as $$
   select set_config('request.jwt.claims', json_build_object('sub', p_user, 'role', 'authenticated', 'is_anonymous', p_anon)::text, true) $$;
-grant execute on function pg_temp.as_user(text, boolean) to authenticated;
+grant execute on function pg_temp.as_user(text, boolean) to anon, authenticated;
 create function pg_temp.id(p_k text) returns uuid language sql as $$ select v from t_ids where k = p_k $$;
-grant execute on function pg_temp.id(text) to authenticated;
+grant execute on function pg_temp.id(text) to anon, authenticated;
 create function pg_temp.names(p uuid[]) returns text language sql as $$
   select coalesce(string_agg(pl.nickname, ',' order by o), '-') from unnest(p) with ordinality u(x, o) join public.players pl on pl.id = u.x $$;
-grant execute on function pg_temp.names(uuid[]) to authenticated;
+grant execute on function pg_temp.names(uuid[]) to anon, authenticated;
 create function pg_temp.order_of(p_plan uuid) returns text language sql as $$
   select coalesce(string_agg(pl.nickname || case when o.has_spot then '' else '(r' || o.place || ')' end, ',' order by o.has_spot desc, o.place), '-')
   from private.callout_order(p_plan) o join public.players pl on pl.id = o.player_id $$;
 create function pg_temp.round_people(p_plan uuid) returns text language sql as $$
-  select coalesce(string_agg(pl.nickname, ',' order by pl.nickname), '-') from public.plans p
+  select coalesce(string_agg(coalesce(pl.nickname, pl.name), ',' order by coalesce(pl.nickname, pl.name)), '-') from public.plans p
   join public.round_players rp on rp.round_id = p.round_id join public.players pl on pl.id = rp.player_id where p.id = p_plan $$;
 create function pg_temp.queued(p_plan uuid, p_kind text) returns text language sql as $$
   select coalesce(string_agg(pl.nickname || ': ' || q.title, ' / ' order by pl.nickname, q.id), '-') from public.notify_queue q
@@ -45,7 +45,7 @@ create function pg_temp.w(p_date text, p_part text) returns jsonb language sql a
   select jsonb_build_object('date', p_date, 'part', p_part,
     'from', case p_part when 'early' then '06:00' when 'morning' then '08:00' when 'arvo' then '11:30' else '16:30' end,
     'to', case p_part when 'early' then '07:59' when 'morning' then '11:29' when 'arvo' then '15:00' else '18:00' end) $$;
-grant execute on function pg_temp.w(text, text) to authenticated;
+grant execute on function pg_temp.w(text, text) to anon, authenticated;
 
 insert into public.groups (id, slug, name, group_pin, admin_pin, quick) values
   ('00000000-0000-4000-8000-00000000f111', 'test-g111', 'Test Group G111', 'G111-CODE-TEST-1', null, false),
@@ -208,6 +208,86 @@ reset role;
 insert into t_results (label, result) select 'the vote, pre-ticked', string_agg(o.label || ' [' || coalesce(o.part, '-') || '] ✓ ' ||
   coalesce((select pg_temp.names(array_agg(v.player_id order by v.first_yes_at)) from public.plan_votes v where v.option_id = o.id and v.response = 'yes'), '-'), ' | ' order by o.start_date)
   from public.plan_options o join public.plan_polls po on po.id = o.poll_id where po.plan_id = pg_temp.id('a2') and po.kind = 'dates';
+
+
+-- ---------------------------------------------------------------- The link: answer with no sign-in (anon)
+insert into auth.users (id, instance_id, aud, role, is_anonymous) values
+  ('00000000-0000-4000-8000-0000011a0a10', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', false),
+  ('00000000-0000-4000-8000-0000011a0a11', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', true);
+select pg_temp.as_user('00000000-0000-4000-8000-0000011a0a02', false); set local role authenticated;
+select pg_temp.try('Bo asks just Sam (an invite list)', $q$with x as (select public.put_round_ask(null, '{"days":["sat"],"parts":[],"range":{"kind":"dates","dates":["2030-11-02"]}}'::jsonb, 4, array[pg_temp.id('sam')]) as id) insert into t_ids select 'a3', id from x returning 'made'$q$);
+reset role;
+insert into t_ids select 'tok3', null;
+create temp table t_tok as select ask_token as t from public.plans where id = pg_temp.id('a3');
+grant all on t_tok to anon, authenticated;
+create temp table t_key (k text);
+grant all on t_key to anon, authenticated;
+insert into t_results (label, result) select 'the ask has a 16-letter link', (length(t) = 16)::text from t_tok;
+-- anon: no sign-in at all
+select set_config('request.jwt.claims', '{"role":"anon"}', true);
+set local role anon;
+select pg_temp.try('anon: a wrong link', $q$select public.ask_public('AAAAAAAAAAAAAAAA')::text$q$);
+select pg_temp.try('anon: the link shows the ask', $q$select (x ->> 'by') || ' · ' || coalesce(x ->> 'course', 'course TBC') || ' · ' || (x ->> 'status') || ' · answers ' || jsonb_array_length(x -> 'answers') || ' · member ' || (x ->> 'member') from (select public.ask_public((select t from t_tok)) as x) y$q$);
+select pg_temp.try('anon: no email or mobile', $q$select public.ask_guest_answer((select t from t_tok), 'Pete', null, null, jsonb_build_array(pg_temp.w('2030-11-02', 'arvo')))::text$q$);
+select pg_temp.try('anon: a bad email', $q$select public.ask_guest_answer((select t from t_tok), 'Pete', 'pete@', null, jsonb_build_array(pg_temp.w('2030-11-02', 'arvo')))::text$q$);
+select pg_temp.try('anon: Pete answers Sat 2 arvo', $q$with x as (select public.ask_guest_answer((select t from t_tok), 'Pete Guest', 'Pete@Example.com', null, jsonb_build_array(pg_temp.w('2030-11-02', 'arvo'))) as r)
+  insert into t_key select r ->> 'key' from x returning 'key kept'$q$);
+select pg_temp.try('anon: Pete changes his answer with his key (same person)', $q$select (public.ask_guest_answer((select t from t_tok), null, null, '0400 000 000', jsonb_build_array(pg_temp.w('2030-11-02', 'arvo'), pg_temp.w('2030-11-02', 'morning')), false, null, (select k from t_key)) ->> 'slots')$q$);
+select pg_temp.try('anon: the link with his key shows his answer', $q$select (x -> 'me' ->> 'name') || ' · slots ' || jsonb_array_length(x -> 'me' -> 'answer' -> 'slots') from (select public.ask_public((select t from t_tok), (select k from t_key)) as x) y$q$);
+select pg_temp.try('anon: reads the guests table', $q$select count(*)::text from public.callout_guests$q$);
+select pg_temp.try('anon: reads players', $q$select count(*)::text from public.players$q$);
+select pg_temp.try('anon: Bo''s organiser tools', $q$select count(*)::text from public.ask_contacts(pg_temp.id('a3'))$q$);
+reset role;
+insert into t_results (label, result) select 'Pete: a player waiting for approval (normal group), on the invite list', p.name || ' · approved ' || p.approved || ' · invited ' ||
+  exists (select 1 from public.plan_invites i where i.plan_id = pg_temp.id('a3') and i.player_id = p.id) || ' · ' || g.email || ' / ' || g.phone
+  from public.callout_guests g join public.players p on p.id = g.player_id where g.plan_id = pg_temp.id('a3');
+select pg_temp.as_user('00000000-0000-4000-8000-0000011a0a02', false); set local role authenticated;
+select pg_temp.try('Bo sees the contacts', $q$select string_agg(name || ' ' || coalesce(email, '-') || ' ' || coalesce(phone, '-'), ', ') from public.ask_contacts(pg_temp.id('a3'))$q$);
+reset role;
+select pg_temp.as_user('00000000-0000-4000-8000-0000011a0a03', false); set local role authenticated;
+select pg_temp.try('Sam (not running it) sees the contacts', $q$select count(*)::text from public.ask_contacts(pg_temp.id('a3'))$q$);
+select pg_temp.try('Sam answers Sat 2 arvo', $q$select public.callout_answer(pg_temp.id('a3'), jsonb_build_array(pg_temp.w('2030-11-02', 'arvo')))::text$q$);
+reset role;
+select pg_temp.as_user('00000000-0000-4000-8000-0000011a0a02', false); set local role authenticated;
+select pg_temp.try('Bo answers and chooses Sat 2 arvo', $q$select public.callout_answer(pg_temp.id('a3'), jsonb_build_array(pg_temp.w('2030-11-02', 'arvo')))::text || ' ' || (public.callout_ask_choose(pg_temp.id('a3'), '2030-11-02', '11:30', '15:00', 'arvo', null, pg_temp.id('moore')) ? 'round_id')::text$q$);
+reset role;
+insert into t_results (label, result) select 'the round includes Pete (answered from the link)', pg_temp.round_people(pg_temp.id('a3'));
+select set_config('request.jwt.claims', '{"role":"anon"}', true); set local role anon;
+select pg_temp.try('anon: Pete sees he''s in', $q$select (public.ask_public((select t from t_tok), (select k from t_key)) -> 'me' -> 'standing')::text$q$);
+reset role;
+-- Pete signs in later: the answer becomes his.
+select pg_temp.as_user('00000000-0000-4000-8000-0000011a0a11', true); set local role authenticated;
+select pg_temp.try('phone-only claims Pete''s answer', $q$select public.ask_guest_claim((select t from t_tok), (select k from t_key))::text$q$);
+reset role;
+select pg_temp.as_user('00000000-0000-4000-8000-0000011a0a10', false); set local role authenticated;
+select pg_temp.try('Pete signs in (Google) and claims it', $q$select (public.ask_guest_claim((select t from t_tok), (select k from t_key)) ->> 'plan_id' = pg_temp.id('a3')::text)::text$q$);
+select pg_temp.try('a wrong key', $q$select public.ask_guest_claim((select t from t_tok), 'WRONGKEY')::text$q$);
+reset role;
+insert into t_results (label, result) select 'Pete is in the group now', m.role || ' · ' || p.name from public.group_members m join public.players p on p.id = m.player_id
+  where m.user_id = '00000000-0000-4000-8000-0000011a0a10';
+
+-- ---------------------------------------------------------------- No group needed
+select pg_temp.as_user('00000000-0000-4000-8000-0000011a0a11', true); set local role authenticated;
+select pg_temp.try('phone-only starts an ask with no group', $q$select public.start_round_ask('Ann', '{"days":[],"parts":[],"range":{"kind":"next","days":14}}')::text$q$);
+reset role;
+-- New groups are open on staging (047's switch; on live only platform admins until the friends' beta).
+update private.platform_flags set is_on = true where key = 'new_groups_open';
+insert into auth.users (id, instance_id, aud, role, is_anonymous) values
+  ('00000000-0000-4000-8000-0000011a0a12', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', false);
+select pg_temp.as_user('00000000-0000-4000-8000-0000011a0a12', false); set local role authenticated;
+select pg_temp.try('Ann (signed in, in no group) asks some mates', $q$with x as (select public.start_round_ask('Ann', '{"days":["sat","sun"],"parts":[],"range":{"kind":"next","days":14}}'::jsonb, 4) as r)
+  insert into t_ids select 'a4', (r ->> 'plan_id')::uuid from x returning 'made'$q$);
+reset role;
+insert into t_results (label, result) select 'Ann''s ask', g.name || ' · quick ' || g.quick || ' · organiser ' || (select m.role from public.group_members m where m.group_id = g.id and m.user_id = '00000000-0000-4000-8000-0000011a0a12')
+  || ' · ask_* on ' || (select count(*) from public.group_features f where f.group_id = g.id and f.feature_key like 'ask\_%' and f.enabled) || ' · has a link ' || (p.ask_token is not null)
+  from public.plans p join public.groups g on g.id = p.group_id where p.id = pg_temp.id('a4');
+create temp table t_tok4 as select ask_token as t from public.plans where id = pg_temp.id('a4');
+grant all on t_tok4 to anon, authenticated;
+select set_config('request.jwt.claims', '{"role":"anon"}', true); set local role anon;
+select pg_temp.try('anon: a mate answers Ann''s ask', $q$select (public.ask_guest_answer((select t from t_tok4), 'Mo', null, '0412 345 678', '[]'::jsonb, true) ->> 'slots')$q$);
+reset role;
+insert into t_results (label, result) select 'Mo: approved straight away (quick group), can''t this round', p.name || ' · approved ' || p.approved || ' · cant ' || a.cant
+  from public.callout_answers a join public.players p on p.id = a.player_id where a.plan_id = pg_temp.id('a4');
 
 do $$ begin
   raise exception 'RESULTS: %', (select string_agg(n || '. ' || label || ' → ' || result, ' | ' order by n) from t_results);

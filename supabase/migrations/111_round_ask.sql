@@ -29,11 +29,18 @@
 --     window fills a group, or replies close, ONE card to the organiser ("Sat 21 arvo · 5 can — choose or vote"); the day
 --     after it's played, "Go again in 2 weeks?". Buzzes reuse 103's kinds, so the notify function needs no change.
 --   * Feature switches (all under 'planner', on by default): ask_usual_week, ask_where, ask_notes, ask_whos_in.
+--   * Independent of a group (Josh 12 Nov): every ask has its own link (#/a/<token>) that opens straight on the grid — no
+--     group, no "Who are you?", no sign-in. People answer with a name and an email or mobile (ask_guest_answer) and are
+--     nudged to sign in, which makes the answer theirs in the app (ask_guest_claim). start_round_ask lets a signed-in
+--     person ask some mates with no group (a hidden quick group, 036's kind). ask_contacts gives the organiser and the
+--     booker the guests' email / mobile.
 
 -- =================================================================================================== columns
 alter table public.plans add column if not exists ask jsonb check (ask is null or jsonb_typeof(ask) = 'object');
 alter table public.plans add column if not exists ask_full text[] not null default '{}';
 alter table public.plans add column if not exists booked_at timestamptz;
+-- The ask's own link (#/a/<token>): opens straight on the grid, no group and no sign-in needed (Josh 12 Nov).
+alter table public.plans add column if not exists ask_token text unique check (ask_token is null or ask_token ~ '^[23456789A-HJ-NP-Z]{16}$');
 
 insert into public.feature_catalogue (key, default_on, parent, tier) values
   ('ask_usual_week', true, 'planner', 'free'),
@@ -80,6 +87,25 @@ drop policy if exists "me only" on public.player_usual_weeks;
 create policy "me only" on public.player_usual_weeks for select to authenticated
   using (player_id = private.my_player_id(group_id));
 revoke insert, update, delete on public.player_usual_weeks from anon, authenticated;
+
+-- =================================================================================================== guests (answered by link)
+-- Someone who answered from the link without signing in: a player row in the group (approved straight away in a quick
+-- group; an organiser approves them in a normal one) plus, here, how to reach them and the hash of the key their phone
+-- keeps to change the answer. Server only: the app never reads this table (ask_contacts gives the organiser the contacts).
+create table if not exists public.callout_guests (
+  player_id uuid primary key references public.players(id) on delete cascade,
+  plan_id uuid not null references public.plans(id) on delete cascade,
+  group_id uuid not null references public.groups(id) on delete cascade,
+  email text check (email is null or length(email) <= 120),
+  phone text check (phone is null or phone ~ '^[0-9 +()-]{8,20}$'),
+  key_hash text not null,
+  user_id uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  check (email is not null or phone is not null)
+);
+create index if not exists callout_guests_plan_idx on public.callout_guests (plan_id);
+alter table public.callout_guests enable row level security;
+revoke all on public.callout_guests from anon, authenticated;
 
 -- =================================================================================================== events (funnel)
 create table if not exists public.callout_events (
@@ -202,27 +228,20 @@ end $$;
 -- =================================================================================================== ask
 -- p_ask: lib/ask.js cleanAsk() — { days: [...], parts: [...], range: { kind: 'next', days } | { kind: 'dates', dates } |
 -- { kind: 'open' }, times: [{ date, at }] }. The rest as put_round_out. → the plan id.
-create or replace function public.put_round_ask(p_name text, p_ask jsonb, p_spots int default null, p_invite uuid[] default null,
-  p_closes_at timestamptz default null, p_note text default null, p_course uuid default null, p_library uuid default null,
-  p_course_name text default null)
+-- The ask itself, in a group already checked: the plan, its link, who's asked, the buzz, the Feed post. → plan id.
+create or replace function private.ask_create(p_g uuid, p_me uuid, p_name text, p_ask jsonb, p_spots int, p_invite uuid[],
+  p_closes_at timestamptz, p_note text, p_course uuid, p_library uuid, p_course_name text)
 returns uuid language plpgsql security definer set search_path = '' as $$
-declare v_g uuid := private.current_group(); me uuid; v_id uuid; v_asked uuid[]; v_name text; v_course_name text; v_kind text; p uuid;
-        v_closes timestamptz;
+declare v_id uuid; v_asked uuid[]; v_name text; v_course_name text; v_kind text; p uuid; v_closes timestamptz; v_tok text;
 begin
-  perform private.require_saved(v_g);
-  if v_g is null or not private.is_group_member(v_g) then raise exception 'Join the group first'; end if;
-  if private.is_group_guest(v_g) then raise exception 'Guests can say when they can play, but can’t ask the group'; end if;
-  if not public.feature_on(v_g, 'planner') then raise exception 'The Trips planner is switched off for this group'; end if;
-  me := private.my_player_id(v_g);
-  if me is null then raise exception 'Pick your name first'; end if;
-  if jsonb_typeof(p_ask) <> 'object' or jsonb_typeof(p_ask -> 'range') <> 'object' then raise exception 'Say how far ahead'; end if;
+  if coalesce(jsonb_typeof(p_ask), '') <> 'object' or coalesce(jsonb_typeof(p_ask -> 'range'), '') <> 'object' then raise exception 'Say how far ahead'; end if;
   v_kind := p_ask -> 'range' ->> 'kind';
-  if v_kind not in ('next', 'dates', 'open') then raise exception 'Say how far ahead'; end if;
+  if coalesce(v_kind, '') not in ('next', 'dates', 'open') then raise exception 'Say how far ahead'; end if;
   if v_kind = 'dates' and coalesce(jsonb_array_length(p_ask -> 'range' -> 'dates'), 0) = 0 then raise exception 'Pick at least one date'; end if;
   if length(p_ask::text) > 4000 then raise exception 'That ask is too big — fewer dates'; end if;
   if p_spots is not null and p_spots not between 2 and 72 then raise exception 'Spots: from 2 to 72, or no cap'; end if;
   if p_course is not null then
-    select name into v_course_name from public.courses where id = p_course and group_id = v_g;
+    select name into v_course_name from public.courses where id = p_course and group_id = p_g;
     if v_course_name is null then raise exception 'That course isn’t one of the group’s'; end if;
   elsif p_library is not null then
     select name into v_course_name from public.course_library where id = p_library and not hidden;
@@ -232,59 +251,130 @@ begin
   end if;
   if p_invite is not null then
     select coalesce(array_agg(distinct pl.id), '{}') into v_asked from public.players pl
-    where pl.group_id = v_g and pl.id = any (p_invite) and pl.approved is not false;
-    if not (me = any (v_asked)) then v_asked := v_asked || me; end if;
+    where pl.group_id = p_g and pl.id = any (p_invite) and pl.approved is not false;
+    if not (p_me = any (v_asked)) then v_asked := v_asked || p_me; end if;
     if cardinality(v_asked) < 2 then raise exception 'Ask at least one other person'; end if;
   end if;
   v_closes := coalesce(p_closes_at, now() + interval '2 days');
   if v_closes <= now() then raise exception 'Replies need to close in the future'; end if;
   v_name := coalesce(nullif(btrim(left(coalesce(p_name, ''), 60)), ''), 'Anyone keen for a round?');
+  loop
+    v_tok := private.random_code(16);
+    exit when not exists (select 1 from public.plans where ask_token = v_tok);
+  end loop;
 
   perform set_config('lgc.callout', 'on', true);
   insert into public.plans (group_id, kind, callout, name, status, proposed, created_by, location_name, course_id, library_course_id,
-    spots, closes_at, brief, invite_all, ask)
-  values (v_g, 'round', true, v_name, 'planning', false, me, v_course_name, p_course, case when p_course is null then p_library end,
-    p_spots, v_closes, nullif(btrim(left(coalesce(p_note, ''), 500)), ''), p_invite is null, p_ask)
+    spots, closes_at, brief, invite_all, ask, ask_token)
+  values (p_g, 'round', true, v_name, 'planning', false, p_me, v_course_name, p_course, case when p_course is null then p_library end,
+    p_spots, v_closes, nullif(btrim(left(coalesce(p_note, ''), 500)), ''), p_invite is null, p_ask, v_tok)
   returning id into v_id;
   perform set_config('lgc.callout', 'off', true);
   if p_invite is not null then
-    insert into public.plan_invites (plan_id, player_id, group_id, invited_by) select v_id, x, v_g, me from unnest(v_asked) x on conflict do nothing;
+    insert into public.plan_invites (plan_id, player_id, group_id, invited_by) select v_id, x, p_g, p_me from unnest(v_asked) x on conflict do nothing;
   end if;
-  foreach p in array coalesce(v_asked, private.callout_everyone(v_g)) loop
-    perform private.ask_event(v_id, v_g, p, 'asked');
+  foreach p in array coalesce(v_asked, private.callout_everyone(p_g)) loop
+    perform private.ask_event(v_id, p_g, p, 'asked');
   end loop;
-  perform private.callout_queue(v_g, coalesce(v_asked, private.callout_everyone(v_g)), 'callout_new',
-    '⛳ ' || private.callout_first(me) || ': anyone keen for a round?',
-    'Tap the times you can play' || coalesce(' · ' || v_course_name, '') || '. 10 seconds.', v_id, me);
-  if p_invite is null and public.feature_on(v_g, 'feed') then
+  perform private.callout_queue(p_g, coalesce(v_asked, private.callout_everyone(p_g)), 'callout_new',
+    '⛳ ' || private.callout_first(p_me) || ': anyone keen for a round?',
+    'Tap the times you can play' || coalesce(' · ' || v_course_name, '') || '. 10 seconds.', v_id, p_me);
+  if p_invite is null and public.feature_on(p_g, 'feed') then
     insert into public.posts (group_id, kind, player_id, body, link)
-    values (v_g, 'user', me, '⛳ Anyone keen for a round? Tap the times you can play' || coalesce(' — ' || v_course_name, '') || '.',
+    values (p_g, 'user', p_me, '⛳ Anyone keen for a round? Tap the times you can play' || coalesce(' — ' || v_course_name, '') || '.',
       '/plan/' || v_id::text || '?c=1');
   end if;
   return v_id;
 end $$;
+revoke all on function private.ask_create(uuid, uuid, text, jsonb, int, uuid[], timestamptz, text, uuid, uuid, text) from public, anon, authenticated;
+
+-- In a group you're in. → the plan id.
+create or replace function public.put_round_ask(p_name text, p_ask jsonb, p_spots int default null, p_invite uuid[] default null,
+  p_closes_at timestamptz default null, p_note text default null, p_course uuid default null, p_library uuid default null,
+  p_course_name text default null)
+returns uuid language plpgsql security definer set search_path = '' as $$
+declare v_g uuid := private.current_group(); me uuid;
+begin
+  perform private.require_saved(v_g);
+  if v_g is null or not private.is_group_member(v_g) then raise exception 'Join the group first'; end if;
+  if private.is_group_guest(v_g) then raise exception 'Guests can say when they can play, but can’t ask the group'; end if;
+  if not public.feature_on(v_g, 'planner') then raise exception 'The Trips planner is switched off for this group'; end if;
+  me := private.my_player_id(v_g);
+  if me is null then raise exception 'Pick your name first'; end if;
+  return private.ask_create(v_g, me, p_name, p_ask, p_spots, p_invite, p_closes_at, p_note, p_course, p_library, p_course_name);
+end $$;
 revoke all on function public.put_round_ask(text, jsonb, int, uuid[], timestamptz, text, uuid, uuid, text) from public, anon;
 grant execute on function public.put_round_ask(text, jsonb, int, uuid[], timestamptz, text, uuid, uuid, text) to authenticated;
+
+-- No group needed (Josh 12 Nov: "start a call out to people without starting a group"): a signed-in person asks some
+-- mates. Behind the scenes it's a quick group (036's kind: "<name>'s rounds", hidden until made official), with them as
+-- organiser. → { group_id, plan_id, token }
+create or replace function public.start_round_ask(p_my_name text, p_ask jsonb, p_spots int default 4, p_closes_at timestamptz default null,
+  p_note text default null, p_library uuid default null)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := auth.uid(); v_me text := btrim(regexp_replace(coalesce(p_my_name, ''), '[[:cntrl:]]+', ' ', 'g'));
+        v_g uuid; v_p uuid; v_c uuid; v_slug text; v_base text; v_n int := 1; v_code text; v_plan uuid; l record;
+begin
+  if v_uid is null or coalesce((select is_anonymous from auth.users where id = v_uid), true) then
+    raise exception 'Sign in with Google or an email code first — then you can see the answers come in' using errcode = '42501', hint = 'save_spot';
+  end if;
+  if length(v_me) not between 1 and 30 then raise exception 'Your name needs 1–30 characters'; end if;
+  perform pg_advisory_xact_lock(hashtext('create_group:' || v_uid::text));
+  if (select count(*) from public.groups where created_by = v_uid and quick and created_at > now() - interval '1 day') >= 10 then
+    raise exception 'That’s 10 asks today — try again tomorrow';
+  end if;
+  v_base := btrim(left(btrim(regexp_replace(lower(v_me || '-rounds'), '[^a-z0-9]+', '-', 'g'), '-'), 30), '-');
+  if length(v_base) < 2 or private.reserved_slug(v_base) then v_base := 'rounds'; end if;
+  loop
+    v_code := private.random_code(10);
+    exit when not exists (select 1 from public.groups where group_pin = v_code);
+  end loop;
+  loop
+    v_slug := case when v_n = 1 then v_base else v_base || '-' || v_n end;
+    if not exists (select 1 from public.groups where slug = v_slug) then
+      begin
+        insert into public.groups (slug, name, group_pin, legacy, created_by, quick)
+        values (v_slug, left(v_me || '’s rounds', 40), v_code, false, v_uid, true) returning id into v_g;
+        exit;
+      exception when unique_violation then null;
+      end;
+    end if;
+    v_n := v_n + 1;
+  end loop;
+  insert into public.group_members (group_id, user_id, role) values (v_g, v_uid, 'organiser');
+  insert into public.group_features (group_id, feature_key, enabled)
+  select v_g, f.key, f.key in ('side_comps', 'trophies', 'gps', 'planner', 'planner_tasks', 'notifications', 'games',
+                               'ask_usual_week', 'ask_where', 'ask_notes', 'ask_whos_in')
+  from public.feature_catalogue f;
+  insert into public.players (group_id, name, approved) values (v_g, v_me, true) returning id into v_p;
+  update public.group_members set player_id = v_p where group_id = v_g and user_id = v_uid;
+  if p_library is not null then
+    select * into l from public.course_library where id = p_library and not hidden;
+    if l.id is null then raise exception 'That course isn’t in the library'; end if;
+    perform set_config('lgc.library_link', 'on', true);
+    insert into public.courses (group_id, name, holes, library_id) values (v_g, l.name, l.holes, l.id) returning id into v_c;
+    perform set_config('lgc.library_link', 'off', true);
+    update public.course_library set copies = copies + 1 where id = l.id;
+  end if;
+  v_plan := private.ask_create(v_g, v_p, null, p_ask, p_spots, null, p_closes_at, p_note, v_c, null, null);
+  return jsonb_build_object('group_id', v_g, 'plan_id', v_plan, 'token', (select ask_token from public.plans where id = v_plan));
+end $$;
+revoke all on function public.start_round_ask(text, jsonb, int, timestamptz, text, uuid) from public, anon;
+grant execute on function public.start_round_ask(text, jsonb, int, timestamptz, text, uuid) to authenticated;
 
 -- =================================================================================================== answer
 -- p_slots: [{ date, from, to, part?, note?, nine? }] (≤ 400). p_cant: "Can't this round". p_where: lib/ask.js cleanWhere.
 -- p_usual: { pattern, notes } to save as your usual week (null = leave it). Anyone asked, saved account or not (103).
-create or replace function public.callout_answer(p_plan uuid, p_slots jsonb, p_cant boolean default false, p_where jsonb default null,
-  p_usual jsonb default null)
-returns jsonb language plpgsql security definer set search_path = '' as $$
-declare v public.plans; me uuid; s jsonb; v_old public.callout_answers; v_first timestamptz; v_slots jsonb := '[]'::jsonb; n int := 0;
+-- Store one answer (checked windows; reply order kept — going "can't" and back puts you at the back). → slot count.
+create or replace function private.ask_store(p_plan public.plans, p_player uuid, p_slots jsonb, p_cant boolean, p_where jsonb)
+returns int language plpgsql security definer set search_path = '' as $$
+declare s jsonb; v_old public.callout_answers; v_first timestamptz; v_slots jsonb := '[]'::jsonb; n int := 0;
 begin
-  select * into v from public.plans where id = p_plan;
-  if v.id is null or not private.is_group_member(v.group_id) or not v.callout or v.ask is null then raise exception 'Round not found'; end if;
-  if v.status <> 'planning' then raise exception 'This one’s decided — ask whoever put it out'; end if;
-  me := private.my_player_id(v.group_id);
-  if me is null then raise exception 'Pick your name first'; end if;
-  if not private.callout_asked(v, me) then
-    raise exception 'This round is just for the people asked — ask % to add you', coalesce(private.callout_first(v.created_by), 'whoever put it out');
-  end if;
-  if length(coalesce(p_where::text, '')) > 2000 or length(coalesce(p_usual::text, '')) > 6000 then raise exception 'That answer is too big'; end if;
+  if p_plan.status <> 'planning' then raise exception 'This one’s decided — ask whoever put it out'; end if;
+  if exists (select 1 from public.plan_polls where plan_id = p_plan.id and kind = 'dates') then raise exception 'It’s gone to a vote — tick the times in the app'; end if;
+  if length(coalesce(p_where::text, '')) > 2000 then raise exception 'That answer is too big'; end if;
   if not coalesce(p_cant, false) then
-    if jsonb_typeof(p_slots) <> 'array' then raise exception 'Tick at least one time, or say you can’t'; end if;
+    if coalesce(jsonb_typeof(p_slots), '') <> 'array' then raise exception 'Tick at least one time, or say you can’t'; end if;
     if jsonb_array_length(p_slots) > 400 then raise exception 'Too many times — try “Any time”'; end if;
     for s in select value from jsonb_array_elements(p_slots) loop
       perform private.ask_check_window(nullif(s ->> 'date', '')::date, s ->> 'from', s ->> 'to');
@@ -295,25 +385,171 @@ begin
     end loop;
     if n = 0 then raise exception 'Tick at least one time, or say you can’t'; end if;
   end if;
-  select * into v_old from public.callout_answers where plan_id = p_plan and player_id = me;
+  select * into v_old from public.callout_answers where plan_id = p_plan.id and player_id = p_player;
   v_first := case when coalesce(p_cant, false) then null when v_old.first_at is not null then v_old.first_at else clock_timestamp() end;
   insert into public.callout_answers (plan_id, player_id, group_id, slots, cant, "where", first_at, updated_at)
-  values (p_plan, me, v.group_id, case when coalesce(p_cant, false) then '[]'::jsonb else v_slots end, coalesce(p_cant, false),
+  values (p_plan.id, p_player, p_plan.group_id, case when coalesce(p_cant, false) then '[]'::jsonb else v_slots end, coalesce(p_cant, false),
           case when jsonb_typeof(p_where) = 'object' then p_where else '{}'::jsonb end, v_first, now())
   on conflict (plan_id, player_id) do update set slots = excluded.slots, cant = excluded.cant, "where" = excluded."where",
     first_at = excluded.first_at, updated_at = now();
+  perform private.ask_event(p_plan.id, p_plan.group_id, p_player, 'opened');
+  perform private.ask_event(p_plan.id, p_plan.group_id, p_player, 'replied');
+  return n;
+end $$;
+revoke all on function private.ask_store(public.plans, uuid, jsonb, boolean, jsonb) from public, anon, authenticated;
+
+-- In the app. p_usual: { pattern, notes } to save as your usual week (null = leave it).
+create or replace function public.callout_answer(p_plan uuid, p_slots jsonb, p_cant boolean default false, p_where jsonb default null,
+  p_usual jsonb default null)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v public.plans; me uuid; n int;
+begin
+  select * into v from public.plans where id = p_plan;
+  if v.id is null or not private.is_group_member(v.group_id) or not v.callout or v.ask is null then raise exception 'Round not found'; end if;
+  me := private.my_player_id(v.group_id);
+  if me is null then raise exception 'Pick your name first'; end if;
+  if not private.callout_asked(v, me) then
+    raise exception 'This round is just for the people asked — ask % to add you', coalesce(private.callout_first(v.created_by), 'whoever put it out');
+  end if;
+  if length(coalesce(p_usual::text, '')) > 6000 then raise exception 'That answer is too big'; end if;
+  n := private.ask_store(v, me, p_slots, p_cant, p_where);
   if jsonb_typeof(p_usual) = 'object' and public.feature_on(v.group_id, 'ask_usual_week') then
     insert into public.player_usual_weeks (player_id, group_id, usual, "where", updated_at)
     values (me, v.group_id, p_usual, case when jsonb_typeof(p_where) = 'object' then p_where else '{}'::jsonb end, now())
     on conflict (player_id) do update set usual = excluded.usual,
       "where" = case when jsonb_typeof(p_where) = 'object' then excluded."where" else public.player_usual_weeks."where" end, updated_at = now();
   end if;
-  perform private.ask_event(p_plan, v.group_id, me, 'opened');
-  perform private.ask_event(p_plan, v.group_id, me, 'replied');
   return jsonb_build_object('slots', n, 'cant', coalesce(p_cant, false));
 end $$;
 revoke all on function public.callout_answer(uuid, jsonb, boolean, jsonb, jsonb) from public, anon;
 grant execute on function public.callout_answer(uuid, jsonb, boolean, jsonb, jsonb) to authenticated;
+
+-- =================================================================================================== the link (no sign-in)
+-- The guest's key → its stored hash.
+create or replace function private.ask_key_hash(p_key text) returns text
+language sql immutable set search_path = '' as $$
+  select encode(extensions.digest(coalesce(p_key, ''), 'sha256'), 'hex')
+$$;
+revoke all on function private.ask_key_hash(text) from public, anon, authenticated;
+
+-- What the link shows, to anyone with it: the ask, whoever put it out (first name), the course, first names and times of
+-- who's answered (never contacts), and — with the key this phone kept — your own answer and where you stand. Also says
+-- whether this sign-in is in the group already (then the app opens instead).
+create or replace function public.ask_public(p_token text, p_key text default null)
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v public.plans; g public.callout_guests; v_member boolean := false;
+begin
+  select * into v from public.plans where ask_token = upper(btrim(coalesce(p_token, ''))) and callout;
+  if v.id is null then raise exception 'That link isn’t working — ask whoever sent it for a new one'; end if;
+  if auth.uid() is not null then v_member := coalesce(private.is_group_member(v.group_id), false) and private.my_player_id(v.group_id) is not null; end if;
+  if nullif(p_key, '') is not null then
+    select * into g from public.callout_guests where plan_id = v.id and key_hash = private.ask_key_hash(p_key);
+  end if;
+  return jsonb_build_object(
+    'plan_id', v.id, 'group_id', v.group_id, 'name', v.name, 'status', v.status, 'ask', v.ask, 'ask_full', to_jsonb(v.ask_full), 'closes_at', v.closes_at,
+    'spots', v.spots, 'course', v.location_name, 'by', private.callout_first(v.created_by), 'start_date', v.start_date,
+    'tee_time', v.tee_time, 'booked', v.booked_at is not null, 'member', v_member,
+    'voting', exists (select 1 from public.plan_polls po where po.plan_id = v.id and po.kind = 'dates'),
+    'answers', (select coalesce(jsonb_agg(jsonb_build_object('player_id', a.player_id, 'name', private.callout_first(a.player_id),
+                  'slots', a.slots, 'cant', a.cant, 'first_at', a.first_at) order by a.first_at), '[]'::jsonb)
+                from public.callout_answers a where a.plan_id = v.id),
+    'me', case when g.player_id is null then null else jsonb_build_object(
+      'player_id', g.player_id, 'name', (select name from public.players where id = g.player_id), 'email', g.email, 'phone', g.phone,
+      'claimed', g.user_id is not null,
+      'answer', (select jsonb_build_object('slots', a.slots, 'cant', a.cant, 'where', a."where") from public.callout_answers a where a.plan_id = v.id and a.player_id = g.player_id),
+      'standing', (select jsonb_build_object('has_spot', o.has_spot, 'place', o.place) from private.callout_order(v.id) o where o.player_id = g.player_id)) end);
+end $$;
+revoke all on function public.ask_public(text, text) from public;
+grant execute on function public.ask_public(text, text) to anon, authenticated;
+
+-- Answer from the link, no sign-in: a name and an email or mobile (so whoever's organising can reach you), the times.
+-- First time → a player in the group (approved straight away in a quick group; an organiser approves them in a normal
+-- one) and a key for this phone to change the answer. → { key, player_id, slots }
+create or replace function public.ask_guest_answer(p_token text, p_name text, p_email text, p_phone text, p_slots jsonb,
+  p_cant boolean default false, p_where jsonb default null, p_key text default null)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v public.plans; g public.callout_guests; v_p uuid; v_key text; v_name text; v_email text; v_phone text; v_quick boolean; n int;
+begin
+  select * into v from public.plans where ask_token = upper(btrim(coalesce(p_token, ''))) and callout for update;
+  if v.id is null then raise exception 'That link isn’t working — ask whoever sent it for a new one'; end if;
+  if v.status <> 'planning' then raise exception 'This one’s decided — ask % if there’s room', coalesce(private.callout_first(v.created_by), 'whoever put it out'); end if;
+  if nullif(p_key, '') is not null then
+    select * into g from public.callout_guests where plan_id = v.id and key_hash = private.ask_key_hash(p_key);
+  end if;
+  v_email := nullif(lower(btrim(coalesce(p_email, ''))), '');
+  v_phone := nullif(btrim(coalesce(p_phone, '')), '');
+  if v_email is not null and v_email !~* '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' then raise exception 'That email doesn’t look right'; end if;
+  if v_phone is not null and v_phone !~ '^[0-9 +()-]{8,20}$' then raise exception 'That mobile doesn’t look right'; end if;
+  if g.player_id is null then
+    v_name := btrim(regexp_replace(coalesce(p_name, ''), '[[:cntrl:]]+', ' ', 'g'));
+    if length(v_name) not between 1 and 30 then raise exception 'Your name, please'; end if;
+    if v_email is null and v_phone is null then raise exception 'Add an email or mobile so % can reach you', coalesce(private.callout_first(v.created_by), 'whoever’s organising'); end if;
+    if (select count(*) from public.callout_guests where plan_id = v.id) >= 60 then raise exception 'This one has plenty of answers — ask whoever sent it'; end if;
+    select quick into v_quick from public.groups where id = v.group_id;
+    insert into public.players (group_id, name, approved) values (v.group_id, v_name, coalesce(v_quick, false)) returning id into v_p;
+    v_key := private.random_code(24);
+    insert into public.callout_guests (player_id, plan_id, group_id, email, phone, key_hash)
+    values (v_p, v.id, v.group_id, v_email, v_phone, private.ask_key_hash(v_key));
+    if not v.invite_all then
+      insert into public.plan_invites (plan_id, player_id, group_id) values (v.id, v_p, v.group_id) on conflict do nothing;
+    end if;
+  else
+    v_p := g.player_id; v_key := p_key;
+    update public.callout_guests set email = coalesce(v_email, email), phone = coalesce(v_phone, phone) where player_id = v_p;
+  end if;
+  n := private.ask_store(v, v_p, p_slots, p_cant, p_where);
+  return jsonb_build_object('key', v_key, 'player_id', v_p, 'slots', n);
+end $$;
+revoke all on function public.ask_guest_answer(text, text, text, text, jsonb, boolean, jsonb, text) from public;
+grant execute on function public.ask_guest_answer(text, text, text, text, jsonb, boolean, jsonb, text) to anon, authenticated;
+
+-- The nudge to log in pays off: signed in (Google or email), the answer becomes yours in the app — buzzes when it's
+-- locked in, your usual week next time, your scores. → { group_id, plan_id }
+create or replace function public.ask_guest_claim(p_token text, p_key text)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := auth.uid(); v public.plans; g public.callout_guests; m public.group_members; v_quick boolean;
+begin
+  if v_uid is null or coalesce((select is_anonymous from auth.users where id = v_uid), true) then
+    raise exception 'Sign in with Google or an email code first' using errcode = '42501', hint = 'save_spot';
+  end if;
+  select * into v from public.plans where ask_token = upper(btrim(coalesce(p_token, ''))) and callout;
+  if v.id is null then raise exception 'That link isn’t working — ask whoever sent it for a new one'; end if;
+  select * into g from public.callout_guests where plan_id = v.id and key_hash = private.ask_key_hash(p_key) for update;
+  if g.player_id is null then raise exception 'That answer isn’t on this phone any more'; end if;
+  if g.user_id is not null and g.user_id <> v_uid then raise exception 'Someone else has already signed in for this answer'; end if;
+  select quick into v_quick from public.groups where id = v.group_id;
+  select * into m from public.group_members where group_id = v.group_id and user_id = v_uid;
+  if m.user_id is null then
+    insert into public.group_members (group_id, user_id, player_id, role)
+    values (v.group_id, v_uid, g.player_id, case when v_quick then 'player' else 'guest' end);
+  elsif m.player_id is null then
+    update public.group_members set player_id = g.player_id where group_id = v.group_id and user_id = v_uid;
+  elsif m.player_id <> g.player_id
+        and not exists (select 1 from public.callout_answers a where a.plan_id = v.id and a.player_id = m.player_id) then
+    -- Already in the group as someone: the answer moves onto them (same reply time, so the same place).
+    update public.callout_answers set player_id = m.player_id where plan_id = v.id and player_id = g.player_id;
+  end if;
+  update public.callout_guests set user_id = v_uid where player_id = g.player_id;
+  return jsonb_build_object('group_id', v.group_id, 'plan_id', v.id);
+end $$;
+revoke all on function public.ask_guest_claim(text, text) from public, anon;
+grant execute on function public.ask_guest_claim(text, text) to authenticated;
+
+-- How to reach the people who answered from the link (whoever put it out, an organiser, or whoever's booking).
+create or replace function public.ask_contacts(p_plan uuid)
+returns table (player_id uuid, name text, email text, phone text, signed_in boolean)
+language plpgsql stable security definer set search_path = '' as $$
+declare v public.plans; me uuid;
+begin
+  select * into v from public.plans where id = p_plan;
+  if v.id is null or not private.is_group_member(v.group_id) then return; end if;
+  me := private.my_player_id(v.group_id);
+  if not (private.callout_can_manage(v) or coalesce(me = v.booker_id, false)) then return; end if;
+  return query select g.player_id, p.name, g.email, g.phone, g.user_id is not null
+    from public.callout_guests g join public.players p on p.id = g.player_id where g.plan_id = p_plan order by g.created_at;
+end $$;
+revoke all on function public.ask_contacts(uuid) from public, anon;
+grant execute on function public.ask_contacts(uuid) to authenticated;
 
 -- Opened (the funnel's second step), once per person.
 create or replace function public.callout_seen(p_plan uuid) returns void
@@ -381,7 +617,7 @@ begin
   if not private.callout_can_manage(v) then raise exception 'Only whoever put it out (or an organiser) can start a vote'; end if;
   if v.status <> 'planning' then raise exception 'This one isn’t open any more'; end if;
   if exists (select 1 from public.plan_polls where plan_id = p_plan and kind = 'dates') then raise exception 'There’s already a vote'; end if;
-  if jsonb_typeof(p_cells) <> 'array' or jsonb_array_length(p_cells) not between 2 and 3 then raise exception 'Put 2 or 3 times to the vote'; end if;
+  if coalesce(jsonb_typeof(p_cells), '') <> 'array' or jsonb_array_length(p_cells) not between 2 and 3 then raise exception 'Put 2 or 3 times to the vote'; end if;
   me := private.my_player_id(v.group_id);
   update public.plans set closes_at = greatest(coalesce(p_closes_at, now() + interval '24 hours'), now() + interval '1 hour') where id = p_plan
   returning * into v;
@@ -409,7 +645,7 @@ begin
   select * into v from public.plans where id = p_plan for update;
   if v.id is null or not private.is_group_member(v.group_id) or not v.callout or v.ask is null then raise exception 'Round not found'; end if;
   me := private.my_player_id(v.group_id);
-  if not (private.callout_can_manage(v) or me = v.booker_id) then raise exception 'Only whoever put it out, an organiser or whoever’s booking can move it'; end if;
+  if not (private.callout_can_manage(v) or coalesce(me = v.booker_id, false)) then raise exception 'Only whoever put it out, an organiser or whoever’s booking can move it'; end if;
   if v.status <> 'confirmed' or v.round_id is null then raise exception 'Lock it in first'; end if;
   select * into v_round from public.rounds where id = v.round_id;
   if v_round.status <> 'setup' or exists (select 1 from public.scores s where s.round_id = v.round_id) then raise exception 'The round has started — it can’t move now'; end if;
@@ -469,7 +705,7 @@ begin
   select * into v from public.plans where id = p_plan for update;
   if v.id is null or not private.is_group_member(v.group_id) or not v.callout then raise exception 'Round not found'; end if;
   me := private.my_player_id(v.group_id);
-  if not (private.callout_can_manage(v) or me = v.booker_id) then raise exception 'Only whoever’s booking (or whoever put it out) can say it’s booked'; end if;
+  if not (private.callout_can_manage(v) or coalesce(me = v.booker_id, false)) then raise exception 'Only whoever’s booking (or whoever put it out) can say it’s booked'; end if;
   if v.status <> 'confirmed' then raise exception 'Lock it in first'; end if;
   if nullif(p_tee_time, '') is not null then
     if p_tee_time !~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' then raise exception 'A tee time looks like 13:20'; end if;
@@ -520,7 +756,7 @@ begin
   me := private.my_player_id(v.group_id);
   if exists (select 1 from public.callout_events e where e.plan_id = p_plan and e.player_id = me and e.kind in ('easy_yes', 'easy_no')) then return; end if;
   perform private.ask_event(p_plan, v.group_id, me, case when p_easy then 'easy_yes' else 'easy_no' end);
-  insert into public.beta_feedback (group_id, user_id, player_id, kind, message, path, version)
+  insert into public.beta_feedback (from_group, user_id, player_id, kind, message, path, version)
   values (v.group_id, auth.uid(), me, case when p_easy then 'like' else 'problem' end,
     '[Round ask] Was that easy to organise? ' || case when p_easy then '👍' else '👎' end || coalesce(' — ' || v_note, ''),
     '/plan/' || p_plan::text, 'ov43');

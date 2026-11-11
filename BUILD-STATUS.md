@@ -2222,5 +2222,18 @@ to run on staging after 111 is applied.
 **Open calls settled (best practice):** usual week counts as "probably" — shown, unconfirmed, never counted or locked in;
 four columns.
 
-**Next:** apply 111 to staging (STOP — Josh approves the Supabase prompt), run the SQL test, test the preview link.
+**Independent of a group (12 Nov, Josh: "I want the app to be independent… answer simply, incentivise log in, ensure an
+email or something"):** every ask has its own link `#/a/<token>` (screens/AskPublic.jsx) that opens straight on the
+grid — no group, no "Who are you?", no sign-in. First answer asks for a name and an email or mobile; the phone keeps a key
+to change it; then "Get a buzz when it's locked in — sign in" claims the answer into the app (ask_guest_claim). `#/ask`
+(screens/AskStart.jsx, from the front door and Your groups) lets anyone signed in ask some mates with no group (a hidden
+quick group, start_round_ask; 047's new-groups switch still applies on live). Organiser and booker see "📇 Answered from
+the link" with emails / mobiles (ask_contacts). Share to the group chat now sends the `#/a/` link.
+
+**Database tested locally:** Postgres 16 with a Supabase stand-in, every migration 001–111 applied in order;
+`111_round_ask.sql` 92 checks (expected file saved); `103_round_callout.sql` still matches its expected file exactly.
+Caught and fixed: an ask with no range was accepted; "Was that easy?" wrote to a missing column; contacts / move / booked
+let anyone through when nobody was booking (null logic).
+
+**Next:** apply 111 to staging (STOP — Josh approves the Supabase prompt), test the preview link.
 Release with the next version (live: 111 after the step-1 snapshot).

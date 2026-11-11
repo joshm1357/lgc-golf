@@ -70,6 +70,7 @@ export default function YourGroups() {
         ? <LinkForm autoFocus={showPin} onOpen={openLink} />
         : <button type="button" className="btn ghost block" style={ghost} onClick={() => setShowPin(true)}>Join another with an invite link</button>}
       {none && <div className="small" style={{ color: 'var(--on-navy-muted)', textAlign: 'center', maxWidth: 340 }}>Played before without signing in? Ask your organiser for your personal link. It brings your scores and history with you.</div>}
+      <a href="#/ask" className="btn ghost block" style={{ ...ghost, maxWidth: 340 }} data-testid="groups-ask">⛳ Ask some mates for a round — no group needed</a>
       {NEW_GROUPS && <a href="#/start" className="btn ghost block" style={{ ...ghost, borderColor: 'transparent', textDecoration: 'underline' }}>{none ? 'Or start a new group' : 'Start a new group'}</a>}
       <div className="small" style={{ color: 'var(--on-navy-muted)', textAlign: 'center' }}>
         {user?.email ? <>Signed in as {user.email}. </> : null}

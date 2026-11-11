@@ -3,6 +3,8 @@
 // several, tap a date or a heading to fill the line, hold a square for a note. One-tap answers, type it, "Where? Any".
 // All the sums are in lib/ask.js (tested); migration 111's callout_answer checks it again.
 // preview: the organiser's "Send to myself" — works the same, saves nothing.
+// guest: the public link (#/a/<token>, screens/AskPublic.jsx) — no group, no sign-in: guest.submit({ slots, cant, where })
+// saves it; the usual week is kept on this phone instead of the database.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { useData, useSession, useFeature } from '../lib/store.jsx';
@@ -31,9 +33,12 @@ function fromAnswer(cells, answer, weekly) {
   return { picks, notes };
 }
 
-export default function AskReply({ plan, answer = null, preview = false, onSent }) {
-  const data = useData();
-  const { status } = useSession();
+export const USUAL_KEY = 'tgt-usual-week';
+const localUsual = () => { try { return JSON.parse(localStorage.getItem(USUAL_KEY) || 'null'); } catch { return null; } };
+
+export default function AskReply({ plan, answer = null, preview = false, guest = null, onSent }) {
+  const data = useData() || { courses: [] };
+  const { status } = useSession() || {};
   const today = sydneyToday();
   const notesOn = useFeature('ask_notes') !== false;
   const whereOn = useFeature('ask_where') !== false;
@@ -70,7 +75,16 @@ export default function AskReply({ plan, answer = null, preview = false, onSent 
       if (answer.where && Object.keys(answer.where).length) setWhere({ courses: answer.where.courses || [], wishes: answer.where.wishes || [], note: answer.where.note || '' });
       return;
     }
-    if (preview || !usualOn || !status.player_id) return;
+    if (preview || !usualOn) return;
+    if (guest) {
+      const u = localUsual();
+      if (!u) return;
+      setUsual(u);
+      const f = prefill(cells, u, { weekly });
+      if (f.picks.size) { setPicks(f.picks); setNotes(f.notes); setFilled('usual'); }
+      return;
+    }
+    if (!status?.player_id) return;
     supabase.from('player_usual_weeks').select('usual,where').eq('group_id', plan.group_id).eq('player_id', status.player_id).maybeSingle().then(({ data: u }) => {
       if (!u) return;
       setUsual(u.usual);
@@ -124,6 +138,12 @@ export default function AskReply({ plan, answer = null, preview = false, onSent 
     if (!cantRound && !slots.length) { toast('Tick at least one time — or tap “Can’t this round”'); return; }
     if (preview) { toast(cantRound ? 'Preview: “Can’t this round” sent' : `Preview: ${slots.length} time${slots.length === 1 ? '' : 's'} sent — nothing saved`); onSent?.(); return; }
     const w = whereOn ? cleanWhere(where) : null;
+    if (guest) {
+      await guest.submit({ slots: cantRound ? null : slots, cant: cantRound, where: w });
+      if (!cantRound) { try { localStorage.setItem(USUAL_KEY, JSON.stringify(usualFrom(shownCells, picks, { weekly, notes, before: usual }))); } catch { /* fine */ } }
+      onSent?.();
+      return;
+    }
     await must(supabase.rpc('callout_answer', {
       p_plan: plan.id, p_slots: cantRound ? null : slots, p_cant: cantRound, p_where: w,
       p_usual: !cantRound && usualOn ? usualFrom(shownCells, picks, { weekly, notes, before: usual }) : null,
@@ -234,12 +254,12 @@ export default function AskReply({ plan, answer = null, preview = false, onSent 
             <div className="stack" style={{ gap: 8 }}>
               <div className="co-chips">
                 <button type="button" className="chip" aria-pressed={!where.courses.length} onClick={() => setWhere({ ...where, courses: [] })}>Any</button>
-                {data.courses.slice(0, 6).map((c) => {
+                {!guest && data.courses.slice(0, 6).map((c) => {
                   const on = where.courses.some((x) => x.kind === 'group' && x.id === c.id);
                   return <button key={c.id} type="button" className="chip" aria-pressed={on} onClick={() => setWhere({ ...where, courses: on ? where.courses.filter((x) => x.id !== c.id) : [...where.courses, { kind: 'group', id: c.id, name: c.name }].slice(0, 6) })}>{c.name}</button>;
                 })}
                 {where.courses.filter((x) => x.kind === 'library').map((x) => <button key={x.id} type="button" className="chip" aria-pressed="true" onClick={() => setWhere({ ...where, courses: where.courses.filter((y) => y.id !== x.id) })}>{x.name} ✕</button>)}
-                <button type="button" className="chip" aria-pressed={finding} onClick={() => setFinding(!finding)}>+ Somewhere else</button>
+                {!guest && <button type="button" className="chip" aria-pressed={finding} onClick={() => setFinding(!finding)}>+ Somewhere else</button>}
               </div>
               {finding && <CourseFinder onPick={(c) => { setWhere({ ...where, courses: [...where.courses.filter((x) => x.id !== c.id), c].slice(0, 6) }); setFinding(false); }} />}
               <div className="co-chips">

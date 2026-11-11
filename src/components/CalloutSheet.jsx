@@ -14,6 +14,7 @@ import {
   parseWhen, buildOptions, makeOption, defaultCloses, defaultName, cleanExtras, EXTRAS, PARTS, PART_KEYS, RANGES,
   BUILDER_DAYS, DAY_KEYS, sydneyToday, cleanTime, partOfTime, closesWords, MAX_OPTIONS, askable,
 } from '../lib/callout.js';
+import AskForm from './AskForm.jsx';
 import './callout.css';
 
 export { openCallout } from '../lib/calloutopen.js';
@@ -145,9 +146,16 @@ export function CalloutSheet({ prefill = {}, onClose, onSaved }) {
     onSaved?.(id);
   });
 
+  // ov43: "Anyone keen for a round?" (ask when they can) is the default; "I've got times" is the ov34 sheet, unchanged.
+  const [kind, setKind] = useState(() => (prefill.ask || (!prefill.date && !typedFirst?.understood && prefill.mode !== 'times') ? 'ask' : 'times'));
   const ready = options.length > 0 && !capBad && askedCount >= 2 && (!extras.course_vote || courseChoices.length >= 2 || course);
   return (
-    <Sheet title="⛳ Put a round out" onClose={onClose}>
+    <Sheet title={kind === 'ask' ? '⛳ Anyone keen for a round?' : '⛳ Put a round out'} onClose={onClose}>
+      <div className="seg light" role="group" aria-label="How to ask" style={{ marginBottom: 14 }} data-testid="co-kind">
+        <button type="button" aria-pressed={kind === 'ask'} onClick={() => setKind('ask')} data-testid="co-kind-ask">Ask when they can</button>
+        <button type="button" aria-pressed={kind === 'times'} onClick={() => setKind('times')} data-testid="co-kind-times">I’ve got times</button>
+      </div>
+      {kind === 'ask' ? <AskForm prefill={prefill} onSaved={onSaved} /> : (
       <div className="stack" data-testid="callout-sheet" style={{ gap: 16 }}>
         <span className="small muted">Ask the group who’s up for a hit. Not a trip, not a cup — just a round.</span>
 
@@ -301,6 +309,7 @@ export function CalloutSheet({ prefill = {}, onClose, onSaved }) {
         </button>
         {!options.length && <span className="small muted" style={{ textAlign: 'center', marginTop: -8 }}>{mode === 'fixed' ? 'Pick the day.' : 'Pick a day (or type one) to make the times.'}</span>}
       </div>
+      )}
     </Sheet>
   );
 }

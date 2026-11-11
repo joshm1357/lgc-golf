@@ -181,3 +181,12 @@
 - Migration 108 was edited in place rather than adding 110, because 108 isn't live yet (same release).
 - The organiser's length is now shown in nights to match ("2 nights", not "3 days"); the stored value didn't change.
 
+
+## ov43 — "Anyone keen for a round?" v2 (12 Nov 2026)
+- One lock-in path: v2 Choose turns the window into a one-option 103 vote and calls `callout_lock`; "Put 2–3 to a vote" is a 103 vote from then on.
+- Usual week = "probably" for non-repliers: shown, marked unconfirmed, never counted toward a full group, never locked in.
+- Four columns: Early (6–8), Morning (8–11:30), Arvo (11:30–3), Twilight (from that day's sunset).
+- Notes are read on the phone and the window narrowed before saving; the database only matches overlapping windows.
+- Full moves the round (same round, new date/time) to the next best window; whoever can make it is in, in reply order.
+- Default replies close: 2 days, by 6pm the day before the first date, never under 12 hours.
+- The ⛳ sheet opens on "Ask when they can"; "I've got times" keeps the ov34 set-time / options sheet unchanged.

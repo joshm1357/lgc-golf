@@ -55,6 +55,11 @@ export const FEATURES = [
   // v10.2 (migration 102, Josh's option B): phone-only accounts look and play; organising, money and proposing need a
   // saved account (Google or email). On by default; a group can switch it off.
   { key: 'phone_only_limited', name: 'Phone-only accounts: look and play only', description: 'Someone on “Just this phone” can follow along, vote and score. To organise, pay or propose things they save their spot (Google or email) first.', newGroup: true },
+  // ov43 (111): "Anyone keen for a round?" — the parts of the reply screen the test plan switches per group.
+  { key: 'ask_usual_week', name: 'Round asks: usual week', description: 'Each player’s answer is saved and fills in next time. Non-repliers show as “probably”.', parent: 'planner', newGroup: true },
+  { key: 'ask_where', name: 'Round asks: where', description: 'One “Where? Any” line under the times: courses, close to home or work, 9 holes is fine.', parent: 'planner', newGroup: true },
+  { key: 'ask_notes', name: 'Round asks: notes', description: 'Hold a square for a note — “only after 9”, “must finish by 12”, “9 holes only”.', parent: 'planner', newGroup: true },
+  { key: 'ask_whos_in', name: 'Round asks: who’s in', description: 'After you send, see who else can make each time.', parent: 'planner', newGroup: true },
 ].map((f) => ({ parent: null, tier: 'free', ...f }));
 
 export const FEATURE_BY_KEY = Object.fromEntries(FEATURES.map((f) => [f.key, f]));

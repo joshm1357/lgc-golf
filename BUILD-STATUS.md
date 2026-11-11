@@ -2188,3 +2188,39 @@ type-checks of ai-helper and notify; `supabase/tests/108_trip_ideas.sql` (85 che
 expected file; 108 re-runs cleanly); e2e `tests/e2e/trip-ideas-test.mjs` (all pass); votes-coorg, plan-ux,
 trip-builder, trips pass; weekends-comps has 1 date-dependent failure that fails the same on v10-6-release.
 **Next**: Josh's OK; apply 108 on staging; set `AI_FAST_MODEL`; check a real WhatsApp preview on a branch link.
+
+## ov43 — "Anyone keen for a round?" v2: ask when they can, match, lock, book, go again (12 Nov 2026, branch `ov43-round-ask`, from `main` (v10.7), migration 111 — staging only once approved)
+Design: Project doc `claude/round-callout-v2-design.md`.
+
+**Audit (12 Nov, live, read-only):** 105 library courses within 60 km of the CBD; visitor times 28, fees 11, booking link 14,
+all three 9; organisers' own times 0. 0 call-outs and 0 home areas on live. So the course check mostly shows guesses
+(marked unconfirmed) until the visitor-times research is done.
+
+**Built**
+- `src/lib/ask.js` (+25 tests, including a simulated group of ten: keen, 9-to-5, parents with "home by", late lurker,
+  can't): the one rule (date + window), four parts (Early / Morning / Arvo / Twilight from that day's sunset), the ask,
+  long asks (weekday rows + can't-dates strip), notes ("only after", "finish by", "9 holes"), one-tap answers, type it,
+  the usual week, matching (reply order), the decide trigger, vote choices, next best for Full, the course check, Where,
+  the funnel and its reading, share text.
+- Migration 111 (additive): `plans.ask / ask_full / booked_at`; `callout_answers`, `player_usual_weeks` (only you read
+  yours), `callout_events`; `put_round_ask`, `callout_answer`, `callout_seen`, `callout_probably`, `callout_ask_choose`
+  (one-option vote → 103's `callout_lock`), `callout_ask_vote`, `callout_move` (Full), `callout_booked`,
+  `callout_take_booking`, `callout_easy` (→ `beta_feedback` for Caddie), played trigger; job `lgc-round-asks` (halfway
+  nudge, ready card, go again). 103's `callout_tick` re-made with one extra line (skips a v2 ask until it has a vote).
+  Buzzes reuse 103's kinds, so the notify function is unchanged. Feature switches: ask_usual_week, ask_where, ask_notes,
+  ask_whos_in (under planner, on by default).
+- Screens: `AskForm.jsx` (inside the ⛳ sheet, now opening on "Ask when they can"; "I've got times" is the ov34 sheet,
+  unchanged), `AskReply.jsx` (the grid: tap, swipe, tap a day/heading, hold for a note, show-only, quick answers, type it,
+  Where, Can't this round), `AskDecide.jsx` (board, Choose, vote, course check, funnel, booking with Full / It's booked /
+  I'll book it, Was that easy?, Go again). `RoundCallout.jsx` and `CalloutCard.jsx` show these only when `plan.ask` is set.
+
+**Tested:** Vitest 1986 (all). e2e new `ask-round-test.mjs` 26 checks (ask, send to myself, 5 answers, swipe, note,
+board, choose, locked round of 4, Full → next best, booked, easy 👍, usual-week prefill, notes switch). e2e
+`round-callout-test.mjs` (fixed time + vote, unchanged path) all pass. SQL test `supabase/tests/111_round_ask.sql` written,
+to run on staging after 111 is applied.
+
+**Open calls settled (best practice):** usual week counts as "probably" — shown, unconfirmed, never counted or locked in;
+four columns.
+
+**Next:** apply 111 to staging (STOP — Josh approves the Supabase prompt), run the SQL test, test the preview link.
+Release with the next version (live: 111 after the step-1 snapshot).

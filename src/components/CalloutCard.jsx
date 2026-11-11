@@ -61,10 +61,11 @@ export function calloutView(cd, { players = [], me = null } = {}) {
   const winner = datesPoll?.winner_option_id ? options.find((o) => o.id === datesPoll.winner_option_id) : null;
   const when = plan.start_date
     ? [dayLabel(String(plan.start_date).slice(0, 10)), plan.tee_time ? clock(plan.tee_time) : (winner?.part || options[0]?.part || null)].filter(Boolean).join(' · ')
-    : options.length ? `${options.length} times to pick from` : 'Time TBC';
+    : options.length ? `${options.length} times to pick from` : plan.ask ? 'When can you play?' : 'Time TBC';
   const closed = !!plan.closes_at && new Date(plan.closes_at) <= new Date();
   return {
     datesPoll, coursePoll, options, courseOptions, locked, voting, asked, spots, tally, best, noReply, when, closed,
+    asking: !!plan.ask && !datesPoll && plan.status === 'planning', // ov43: a v2 ask still collecting times
     isAsked: asked.includes(me), standing: myStanding({ cap: plan.spots, rsvps: cd.rsvps }, me),
     myVote: (optionId) => cd.votes.find((v) => v.option_id === optionId && v.player_id === me)?.response || null,
     course: plan.location_name || 'Course TBC',
@@ -102,6 +103,8 @@ export function ReplyButtons({ cd, v, me, compact = false, maxOptions = 99 }) {
   const [busy, setBusy] = useState(false);
   const { plan } = cd;
   if (!me || !v.isAsked || plan.status === 'cancelled' || v.past) return null;
+  // ov43: a v2 ask is answered on its grid — one tap from the card or the Feed.
+  if (v.asking) return <Link to={`/plan/${plan.id}`} className="btn gold block" style={{ minHeight: 48 }} data-testid="co-ask-open">Tap the times you can play →</Link>;
   const go = async (fn) => {
     if (busy) return;
     setBusy(true);

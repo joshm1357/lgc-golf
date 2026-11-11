@@ -201,6 +201,10 @@ await as(phone, BO_ME, '/plan');
 await phone.getByTestId('put-round-out').waitFor({ timeout: 20000 });
 await phone.screenshot({ path: `${SHOTS}/1-trips-button.png`, fullPage: true });
 await phone.getByTestId('put-round-out').click();
+// ov43: the sheet opens on "Ask when they can"; the set-time call-out is one tap away and unchanged.
+await phone.getByTestId('co-kind-ask').waitFor();
+check((await phone.getByTestId('co-kind-ask').getAttribute('aria-pressed')) === 'true', 'ov43: the sheet opens on “Ask when they can”');
+await phone.getByTestId('co-kind-times').click();
 await phone.getByTestId('callout-sheet').waitFor();
 await phone.getByTestId('co-courses').getByRole('button', { name: 'Moore Park' }).click();
 await phone.getByTestId('co-days').getByRole('button', { name: 'Fri' }).click();
@@ -309,7 +313,7 @@ await phone.screenshot({ path: `${SHOTS}/13-trips-card.png`, fullPage: true });
 // 8. The old "⛳ One-day round" choice opens the new sheet.
 await phone.getByRole('button', { name: /Suggest a trip or round/ }).first().click();
 await phone.getByTestId('suggest-one-day-round').click();
-check(await phone.getByTestId('callout-sheet').waitFor({ timeout: 10000 }).then(() => true, () => false), '“⛳ One-day round” in Suggest opens ⛳ Put a round out');
+check(await phone.getByTestId('co-kind').waitFor({ timeout: 10000 }).then(() => true, () => false), '“⛳ One-day round” in Suggest opens ⛳ Put a round out');
 
 await browser.close();
 console.log(fails.length ? `\n${fails.length} FAILED:\n- ${fails.join('\n- ')}` : '\nAll checks passed.');

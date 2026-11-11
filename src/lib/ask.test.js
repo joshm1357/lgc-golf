@@ -129,9 +129,11 @@ describe('a simulated group of ten', () => {
     expect(cellWords(ranked[0].cell)).toBe('Sat 14 arvo');
     expect(ranked[0].can).toEqual(['keen1', 'keen2', 'regular', 'regular2', 'shifty', 'lurker']);
     expect(leaderLine(ranked[0])).toBe('Sat 14 arvo · 6 can');
-    expect(decideReady(ranked, { spots: 4 })).toEqual({ ready: true, why: 'full' });
-    expect(decideReady(ranked, { spots: 8 }).ready).toBe(false);
-    expect(decideReady(ranked, { spots: 8, closesAt: '2026-11-12T00:00:00Z', now: new Date('2026-11-12T01:00:00Z') })).toEqual({ ready: true, why: 'closed' });
+    // v2.1: ready the first time a 4-ball can play (max players is a cap, never a target)
+    expect(decideReady(ranked)).toEqual({ ready: true, why: 'full' });
+    const three = rankCells(cells, answers.slice(0, 3));
+    expect(decideReady(three).ready).toBe(false);
+    expect(decideReady(three, { closesAt: '2026-11-12T00:00:00Z', now: new Date('2026-11-12T01:00:00Z') })).toEqual({ ready: true, why: 'closed' });
   });
   it('spots go in reply order; the late lurker is on reserve', () => {
     const ranked = rankCells(cells, answers);

@@ -15,6 +15,7 @@
 //   * the leader — the cell with the most players who can, then the earliest.
 import { addDays, dowOf, dayLabel, DAY_KEYS, clock, cleanTime } from './callout.js';
 import { sunTimes, ROUND_LENGTH } from './daytiming.js';
+import { km, driveMinutes } from './tripfinder.js';
 
 const pad = (n) => String(n).padStart(2, '0');
 export const toMin = (t) => { const m = /^(\d{1,2}):(\d{2})/.exec(String(t || '')); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
@@ -35,7 +36,11 @@ export const ASK_PARTS = {
   twilight: { label: 'Twilight', from: null, to: null }, // from that day's sunset
 };
 export const ASK_PART_KEYS = Object.keys(ASK_PARTS);
-export const ASK_DAYS = ['thu', 'fri', 'sat', 'sun'];
+export const ASK_DAYS = ['thu', 'fri', 'sat', 'sun']; // ov43's old default — kept for "Same as last time" on old asks
+/** Monday first, for the day chips and "your week". */
+export const WEEK_DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+/** v2.1 (Josh 12 Nov): every day, any time, next 4 weeks. The organiser narrows only if they want to. */
+export const DEFAULT_ASK = { days: [], parts: [], range: { kind: 'next', days: 28 }, times: [] };
 const WEEKDAY_WORD = { sun: 'Sun', mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat' };
 export const dayWord = (k) => WEEKDAY_WORD[k] || k;
 
@@ -331,33 +336,36 @@ export function rankCells(cells, answers = [], { probably = [], full = [] } = {}
   const fullSet = new Set(full);
   const sorted = [...answers].filter((a) => !a.cant).sort(byFirst);
   return cells.filter((c) => !fullSet.has(c.key)).map((cell) => {
-    const can = []; const nine = []; const notes = [];
+    const can = []; const maybe = []; const nine = []; const notes = [];
     for (const a of sorted) {
-      const s = (a.slots || []).find((x) => overlaps(x, cell));
-      if (!s) continue;
+      const s = (a.slots || []).find((x) => !x.maybe && overlaps(x, cell));
+      if (!s) { if ((a.slots || []).some((x) => x.maybe && overlaps(x, cell))) maybe.push(a.player_id); continue; }
       can.push(a.player_id);
       if (s.nine) nine.push(a.player_id);
       if (s.note) notes.push({ player_id: a.player_id, note: s.note });
     }
     const prob = probably.filter((p) => (p.slots || []).some((x) => overlaps(x, cell))).map((p) => p.player_id);
-    return { cell, can, nine, notes, probably: prob };
-  }).sort((a, b) => (b.can.length - a.can.length) || (b.probably.length - a.probably.length)
+    return { cell, can, maybe, nine, notes, probably: prob };
+  }).sort((a, b) => (b.can.length - a.can.length) || (b.maybe.length - a.maybe.length) || (b.probably.length - a.probably.length)
     || a.cell.date.localeCompare(b.cell.date) || a.cell.from.localeCompare(b.cell.from));
 }
 
-/** The group size a slot needs: the spots, else a four. */
-export const groupSize = (spots) => (Number(spots) >= 2 ? Number(spots) : 4);
+/** Golf is booked in 4-balls: the organiser's card fires the first time four can play the same time (v2.1). */
+export const FOURBALL = 4;
+/** Kept for older screens: the group size a slot needs is always a 4-ball now (max players is a cap, not a target). */
+export const groupSize = () => FOURBALL;
 
 /** "Sat 21 arvo · 5 can" */
 export function leaderLine(top) {
   if (!top || !top.can.length) return 'Nobody’s matched yet';
-  return `${cellWords(top.cell)} · ${top.can.length} can${top.probably.length ? ` (+${top.probably.length} probably)` : ''}`;
+  const extra = [top.maybe?.length ? `${top.maybe.length} maybe` : '', top.probably.length ? `${top.probably.length} probably` : ''].filter(Boolean).join(', ');
+  return `${cellWords(top.cell)} · ${top.can.length} can${extra ? ` (+${extra})` : ''}`;
 }
 
 /** Is it time for the organiser's card? A slot fills a group, or replies have closed. → { ready, why } */
-export function decideReady(ranked, { spots = null, closesAt = null, now = new Date() } = {}) {
+export function decideReady(ranked, { closesAt = null, now = new Date() } = {}) {
   const top = ranked[0];
-  if (top && top.can.length >= groupSize(spots)) return { ready: true, why: 'full' };
+  if (top && top.can.length >= FOURBALL) return { ready: true, why: 'full' };
   if (closesAt && new Date(closesAt) <= now) return { ready: true, why: 'closed' };
   return { ready: false, why: null };
 }
@@ -518,3 +526,452 @@ export function contactOf(text) {
 export const guestKeyName = (token) => `tgt-ask-key:${String(token || '').toUpperCase()}`;
 /** The ask's own link. */
 export const askLink = (token, base = '') => `${base}#/a/${token}`;
+
+// ================================================================== v2.1 — how a group actually settles on a round
+// (Josh 12 Nov, claude/round-ask-v2-1-rethink.md). Every square is ✓ (can), ✗ (can't) or ? (not said — the start).
+// Only ✓ counts toward a tee time; ? shows as "maybe" on the board; ✗ is out.
+// The reply has two levels: "your week" (weekday × part of the day — the first view, and exactly what's saved as the
+// usual week) and the dates (every date, filled in from your week) where you change just the exceptions.
+//   st = { week: { 'sat|arvo': 'y' | 'n' }, dates: { '2026-11-21|arvo': 'y' | 'n' | '?' } }   (missing = ?)
+//   notes = { 'sat|arvo': 'home by 12', '2026-11-21|arvo': '9 holes' }   (a date's note beats its weekday's)
+export const YES = 'y';
+export const NO = 'n';
+export const MAYBE = '?';
+/** Tap: ? → ✓ → ✗ → ? */
+export const nextStatus = (s) => (s === YES ? NO : s === NO ? MAYBE : YES);
+export const MARK = { y: '✓', n: '✗', '?': '?' };
+const okStatus = (s) => (s === YES || s === NO || s === MAYBE ? s : null);
+const dayDiff = (a, b) => Math.round((new Date(`${b}T00:00:00Z`) - new Date(`${a}T00:00:00Z`)) / 86400000);
+export const dayKeyOf = (date) => DAY_KEYS[dowOf(date)];
+
+/** Does the reply open on "your week"? Asks running over a week. Short asks and picked dates go straight to the dates. */
+export function weekFirst(ask, today) {
+  const r = ask?.range || {};
+  if (r.kind === 'dates') return false;
+  if (r.kind === 'open') return true;
+  const ds = askDates(ask, today);
+  return ds.length > 1 && dayDiff(ds[0], ds[ds.length - 1]) >= 7;
+}
+
+/** The weekdays an ask covers, Monday first. */
+export function weekRows(cells) {
+  const have = new Set(cells.filter((c) => c.part).map((c) => dayKeyOf(c.date)));
+  return WEEK_DAYS.filter((d) => have.has(d));
+}
+
+/** The Monday of a date's week. */
+export const mondayOf = (date) => addDays(date, -((dowOf(date) + 6) % 7));
+
+/** The dates, grouped by week: [{ monday, dates: [...] }]. */
+export function weeksOf(cells) {
+  const out = [];
+  for (const d of [...new Set(cells.map((c) => c.date))].sort()) {
+    const m = mondayOf(d);
+    const w = out.find((x) => x.monday === m);
+    if (w) w.dates.push(d); else out.push({ monday: m, dates: [d] });
+  }
+  return out;
+}
+
+/** "Mon 17 Nov – Sun 14 Dec" — the span "your week" applies to. */
+export function spanWords(cells) {
+  const ds = cells.map((c) => c.date).sort();
+  if (!ds.length) return '';
+  const f = (d) => dayLabel(d);
+  return ds[0] === ds[ds.length - 1] ? f(ds[0]) : `${f(ds[0])} – ${f(ds[ds.length - 1])}`;
+}
+
+export const emptyState = () => ({ week: {}, dates: {} });
+
+/** A square's status: its date's own answer, else its weekday's, else ?. */
+export function statusOf(c, st) {
+  const d = st?.dates?.[c.key];
+  if (d) return d;
+  return (c.part && st?.week?.[rowKey(c)]) || MAYBE;
+}
+/** Is this date different from the week (an exception, marked on the dates view)? */
+export function isException(c, st) {
+  const d = st?.dates?.[c.key];
+  return !!(c.part && d && d !== ((st.week || {})[rowKey(c)] || MAYBE));
+}
+
+/** Set weekday squares ('sat|arvo') — dates that now match the week stop being exceptions. */
+export function setWeek(st, keys, status, cells = []) {
+  const week = { ...st.week }; const dates = { ...st.dates };
+  for (const k of keys) { if (status === MAYBE) delete week[k]; else week[k] = status; }
+  const ks = new Set(keys);
+  for (const c of cells) if (c.part && ks.has(rowKey(c)) && dates[c.key] === (week[rowKey(c)] || MAYBE)) delete dates[c.key];
+  return { week, dates };
+}
+/** Set date squares (cell keys). A date that matches its week is just the week (no exception kept). */
+export function setDates(st, keys, status, cells) {
+  const dates = { ...st.dates };
+  const byKey = new Map(cells.map((c) => [c.key, c]));
+  for (const k of keys) {
+    const c = byKey.get(k);
+    if (!c) continue;
+    if (c.part && status === ((st.week || {})[rowKey(c)] || MAYBE)) delete dates[k]; else dates[k] = status;
+  }
+  return { week: { ...st.week }, dates };
+}
+
+/** "Everything else ✗" / "Everything else ✓": every square still ? gets this status. */
+export function everythingElse(st, cells, status, { weekView = true } = {}) {
+  let next = st;
+  if (weekView) {
+    const rks = [...new Set(cells.filter((c) => c.part).map(rowKey))].filter((k) => !st.week[k]);
+    next = setWeek(next, rks, status, cells);
+  }
+  const keys = cells.filter((c) => statusOf(c, next) === MAYBE).map((c) => c.key);
+  return setDates(next, keys, status, cells);
+}
+
+/** How many squares are ✓ / ✗ / ? (over the dates). */
+export function counts(cells, st) {
+  const n = { y: 0, n: 0, '?': 0 };
+  for (const c of cells) n[statusOf(c, st)] += 1;
+  return n;
+}
+
+const noteFor = (c, notes) => (notes || {})[c.key] || (c.part ? (notes || {})[rowKey(c)] : null) || null;
+
+/** The squares → the windows to save: ✓ as is, ? marked maybe, ✗ left out. Notes narrow the window (or rule it out). */
+export function slotsFrom(cells, st, notes = {}) {
+  const out = [];
+  for (const c of cells) {
+    const s = statusOf(c, st);
+    if (s === NO) continue;
+    const note = noteFor(c, notes);
+    const w = narrow(c.from, c.to, note);
+    if (!w) continue;
+    const n = note ? parseNote(note) : null;
+    out.push({ date: c.date, from: w.from, to: w.to, part: c.part, ...(n ? { note: n.text, ...(n.nine ? { nine: true } : {}) } : {}), ...(s === MAYBE ? { maybe: true } : {}) });
+  }
+  return out.slice(0, 400);
+}
+
+/** Dates whose squares all say the same thing → that's the week; the odd ones out stay as exceptions. */
+export function compress(cells, st) {
+  const by = new Map();
+  for (const c of cells) if (c.part) { const k = rowKey(c); if (!by.has(k)) by.set(k, []); by.get(k).push(c); }
+  let week = { ...st.week }; const dates = { ...st.dates };
+  for (const [k, cs] of by) {
+    const tally = {};
+    for (const c of cs) { const s = statusOf(c, { week, dates }); tally[s] = (tally[s] || 0) + 1; }
+    const best = Object.entries(tally).sort((a, b) => b[1] - a[1])[0]?.[0] || MAYBE;
+    const current = week[k] || MAYBE;
+    const pick = tally[current] === tally[best] ? current : best;
+    const eff = cs.map((c) => [c, statusOf(c, { week, dates })]);
+    if (pick === MAYBE) delete week[k]; else week = { ...week, [k]: pick };
+    for (const [c, s] of eff) { if (s === pick) delete dates[c.key]; else dates[c.key] = s; }
+  }
+  return { week, dates };
+}
+
+/** A sent answer → the squares again (old answers: anything not sent was can't). */
+export function stateFromAnswer(cells, answer, { weekView = true } = {}) {
+  const dates = {}; const notes = {};
+  for (const c of cells) {
+    const s = (answer?.slots || []).find((x) => x.date === c.date && (c.part ? x.part === c.part : overlaps(x, c)));
+    dates[c.key] = s ? (s.maybe ? MAYBE : YES) : NO;
+    if (s?.note) notes[c.key] = s.note;
+  }
+  const st = { week: {}, dates };
+  return { st: weekView ? compress(cells, st) : st, notes };
+}
+
+/** The usual week (saved, prefills next time) = the first view. v: 2 keeps ✗ too; `pattern` (✓ only) is what
+ *  migration 111's callout_probably and older app versions read. Days this ask didn't cover keep what was saved. */
+export function usualFrom2(cells, st, notes = {}, before = null) {
+  const week = before?.v === 2 ? { ...(before.week || {}) } : Object.fromEntries(Object.keys(before?.pattern || {}).map((k) => [k, YES]));
+  const keepNotes = { ...(before?.notes || {}) };
+  const cmp = compress(cells, st);
+  for (const k of new Set(cells.filter((c) => c.part).map(rowKey))) {
+    if (cmp.week[k]) week[k] = cmp.week[k]; else delete week[k];
+    const cs = cells.filter((c) => c.part && rowKey(c) === k);
+    const ns = cs.map((c) => noteFor(c, notes));
+    if (notes[k] || (ns.length && ns.every((n) => n && n === ns[0]))) keepNotes[k] = notes[k] || ns[0]; else delete keepNotes[k];
+  }
+  const pattern = Object.fromEntries(Object.entries(week).filter(([, s]) => s === YES).map(([k]) => [k, true]));
+  return { v: 2, week, pattern, notes: keepNotes };
+}
+/** The usual week → the starting squares and notes. */
+export function stateFromUsual(usual) {
+  if (!usual) return { st: emptyState(), notes: {} };
+  const week = usual.v === 2 ? Object.fromEntries(Object.entries(usual.week || {}).filter(([, s]) => s === YES || s === NO))
+    : Object.fromEntries(Object.keys(usual.pattern || {}).map((k) => [k, YES]));
+  return { st: { week, dates: {} }, notes: { ...(usual.notes || {}) } };
+}
+
+// ------------------------------------------------------------------ tee times (the group size is the answer)
+const NUM = ['no', 'one', 'two', 'three', 'four', 'five', 'six'];
+const nWord = (n) => NUM[n] || String(n);
+/** Split n players into tee times of 2–4, as even as possible: 6 → [3, 3], 7 → [4, 3], 9 → [3, 3, 3]. */
+export function teeSplit(n) {
+  const t = teeTimes(n);
+  const base = Math.floor(n / t); const extra = n % t;
+  return Array.from({ length: t }, (_, i) => base + (i < extra ? 1 : 0));
+}
+/** "6 can → two tee times (3 + 3), or a 4 + 2 reserves". max = the organiser's optional max players. */
+export function teeWords(n, max = null) {
+  n = Number(n) || 0;
+  if (!n) return 'Nobody yet';
+  if (n < FOURBALL) return `${n} can — ${FOURBALL - n} more for a 4-ball`;
+  const cap = Number(max) >= 2 ? Number(max) : null;
+  if (cap && n > cap) return `${n} can → ${nWord(teeTimes(cap))} tee time${teeTimes(cap) === 1 ? '' : 's'} for ${cap} (the max) + ${n - cap} reserve${n - cap === 1 ? '' : 's'}`;
+  const t = teeTimes(n);
+  if (n % FOURBALL === 0) return `${n} can → ${nWord(t)} tee time${t === 1 ? '' : 's'}`;
+  const r = n % FOURBALL; const fulls = Math.floor(n / FOURBALL);
+  return `${n} can → ${nWord(t)} tee times (${teeSplit(n).join(' + ')}), or ${fulls === 1 ? 'a 4' : `${fulls} × 4`} + ${r} reserve${r === 1 ? '' : 's'}`;
+}
+
+// ------------------------------------------------------------------ where: leaving from (and how far you'll drive)
+// Josh 12 Nov: "leaving from where — should be able to say from here or here, noting this could differ from weekends vs
+// weekdays, or other days". Each place: a suburb (never an address), the days it applies (none = any day), a max drive.
+export const DRIVE_CHOICES = [20, 30, 45, 60];
+export const DEFAULT_DRIVE = 30;
+export const MAX_FROM = 3;
+const FROM_DAY_SETS = { any: [], weekdays: ['mon', 'tue', 'wed', 'thu', 'fri'], weekends: ['sat', 'sun'] };
+/** The days chip words for a place: "Any day", "Weekdays", "Weekends", "Mon, Wed". */
+export function fromDaysWords(days = []) {
+  const s = [...new Set(days)];
+  if (!s.length || s.length === 7) return 'Any day';
+  const same = (a) => a.length === s.length && a.every((d) => s.includes(d));
+  if (same(FROM_DAY_SETS.weekdays)) return 'Weekdays';
+  if (same(FROM_DAY_SETS.weekends)) return 'Weekends';
+  return WEEK_DAYS.filter((d) => s.includes(d)).map(dayWord).join(', ');
+}
+export const fromDaySet = (key) => FROM_DAY_SETS[key] || [];
+const r2 = (x) => Math.round(Number(x) * 100) / 100;
+/** One place to leave from, cleaned: { label, lat, lng, max_min, days } (lat/lng kept to about 1 km). */
+export function cleanFrom(f = {}) {
+  const label = String(f.label || '').replace(/[0-9<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 60);
+  if (!label) return null;
+  const lat = Number(f.lat); const lng = Number(f.lng);
+  const has = Number.isFinite(lat) && Number.isFinite(lng) && f.lat !== null && f.lng !== null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+  const max = Math.round(Number(f.max_min));
+  const days = [...new Set(Array.isArray(f.days) ? f.days : [])].filter((d) => WEEK_DAYS.includes(d));
+  return { label, lat: has ? r2(lat) : null, lng: has ? r2(lng) : null, max_min: max >= 5 && max <= 240 ? max : DEFAULT_DRIVE, days: days.length === 7 ? [] : WEEK_DAYS.filter((d) => days.includes(d)) };
+}
+/** The places that apply on a date. */
+export function fromFor(where, date = null) {
+  const list = (where?.from || []).filter(Boolean);
+  if (!date) return list;
+  const d = dayKeyOf(date);
+  return list.filter((f) => !f.days?.length || f.days.includes(d));
+}
+/** About how long one person drives to a course on a date: from the nearest of their places that day.
+ *  → { min, max, over, label } | null (no place with a location that day). */
+export function personDrive(where, course, date = null) {
+  if (!course || course.lat == null) return null;
+  let best = null;
+  for (const f of fromFor(where, date)) {
+    if (f.lat == null) continue;
+    const min = driveMinutes(km(f, course));
+    if (min == null) continue;
+    if (!best || min < best.min) best = { min, max: f.max_min || DEFAULT_DRIVE, label: f.label };
+  }
+  return best ? { ...best, over: best.min > best.max } : null;
+}
+/**
+ * The organiser's course ranking for the leading time: total drive for the people who can make it, anyone over their
+ * max flagged. people: [{ player_id, where }] (only those who ✓ the time). → [{ course, total, known, drives, over }]
+ * sorted: fewest people over their max, then least total drive, then nearest for the furthest person.
+ */
+export function rankCourses(courses = [], people = [], date = null) {
+  return courses.filter((c) => c && c.lat != null).map((course) => {
+    const drives = people.map((p) => ({ player_id: p.player_id, ...(personDrive(p.where, course, date) || { min: null }) }));
+    const known = drives.filter((d) => d.min != null);
+    return {
+      course, drives, known: known.length,
+      total: known.reduce((a, d) => a + d.min, 0),
+      worst: known.reduce((a, d) => Math.max(a, d.min), 0),
+      over: known.filter((d) => d.over).map((d) => d.player_id),
+    };
+  }).sort((a, b) => (a.over.length - b.over.length) || (a.total - b.total) || (a.worst - b.worst) || String(a.course.name).localeCompare(String(b.course.name)));
+}
+/** The middle of everyone's places (for "courses near the group"). */
+export function centreOf(points = []) {
+  const ps = points.filter((p) => p && p.lat != null && p.lng != null);
+  if (!ps.length) return null;
+  return { lat: r2(ps.reduce((a, p) => a + p.lat, 0) / ps.length), lng: r2(ps.reduce((a, p) => a + p.lng, 0) / ps.length) };
+}
+
+/** The v2.1 "where" to save: leaving from (up to 3 places), course picks, a line. Wishes from ov43 answers are kept. */
+export function cleanWhere2(w = {}) {
+  const base = cleanWhere(w);
+  const from = (w.from || []).map(cleanFrom).filter(Boolean).slice(0, MAX_FROM);
+  const avoid = (w.avoid || []).map((x) => String(x || '').replace(/[<>]/g, '').trim().slice(0, 60)).filter(Boolean).slice(0, 6);
+  return { ...base, from, ...(avoid.length ? { avoid } : {}) };
+}
+
+// ------------------------------------------------------------------ the Caddie box: "Tell the Caddie when you can play"
+// Simple phrases fill instantly on the phone (quickFill). Anything else goes to the AI (the ask-fill function), whose
+// answer is cleaned here (cleanFill) — on the server AND again on the phone — and put on the grid (applyFill).
+const QF_DAYS = { ...TYPE_DAYS, weekend: 'we', weekends: 'we', weekday: 'wd', weekdays: 'wd' };
+const QF_PARTS = { ...TYPE_PARTS, arvo: 'arvo', twilight: 'twilight' };
+const MONTH_WORDS = { jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2, apr: 3, april: 3, may: 4, jun: 5, june: 5, jul: 6, july: 6, aug: 7, august: 7, sep: 8, sept: 8, september: 8, oct: 9, october: 9, nov: 10, november: 10, dec: 11, december: 11 };
+const NEG = new Set(['not', 'no', 'cant', 'cannot', 'except', 'never', 'away', 'busy', 'unavailable', 'out', 'without']);
+const ANY = new Set(['any', 'anytime', 'whenever', 'everything', 'every', 'all', 'always', 'anything']);
+const FILLER = new Set(['i', 'im', 'am', 'can', 'could', 'play', 'free', 'good', 'ok', 'okay', 'fine', 'available', 'keen', 'on', 'the', 'a', 'of', 'in', 'at', 'day', 'days', 'time', 'times', 'week', 'weeks', 'is', 'are', 'for', 'me', 'do', 'mostly', 'usually', 'generally', 'pretty', 'much', 'most', 'th', 'st', 'nd', 'rd', 'yes', 'yep', 'probably', 'happy', 'to', 'golf', 'round', 'rounds', 'only', 'just', 'else', 'rest', 'otherwise', 'but', 'and', 'or', 'also', 'plus', 'then', 'apart', 'from', 'other', 'than', 'this', 'next', 'nights', 'night', 'sorry', 'mornin', 'onwards', 'each', 'either']);
+
+/**
+ * Easy phrases, read on the phone: "any time", "weekends", "fri arvos and any Sunday", "not fridays", "can't the 21st",
+ * "sat morning only". → { ok, st, words } — ok false if it didn't understand every word (then the AI takes it).
+ * "only" → everything not named is ✗. Negative bits ("not", "can't", "except", "away") → ✗.
+ */
+export function quickFill(text, cells, st, { weekView = true } = {}) {
+  const s = String(text || '').toLowerCase().replace(/[’']/g, '').replace(/after\s+work/g, ' twilight weekday ').replace(/after\s+lunch/g, ' arvo ')
+    .replace(/\bexcept\b/g, ', except');
+  if (!s.trim()) return { ok: false };
+  const only = /\bonly\b|\bjust\b/.test(s);
+  const chunks = s.split(/\s*(?:,|;|\.|\band\b|\bbut\b|\bplus\b|&|\+|\bor\b)\s*/).filter((x) => x.trim());
+  const ds = [...new Set(cells.map((c) => c.date))];
+  let next = st; let unknown = false; const named = new Set(); const words = [];
+  let negAll = false;
+  for (const ch of chunks) {
+    const toks = ch.split(/[^a-z0-9]+/).filter(Boolean);
+    const days = new Set(); const parts = new Set(); const dates = new Set(); let neg = negAll; let any = false; let month = null;
+    for (const t of toks) { if (t in MONTH_WORDS) month = MONTH_WORDS[t]; }
+    for (let i = 0; i < toks.length; i += 1) {
+      const t = toks[i];
+      const bare = t.endsWith('s') && !(t in QF_DAYS) && t.slice(0, -1) in QF_DAYS ? t.slice(0, -1) : t;
+      if (NEG.has(t)) { neg = true; if (t === 'except') negAll = true; continue; }
+      if (bare in QF_DAYS) { const v = QF_DAYS[bare]; if (v === 'we') { days.add(0); days.add(6); } else if (v === 'wd') [1, 2, 3, 4, 5].forEach((d) => days.add(d)); else days.add(v); continue; }
+      if (t in QF_PARTS) { parts.add(QF_PARTS[t]); continue; }
+      if (ANY.has(t)) { any = true; continue; }
+      if (t in MONTH_WORDS) continue;
+      const m = /^(\d{1,2})(st|nd|rd|th)?$/.exec(t);
+      if (m) {
+        const n = Number(m[1]);
+        const hit = ds.filter((d) => Number(d.slice(8, 10)) === n && (month == null || Number(d.slice(5, 7)) - 1 === month));
+        if (!hit.length) { unknown = true; continue; }
+        dates.add(hit[0]); continue;
+      }
+      if (FILLER.has(t)) continue;
+      unknown = true;
+    }
+    if (!days.size && !parts.size && !dates.size && !any) continue;
+    const status = neg ? NO : YES;
+    const hit = cells.filter((c) => (!days.size || days.has(dowOf(c.date))) && (!dates.size || dates.has(c.date)) && (!parts.size || (c.part && parts.has(c.part))));
+    if (!hit.length) continue;
+    hit.forEach((c) => named.add(c.key));
+    if (weekView && !dates.size) {
+      next = setWeek(next, [...new Set(hit.filter((c) => c.part).map(rowKey))], status, cells);
+      const ex = hit.filter((c) => !c.part).map((c) => c.key);
+      if (ex.length) next = setDates(next, ex, status, cells);
+    } else next = setDates(next, hit.map((c) => c.key), status, cells);
+    words.push(`${MARK[status]} ${ch.replace(/\b(not|no|cant|cannot|except|never)\b/g, '').replace(/\s+/g, ' ').trim()}`);
+  }
+  if (unknown || !words.length) return { ok: false };
+  if (only) {
+    const rest = cells.filter((c) => !named.has(c.key));
+    if (weekView) {
+      const restRows = [...new Set(rest.filter((c) => c.part).map(rowKey))].filter((k) => !cells.some((c) => c.part && rowKey(c) === k && named.has(c.key)));
+      next = setWeek(next, restRows, NO, cells);
+    }
+    next = setDates(next, rest.filter((c) => statusOf(c, next) !== NO).map((c) => c.key), NO, cells);
+    words.push('✗ everything else');
+  }
+  return { ok: true, st: next, words };
+}
+
+const AI_STATUS = { yes: YES, y: YES, can: YES, '✓': YES, no: NO, n: NO, cant: NO, '✗': NO, maybe: MAYBE, '?': MAYBE };
+const dayKeysFor = (d) => {
+  const v = String(d || '').toLowerCase().replace(/s$/, '');
+  if (v === 'any' || v === 'every' || v === 'all' || v === 'everyday') return WEEK_DAYS;
+  if (v === 'weekday') return FROM_DAY_SETS.weekdays;
+  if (v === 'weekend') return FROM_DAY_SETS.weekends;
+  const k = TYPE_DAYS[v] ?? TYPE_DAYS[String(d || '').toLowerCase()];
+  return k == null ? [] : [DAY_KEYS[k]];
+};
+const partsFor = (p) => {
+  const v = String(p || 'any').toLowerCase();
+  if (v === 'any' || v === 'all' || !v) return ASK_PART_KEYS;
+  const k = TYPE_PARTS[v] || (ASK_PART_KEYS.includes(v) ? v : null);
+  return k ? [k] : [];
+};
+/**
+ * What the AI said, made safe: { week: [{ day, part, status }], dates: [{ date, part, status }], notes: [{ day | date,
+ * part, note }], where: { from: [{ place, days, max_drive_min }], avoid: [...], like: [...], note }, said }.
+ * Only the ask's own dates and parts get through; notes and words are cut short. → the same shape, cleaned.
+ */
+export function cleanFill(raw, { dates = [], parts = ASK_PART_KEYS } = {}) {
+  const r = raw && typeof raw === 'object' ? raw : {};
+  const dset = new Set(dates); const pset = new Set(parts);
+  const arr = (x, n) => (Array.isArray(x) ? x.slice(0, n) : []);
+  const txt = (x, n) => String(x ?? '').replace(/[<>{}]/g, '').replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n);
+  const week = [];
+  for (const w of arr(r.week, 60)) {
+    const st = AI_STATUS[String(w?.status || '').toLowerCase()];
+    if (!st) continue;
+    for (const day of dayKeysFor(w.day)) for (const part of partsFor(w.part)) if (pset.has(part)) week.push({ day, part, status: st });
+  }
+  const ds = [];
+  for (const d of arr(r.dates, 120)) {
+    const st = AI_STATUS[String(d?.status || '').toLowerCase()];
+    if (!st || !dset.has(String(d?.date || ''))) continue;
+    for (const part of partsFor(d.part)) if (pset.has(part)) ds.push({ date: String(d.date), part, status: st });
+  }
+  const notes = [];
+  for (const n of arr(r.notes, 20)) {
+    const note = txt(n?.note, 80);
+    if (!note) continue;
+    const ps = partsFor(n.part).filter((p) => pset.has(p));
+    if (n?.date && dset.has(String(n.date))) ps.forEach((p) => notes.push({ date: String(n.date), part: p, note }));
+    else dayKeysFor(n?.day || 'any').forEach((day) => ps.forEach((p) => notes.push({ day, part: p, note })));
+  }
+  const w = r.where && typeof r.where === 'object' ? r.where : {};
+  const from = arr(w.from, MAX_FROM).map((f) => {
+    const label = txt(f?.place ?? f?.label, 60).replace(/[0-9]/g, '').trim();
+    if (!label) return null;
+    const days = [...new Set(arr(f?.days, 7).flatMap((d) => dayKeysFor(d)))];
+    const max = Math.round(Number(f?.max_drive_min));
+    return { label, days: days.length === 7 ? [] : WEEK_DAYS.filter((d) => days.includes(d)), max_min: max >= 5 && max <= 240 ? max : null, lat: Number.isFinite(Number(f?.lat)) && f?.lat != null ? Number(f.lat) : null, lng: Number.isFinite(Number(f?.lng)) && f?.lng != null ? Number(f.lng) : null };
+  }).filter(Boolean);
+  const where = {
+    from, avoid: arr(w.avoid, 6).map((x) => txt(x, 60)).filter(Boolean), like: arr(w.like, 6).map((x) => txt(x, 60)).filter(Boolean),
+    note: txt(w.note, 120),
+  };
+  return { week, dates: ds, notes, where, said: txt(r.said, 200) };
+}
+
+/** Put a cleaned fill on the grid. → { st, notes, changed: [cell keys], words: ['✓ every arvo', …] } */
+export function applyFill(fill, cells, st, notes = {}, { weekView = true } = {}) {
+  let next = st; const nn = { ...notes }; const before = new Map(cells.map((c) => [c.key, statusOf(c, st)]));
+  for (const w of fill.week || []) {
+    const k = `${w.day}|${w.part}`;
+    if (weekView) next = setWeek(next, [k], w.status, cells);
+    else next = setDates(next, cells.filter((c) => c.part === w.part && dayKeyOf(c.date) === w.day).map((c) => c.key), w.status, cells);
+  }
+  for (const d of fill.dates || []) next = setDates(next, [`${d.date}|${d.part}`], d.status, cells);
+  for (const n of fill.notes || []) {
+    if (n.date) nn[`${n.date}|${n.part}`] = n.note;
+    else if (weekView) nn[`${n.day}|${n.part}`] = n.note;
+    else cells.filter((c) => c.part === n.part && dayKeyOf(c.date) === n.day).forEach((c) => { nn[c.key] = n.note; });
+  }
+  const changed = cells.filter((c) => statusOf(c, next) !== before.get(c.key)).map((c) => c.key);
+  const words = [];
+  const tally = (s) => changed.filter((k) => statusOf(cells.find((c) => c.key === k), next) === s).length;
+  if (tally(YES)) words.push(`✓ ${tally(YES)} square${tally(YES) === 1 ? '' : 's'}`);
+  if (tally(NO)) words.push(`✗ ${tally(NO)}`);
+  if (tally(MAYBE)) words.push(`? ${tally(MAYBE)}`);
+  const nNotes = (fill.notes || []).length;
+  if (nNotes) words.push(`${nNotes} note${nNotes === 1 ? '' : 's'}`);
+  return { st: next, notes: nn, changed, words };
+}
+
+/** What the phone sends the AI about this ask (no names, no other answers). */
+export function fillContext(ask, today) {
+  const cells = askCells(ask, today);
+  const dates = [...new Set(cells.map((c) => c.date))];
+  return {
+    today, weekday: dayWord(dayKeyOf(today)),
+    dates: dates.map((d) => `${d} ${dayWord(dayKeyOf(d))}`),
+    parts: askPartKeys(ask).map((p) => {
+      const w = partWindow(dates[0] || today, p);
+      return `${p} ${w?.from}–${w?.to}${p === 'twilight' ? ' (from sunset)' : ''}`;
+    }),
+    week_first: weekFirst(ask, today),
+  };
+}

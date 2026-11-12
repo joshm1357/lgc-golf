@@ -1,0 +1,21 @@
+Run on staging 12 Nov 2026 (after 111 + 112), all as expected:
+1. Bo asks: two Saturdays, any time, no max → ok made
+2. Bo asks again with max 5 players → ok made
+3. spots (none = no cap) → none
+4–8. Sam / Kurt / Al (all maybe) / Ham / Dan answer → ok
+9. Sam's maybe kept → arvo:yes,morning:true
+10. can: Sat 2 arvo → Sam,Kurt,Ham            (Al's maybe doesn't count)
+11. can: Sat 2 morning (only a maybe) → -
+12. can: Sat 9 arvo (Dan, "maybe":"yes" is not a maybe) → Dan
+13. best so far → 2030-11-02 arvo · 3
+14. ready card at 3 can + 1 maybe → -
+16. ready card at 4 can → Bo: ⏰ Sat 2 arvo · 4 can — That’s a 4-ball. Tap to choose it, or put 2–3 to a vote.
+21. a2 (max 5): ready at 4 → Bo: ⏰ Sat 16 arvo · 4 can — That’s a 4-ball. …   (max is a cap, not a target)
+22–23. vote ticks → Sat 2 arvo: Bo,Ham,Kurt,Sam / Sat 2 morning: -   (maybes aren't ticked)
+24–25. Bo reads / writes the AI log → refused: permission denied
+26. anon: places with the link → North Ryde NSW (1)   (library areas; OpenStreetMap is the wider search)
+27. anon: places, a made-up token → refused: That link isn’t working…
+28. anon: courses near Leichhardt → Barnwell Park 4.3km, Marrickville 4.6km, Massey Park 5.3km, Moore Park 5.9km…
+29. anon: courses near, made-up token → refused
+30. anon: courses near, no point → 0
+31. anon: find_courses directly → refused: permission denied

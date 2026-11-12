@@ -33,3 +33,51 @@ details.co-more > summary { cursor: pointer; font-weight: 700; min-height: 44px;
 details.co-more > summary::-webkit-details-marker { display: none; }
 details.co-more > summary::after { content: '▾'; margin-left: 6px; color: var(--muted); }
 details.co-more[open] > summary::after { content: '▴'; }
+
+/* ov43 — "Anyone keen for a round?" v2: the reply grid (components/AskReply.jsx) and the board (AskDecide.jsx). */
+.ask-grid { display: grid; gap: 6px; align-items: stretch; touch-action: none; user-select: none; -webkit-user-select: none; }
+.ask-head { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; min-height: 48px; padding: 4px 2px; border: 0; background: transparent; font: inherit; color: var(--text); cursor: pointer; line-height: 1.15; }
+.ask-head strong { font-size: 14px; }
+.ask-head span { font-size: 11px; color: var(--muted); }
+.ask-rowhead { display: flex; align-items: center; gap: 4px; min-height: 48px; padding: 0 6px; border: 0; background: transparent; font: inherit; font-size: 14px; color: var(--text); text-align: left; cursor: pointer; }
+.ask-cell { position: relative; min-height: 48px; border-radius: 10px; border: 1px solid #B9C2CC; background: #fff; font-size: 20px; font-weight: 800; color: #fff; cursor: pointer; touch-action: none; -webkit-touch-callout: none; }
+.ask-cell.on { background: var(--up); border-color: var(--up); }
+.ask-cell.out { background: var(--gold-soft); border-color: var(--gold); color: var(--text); }
+.ask-cell:disabled { opacity: .35; }
+.ask-dot { position: absolute; top: 2px; right: 6px; font-size: 18px; color: var(--gold); line-height: 1; }
+.ask-cell:not(.on) .ask-dot { color: var(--muted); }
+.ask-strip { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 6px; }
+.ask-showonly .chip { min-height: 36px; }
+.ask-whereline { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); font: inherit; color: var(--text); text-align: left; cursor: pointer; }
+.ask-whereline strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ask-leader { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 12px; background: var(--ground); }
+.ask-leader strong { font-size: 18px; }
+.ask-leader.ready { background: #E3F2EA; }
+.ask-slot { display: flex; gap: 8px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line-soft); }
+.linkish { border: 0; background: transparent; padding: 0; font: inherit; color: var(--navy); text-decoration: underline; cursor: pointer; }
+.ask-wa { display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 12px; background: #E5DDD5; }
+.ask-wa-bubble { align-self: flex-end; max-width: 92%; padding: 8px 10px; border-radius: 10px; background: #DCF8C6; white-space: pre-wrap; font-size: 14px; color: #111; }
+.ask-wa-card { align-self: flex-end; max-width: 92%; display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 10px; background: #fff; border-left: 4px solid var(--gold); color: #111; }
+
+/* v2.1 — ✓ / ✗ / ? squares, your week + dates, the Caddie box, Where (always open) */
+.ask-cell.y { background: var(--up); border-color: var(--up); color: #fff; }
+.ask-cell.n { background: #F4E3E1; border-color: #D9A39C; color: #B3261E; }
+.ask-cell.m { background: #fff; border-color: #B9C2CC; color: #8A96A3; font-weight: 600; }
+.ask-cell.ex { box-shadow: 0 0 0 2px var(--gold) inset; }
+.ask-cell.changed { outline: 2px dashed var(--gold); outline-offset: 1px; }
+.ask-cell.y .ask-dot { color: #fff; }
+.ask-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; color: var(--muted); }
+.ask-legend b { display: inline-block; min-width: 22px; text-align: center; border-radius: 6px; padding: 0 4px; color: #fff; }
+.ask-legend b.y { background: var(--up); }
+.ask-legend b.n { background: #F4E3E1; color: #B3261E; }
+.ask-legend b.m { background: #fff; color: #8A96A3; border: 1px solid #B9C2CC; }
+.ask-week-title { display: flex; flex-direction: column; gap: 2px; }
+.ask-dates-toggle { align-self: flex-start; min-height: 44px; border: 0; background: transparent; padding: 0; font: inherit; font-weight: 700; color: var(--navy); cursor: pointer; }
+.ask-weekblock { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid var(--line-soft); }
+.ask-caddie { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 14px; background: var(--ground); border: 1px solid var(--line); }
+.ask-caddie textarea { width: 100%; min-height: 64px; resize: vertical; }
+.ask-filled { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; background: #FFF7E0; border: 1px solid var(--gold); }
+.ask-where { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 14px; border: 1px solid var(--line); background: var(--card); }
+.ask-from { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 12px; background: var(--ground); }
+.ask-from .row { align-items: center; }
+.ask-from .co-chips .chip { min-height: 36px; }

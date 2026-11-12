@@ -22,3 +22,8 @@ verify_jwt = false
 # one vote, expires when the vote closes) is the check — see supabase/functions/vote-link/logic.ts.
 [functions.vote-link]
 verify_jwt = false
+
+# The Caddie box on "Anyone keen for a round?" (v2.1): answers from the no-sign-in link too, so it checks the ask's
+# link token and its own caps (5 a person, 60 an ask) instead of needing a sign-in.
+[functions.ask-fill]
+verify_jwt = false

@@ -206,6 +206,8 @@ function FrontDoor() {
       </div>
       <LinkForm />
       <LostLink />
+      {/* ov43: no group needed */}
+      {signInOn && <a href="#/ask" className="btn ghost block" style={{ ...ON_NAVY_GHOST, maxWidth: 340 }} data-testid="front-ask">⛳ Ask some mates for a round — no group needed</a>}
       {NEW_GROUPS && <a href="#/start" className="small" style={{ color: '#fff', fontWeight: 700, textAlign: 'center', borderTop: '1px solid rgba(255,255,255,.2)', paddingTop: 14, width: '100%', maxWidth: 340 }}>{signInOn ? 'Start a new group' : 'Running a golf group? Start your own →'}</a>}
       <span className="small" style={{ color: 'var(--on-navy-muted)' }}><a href="#/privacy" style={{ color: 'inherit' }}>Privacy</a> · <a href="#/terms" style={{ color: 'inherit' }}>Terms</a></span>
     </div>

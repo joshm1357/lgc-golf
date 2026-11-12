@@ -4,12 +4,12 @@
 // answered (headcount.js's rule), the note, when replies close, and the actions. Extras ("➕ Add to this round") only
 // show when someone switched them on. Locking it in (103's callout_lock) makes one round in the app, so scoring,
 // history and side games work as usual.
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
 import { useData, useSession, useFeature, playerName } from '../lib/store.jsx';
 import { Header, Avatar, Sheet, toast, askConfirm } from '../components/ui.jsx';
-import { notify } from '../lib/push.js';
+import { notify, shareText } from '../lib/push.js';
 import { useRun, must } from '../lib/run.js';
 import { gate } from '../lib/savedgate.js';
 import { replies, repliesLine } from '../lib/headcount.js';
@@ -21,6 +21,10 @@ import CalloutDayPlan from '../components/CalloutDayPlan.jsx';
 import { CourseFinder } from '../components/CalloutSheet.jsx';
 import { TripWeather } from '../components/Weather.jsx';
 import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
+import AskReply from '../components/AskReply.jsx';
+import { useAsk, AskBoard, ChooseSheet, VoteSheet, BookingCard, EasyAsk, GoAgain } from '../components/AskDecide.jsx';
+import { askShareText, askWords } from '../lib/ask.js';
+import { sydneyToday } from '../lib/callout.js';
 import '../components/callout.css';
 
 const KittyTab = lazyScreen(() => import('./PlanTabs.jsx'), 'KittyTab', { inline: true });
@@ -49,6 +53,13 @@ export default function RoundCallout({ pd }) {
   const [locking, setLocking] = useState(false);
   const [changing, setChanging] = useState(false);
   const [busy, run] = useRun();
+  // ov43: a v2 ask ("Anyone keen for a round?") — answers, choose / vote, booking.
+  const ad = useAsk(cd?.plan || pd.plan);
+  const [choosing, setChoosing] = useState(null);
+  const [voting, setVoting] = useState(null);
+  const [editing, setEditing] = useState(false);
+  const whosInOn = useFeature('ask_whos_in') !== false;
+  useEffect(() => { if (pd.plan.ask) supabase.rpc('callout_seen', { p_plan: pd.plan.id }).then(() => {}, () => {}); }, [pd.plan.id, pd.plan.ask]);
   const on = {
     games: useFeature('games'), dinner_awards: useFeature('dinner_awards'), planner_rooms: useFeature('planner_rooms'), planner_costs: useFeature('planner_costs'),
   };
@@ -105,14 +116,38 @@ export default function RoundCallout({ pd }) {
           </div>
         ) : (
           <div className="card pad stack" style={{ gap: 4 }} data-testid="co-open">
-            <span className="label">⛳ Who’s up for a hit?</span>
-            <span>{by ? `${playerName(by)} put this out` : 'Put out'}{v.voting ? ' — tick the times you can make.' : ' — say if you can play.'}</span>
+            <span className="label">{plan.ask ? '⛳ Anyone keen for a round?' : '⛳ Who’s up for a hit?'}</span>
+            <span>{by ? `${playerName(by)} put this out` : 'Put out'}{v.asking ? ' — tap the times you can play.' : v.voting ? ' — tick the times you can make.' : ' — say if you can play.'}</span>
+            {v.asking && <span className="small muted">{askWords(plan.ask)}</span>}
             {v.closesLine && <span className="small muted">{v.closesLine}{v.closed && manage ? ' — time to lock it in.' : v.closed ? ` — waiting for ${by ? playerName(by) : 'them'} to lock it in.` : ''}</span>}
           </div>
         )}
 
+        {/* ---------------- ov43: your answer on the grid */}
+        {v.asking && v.isAsked && !cancelled && (() => {
+          const mineA = ad.answers.find((a) => a.player_id === me) || null;
+          if (mineA && !editing) {
+            return (
+              <div className="card pad row between" data-testid="ask-mine">
+                <span><strong>Your answer:</strong> {mineA.cant ? 'can’t this round' : `${mineA.slots.length} time${mineA.slots.length === 1 ? '' : 's'}`}</span>
+                <button type="button" className="btn ghost sm" onClick={() => setEditing(true)} data-testid="ask-change">Change</button>
+              </div>
+            );
+          }
+          return <div className="card pad stack" style={{ gap: 8 }}><strong>When can you play?</strong><AskReply plan={plan} answer={mineA} onSent={async () => { setEditing(false); await ad.reload(); }} /></div>;
+        })()}
+        {v.asking && (manage || (whosInOn && ad.answers.some((a) => a.player_id === me))) && !cancelled && (
+          <AskBoard plan={plan} asked={v.asked} ad={ad} manage={manage} onChoose={(r) => setChoosing(r)} onVote={(c) => setVoting(c)} />
+        )}
+        {v.asking && manage && !cancelled && (
+          <button type="button" className="btn ghost block" data-testid="ask-share"
+            onClick={async () => { const r = await shareText(askShareText({ who: by ? playerName(by) : '', ask: plan.ask, courseName: plan.location_name || '', link: plan.ask_token ? `${window.location.origin}${import.meta.env.BASE_URL}#/a/${plan.ask_token}` : `${window.location.origin}${import.meta.env.BASE_URL}#/plan/${plan.id}?c=1` })); if (r === 'copied') toast('Copied — paste it in the group chat'); }}>
+            💬 Share to the group chat
+          </button>
+        )}
+
         {/* ---------------- Your reply */}
-        {!cancelled && !v.past && v.isAsked && (
+        {!v.asking && !cancelled && !v.past && v.isAsked && (
           <div className="card pad stack" style={{ gap: 10 }} data-testid="co-your-reply">
             <div className="row between"><strong>Your reply</strong><span className={`co-pill${v.standing.status === 'in' ? ' in' : v.standing.status === 'reserve' ? ' reserve' : ''}`} data-testid="co-standing">{v.voting ? `${v.options.filter((o) => v.myVote(o.id)).length} of ${v.options.length} answered` : standingWords(v.standing)}</span></div>
             <ReplyButtons cd={cd} v={v} me={me} />
@@ -124,8 +159,11 @@ export default function RoundCallout({ pd }) {
         )}
         {!v.isAsked && !cancelled && <div className="small muted">This one’s just for the people asked{by ? ` — ask ${playerName(by)} to add you` : ''}.</div>}
 
-        {/* ---------------- Who's playing */}
-        <div className="card pad stack" style={{ gap: 10 }} data-testid="co-who-card">
+        {/* ---------------- Who's playing (a v2 ask shows its board above until it's decided) */}
+        {plan.ask && v.locked && !cancelled && <BookingCard plan={plan} ad={ad} manage={manage} inCount={v.spots.in.length} />}
+        {plan.ask && v.locked && manage && !cancelled && <EasyAsk plan={plan} ad={ad} />}
+        {plan.ask && v.locked && manage && !cancelled && (round?.status !== 'setup' || String(plan.start_date).slice(0, 10) < sydneyToday()) && <GoAgain plan={plan} invites={cd.invites} />}
+        {!v.asking && <div className="card pad stack" style={{ gap: 10 }} data-testid="co-who-card">
           <div className="row between">
             <strong>Who’s {v.locked ? 'playing' : 'in'}</strong>
             <span className="small muted" data-testid="co-spots">{v.voting ? (plan.spots ? `${plan.spots} spots` : 'No cap') : spotsWords(plan.spots, v.spots.in.length, v.spots.reserve.length)}</span>
@@ -159,7 +197,7 @@ export default function RoundCallout({ pd }) {
               </span>
             </div>
           )}
-        </div>
+        </div>}
 
         {/* ---------------- The details */}
         <div className="card pad stack" style={{ gap: 6 }} data-testid="co-details">
@@ -197,7 +235,7 @@ export default function RoundCallout({ pd }) {
         {/* ---------------- The actions */}
         {manage && !cancelled && !v.past && (
           <div className="stack" style={{ gap: 8 }}>
-            {!v.locked && (
+            {!v.locked && !v.asking && (
               <button {...gate('organise')} type="button" className="btn gold block" style={{ minHeight: 56 }} onClick={() => setLocking(true)} data-testid="co-lock">
                 🔒 Lock it in{v.best && v.tally[v.best.id]?.yes ? ` — ${v.best.label}` : ''}
               </button>
@@ -209,6 +247,8 @@ export default function RoundCallout({ pd }) {
       </div>
       {locking && <LockSheet cd={cd} v={v} onClose={() => setLocking(false)} onDone={(r) => { setLocking(false); if (r?.round_id) toast('Locked in — the round is in the app'); }} />}
       {changing && <ChangeSheet cd={cd} v={v} onClose={() => setChanging(false)} />}
+      {choosing && <ChooseSheet plan={plan} r={choosing} onClose={() => setChoosing(null)} onDone={async () => { setChoosing(null); await cd.reload(); await ad.reload(); toast('Locked in — the round is in the app'); }} />}
+      {voting && <VoteSheet plan={plan} choices={voting} onClose={() => setVoting(null)} onDone={async () => { setVoting(null); await cd.reload(); }} />}
     </div>
   );
 }

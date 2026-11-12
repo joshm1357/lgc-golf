@@ -25,7 +25,7 @@ import { loadJoinCode } from './lib/joincode.js';
 import Join, { InviteJoin } from './screens/Join.jsx';
 import { inviteCode } from './lib/invite.js';
 import { signInProblemFromUrl, SIGN_IN } from './lib/auth.js';
-import { frontDoor, isFreshSignIn, clearFreshSignIn, takeReturn, choosesItsOwnWay } from './lib/home.js';
+import { frontDoor, isFreshSignIn, clearFreshSignIn, takeReturn, choosesItsOwnWay, wasPicked } from './lib/home.js';
 import YourGroups, { YourGroupsInside } from './screens/YourGroups.jsx';
 import PersonalLink from './screens/PersonalLink.jsx';
 import { personalCode } from './lib/personal.js';
@@ -45,6 +45,8 @@ const SetupGuide = lazyScreen(() => import('./screens/SetupGuide.jsx'));
 const Privacy = lazyScreen(() => import('./screens/Legal.jsx'), 'Privacy');
 const Terms = lazyScreen(() => import('./screens/Legal.jsx'), 'Terms');
 const VoteLink = lazyScreen(() => import('./screens/VoteLink.jsx'));
+const AskPublic = lazyScreen(() => import('./screens/AskPublic.jsx')); // ov43: a round ask's own link, no group or sign-in
+const AskStart = lazyScreen(() => import('./screens/AskStart.jsx')); // ov43: ask some mates, no group needed
 const Profile = lazyScreen(() => import('./screens/Profile.jsx'));
 const Comps = lazyScreen(() => import('./screens/Comps.jsx'));
 const MapScreen = lazyScreen(() => import('./screens/MapScreen.jsx'));
@@ -221,6 +223,10 @@ function Gate() {
   if (loc.pathname === '/start' || loc.pathname.startsWith('/start/')) return <StartOrClosed />;
   // Privacy and terms (drafts): anyone can read them.
   if (loc.pathname === '/privacy') return <LazyArea resetKey="privacy" fallback={<Loading />}><Privacy /></LazyArea>;
+  // ov43: "Anyone keen for a round?" — its link opens straight on the grid (no group, no "Who are you?", no sign-in),
+  // and anyone signed in can ask some mates with no group.
+  if (loc.pathname.startsWith('/a/')) return <LazyArea resetKey="ask-link" fallback={<Loading />}><AskPublic token={loc.pathname.split('/')[2] || ''} /></LazyArea>;
+  if (loc.pathname === '/ask') return <LazyArea resetKey="ask-start" fallback={<Loading />}><AskStart /></LazyArea>;
   if (loc.pathname.startsWith('/v/')) return <LazyArea resetKey="vote-link" fallback={<Loading />}><Routes><Route path="/v/:token" element={<VoteLink />} /></Routes></LazyArea>; // 079: vote email answers, no sign-in
   if (loc.pathname === '/terms') return <LazyArea resetKey="terms" fallback={<Loading />}><Terms /></LazyArea>;
   // The clubhouse TV: read-only, no sign-in.
@@ -241,7 +247,8 @@ function Gate() {
   const banner = problem && <div className="err" role="alert" style={{ margin: 0, borderRadius: 0 }}>{problem}</div>;
   // The front door: sign in first (when it's switched on in this build), then Your groups, then into a group.
   // With sign-in off (the live L.G.C build): not in a group → the link-first screen (no PINs, 083).
-  const door = frontDoor({ signInOn: SIGN_IN.length > 0, status, fresh: isFreshSignIn(), hasInvite: !!inviteCode(window.location.hash) });
+  const door = frontDoor({ signInOn: SIGN_IN.length > 0, status, fresh: isFreshSignIn(), hasInvite: !!inviteCode(window.location.hash),
+    picked: wasPicked(), link: !/^#?\/?(\?.*)?$/.test(window.location.hash) }); // ov43: no link → Your groups
   if (door === 'join' || door === 'home') return <>{banner}<Join /></>;
   if (door === 'your-groups') return <>{banner}<YourGroups /></>;
   return (

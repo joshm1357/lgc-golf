@@ -25,8 +25,19 @@ describe('frontDoor', () => {
   it('signed in, in no group: Your groups empty state', () => {
     expect(frontDoor({ signInOn: true, status: { is_member: false, signed_in: true, groups: [] } })).toBe('your-groups');
   });
-  it('just signed in with one group: straight in', () => {
+  it('just signed in with one group: straight in (once a group is picked)', () => {
     expect(frontDoor({ signInOn: true, status: { is_member: true, signed_in: true, groups: [G1] }, fresh: true })).toBe('inside');
+  });
+  it('ov43: signed in, opening the app with no link and no group picked this visit: Your groups', () => {
+    expect(frontDoor({ signInOn: true, status: { is_member: true, signed_in: true, groups: [G1] }, picked: false })).toBe('your-groups');
+    expect(frontDoor({ signInOn: true, status: { is_member: true, signed_in: true, groups: [G1, G2] }, picked: false })).toBe('your-groups');
+  });
+  it('ov43: a group link (deep link) or a group picked this visit: straight in', () => {
+    expect(frontDoor({ signInOn: true, status: { is_member: true, signed_in: true, groups: [G1] }, picked: false, link: true })).toBe('inside');
+    expect(frontDoor({ signInOn: true, status: { is_member: true, signed_in: true, groups: [G1, G2] }, picked: true })).toBe('inside');
+  });
+  it('ov43: phone-only (not signed in) people are never sent to the list', () => {
+    expect(frontDoor({ signInOn: true, status: { is_member: true, signed_in: false, groups: [G1] }, picked: false })).toBe('inside');
   });
   it('just signed in with several groups: pick one', () => {
     expect(frontDoor({ signInOn: true, status: { is_member: true, signed_in: true, groups: [G1, G2] }, fresh: true })).toBe('your-groups');

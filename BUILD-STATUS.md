@@ -2188,3 +2188,88 @@ type-checks of ai-helper and notify; `supabase/tests/108_trip_ideas.sql` (85 che
 expected file; 108 re-runs cleanly); e2e `tests/e2e/trip-ideas-test.mjs` (all pass); votes-coorg, plan-ux,
 trip-builder, trips pass; weekends-comps has 1 date-dependent failure that fails the same on v10-6-release.
 **Next**: Josh's OK; apply 108 on staging; set `AI_FAST_MODEL`; check a real WhatsApp preview on a branch link.
+
+## ov43 — "Anyone keen for a round?" v2: ask when they can, match, lock, book, go again (12 Nov 2026, branch `ov43-round-ask`, from `main` (v10.7), migration 111 — staging only once approved)
+Design: Project doc `claude/round-callout-v2-design.md`.
+
+**Audit (12 Nov, live, read-only):** 105 library courses within 60 km of the CBD; visitor times 28, fees 11, booking link 14,
+all three 9; organisers' own times 0. 0 call-outs and 0 home areas on live. So the course check mostly shows guesses
+(marked unconfirmed) until the visitor-times research is done.
+
+**Built**
+- `src/lib/ask.js` (+25 tests, including a simulated group of ten: keen, 9-to-5, parents with "home by", late lurker,
+  can't): the one rule (date + window), four parts (Early / Morning / Arvo / Twilight from that day's sunset), the ask,
+  long asks (weekday rows + can't-dates strip), notes ("only after", "finish by", "9 holes"), one-tap answers, type it,
+  the usual week, matching (reply order), the decide trigger, vote choices, next best for Full, the course check, Where,
+  the funnel and its reading, share text.
+- Migration 111 (additive): `plans.ask / ask_full / booked_at`; `callout_answers`, `player_usual_weeks` (only you read
+  yours), `callout_events`; `put_round_ask`, `callout_answer`, `callout_seen`, `callout_probably`, `callout_ask_choose`
+  (one-option vote → 103's `callout_lock`), `callout_ask_vote`, `callout_move` (Full), `callout_booked`,
+  `callout_take_booking`, `callout_easy` (→ `beta_feedback` for Caddie), played trigger; job `lgc-round-asks` (halfway
+  nudge, ready card, go again). 103's `callout_tick` re-made with one extra line (skips a v2 ask until it has a vote).
+  Buzzes reuse 103's kinds, so the notify function is unchanged. Feature switches: ask_usual_week, ask_where, ask_notes,
+  ask_whos_in (under planner, on by default).
+- Screens: `AskForm.jsx` (inside the ⛳ sheet, now opening on "Ask when they can"; "I've got times" is the ov34 sheet,
+  unchanged), `AskReply.jsx` (the grid: tap, swipe, tap a day/heading, hold for a note, show-only, quick answers, type it,
+  Where, Can't this round), `AskDecide.jsx` (board, Choose, vote, course check, funnel, booking with Full / It's booked /
+  I'll book it, Was that easy?, Go again). `RoundCallout.jsx` and `CalloutCard.jsx` show these only when `plan.ask` is set.
+
+**Tested:** Vitest 1986 (all). e2e new `ask-round-test.mjs` 26 checks (ask, send to myself, 5 answers, swipe, note,
+board, choose, locked round of 4, Full → next best, booked, easy 👍, usual-week prefill, notes switch). e2e
+`round-callout-test.mjs` (fixed time + vote, unchanged path) all pass. SQL test `supabase/tests/111_round_ask.sql` written,
+to run on staging after 111 is applied.
+
+**Open calls settled (best practice):** usual week counts as "probably" — shown, unconfirmed, never counted or locked in;
+four columns.
+
+**Independent of a group (12 Nov, Josh: "I want the app to be independent… answer simply, incentivise log in, ensure an
+email or something"):** every ask has its own link `#/a/<token>` (screens/AskPublic.jsx) that opens straight on the
+grid — no group, no "Who are you?", no sign-in. First answer asks for a name and an email or mobile; the phone keeps a key
+to change it; then "Get a buzz when it's locked in — sign in" claims the answer into the app (ask_guest_claim). `#/ask`
+(screens/AskStart.jsx, from the front door and Your groups) lets anyone signed in ask some mates with no group (a hidden
+quick group, start_round_ask; 047's new-groups switch still applies on live). Organiser and booker see "📇 Answered from
+the link" with emails / mobiles (ask_contacts). Share to the group chat now sends the `#/a/` link.
+
+**Database tested locally:** Postgres 16 with a Supabase stand-in, every migration 001–111 applied in order;
+`111_round_ask.sql` 92 checks (expected file saved); `103_round_callout.sql` still matches its expected file exactly.
+Caught and fixed: an ask with no range was accepted; "Was that easy?" wrote to a missing column; contacts / move / booked
+let anyone through when nobody was booking (null logic).
+
+**Next:** apply 111 to staging (STOP — Josh approves the Supabase prompt), test the preview link.
+Release with the next version (live: 111 after the step-1 snapshot).
+
+
+## ov43 v2.1 — "Anyone keen for a round?" rethought: ✓/✗/?, your week + dates, Caddie box, where you leave from (12 Nov 2026, branch `ov43-round-ask`, PR #35, migration 112 — on staging)
+Design: Project doc `claude/round-ask-v2-1-rethink.md` (Josh tested ov43 and called out that it followed the brief literally).
+
+**Built**
+- `src/lib/ask.js` v2.1 section (+22 tests in `ask21.test.js`): ✓/✗/? state (your week + date exceptions), tap cycle,
+  "Everything else ✗/✓", slots (? = maybe), compress / from-answer / usual week v2, tee-time words, the 4-ball ready
+  rule, leaving-from places (days, max drive) and drive per date, course ranking by total drive, the phone's phrase
+  reader (`quickFill`), the AI fill cleaner (`cleanFill`, used on the server and the phone) and `applyFill`.
+- Migration 112 (additive): `ask_ai_uses` (server only); `ask_store` keeps "maybe"; `ask_can` / `ask_best` skip maybes;
+  the job's ready card fires at the first 4-ball ("That's a 4-ball / 2 tee times"); `ask_places` and `ask_courses_near`
+  (link-safe, need the ask's token). SQL test `supabase/tests/112_round_ask_v21.sql` — run on staging, all as expected.
+- Edge function `ask-fill` (verify_jwt off; checks the token, the caps, cuts the text to 300; logs outline only). Uses the
+  same AI secrets as ai-helper (fast model if set, low thinking). Deployed to staging (bundled, see below). Deno tests
+  `supabase/functions/ask-fill/logic.test.ts` (7).
+- Screens: `AskReply.jsx` rewritten (Caddie box with Undo, your week, Show the dates, exceptions outlined, notes shown,
+  gold = a note rules the time out, Where always open with places/days/drive and courses by drive, Send ✓ n · ? n);
+  `AskForm.jsx` and `AskStart.jsx` (defaults, no group size, More: max players / exact times / closes / note);
+  `AskDecide.jsx` (tee-time words, maybes, courses ranked by drive with each person's drive and ⚠ over max);
+  `AskPublic.jsx` (tee-time words, maybes, passes the token and key so the Caddie box works on the link);
+  `PlaceSearch.jsx` takes an optional search (the link's `ask_places`).
+
+**Tested:** Vitest 2012 (all). e2e `ask-round-test.mjs` rewritten for v2.1 — 50+ checks all pass (defaults, preview, the
+Caddie box on the phone and with the AI (faked), your week taps, row tap, a date exception, swipe, can't, the 4-ball board,
+maybes never counted, lock-in, Full, booked, easy, usual week, Where switch, the link with two places and courses by drive,
+contacts, no-group start). `round-callout-test.mjs` unchanged and passing. Live AI call on staging (via pg_net): "any arvo
+except the 21st, Sundays home by 12, leaving from Ryde on weekends, not Moore Park again" → every arvo ✓, the 21st ✗,
+Sundays ✓ with "home by 12", Ryde (weekends), not Moore Park.
+
+**Deploying ask-fill:** the staging workflow only runs on `product`, so it was deployed by hand as one bundled file:
+`npx esbuild supabase/functions/ask-fill/index.ts --bundle --format=esm --platform=neutral --minify --external:'npm:*'`.
+On release, the normal `supabase functions deploy ask-fill` (config.toml sets verify_jwt = false) does the same.
+
+**Before release (live):** apply 111 then 112; deploy `ask-fill`; check live's Auth Site URL / redirect list (staging's
+fixed 12 Nov). The "why" field on ask-fill's error replies (outline only, no words) can come out once it's settled.

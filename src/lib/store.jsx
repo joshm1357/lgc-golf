@@ -62,7 +62,7 @@ export function SessionProvider({ children }) {
     // isn't left refusing every change with no Stop bar.
     if (viewing && !status?.viewing) stopPreview();
     // The database says which group I'm in (the one this phone asked for, if I'm still in it).
-    if (status?.group_id) setCurrentGroup(status.group_id);
+    if (status?.group_id) setCurrentGroup(status.group_id, { auto: true });
     setState({ loading: false, user: session.user, status, offline: !!(error && cached) });
     // The group's look. (An older database has no look: it only has L.G.C.)
     if (status?.is_member) applyLook(status.look || (status.legacy === false ? DEFAULT_LOOK : LGC_LOOK), status.group_name);

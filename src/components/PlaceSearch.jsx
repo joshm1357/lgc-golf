@@ -12,7 +12,8 @@ import { nominatimUrl, placeFromNominatim, round2 } from '../lib/tripfinder.js';
 
 const OSM = () => <>Search © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors</>;
 
-export default function PlaceSearch({ onPick, placeholder = 'Suburb or town', allowHere = false, initial = '' }) {
+// search (optional): (term) → rows like trip_finder_places' — the ask link passes its own (ask_places, no sign-in).
+export default function PlaceSearch({ onPick, placeholder = 'Suburb or town', allowHere = false, initial = '', search = null }) {
   const [q, setQ] = useState(initial);
   const [lib, setLib] = useState([]);
   const [osm, setOsm] = useState(null);
@@ -27,7 +28,7 @@ export default function PlaceSearch({ onPick, placeholder = 'Suburb or town', al
     if (term.length < 2) { setLib([]); return undefined; }
     const t = setTimeout(async () => {
       const mine = ++ticket.current;
-      const { data } = await supabase.rpc('trip_finder_places', { p_query: term });
+      const { data } = search ? { data: await search(term).catch(() => []) } : await supabase.rpc('trip_finder_places', { p_query: term });
       if (mine === ticket.current) setLib(Array.isArray(data) ? data : []);
     }, 300);
     return () => clearTimeout(t);

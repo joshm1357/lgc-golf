@@ -388,7 +388,8 @@ const LINK = `#/join/${INVITE}?to=%2Fcourses`;
   const u = addUser(S, { id: GOOGLE, email: 'josh@gmail.com' });
   S.members.set(GOOGLE, { player: null });
   const { ctx, page } = await phone(S, { sess: session(u), notifyAsked: true });
-  await page.goto(PW);
+  // ov43: opening the app with no link starts on Your groups; a group's link goes in (and asks who you are).
+  await page.goto(`${PW}#/plan`);
   await page.getByText('Who are you?').waitFor({ timeout: 15000 });
   check(await page.getByText('taken', { exact: true }).waitFor({ timeout: 8000 }).then(() => true, () => false), 'G: Mike shows as taken (as before)');
   await page.getByRole('button', { name: /Mike/ }).first().click();

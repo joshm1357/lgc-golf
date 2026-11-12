@@ -2237,3 +2237,39 @@ let anyone through when nobody was booking (null logic).
 
 **Next:** apply 111 to staging (STOP — Josh approves the Supabase prompt), test the preview link.
 Release with the next version (live: 111 after the step-1 snapshot).
+
+
+## ov43 v2.1 — "Anyone keen for a round?" rethought: ✓/✗/?, your week + dates, Caddie box, where you leave from (12 Nov 2026, branch `ov43-round-ask`, PR #35, migration 112 — on staging)
+Design: Project doc `claude/round-ask-v2-1-rethink.md` (Josh tested ov43 and called out that it followed the brief literally).
+
+**Built**
+- `src/lib/ask.js` v2.1 section (+22 tests in `ask21.test.js`): ✓/✗/? state (your week + date exceptions), tap cycle,
+  "Everything else ✗/✓", slots (? = maybe), compress / from-answer / usual week v2, tee-time words, the 4-ball ready
+  rule, leaving-from places (days, max drive) and drive per date, course ranking by total drive, the phone's phrase
+  reader (`quickFill`), the AI fill cleaner (`cleanFill`, used on the server and the phone) and `applyFill`.
+- Migration 112 (additive): `ask_ai_uses` (server only); `ask_store` keeps "maybe"; `ask_can` / `ask_best` skip maybes;
+  the job's ready card fires at the first 4-ball ("That's a 4-ball / 2 tee times"); `ask_places` and `ask_courses_near`
+  (link-safe, need the ask's token). SQL test `supabase/tests/112_round_ask_v21.sql` — run on staging, all as expected.
+- Edge function `ask-fill` (verify_jwt off; checks the token, the caps, cuts the text to 300; logs outline only). Uses the
+  same AI secrets as ai-helper (fast model if set, low thinking). Deployed to staging (bundled, see below). Deno tests
+  `supabase/functions/ask-fill/logic.test.ts` (7).
+- Screens: `AskReply.jsx` rewritten (Caddie box with Undo, your week, Show the dates, exceptions outlined, notes shown,
+  gold = a note rules the time out, Where always open with places/days/drive and courses by drive, Send ✓ n · ? n);
+  `AskForm.jsx` and `AskStart.jsx` (defaults, no group size, More: max players / exact times / closes / note);
+  `AskDecide.jsx` (tee-time words, maybes, courses ranked by drive with each person's drive and ⚠ over max);
+  `AskPublic.jsx` (tee-time words, maybes, passes the token and key so the Caddie box works on the link);
+  `PlaceSearch.jsx` takes an optional search (the link's `ask_places`).
+
+**Tested:** Vitest 2012 (all). e2e `ask-round-test.mjs` rewritten for v2.1 — 50+ checks all pass (defaults, preview, the
+Caddie box on the phone and with the AI (faked), your week taps, row tap, a date exception, swipe, can't, the 4-ball board,
+maybes never counted, lock-in, Full, booked, easy, usual week, Where switch, the link with two places and courses by drive,
+contacts, no-group start). `round-callout-test.mjs` unchanged and passing. Live AI call on staging (via pg_net): "any arvo
+except the 21st, Sundays home by 12, leaving from Ryde on weekends, not Moore Park again" → every arvo ✓, the 21st ✗,
+Sundays ✓ with "home by 12", Ryde (weekends), not Moore Park.
+
+**Deploying ask-fill:** the staging workflow only runs on `product`, so it was deployed by hand as one bundled file:
+`npx esbuild supabase/functions/ask-fill/index.ts --bundle --format=esm --platform=neutral --minify --external:'npm:*'`.
+On release, the normal `supabase functions deploy ask-fill` (config.toml sets verify_jwt = false) does the same.
+
+**Before release (live):** apply 111 then 112; deploy `ask-fill`; check live's Auth Site URL / redirect list (staging's
+fixed 12 Nov). The "why" field on ask-fill's error replies (outline only, no words) can come out once it's settled.

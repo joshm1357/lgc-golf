@@ -192,3 +192,13 @@
 - The ⛳ sheet opens on "Ask when they can"; "I've got times" keeps the ov34 set-time / options sheet unchanged.
 - Front door (Josh 12 Nov): signed in and opening the app with no link → Your groups (each group, Start a new group, ⛳ Ask some mates), even with one group. A group's link goes straight in; a group picked this visit stays picked (sessionStorage). Phone-only people are unchanged (straight in). "Who are you?" has a way out to ⛳ Ask some mates.
 - Answering by link needs a name and an email or mobile; signing in afterwards claims the answer. Asking with no group = a hidden quick group.
+
+## ov43 v2.1 — how a group actually settles on a round (12 Nov 2026, claude/round-ask-v2-1-rethink.md)
+- Ask defaults: every day, any time, next 4 weeks; all 7 day chips. No group size asked: the board says it in tee times; optional "max players" (a cap) under More.
+- Ready = the first time a 4-ball (4 ✓) can play the same time, or replies close (migration 112's job).
+- Squares are ✓ / ✗ / ?, all starting ?. Tap cycles ✓ → ✗ → ?. Only ✓ counts toward a tee time, a lock-in or a vote tick; ? is sent as "maybe" and shown separately. Hold-for-note is gone (notes come through the Caddie box).
+- The reply opens on "your week" (Mon–Sun × parts) for asks over a week; "Show the dates ▾" opens every date by week to change exceptions (outlined). Short asks and picked dates open on the dates. The saved usual week = the first view (v: 2 keeps ✗; `pattern` keeps ✓ for older readers).
+- Caddie box: easy phrases fill on the phone; anything else goes to the new `ask-fill` function. AI on the no-sign-in link: yes, capped at 5 a person and 60 an ask (Josh 12 Nov). "A person" = sign-in, else the answer key, else a random id on the phone; 60 an ask is the hard ceiling. Logs never hold the words.
+- Leaving from (Josh 12 Nov: "from here or here … could differ weekends vs weekdays, or other days"): up to 3 places, each with its own days (any mix of Mon–Sun; Weekdays / Weekends shortcuts) and max drive (20/30/45/60). The drive for a date uses the nearest place that applies that day. Suburb only, never an address; the group sees it.
+- Suburb lookup: the app's existing place search (course-library towns, then OpenStreetMap on tap) — no bundled list added. On the link it uses `ask_places` (no sign-in needed).
+- The organiser's course check ranks courses by total drive for the people who ✓ the leading time (fewest over their max first), skips courses most of them said no to, then visitor times / daylight / booking link.

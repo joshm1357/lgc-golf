@@ -1,6 +1,7 @@
-// ov43 — "Anyone keen for a round?" v2 end to end, on a phone (375 px) and a laptop. Fake database only: it does what
-// migrations 103 + 111 do, with the same maths (src/lib/ask.js, src/lib/callout.js). Ask (and "Send to myself") →
-// five players answer (one-tap, type it, a note, a swipe, can't) → the board leads "Sat … arvo · 4 can" → Choose →
+// ov43 v2.1 — "Anyone keen for a round?" end to end (claude/round-ask-v2-1-rethink.md), on a phone (375 px) and a laptop. Fake database only: it does what
+// migrations 103 + 111 + 112 do, with the same maths (src/lib/ask.js, src/lib/callout.js). Ask (every day, any time, 4 weeks,
+// no group size; "Send to myself") → five players answer (the Caddie box, taps on "your week", a date exception, a swipe,
+// can't) → the board leads "Sat … arvo · 4 can → one tee time" → Choose →
 // locked through 103's lock-in → the booker taps Full (moves to the next best) → It's booked → "Was that easy?" →
 // the usual week fills the next ask. Usage: node tests/e2e/ask-round-test.mjs <base> [shotDir]
 import { chromium } from '/opt/npm-tools/node_modules/playwright/index.mjs';
@@ -34,6 +35,7 @@ const db = {
 };
 let me = { player_id: BO, is_admin: false, role: 'player' };
 const notifies = [];
+const fills = [];
 const startCalls = [];
 
 // ---------------------------------------------------------------- what 103 does
@@ -114,7 +116,7 @@ function calloutLock(a) {
 
 // ---------------------------------------------------------------- what 111 does
 const ev = (plan, kind, player = me.player_id) => db.callout_events.push({ plan_plan: plan, plan_id: plan, group_id: GROUP, player_id: player, kind, at: now() });
-const canFor = (planId, date, from, to) => db.callout_answers.filter((a) => a.plan_id === planId && !a.cant && (a.slots || []).some((s) => A.overlaps(s, { date, from, to })))
+const canFor = (planId, date, from, to) => db.callout_answers.filter((a) => a.plan_id === planId && !a.cant && (a.slots || []).some((s) => !s.maybe && A.overlaps(s, { date, from, to })))
   .sort((a, b) => a.first_at.localeCompare(b.first_at)).map((a) => a.player_id);
 function putRoundAsk(a) {
   const id = crypto.randomUUID();
@@ -223,6 +225,13 @@ async function fake(route) {
   const p = url.pathname;
   const body = () => JSON.parse(req.postData() || '{}');
   if (p.startsWith('/functions/v1/notify')) { notifies.push(body()); return json({ sent: 3 }); }
+  if (p.startsWith('/functions/v1/ask-fill')) {
+    const b = body(); fills.push(b);
+    const d21 = A.askCells(db.plans.find((x) => x.ask_token === b.token).ask, CO.sydneyToday()).map((c) => c.date).find((d) => d.endsWith('-21')) || null;
+    return json({ fill: { week: [{ day: 'any', part: 'arvo', status: 'yes' }, { day: 'sun', part: 'any', status: 'yes' }], dates: d21 ? [{ date: d21, part: 'any', status: 'no' }] : [],
+      notes: [{ day: 'sun', part: 'morning', note: 'home by 12' }], where: { from: [{ place: 'Ryde', days: ['sat', 'sun'], max_drive_min: 45 }], avoid: ['Moore Park'], note: 'anywhere east' },
+      said: 'Any arvo, Sundays (home by 12), not the 21st.' }, remaining: { you: 4, ask: 59 } });
+  }
   if (p.startsWith('/auth/v1/user')) return json({ id: '99999999-9999-4999-8999-999999999934', aud: 'authenticated', role: 'authenticated', is_anonymous: false, email: 'bo@example.com' });
   if (p.startsWith('/rest/v1/rpc/')) {
     const fn = p.split('/').pop();
@@ -231,6 +240,8 @@ async function fake(route) {
     if (fn === 'put_round_out') return json(putRoundOut(body()));
     if (fn === 'callout_lock') { const r = calloutLock(body()); return r.error ? json({ message: r.error, code: 'P0001' }, 400) : json(r); }
     if (fn === 'find_courses') return json([]);
+    if (fn === 'ask_places' || fn === 'trip_finder_places') return json([{ area: 'Leichhardt NSW', lat: -33.88, lng: 151.16, courses: 1 }]);
+    if (fn === 'ask_courses_near') return json([{ id: 'l1', name: 'Marrickville', area: 'Marrickville', lat: -33.92, lng: 151.16, holes: 18, km: 4.6 }, { id: 'l2', name: 'Bonnie Doon', area: 'Pagewood', lat: -33.94, lng: 151.22, holes: 18, km: 9 }]);
     if (fn === 'put_round_ask') return json(putRoundAsk(body()));
     if (fn === 'ask_public') { const r = askPublic(body(), /Bearer [^ ]+\.[^ ]+\./.test(req.headers().authorization || '')); return r.error ? json({ message: r.error, code: 'P0001' }, 400) : json(r); }
     if (fn === 'ask_guest_answer') { const r = guestAnswer(body()); return r.error ? json({ message: r.error, code: 'P0001' }, 400) : json(r); }
@@ -302,76 +313,102 @@ const as = async (page, who, path) => { me = who; await page.goto(`${BASE}#${pat
 const BO_ME = { player_id: BO, is_admin: false, role: 'player' };
 const who = (id) => ({ player_id: id, is_admin: false, role: 'player' });
 const today2 = CO.sydneyToday();
-const cells = A.askCells({ days: ['thu', 'fri', 'sat', 'sun'], parts: [], range: { kind: 'next', days: 14 } }, today2);
-const firstSat = cells.find((c) => CO.dowOf(c.date) === 6).date;
-const satWord = CO.dayLabel(firstSat).split(' ').slice(0, 2).join(' '); // "Sat 14"
-const cellBtn = (page, part) => page.getByTestId('ask-grid').getByRole('button', { name: new RegExp(`^${satWord} ${part}`) });
+const cells = A.askCells(A.DEFAULT_ASK, today2);
+const sats = [...new Set(cells.filter((c) => CO.dowOf(c.date) === 6).map((c) => c.date))];
+const [firstSat, secondSat] = sats;
+const word = (d) => CO.dayLabel(d).split(' ').slice(0, 2).join(' '); // "Sat 14"
+const wsq = (page, day, part) => page.getByTestId('ask-grid').getByRole('button', { name: new RegExp(`^${day}s ${part}:`) });
+const dsq = (page, d, part) => page.getByTestId('ask-dates').getByRole('button', { name: new RegExp(`^${word(d)} ${part}:`) });
+const stateOf = async (loc) => { const l = await loc.getAttribute('aria-label'); return /: can’t/.test(l) ? 'n' : /: can/.test(l) ? 'y' : '?'; };
 
-// 1. Bo asks: Thu–Sun, any time, next 2 weeks, Moore Park, 4.
+// 1. Bo asks: the defaults are every day, any time, next 4 weeks — and no group size.
 await as(phone, BO_ME, '/plan');
 await phone.getByTestId('put-round-out').waitFor({ timeout: 20000 });
 await phone.getByTestId('put-round-out').click();
 await phone.getByTestId('ask-form').waitFor();
 check((await phone.getByTestId('co-kind-ask').getAttribute('aria-pressed')) === 'true', 'the sheet opens on “Ask when they can”');
+const summary1 = await phone.getByTestId('ask-summary').innerText();
+check(/Any day · any time · next 4 weeks/.test(summary1), `defaults: Any day · any time · next 4 weeks (got ${summary1})`);
+check(!(await phone.getByText('Group size').isVisible().catch(() => false)), 'no group size asked up front');
+check((await phone.getByTestId('ask-days').getByRole('button').count()) === 8, 'all 7 day chips (+ Every day)');
+await phone.getByTestId('ask-more').locator('summary').first().click();
+check(await phone.getByTestId('ask-max').isVisible(), 'max players is optional, under More');
 await phone.getByTestId('ask-course').getByRole('button', { name: 'Moore Park' }).click();
-check(/Thu, Fri, Sat, Sun · any time · next 2 weeks/.test(await phone.getByTestId('ask-summary').innerText()), 'the ask in one line: Thu, Fri, Sat, Sun · any time · next 2 weeks');
 await phone.screenshot({ path: `${SHOTS}/1-ask.png`, fullPage: true });
-// "Send to myself": the WhatsApp message and the grid, nothing saved.
+// "Send to myself": the WhatsApp message and the reply screen, nothing saved.
 await phone.getByTestId('ask-preview').click();
 await phone.getByTestId('ask-preview-sheet').waitFor();
 check(/anyone keen for a round\?/i.test(await phone.getByTestId('ask-wa-preview').innerText()), 'Send to myself: the WhatsApp preview');
-await phone.getByTestId('ask-preview-sheet').getByTestId('ask-quick').getByRole('button', { name: 'Weekends only' }).click();
+const pv = phone.getByTestId('ask-preview-sheet');
+check(/Applies to every week/.test(await pv.getByTestId('ask-span').innerText()), 'the reply opens on “your week — applies to every week …”');
+await pv.getByTestId('ask-caddie-text').fill('weekends only');
+await pv.getByTestId('ask-caddie-go').click();
+await pv.getByTestId('ask-filled').waitFor();
 await phone.screenshot({ path: `${SHOTS}/2-send-to-myself.png`, fullPage: true });
-await phone.getByTestId('ask-preview-sheet').getByTestId('ask-send').click();
+await pv.getByTestId('ask-send').click();
 check(db.callout_answers.length === 0 && db.plans.length === 0, 'the preview saves nothing');
-check(!(await phone.getByTestId('ask-preview-sheet').isVisible().catch(() => false)), 'sending the preview closes it, back on the ask');
 await phone.getByTestId('ask-go').click();
 await phone.getByTestId('ask-reply').waitFor({ timeout: 15000 });
 const plan = db.plans[0];
-check(plan?.ask?.range?.kind === 'next' && plan.spots === 4 && plan.location_name === 'Moore Park', 'asked: the ask saved with 4 spots at Moore Park');
+check(plan?.ask?.range?.days === 28 && !plan.ask.days.length && !plan.ask.parts.length && plan.spots == null && plan.location_name === 'Moore Park', 'asked: every day, any time, 4 weeks, no max, Moore Park');
 check(notifies.some((n) => n.plan_id === plan.id), 'the notify function is poked');
 
-// 2. Bo answers: Weekends only.
-await phone.getByTestId('ask-quick').getByRole('button', { name: 'Weekends only' }).click();
-await phone.screenshot({ path: `${SHOTS}/3-grid-weekends.png`, fullPage: true });
+// 2. Bo answers with the Caddie box: "weekends only" (read on the phone, no AI).
+await phone.getByTestId('ask-caddie-text').fill('weekends only');
+await phone.getByTestId('ask-caddie-go').click();
+await phone.getByTestId('ask-filled').waitFor();
+check(fills.length === 0, 'an easy phrase fills on the phone (no AI)');
+check(await stateOf(wsq(phone, 'Sat', 'Arvo')) === 'y' && await stateOf(wsq(phone, 'Wed', 'Arvo')) === 'n', '“weekends only”: Saturdays ✓, Wednesdays ✗');
+await phone.screenshot({ path: `${SHOTS}/3-caddie-weekends.png`, fullPage: true });
 await phone.getByTestId('ask-send').click();
 await phone.getByTestId('ask-mine').waitFor();
-check(db.callout_answers.find((a) => a.player_id === BO)?.slots.every((s) => [0, 6].includes(CO.dowOf(s.date))), 'Bo: weekends only');
+const boA = db.callout_answers.find((a) => a.player_id === BO);
+check(boA?.slots.length > 0 && boA.slots.every((s) => [0, 6].includes(CO.dowOf(s.date)) && !s.maybe), 'Bo: weekends only, all ✓');
 
-// 3. Sam (laptop): types it.
+// 3. Sam (laptop): taps Sat arvo and Sun arvo on his week, then “Everything else ✗”.
 await as(laptop, who(SAM), `/plan/${plan.id}`);
-await laptop.getByTestId('ask-typed').fill('sat arvo, sun arvo');
-await laptop.getByRole('button', { name: 'Fill' }).click();
-check((await cellBtn(laptop, 'Arvo').getAttribute('aria-pressed')) === 'true' && (await cellBtn(laptop, 'Morning').getAttribute('aria-pressed')) === 'false', 'type it: “sat arvo, sun arvo” ticks the arvos only');
+await wsq(laptop, 'Sat', 'Arvo').waitFor({ timeout: 15000 });
+check(await stateOf(wsq(laptop, 'Mon', 'Early')) === '?', 'every square starts ?');
+await wsq(laptop, 'Sat', 'Arvo').click();
+await wsq(laptop, 'Sun', 'Arvo').click();
+check(await stateOf(wsq(laptop, 'Sat', 'Arvo')) === 'y', 'one tap: ? → ✓');
+await laptop.getByTestId('ask-else-no').click();
+check(await stateOf(wsq(laptop, 'Mon', 'Early')) === 'n' && await stateOf(wsq(laptop, 'Sat', 'Arvo')) === 'y', '“Everything else ✗” leaves the ✓ alone');
 await laptop.getByTestId('ask-send').click();
 await laptop.getByTestId('ask-mine').waitFor();
+const samA = db.callout_answers.find((a) => a.player_id === SAM);
+check(samA.slots.every((s) => s.part === 'arvo' && [0, 6].includes(CO.dowOf(s.date)) && !s.maybe), 'Sam: Sat and Sun arvos only');
 check(await laptop.getByTestId('ask-board').isVisible(), 'after sending, Sam sees who else is in');
 
-// 4. Al (phone): all Saturdays, plus a note on the first Saturday arvo.
+// 4. Al (phone): all Saturdays (tap the row), then one date off — the first Saturday arvo.
 await as(phone, who(AL), `/plan/${plan.id}`);
-await phone.getByTestId('ask-typed').fill('sat');
-await phone.getByRole('button', { name: 'Fill' }).click();
-await phone.getByTestId('ask-add-note').click();
-await cellBtn(phone, 'Arvo').click();
-await phone.getByTestId('ask-note-sheet').waitFor();
-await phone.getByTestId('ask-note-input').fill('only after 1');
-check(/tee off 1pm–3pm/.test(await phone.getByTestId('ask-note-read').innerText()), 'a note is read: “only after 1” → tee off 1pm–3pm');
-await phone.screenshot({ path: `${SHOTS}/4-note.png`, fullPage: true });
-await phone.getByTestId('ask-note-save').click();
+await phone.getByTestId('ask-grid').waitFor();
+await phone.getByTestId('ask-grid').getByRole('button', { name: 'Sats', exact: true }).click();
+check(await stateOf(wsq(phone, 'Sat', 'Early')) === 'y' && await stateOf(wsq(phone, 'Sat', 'Twilight')) === 'y', 'tap a day: the whole row ✓');
+await phone.getByTestId('ask-show-dates').click();
+await phone.getByTestId('ask-dates').waitFor();
+check(await stateOf(dsq(phone, secondSat, 'Arvo')) === 'y', 'the dates are filled in from your week');
+await dsq(phone, firstSat, 'Arvo').click(); // ✓ → ✗
+check(await stateOf(dsq(phone, firstSat, 'Arvo')) === 'n' && /ex/.test(await dsq(phone, firstSat, 'Arvo').getAttribute('class')), 'a date changed from the week is an exception (marked)');
+check(/1 changed/.test(await phone.getByTestId('ask-show-dates').innerText()), '“Show the dates” says how many are changed');
+await phone.screenshot({ path: `${SHOTS}/4-dates-exception.png`, fullPage: true });
 await phone.getByTestId('ask-send').click();
 await phone.getByTestId('ask-mine').waitFor();
-const alSat = db.callout_answers.find((a) => a.player_id === AL).slots.find((s) => s.date === firstSat && s.part === 'arvo');
-check(alSat?.from === '13:00' && alSat?.note === 'only after 1', 'Al’s Saturday arvo is narrowed to after 1pm, with the note');
+const alA = db.callout_answers.find((a) => a.player_id === AL);
+check(!alA.slots.some((s) => s.date === firstSat && s.part === 'arvo') && alA.slots.some((s) => s.date === secondSat && s.part === 'arvo' && !s.maybe), 'Al: Saturdays except the first Saturday arvo');
+check(alA.slots.some((s) => s.maybe) && alA.slots.filter((s) => s.maybe).every((s) => CO.dowOf(s.date) !== 6), 'Al: the rest went as “maybe” (?)');
 
-// 5. Kurt (phone): swipes across the first Saturday, early → arvo.
+// 5. Kurt (phone): swipes across Saturday, early → arvo.
 await as(phone, who(KURT), `/plan/${plan.id}`);
 await phone.getByTestId('ask-grid').waitFor();
-const a1 = await cellBtn(phone, 'Early').boundingBox(); const a3 = await cellBtn(phone, 'Arvo').boundingBox();
+await phone.waitForTimeout(1200); // let the screen settle (it re-renders once the answers load)
+await wsq(phone, 'Sat', 'Early').scrollIntoViewIfNeeded();
+const a1 = await wsq(phone, 'Sat', 'Early').boundingBox(); const a3 = await wsq(phone, 'Sat', 'Arvo').boundingBox();
 await phone.mouse.move(a1.x + a1.width / 2, a1.y + a1.height / 2); await phone.mouse.down();
 await phone.mouse.move(a1.x + a1.width * 1.5, a1.y + a1.height / 2, { steps: 4 });
 await phone.mouse.move(a3.x + a3.width / 2, a3.y + a3.height / 2, { steps: 8 }); await phone.mouse.up();
-const swiped = await Promise.all(['Early', 'Morning', 'Arvo'].map(async (p) => (await cellBtn(phone, p).getAttribute('aria-pressed')) === 'true'));
-check(swiped.every(Boolean), `swipe ticks several (early, morning, arvo: ${swiped})`);
+const swiped = await Promise.all(['Early', 'Morning', 'Arvo'].map((p) => stateOf(wsq(phone, 'Sat', p))));
+check(swiped.every((x) => x === 'y'), `swipe paints several (early, morning, arvo: ${swiped})`);
 await phone.getByTestId('ask-send').click();
 await phone.getByTestId('ask-mine').waitFor();
 
@@ -381,11 +418,13 @@ await phone.getByTestId('ask-cant').click();
 await phone.getByTestId('ask-mine').waitFor();
 check(db.callout_answers.find((a) => a.player_id === DAN)?.cant === true, 'Dan: can’t this round (once, no nagging)');
 
-// 7. Bo's board: the leader and the course check.
+// 7. Bo's board: the second Saturday arvo is the first time a 4-ball can play; said in tee times.
 await as(phone, BO_ME, `/plan/${plan.id}`);
 await phone.getByTestId('ask-board').waitFor();
 const lead = await phone.getByTestId('ask-leader').innerText();
-check(new RegExp(`That’s a group[\\s\\S]*${satWord} arvo · 4 can`, 'i').test(lead), `leader: “${satWord} arvo · 4 can” and it’s a group (got ${lead.replace(/\n/g, ' ')})`);
+check(new RegExp(`A 4-ball can play[\\s\\S]*${word(secondSat)} arvo · 4 can[\\s\\S]*4 can → one tee time`, 'i').test(lead), `leader: “${word(secondSat)} arvo · 4 can → one tee time” (got ${lead.replace(/\n/g, ' ')})`);
+const top5 = A.rankCells(A.askCells(plan.ask, today2), db.callout_answers.filter((a) => a.plan_id === plan.id)).filter((r) => r.can.length || r.maybe.length).slice(0, 5);
+check(top5.some((r) => r.maybe.length) === /maybe/.test(await phone.getByTestId('ask-board').innerText()) && top5[0].maybe.length === 0, 'the board shows maybes separately (never counted as can)');
 check(/Not answered: Josh/.test(await phone.getByTestId('ask-noreply').innerText()), 'not answered: Josh; Dan can’t');
 check(await phone.getByTestId('ask-funnel').isVisible(), 'the organiser sees the funnel');
 await phone.screenshot({ path: `${SHOTS}/5-board.png`, fullPage: true });
@@ -394,54 +433,50 @@ await phone.screenshot({ path: `${SHOTS}/5-board.png`, fullPage: true });
 await phone.getByTestId('ask-choose').first().click();
 await phone.getByTestId('ask-choose-tee').fill('13:20');
 await phone.getByTestId('ask-booker').selectOption(SAM);
-await phone.screenshot({ path: `${SHOTS}/6-choose.png`, fullPage: true });
 await phone.getByTestId('ask-choose-go').click();
 await phone.getByTestId('ask-booking').waitFor({ timeout: 15000 });
 const locked = db.plans[0];
 const rp = db.round_players.filter((x) => x.round_id === locked.round_id).map((x) => x.player_id);
-check(locked.status === 'confirmed' && locked.start_date === firstSat && locked.tee_time === '13:20', 'locked: the first Saturday at 1:20pm');
-check([BO, SAM, AL, KURT].every((x) => rp.includes(x)) && rp.length === 4, 'the round’s players: Bo, Sam, Al, Kurt (the 4 who could)');
-await phone.screenshot({ path: `${SHOTS}/7-locked.png`, fullPage: true });
+check(locked.status === 'confirmed' && locked.start_date === secondSat && locked.tee_time === '13:20', 'locked: the second Saturday at 1:20pm');
+check([BO, SAM, AL, KURT].every((x) => rp.includes(x)) && rp.length === 4, 'the round’s players: Bo, Sam, Al, Kurt (the 4 who ✓)');
+await phone.screenshot({ path: `${SHOTS}/6-locked.png`, fullPage: true });
 
 // 9. Sam (booking): Full → next best, then It's booked.
 await as(phone, who(SAM), `/plan/${plan.id}`);
 await phone.getByTestId('ask-full').waitFor();
-const fullText = await phone.getByTestId('ask-full').innerText();
 await phone.getByTestId('ask-full').click();
 await phone.waitForTimeout(800);
-check(db.plans[0].start_date !== firstSat || db.plans[0].ask.chosen.part !== 'arvo', `Full moves it to the next best (${fullText.replace(/\n/g, ' ')})`);
-check(db.plans[0].ask_full.length === 1, 'the full time is remembered');
+check(db.plans[0].ask_full.length === 1 && (db.plans[0].start_date !== secondSat || db.plans[0].ask.chosen.part !== 'arvo'), 'Full moves it to the next best, and remembers the full time');
 await phone.getByTestId('ask-booked').click();
 await phone.waitForTimeout(800);
 check(!!db.plans[0].booked_at, 'It’s booked');
-await phone.screenshot({ path: `${SHOTS}/8-booked.png`, fullPage: true });
 
 // 10. Bo: was that easy? 👍
 await as(phone, BO_ME, `/plan/${plan.id}`);
 await phone.getByTestId('ask-easy-yes').click();
-await phone.getByRole('textbox', { name: '' }).last().fill('two minutes, start to finish').catch(() => {});
 await phone.getByTestId('ask-easy-send').click();
 await phone.waitForTimeout(600);
 check(db.beta_feedback.some((f) => f.kind === 'like'), '“Was that easy?” 👍 goes to Caddie’s inbox');
 
-// 11. The usual week fills the next ask (Sam).
+// 11. The usual week fills the next ask (Sam) — exactly his first view.
 me = BO_ME;
-const id2 = putRoundAsk({ p_ask: { days: ['sat', 'sun'], parts: [], range: { kind: 'next', days: 14 }, times: [] }, p_spots: 4, p_closes_at: new Date(Date.now() + 86400000).toISOString() });
+const id2 = putRoundAsk({ p_ask: { days: ['sat', 'sun'], parts: [], range: { kind: 'next', days: 14 }, times: [] }, p_spots: null, p_closes_at: new Date(Date.now() + 86400000).toISOString() });
 await as(phone, who(SAM), `/plan/${id2}`);
 await phone.getByTestId('ask-prefilled').waitFor({ timeout: 10000 }).catch(() => {});
 check(await phone.getByTestId('ask-prefilled').isVisible().catch(() => false), 'next time: “Filled in from your usual week”');
-check((await cellBtn(phone, 'Arvo').getAttribute('aria-pressed')) === 'true', 'the usual week ticks Saturday arvo again');
-await phone.screenshot({ path: `${SHOTS}/9-usual-week.png`, fullPage: true });
+check(await stateOf(wsq(phone, 'Sat', 'Arvo')) === 'y' && await stateOf(wsq(phone, 'Sat', 'Early')) === 'n', 'the usual week: Sat arvo ✓, Sat early ✗ (as he left it)');
+await phone.screenshot({ path: `${SHOTS}/7-usual-week.png`, fullPage: true });
 
-// 12. Feature switch: notes off for the group → no hint, no notes.
-db.group_features.push({ group_id: GROUP, feature_key: 'ask_notes', enabled: false });
+// 12. Feature switch: Where off for the group → no Where box.
+db.group_features.push({ group_id: GROUP, feature_key: 'ask_where', enabled: false });
 await as(phone, who(SAM), `/plan/${id2}`);
 await phone.getByTestId('ask-grid').waitFor();
-check(!(await phone.getByTestId('ask-hint').isVisible().catch(() => false)), 'switch: notes off hides the note hint');
+check(!(await phone.getByTestId('ask-where').isVisible().catch(() => false)), 'switch: Where off hides the Where box');
+db.group_features = db.group_features.filter((f) => f.feature_key !== 'ask_where');
 
-// 13. The ask's own link on a phone that has never used the app: straight onto the grid — no "Who are you?", no sign-in.
+// 13. The ask's own link on a fresh phone: straight onto the reply — the Caddie (AI) fills it, Where with a suburb.
 me = BO_ME;
-const id3 = putRoundAsk({ p_ask: { days: ['sat', 'sun'], parts: [], range: { kind: 'next', days: 14 }, times: [] }, p_spots: 4, p_course: COURSE, p_closes_at: new Date(Date.now() + 86400000).toISOString() });
+const id3 = putRoundAsk({ p_ask: A.DEFAULT_ASK, p_spots: null, p_course: COURSE, p_closes_at: new Date(Date.now() + 86400000).toISOString() });
 const tok3 = db.plans.find((x) => x.id === id3).ask_token;
 const fresh = await (async () => {
   const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
@@ -451,25 +486,45 @@ const fresh = await (async () => {
 })();
 await fresh.goto(`${BASE}#/a/${tok3}`);
 await fresh.getByTestId('ask-public').waitFor({ timeout: 20000 });
-check(/Bo: anyone keen for a round\?/.test(await fresh.getByTestId('ask-public').innerText()), 'link: opens on the ask (“Bo: anyone keen for a round?”), no group, no sign-in');
-check(!(await fresh.getByText(/Who are you/i).isVisible().catch(() => false)), 'link: no “Who are you?”');
+check(/Bo: anyone keen for a round\?/.test(await fresh.getByTestId('ask-public').innerText()), 'link: opens on the ask, no group, no sign-in');
+check(await fresh.getByTestId('ask-caddie').isVisible(), 'link: the Caddie box is there too');
+await fresh.getByTestId('ask-caddie-text').fill('any arvo except the 21st, Sundays home by 12, from Ryde on weekends, not Moore Park again');
+await fresh.getByTestId('ask-caddie-go').click();
+await fresh.getByTestId('ask-filled').waitFor({ timeout: 10000 });
+check(fills.length === 1 && fills[0].token === tok3 && /^[a-z0-9]{18}$/.test(fills[0].device || ''), 'link: messy words go to the AI, with the link token and this phone’s id');
+check(/Any arvo, Sundays/.test(await fresh.getByTestId('ask-filled').innerText()), 'link: the Caddie says what it filled in');
+check(await stateOf(wsq(fresh, 'Wed', 'Arvo')) === 'y' && await stateOf(wsq(fresh, 'Wed', 'Early')) === '?', 'AI fill: every arvo ✓, the rest left ?');
+check(/Ryde/.test(await fresh.getByTestId('ask-where').innerText()) && /Not Moore Park/.test(await fresh.getByTestId('ask-where').innerText()), 'AI fill: leaving from Ryde (weekends), not Moore Park');
+await fresh.screenshot({ path: `${SHOTS}/8-link-caddie.png`, fullPage: true });
+await fresh.getByTestId('ask-filled-undo').click();
+check(await stateOf(wsq(fresh, 'Wed', 'Arvo')) === '?' && !(await fresh.getByTestId('ask-from').count()), 'Undo puts it all back');
+await fresh.getByTestId('ask-caddie-go').click();
+await fresh.getByTestId('ask-filled').waitFor({ timeout: 10000 });
+// A second place: Leichhardt, weekdays, 30 min.
+await fresh.getByTestId('ask-add-from').click();
+const addPlace = fresh.getByTestId('ask-add-place');
+await addPlace.getByRole('textbox', { name: 'Suburb or town' }).fill('Leich');
+await addPlace.getByRole('button', { name: /Leichhardt NSW/ }).click();
+const froms = fresh.getByTestId('ask-from');
+check((await froms.count()) === 2, 'two places to leave from');
+await froms.nth(1).getByRole('button', { name: 'Weekdays' }).click();
+await froms.nth(1).getByRole('button', { name: '30 min' }).click();
+await fresh.getByTestId('ask-courses').getByRole('button', { name: /Marrickville · \d+ min/ }).waitFor({ timeout: 8000 });
+check(true, 'courses near your place, with your drive');
 await fresh.getByTestId('ask-public-name').fill('Pete');
-await fresh.getByTestId('ask-quick').getByRole('button', { name: 'Weekends only' }).click();
-await fresh.getByTestId('ask-send').click();
-await fresh.waitForTimeout(600);
-check(!db.callout_answers.some((a) => a.plan_id === id3), 'link: no email or mobile → not sent (asks for one)');
 await fresh.getByTestId('ask-public-contact').fill('pete@example.com');
-await fresh.screenshot({ path: `${SHOTS}/10-link-answer.png`, fullPage: true });
+await fresh.screenshot({ path: `${SHOTS}/9-link-where.png`, fullPage: true });
 await fresh.getByTestId('ask-send').click();
 await fresh.getByTestId('ask-public-mine').waitFor({ timeout: 10000 });
 const pete = db.callout_guests.find((g) => g.plan_id === id3);
-check(pete?.email === 'pete@example.com' && db.callout_answers.some((a) => a.plan_id === id3 && a.player_id === pete.player_id && a.slots.length > 0), 'link: Pete answered with his email');
-check(await fresh.getByTestId('ask-public-signin').isVisible(), 'link: then the nudge to sign in (buzz when it’s locked in)');
-check(await fresh.getByTestId('ask-public-board').isVisible(), 'link: after answering he sees who can make what');
-await fresh.screenshot({ path: `${SHOTS}/11-link-sent.png`, fullPage: true });
+const peteA = db.callout_answers.find((a) => a.plan_id === id3 && a.player_id === pete?.player_id);
+check(pete?.email === 'pete@example.com' && peteA?.slots.some((s) => !s.maybe) && peteA.slots.some((s) => s.maybe), 'link: Pete answered (✓ and ? squares)');
+const lf = peteA?.where?.from || [];
+check(lf.length === 2 && lf[1].label === 'Leichhardt' && lf[1].days.join() === 'mon,tue,wed,thu,fri' && lf[1].max_min === 30 && lf[1].lat === -33.88, 'link: leaving from Ryde (weekends) and Leichhardt (weekdays, 30 min) saved');
+check(await fresh.getByTestId('ask-public-signin').isVisible(), 'link: then the nudge to sign in');
 await fresh.reload();
 await fresh.getByTestId('ask-public-mine').waitFor({ timeout: 10000 });
-check(/Pete/.test(await fresh.getByTestId('ask-public-mine').innerText()), 'link: this phone remembers his answer (he can change it)');
+check(/Pete/.test(await fresh.getByTestId('ask-public-mine').innerText()), 'link: this phone remembers his answer');
 
 // 14. Bo sees how to reach him.
 await as(phone, BO_ME, `/plan/${id3}`);
@@ -477,15 +532,16 @@ await phone.getByTestId('ask-contacts').waitFor({ timeout: 10000 });
 await phone.getByTestId('ask-contacts').locator('summary').click();
 check(/pete@example\.com/.test(await phone.getByTestId('ask-contacts').innerText()), 'Bo: “Answered from the link” — Pete’s email');
 
-// 15. No group needed: signed in, #/ask → make the link → straight to the ask with Share.
+// 15. No group needed: #/ask → make the link (no group size).
 await as(laptop, who(JOSH), '/ask');
 await laptop.goto(`${BASE}#/ask`);
 await laptop.getByTestId('ask-start').waitFor({ timeout: 15000 });
 await laptop.getByTestId('ask-start-name').fill('Josh');
-await laptop.screenshot({ path: `${SHOTS}/12-ask-start.png`, fullPage: true });
+check(!(await laptop.getByText('Group size').isVisible().catch(() => false)), 'no group: no group size either');
+await laptop.screenshot({ path: `${SHOTS}/10-ask-start.png`, fullPage: true });
 await laptop.getByTestId('ask-start-go').click();
 await laptop.waitForTimeout(1500);
-check(startCalls.length === 1 && startCalls[0].p_my_name === 'Josh' && startCalls[0].p_ask?.range?.kind === 'next', 'no group: “Make the link” starts an ask as Josh');
+check(startCalls.length === 1 && startCalls[0].p_my_name === 'Josh' && startCalls[0].p_ask?.range?.days === 28 && startCalls[0].p_spots == null, 'no group: “Make the link” — every day, 4 weeks, no max');
 
 await browser.close();
 console.log(fails.length ? `\n${fails.length} FAILED:\n- ${fails.join('\n- ')}` : '\nAll checks passed.');

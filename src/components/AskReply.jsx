@@ -142,7 +142,7 @@ export default function AskReply({ plan, answer = null, preview = false, guest =
     const before = { st, notes, where };
     const q = quickFill(t, cells, st, { weekView });
     if (q.ok) {
-      const changed = new Set(cells.filter((c) => statusOf(c, q.st) !== statusOf(c, st)).map((c) => c.key));
+      const changed = withRows(cells.filter((c) => statusOf(c, q.st) !== statusOf(c, st)).map((c) => c.key));
       setSt(q.st); setSaid('');
       setResult({ words: q.words, said: '', undo: before, changed });
       return;
@@ -170,10 +170,12 @@ export default function AskReply({ plan, answer = null, preview = false, guest =
       }
       setSaid(fill.said);
       const placeWords = fill.where.from.map((f) => `📍 ${f.label}${f.days.length ? ` (${fromDaysWords(f.days)})` : ''}`);
-      setResult({ words: [...a.words, ...placeWords, ...(fill.where.avoid.length ? [`not ${fill.where.avoid.join(', ')}`] : [])], said: fill.said, undo: before, changed: new Set(a.changed), left: r.remaining });
+      setResult({ words: [...a.words, ...placeWords, ...(fill.where.avoid.length ? [`not ${fill.where.avoid.join(', ')}`] : [])], said: fill.said, undo: before, changed: withRows(a.changed), left: r.remaining });
       if (a.changed.some((k) => isException(cells.find((c) => c.key === k), a.st))) setShowDates(true);
     } finally { setThinking(false); }
   });
+  /** Changed date squares → also their weekday squares (so "your week" shows what the Caddie changed). */
+  const withRows = (keys) => { const set = new Set(keys); for (const c of cells) if (c.part && set.has(c.key)) set.add(rowKey(c)); return set; };
   const undo = () => { if (!result?.undo) return; setSt(result.undo.st); setNotes(result.undo.notes); setWhere(result.undo.where); setResult(null); setSaid(''); };
 
   // ---- sending
@@ -276,7 +278,7 @@ export default function AskReply({ plan, answer = null, preview = false, guest =
           </div>
         ))}
         {Object.keys(notes).length > 0 && (
-          <span className="small muted" data-testid="ask-notes">📝 {Object.entries(notes).map(([k, v]) => `${noteWhere(k)}: ${v}`).join(' · ')}</span>
+          <span className="small muted" data-testid="ask-notes">📝 {Object.entries(notes).map(([k, v]) => `${noteWhere(k)}: ${v}`).join(' · ')} — a gold square means your note rules that time out.</span>
         )}
 
         {weekView && (
@@ -363,6 +365,7 @@ function CaddieBox({ onTell, busy, thinking, result, onUndo, onOk, canAi }) {
 /** Where — leaving from (one or more places, each with its days and max drive) and the courses near you, by drive. */
 function WhereBox({ where, setWhere, guest, token, courses }) {
   const [adding, setAdding] = useState(false);
+  const [fixing, setFixing] = useState(null); // a place the Caddie named that isn't on the map yet
   const [near, setNear] = useState([]);
   const first = where.from.find((f) => f.lat != null);
   const search = token ? async (term) => { const { data } = await supabase.rpc('ask_places', { p_token: token, p_query: term }); return data || []; } : null;
@@ -385,7 +388,7 @@ function WhereBox({ where, setWhere, guest, token, courses }) {
       <span className="label">Leaving from</span>
       {where.from.map((f, i) => (
         <div key={`${f.label}-${i}`} className="ask-from" data-testid="ask-from">
-          <div className="row between"><strong>{f.label}</strong>{f.lat == null && <span className="small muted">(pick it below to get drive times)</span>}
+          <div className="row between"><strong>{f.label}</strong>{f.lat == null && fixing !== i && <button type="button" className="btn ghost sm" onClick={() => setFixing(i)} data-testid="ask-find-place">Find it (for drive times)</button>}
             <button type="button" className="btn ghost sm" onClick={() => setWhere({ ...where, from: where.from.filter((_, j) => j !== i) })} aria-label={`Remove ${f.label}`}>✕</button></div>
           <div className="co-chips" role="group" aria-label="Which days">
             {['any', 'weekdays', 'weekends'].map((k) => <button key={k} type="button" className="chip" aria-pressed={fromDaysWords(f.days) === fromDaysWords(fromDaySet(k))} onClick={() => setFrom(i, { days: fromDaySet(k) })}>{k === 'any' ? 'Any day' : k[0].toUpperCase() + k.slice(1)}</button>)}
@@ -397,12 +400,12 @@ function WhereBox({ where, setWhere, guest, token, courses }) {
             <span className="small muted" style={{ alignSelf: 'center' }}>Drive up to</span>
             {DRIVE_CHOICES.map((m) => <button key={m} type="button" className="chip" aria-pressed={f.max_min === m} onClick={() => setFrom(i, { max_min: m })}>{m} min</button>)}
           </div>
-          {f.lat == null && <PlaceSearch initial={f.label} search={search} allowHere onPick={(p) => setFrom(i, { label: p.label || f.label, lat: p.lat, lng: p.lng })} />}
+          {f.lat == null && fixing === i && <PlaceSearch initial={f.label} search={search} allowHere onPick={(p) => { setFrom(i, { label: p.label || f.label, lat: p.lat, lng: p.lng }); setFixing(null); }} />}
         </div>
       ))}
       {where.from.length < MAX_FROM && (adding ? (
-        <PlaceSearch search={search} allowHere placeholder={where.from.length ? 'Another suburb (e.g. work)' : 'Your suburb or town'}
-          onPick={(p) => { setWhere({ ...where, from: [...where.from, cleanFrom({ label: p.label || 'Here', lat: p.lat, lng: p.lng, max_min: DEFAULT_DRIVE, days: [] })].filter(Boolean) }); setAdding(false); }} />
+        <div data-testid="ask-add-place"><PlaceSearch search={search} allowHere placeholder={where.from.length ? 'Another suburb (e.g. work)' : 'Your suburb or town'}
+          onPick={(p) => { setWhere({ ...where, from: [...where.from, cleanFrom({ label: p.label || 'Here', lat: p.lat, lng: p.lng, max_min: DEFAULT_DRIVE, days: [] })].filter(Boolean) }); setAdding(false); }} /></div>
       ) : (
         <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={() => setAdding(true)} data-testid="ask-add-from">
           {where.from.length ? '+ Another place (e.g. work, on weekdays)' : '+ Add your suburb'}

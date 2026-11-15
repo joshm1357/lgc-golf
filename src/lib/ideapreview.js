@@ -32,12 +32,13 @@ export function previewWords(p) {
   };
 }
 
-/** The whole page. { preview, url (this page), image (fallback picture), appBase ('/') } */
-export function previewPage({ preview = null, url = '', image = '', appBase = '/' } = {}) {
-  const w = previewWords(preview);
+/** The whole page. { preview, url (this page), image (fallback picture), appBase ('/') }
+ *  ov44: words and hop let another kind of link (the round ask, lib/askpreview.js) use the same page. */
+export function previewPage({ preview = null, url = '', image = '', appBase = '/', words = null, hop = null } = {}) {
+  const w = words && words.title ? words : previewWords(preview);
   const img = preview?.card_url && /^https:\/\//.test(preview.card_url) ? preview.card_url : image;
   const planId = preview?.plan_id && UUID.test(preview.plan_id) ? preview.plan_id : null;
-  const fallback = planId ? `#/idea/${planId}` : '#/';
+  const fallback = hop && /^#\/[A-Za-z0-9\/_?=&-]*$/.test(hop) ? hop : planId ? `#/idea/${planId}` : '#/';
   const base = /^\/[A-Za-z0-9/_-]*$/.test(appBase) ? appBase : '/';
   return `<!doctype html>
 <html lang="en-AU"><head>

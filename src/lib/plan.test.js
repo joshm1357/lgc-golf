@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { tallyPoll, nonVoters, kitty, settleUp, suggestions, icsFor, fmtRange, countdown, daysUntil, nudgeText } from './plan.js';
+import { tallyPoll, nonVoters, kitty, settleUp, suggestions, icsFor, icsForRound, fmtRange, countdown, daysUntil, nudgeText } from './plan.js';
 import { makeGroupDraw } from './draw.js';
 
 describe('date / location votes', () => {
@@ -170,5 +170,24 @@ describe('starter rulebook drives round set-up (Stage 5)', () => {
     expect(s.comp_bonus).toBe(2);
     expect(s.min_drives).toBe(6);
     expect(roundSettingsFromRules(rules, 'stableford').comp_bonus).toBeNull();
+  });
+});
+
+describe('ov44: a calendar file for one round', () => {
+  it('a tee time makes a timed event, 4½ hours, with a reminder the day before', () => {
+    const ics = icsForRound({ id: 'p-1', name: 'Round at Moore Park', date: '2026-11-21', time: '07:30', course: 'Moore Park' }, 'https://app.example/a/TOK');
+    expect(ics).toContain('DTSTART:20261121T073000');
+    expect(ics).toContain('DTEND:20261121T120000');
+    expect(ics).toContain('SUMMARY:⛳ Round at Moore Park');
+    expect(ics).toContain('LOCATION:Moore Park');
+    expect(ics).toContain('TRIGGER:-P1D');
+    expect(ics).toContain('https://app.example/a/TOK');
+    expect(ics.split('\r\n')[0]).toBe('BEGIN:VCALENDAR');
+  });
+  it('no tee time yet: an all-day event; no date: nothing', () => {
+    const ics = icsForRound({ id: 'p-2', date: '2026-11-21' });
+    expect(ics).toContain('DTSTART;VALUE=DATE:20261121');
+    expect(ics).toContain('DTEND;VALUE=DATE:20261122');
+    expect(icsForRound({ name: 'x' })).toBeNull();
   });
 });

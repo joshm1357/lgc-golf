@@ -1,0 +1,64 @@
+Run on staging 15 Nov 2026 (after 111 + 112 + 113), all as expected:
+1. door shut: the app is told → ok false
+2. door shut: Sid asks some mates → refused: Asking some mates for a round isn’t open yet. Got an invite link? Open it to join your group.
+3. round door open: the app is told → ok true
+4. groups still shut: the app is told → ok false
+5. round door open: Sid asks some mates → ok made
+6. Sid's hidden group: quick, weather on → true, true
+7. the place is kept inside the ask → Perth
+8. lock: a proper group → refused: The Golf Trip is invite-only while we test it. Got an invite link? Open it to join your group.
+9. lock: a quick group that isn't a round ask (a quick round) → refused: The Golf Trip is invite-only while we test it. …
+10. lock: a proper group claiming to be a round ask → refused: The Golf Trip is invite-only while we test it. …
+11. Sid: Make it official (a back way to a group) → refused: Starting a group is invite-only while we test it. Your rounds keep working as they are.
+12. Sid's group still hidden → true
+13. anon: preview keys → ok ask,by,card_url,course,status
+14. anon: preview says → ok Sid · planning · place left out · range 28
+15. anon: preview, lower case and spaces → ok true
+16. anon: preview, a made-up token → ok nothing
+17. anon: preview, rubbish → ok nothing
+18. anon: set a picture → refused: permission denied for function ask_set_card
+19. Sid sets the picture → ok
+20. Sid sets a picture from somewhere else → refused: That picture address isn’t one of ours
+21. Mate (not in it) sets the picture → refused: Round not found
+22. anon: preview has the picture → ok https://x.supabase.co/storage/v1/object/public/photos/g/asks/1.jpg
+23. link answer 1 (keeps its key) → ok sent
+24. link answers 2–6 from the same connection → ok 5
+25. link answer 7 from the same connection → refused: That’s a lot of answers from one place today — ask Sid to add you
+26. Ann changes her own answer (never limited) → ok 1
+27. a new answer from another connection → ok 1
+28. anon reads the connection marks → refused: permission denied for schema private
+29. what's kept about a connection → 6 answers, mark of 32 letters / 1 answers, mark of 32 letters
+30. link answers on Sid's ask → 7
+31. anon: the link says quick + weather → ok true, true
+32. anon: the link never has contacts → ok true
+33. anon: the preview never has contacts or names of who answered → ok true
+34. anon: Ann sees her own contact with her key → ok ann@example.com
+35. anon: contacts → refused: permission denied for function ask_contacts
+36. Sid (asked) sees contacts → ok 7 incl. zed@example.com
+37. Mate (a stranger) sees contacts → ok 0
+38. Bo asks in group G → ok made
+39. a link answer on Bo's ask → ok 1
+40. anon: group G's link says quick + weather (its switch is off) → ok false, false
+41. Bo (asked) sees contacts → ok 1
+42. So (the group's organiser) sees contacts → ok 1
+43. Kurt (booking it) sees contacts → ok 0
+44. Kurt sets the picture → refused: Only whoever put it out can do that
+45. Oz (another group) sees contacts → ok 0
+46. Oz sets the picture on Bo's ask → refused: Round not found
+47. Oz reads Bo's ask's answers → ok 0
+48. Oz reads the link answerers → refused: permission denied for table callout_guests
+49. Oz reads the door funnel → refused: Not for you
+50. anon counts: opened ×2 from the website, built ×1 → ok 3
+51. anon counts: a made-up step, a bad source → ok 2            (the made-up step isn't counted; the bad source becomes "direct")
+52. anon reads the counts → refused: permission denied for table door_counts
+53. anon reads the funnel → refused: permission denied for function admin_door_funnel
+54. one connection, 70 more → ok 70                               (called 70 times; only 56 counted — 60 a day per connection)
+55. today's counts → built/web-home=1, opened/spam=56, opened/web-home=2, shared/direct=1
+56. Josh reads the funnel: counts → ok {"built": 1, "opened": 58, "shared": 1}
+57. Josh reads the funnel: no-group asks today → ok true, first reply true
+58. Sid asks again (nobody will answer) → ok made
+59. tidy-up: groups deleted (oldest one that went nowhere) → 1
+60. the answered one (older) is kept → true
+61. the one nobody answered is gone, with its ask → true, true
+62. Sid's account is untouched → true
+63. a proper group is never tidied → true

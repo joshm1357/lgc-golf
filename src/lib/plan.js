@@ -248,6 +248,43 @@ export function icsFor(plan, url = '') {
   ].filter(Boolean).join('\r\n');
 }
 
+/**
+ * ov44: a calendar file for one locked-in round (the ask's link, for people who answered without signing in).
+ * With a tee time it's a timed event in the phone's own clock (a "floating" time — a round is local), 4½ hours long,
+ * with a reminder the day before; without one it's an all-day event. round: { id, name, date 'YYYY-MM-DD', time 'HH:MM', course }.
+ */
+export function icsForRound(round = {}, url = '') {
+  const a = parseDate(round.date);
+  if (!a) return null;
+  const p2 = (n) => String(n).padStart(2, '0');
+  const d8 = (d) => `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}`;
+  const esc = (s) => String(s || '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/[,;]/g, (m) => `\\${m}`);
+  const t = /^(\d{1,2}):(\d{2})/.exec(String(round.time || ''));
+  let when;
+  if (t) {
+    const start = new Date(a.getFullYear(), a.getMonth(), a.getDate(), Number(t[1]), Number(t[2]));
+    const end = new Date(start.getTime() + 270 * 60000);
+    const dt = (d) => `${d8(d)}T${p2(d.getHours())}${p2(d.getMinutes())}00`;
+    when = [`DTSTART:${dt(start)}`, `DTEND:${dt(end)}`];
+  } else {
+    const end = new Date(a.getFullYear(), a.getMonth(), a.getDate() + 1);
+    when = [`DTSTART;VALUE=DATE:${d8(a)}`, `DTEND;VALUE=DATE:${d8(end)}`];
+  }
+  const name = round.name || 'Golf';
+  return [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//The Golf Trip//Round//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+    'BEGIN:VEVENT',
+    `UID:round-${String(round.id || d8(a)).replace(/[^A-Za-z0-9-]/g, '')}@thegolftrip`,
+    `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)}Z`,
+    ...when,
+    `SUMMARY:${esc(`⛳ ${name}`)}`,
+    round.course ? `LOCATION:${esc(round.course)}` : null,
+    `DESCRIPTION:${esc(url ? `Who’s in and any changes: ${url}` : 'Sorted with The Golf Trip')}`,
+    'BEGIN:VALARM', 'TRIGGER:-P1D', 'ACTION:DISPLAY', `DESCRIPTION:${esc(`${name} is tomorrow`)}`, 'END:VALARM',
+    'END:VEVENT', 'END:VCALENDAR',
+  ].filter(Boolean).join('\r\n');
+}
+
 /** A ready-to-paste Messenger message. */
 export function nudgeText(kind, { plan, names = [], url = '', extra = '' }) {
   const who = names.length ? names.join(', ') : 'everyone';

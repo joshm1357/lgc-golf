@@ -129,7 +129,7 @@ const page = await ctx.newPage();
 page.on('pageerror', (e) => fails.push(`page error: ${e}`));
 
 // 1. Ask → an answer → "Was that helpful?" under it.
-await page.goto(`${BASE}#/ask?about=round`);
+await page.goto(`${BASE}#/caddie?about=round`);
 await page.getByRole('button', { name: 'Who’s leading?' }).click();
 await page.getByText(/Kurt leads on 3 points/).waitFor({ timeout: 10000 });
 check(await page.getByText('Was that helpful?').isVisible(), '"Was that helpful?" shows under the answer');

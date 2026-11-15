@@ -13,7 +13,7 @@ export function AskChip({ about = 'round', inline = false }) {
   // Guests (quick-round and personal links) don't get the helper; the function refuses them too.
   if (!on || status?.quick || status?.role === 'guest') return null;
   const chip = (
-    <Link to={`/ask?about=${about}`} className="chip" data-testid="ask-chip"
+    <Link to={`/caddie?about=${about}`} className="chip" data-testid="ask-chip"
       style={{ display: 'inline-flex', alignItems: 'center', textDecoration: 'none', color: 'inherit', minHeight: 40 }}>
       {LABEL[about] || '✨ Ask'}
     </Link>

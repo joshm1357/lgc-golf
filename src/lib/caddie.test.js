@@ -40,7 +40,7 @@ describe('the catalogue', () => {
 
 describe('where it shows and what screen you’re on', () => {
   it('hides on full-screen views only', () => {
-    for (const p of ['/tv/lgc', '/replay/x', '/round/x/present', '/round/x/print', '/present', '/desk/present/x', '/desk/print/x', '/start', '/join/abc', '/score/x', '/ask']) expect(caddieHidden(p)).toBe(true);
+    for (const p of ['/tv/lgc', '/replay/x', '/round/x/present', '/round/x/print', '/present', '/desk/present/x', '/desk/print/x', '/start', '/join/abc', '/score/x', '/ask', '/caddie']) expect(caddieHidden(p)).toBe(true);
     for (const p of ['/', '/plan', '/rules', '/admin', '/desk', '/group/players', '/courses/paste', '/round/x/cards', '/cards', '/more', '/trip/x']) expect(caddieHidden(p)).toBe(false);
   });
   it('is a panel on a laptop and on the laptop tools', () => {

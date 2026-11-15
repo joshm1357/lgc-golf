@@ -94,28 +94,31 @@ export function themeVars(look) {
 const KEY = 'lgc-look';
 const BASE = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/';
 
-/** The app's name on this phone (tab, app switcher, Home Screen title) for a look. */
-export function appTitle(look, name) {
-  if (look?.crest_url === 'builtin:lgc') return { title: 'L.G.C Golf', short: 'L.G.C' };
-  const short = look?.short_name || name || 'The Golf Trip';
-  return { title: name || look?.short_name || 'The Golf Trip', short: short.length > 12 ? 'Golf Trip' : short };
+// ov44 (Josh 15 Nov 2026: "needs to be The Golf Trip, not the app of the group"): the app's own name and icon — the
+// tab, the app switcher, the Home Screen, notifications and link previews — are The Golf Trip for every group, L.G.C
+// included. This replaces Stage 4's rule (a group's name and crest on the Home Screen). Inside the app, the headers,
+// crest and colours are still the group's own. A phone that added the app before this keeps the name and icon it saved
+// (iPhones until it's added again; Android usually updates itself within days).
+export const APP_NAME = 'The Golf Trip';
+export const APP_SHORT = 'Golf Trip'; // under the Home Screen icon (about 12 letters fit)
+/** The app's name on this phone (tab, app switcher, Home Screen title): the same for every look. */
+export function appTitle() {
+  return { title: APP_NAME, short: APP_SHORT };
 }
-/** The Home Screen icon for a look: the uploaded crest, L.G.C's, or the plain one. */
-export function appIcon(look) {
-  if (look?.crest_url === 'builtin:lgc') return `${BASE}brand/icon-192.png`;
-  if (look?.crest_url) return look.crest_url;
+/** The Home Screen icon: The Golf Trip's, for every look. */
+export function appIcon() {
   return `${BASE}brand/trip-192.png`;
 }
 
 function setHead(look, name) {
   const vars = themeVars(look);
-  const { title, short } = appTitle(look, name);
+  const { title, short } = appTitle();
   document.title = title;
   const set = (sel, attr, val) => { const el = document.querySelector(sel); if (el) el.setAttribute(attr, val); };
   set('meta[name="theme-color"]', 'content', vars['--navy']);
   set('meta[name="apple-mobile-web-app-title"]', 'content', short);
-  set('link[rel="apple-touch-icon"]', 'href', appIcon(look));
-  set('link[rel="icon"]', 'href', look?.crest_url === 'builtin:lgc' ? `${BASE}brand/icon.svg` : look?.crest_url || `${BASE}brand/trip-icon.svg`);
+  set('link[rel="apple-touch-icon"]', 'href', appIcon());
+  set('link[rel="icon"]', 'href', `${BASE}brand/trip-icon.svg`);
   for (const [k, v] of Object.entries(vars)) document.documentElement.style.setProperty(k, v);
 }
 

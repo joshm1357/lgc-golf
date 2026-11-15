@@ -9,7 +9,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
 import { useData, useSession, useFeature, playerName } from '../lib/store.jsx';
 import { Header, Avatar, Sheet, toast, askConfirm } from '../components/ui.jsx';
-import { notify, shareText } from '../lib/push.js';
+import { notify } from '../lib/push.js';
 import { useRun, must } from '../lib/run.js';
 import { gate } from '../lib/savedgate.js';
 import { replies, repliesLine } from '../lib/headcount.js';
@@ -23,7 +23,8 @@ import { TripWeather } from '../components/Weather.jsx';
 import { lazyScreen, LazyArea } from '../lib/lazy.jsx';
 import AskReply from '../components/AskReply.jsx';
 import { useAsk, AskBoard, ChooseSheet, VoteSheet, BookingCard, EasyAsk, GoAgain } from '../components/AskDecide.jsx';
-import { askShareText, askWords } from '../lib/ask.js';
+import { askWords } from '../lib/ask.js';
+import AskShare from '../components/AskShare.jsx';
 import { sydneyToday } from '../lib/callout.js';
 import '../components/callout.css';
 
@@ -69,6 +70,7 @@ export default function RoundCallout({ pd }) {
   const byId = data.playersById;
   const manage = isAdmin || (me && (me === plan.created_by || me === plan.organiser_id));
   const by = byId[plan.created_by];
+  const firstShare = !!plan.ask && !(ad.answers || []).some((x) => x.player_id !== plan.created_by); // ov44
   const asked = v.asked.map((id) => byId[id]).filter(Boolean);
   // The ONE headcount rule (headcount.js), over the people asked.
   const counts = replies({ players: asked, rsvps: cd.rsvps });
@@ -123,6 +125,9 @@ export default function RoundCallout({ pd }) {
           </div>
         )}
 
+        {/* ---------------- ov44: nobody else has answered yet — sharing the link is the one thing to do */}
+        {v.asking && manage && !cancelled && firstShare && <AskShare big plan={plan} who={by ? playerName(by) : ''} />}
+
         {/* ---------------- ov43: your answer on the grid */}
         {v.asking && v.isAsked && !cancelled && (() => {
           const mineA = ad.answers.find((a) => a.player_id === me) || null;
@@ -139,12 +144,7 @@ export default function RoundCallout({ pd }) {
         {v.asking && (manage || (whosInOn && ad.answers.some((a) => a.player_id === me))) && !cancelled && (
           <AskBoard plan={plan} asked={v.asked} ad={ad} manage={manage} onChoose={(r) => setChoosing(r)} onVote={(c) => setVoting(c)} />
         )}
-        {v.asking && manage && !cancelled && (
-          <button type="button" className="btn ghost block" data-testid="ask-share"
-            onClick={async () => { const r = await shareText(askShareText({ who: by ? playerName(by) : '', ask: plan.ask, courseName: plan.location_name || '', link: plan.ask_token ? `${window.location.origin}${import.meta.env.BASE_URL}#/a/${plan.ask_token}` : `${window.location.origin}${import.meta.env.BASE_URL}#/plan/${plan.id}?c=1` })); if (r === 'copied') toast('Copied — paste it in the group chat'); }}>
-            💬 Share to the group chat
-          </button>
-        )}
+        {v.asking && manage && !cancelled && !firstShare && <AskShare plan={plan} who={by ? playerName(by) : ''} />}
 
         {/* ---------------- Your reply */}
         {!v.asking && !cancelled && !v.past && v.isAsked && (

@@ -226,7 +226,9 @@ function Gate() {
   // ov43: "Anyone keen for a round?" — its link opens straight on the grid (no group, no "Who are you?", no sign-in),
   // and anyone signed in can ask some mates with no group.
   if (loc.pathname.startsWith('/a/')) return <LazyArea resetKey="ask-link" fallback={<Loading />}><AskPublic token={loc.pathname.split('/')[2] || ''} /></LazyArea>;
-  if (loc.pathname === '/ask') return <LazyArea resetKey="ask-start" fallback={<Loading />}><AskStart /></LazyArea>;
+  // ov44: #/ask is the round door for everyone. The Caddie's full screen used to live there too (ov43 hid it by
+  // mistake): it's #/caddie now, and an old #/ask?about=… link still reaches it.
+  if (loc.pathname === '/ask' && !new URLSearchParams(loc.search).has('about')) return <LazyArea resetKey="ask-start" fallback={<Loading />}><AskStart /></LazyArea>;
   if (loc.pathname.startsWith('/v/')) return <LazyArea resetKey="vote-link" fallback={<Loading />}><Routes><Route path="/v/:token" element={<VoteLink />} /></Routes></LazyArea>; // 079: vote email answers, no sign-in
   if (loc.pathname === '/terms') return <LazyArea resetKey="terms" fallback={<Loading />}><Terms /></LazyArea>;
   // The clubhouse TV: read-only, no sign-in.
@@ -319,6 +321,7 @@ function Inside() {
         <Route path="/trip/:tripId" element={<TripOverviewScreen />} />
         <Route path="/trip-now/:tripId" element={<TripNow />} />
         <Route path="/ask" element={<FeatureRoute feature="ai_helper" label="The Caddie"><Ask /></FeatureRoute>} />
+        <Route path="/caddie" element={<FeatureRoute feature="ai_helper" label="The Caddie"><Ask /></FeatureRoute>} />
         <Route path="/import" element={<FeatureRoute feature="ai_helper" label="The Caddie"><AiImport /></FeatureRoute>} />
         <Route path="/cup" element={<FeatureRoute feature="cup" label="The Cup"><Cup /></FeatureRoute>} />
         <Route path="/cup/:matchId" element={<FeatureRoute feature="cup" label="The Cup"><CupMatch /></FeatureRoute>} />

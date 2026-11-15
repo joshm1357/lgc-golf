@@ -104,7 +104,7 @@ function PickOrAdd() {
       </header>
       <div className="section stack" style={{ paddingBottom: 24 }}>
         {/* ov43: never trapped here — asking some mates for a round needs no group or name. */}
-        <a href="#/ask" className="btn ghost block" data-testid="who-ask">⛳ Just want to ask some mates for a round? No group needed</a>
+        <a href="#/ask?src=who" className="btn ghost block" data-testid="who-ask">⛳ Just want to ask some mates for a round? No group needed</a>
         {mode === 'pick' ? (
           <>
             <div className="card">

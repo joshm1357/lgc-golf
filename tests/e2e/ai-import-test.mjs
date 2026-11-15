@@ -169,7 +169,7 @@ check(true, 'the guided setup has a "Bring your history" card');
 await page.goto(`${BASE}#/rules`);
 await page.getByRole('link', { name: '✨ Import rules from a photo or text' }).waitFor({ timeout: 15000 });
 check(true, 'the Rulebook has "Import rules from a photo or text" for organisers');
-await page.goto(`${BASE}#/ask`);
+await page.goto(`${BASE}#/caddie`);
 await page.getByRole('link', { name: '✨ Bring in our history' }).waitFor({ timeout: 15000 });
 check(true, 'the Ask screen suggests bringing in history (organisers)');
 
@@ -272,7 +272,7 @@ check(rpcs.length === nBefore, 'nothing written the second time');
 
 // 6. A player: no way in, and /import says organisers only.
 organiser = false;
-await page.goto(`${BASE}#/ask`);
+await page.goto(`${BASE}#/caddie`);
 await page.reload();
 await page.getByLabel('Your question').waitFor({ timeout: 15000 });
 check(!(await page.getByRole('link', { name: '✨ Bring in our history' }).isVisible().catch(() => false)), 'a player doesn’t get the import chip on Ask');

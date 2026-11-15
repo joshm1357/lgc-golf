@@ -18,6 +18,8 @@ describe('the round ask’s link preview', () => {
     expect(asked).toBe(0);
     expect(bad.body).toContain('<meta property="og:title" content="The Golf Trip" />');
     expect(bad.body).toContain('og:image" content="https://a/brand/trip-512.png"');
+    expect(bad.body).toContain('<meta name="twitter:card" content="summary" />'); // the square icon, not a wide card
+    expect(bad.body).not.toContain('og:image:width');
     expect(bad.headers['cache-control']).toBe('no-store');
     const unknown = await askPreviewResponse({ token: TOK, rpc: async () => null, image: 'https://a/b.png' });
     expect(unknown.body).toContain('<title>The Golf Trip</title>');

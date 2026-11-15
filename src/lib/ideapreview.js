@@ -36,7 +36,8 @@ export function previewWords(p) {
  *  ov44: words and hop let another kind of link (the round ask, lib/askpreview.js) use the same page. */
 export function previewPage({ preview = null, url = '', image = '', appBase = '/', words = null, hop = null } = {}) {
   const w = words && words.title ? words : previewWords(preview);
-  const img = preview?.card_url && /^https:\/\//.test(preview.card_url) ? preview.card_url : image;
+  const card = preview?.card_url && /^https:\/\//.test(preview.card_url) ? preview.card_url : null;
+  const img = card || image; // ov44: the fallback is the app's square icon — only the drawn card is 1200 × 630
   const planId = preview?.plan_id && UUID.test(preview.plan_id) ? preview.plan_id : null;
   const fallback = hop && /^#\/[A-Za-z0-9\/_?=&-]*$/.test(hop) ? hop : planId ? `#/idea/${planId}` : '#/';
   const base = /^\/[A-Za-z0-9/_-]*$/.test(appBase) ? appBase : '/';
@@ -50,7 +51,7 @@ export function previewPage({ preview = null, url = '', image = '', appBase = '/
 <meta property="og:site_name" content="The Golf Trip" />
 <meta property="og:title" content="${esc(w.title)}" />
 <meta property="og:description" content="${esc(w.description)}" />
-${url ? `<meta property="og:url" content="${esc(url)}" />\n` : ''}${img ? `<meta property="og:image" content="${esc(img)}" />\n<meta property="og:image:width" content="1200" />\n<meta property="og:image:height" content="630" />\n<meta name="twitter:image" content="${esc(img)}" />\n` : ''}<meta name="twitter:card" content="${img ? 'summary_large_image' : 'summary'}" />
+${url ? `<meta property="og:url" content="${esc(url)}" />\n` : ''}${img ? `<meta property="og:image" content="${esc(img)}" />\n${card ? '<meta property="og:image:width" content="1200" />\n<meta property="og:image:height" content="630" />\n' : ''}<meta name="twitter:image" content="${esc(img)}" />\n` : ''}<meta name="twitter:card" content="${card ? 'summary_large_image' : 'summary'}" />
 <meta name="robots" content="noindex" />
 <style>body{margin:0;font:16px/1.4 system-ui,sans-serif;background:#0E1F17;color:#fff;display:flex;min-height:100vh;align-items:center;justify-content:center;text-align:center;padding:24px}a{color:#E0B84A;font-weight:700}</style>
 </head><body>

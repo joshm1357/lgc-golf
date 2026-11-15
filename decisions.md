@@ -202,3 +202,19 @@
 - Leaving from (Josh 12 Nov: "from here or here … could differ weekends vs weekdays, or other days"): up to 3 places, each with its own days (any mix of Mon–Sun; Weekdays / Weekends shortcuts) and max drive (20/30/45/60). The drive for a date uses the nearest place that applies that day. Suburb only, never an address; the group sees it.
 - Suburb lookup: the app's existing place search (course-library towns, then OpenStreetMap on tap) — no bundled list added. On the link it uses `ask_places` (no sign-in needed).
 - The organiser's course check ranks courses by total drive for the people who ✓ the leading time (fewest over their max first), skips courses most of them said no to, then visitor times / daylight / booking link.
+
+## ov44 — Open the round door (15 Nov 2026, claude/round-door-addendum.md; Josh said "go" to the audit's six calls)
+- The app's own name and icon are The Golf Trip for every group, L.G.C included (title, Home Screen, install name, notifications, link previews). This replaces Stage 4's "a group's name and crest on the Home Screen". Inside the app nothing changes: the group's name, crest and colours.
+- The round door has its own switch, `round_asks_open`. Starting a group stays with `new_groups_open` (invite-only on live). The lock lets through only the hidden quick group `start_round_ask` makes; "Make it official" is refused while groups are invite-only.
+- A link answerer's email or mobile: whoever asked and that group's organisers. Not whoever's booking.
+- Link answers: 60 an ask (as before) and 6 new ones per connection per ask per day; the connection is a scrambled daily mark, never an address. Changing your own answer is never limited.
+- Tidy-up: a hidden quick group is deleted 30 days after its ask closed when nobody but the asker answered and no round was made. The asker's account stays.
+- The ask's place for a stranger: the city of the phone's clock, shown as "Daylight and weather for Sydney · change" — nobody is asked for a suburb. Order when there's more to go on: the picked course, where the asker leaves from, their home area (named by its city, since it may not be shared), the phone's clock, Sydney. Kept to about 10 km inside the ask.
+- Daylight: earliest tee = sunrise less 10 minutes, never before 6:00; last tee for 18 = sunset less 4½ hours; for 9, 2¼ hours; rounded to 5 minutes the safe way. "Your week" rows show a part if any of its dates has it, and "9" only when all do.
+- Weather on an ask's dates is part of the ask for a no-group ask (always shown); inside a group it follows the group's Weather switch.
+- AI: 5 a person and 60 an ask stay; `ASK_AI_MONTH_CAP` across the platform per calendar month, 2,000 if not set.
+- The door's counts hold a day, a step and a source — never a person, a phone or an ask. The middle of the funnel (a mate answered, a 4-ball, locked in) is read from the no-group asks themselves.
+- `#/ask` is the round door for everyone; the Caddie's full screen moved to `#/caddie`.
+- Sharing: the gold "Your link's ready" card is the first thing the asker sees until a mate answers; the picture uses The Golf Trip's colours, not a group's.
+- Privacy contact: admin@thegolftrip.club. The page stays marked DRAFT until Josh has checked the new wording.
+- The pull request is stacked on ov43's branch (not `main`), so nothing can reach `main` by merging it.

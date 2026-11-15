@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { useRun, must } from '../lib/run.js';
 import { QrCard } from '../components/QrCard.jsx';
+import { doorRows, doorSources } from '../lib/door.js';
 
 // Stage 9: Josh's own screen (#/club/josh; platform admins only — the database checks too).
 // Numbers (counts only, no names), app problems the app has reported, and stay cards for accommodation.
@@ -16,11 +17,12 @@ export default function JoshPage({ Top }) {
       <div className="stack" style={{ maxWidth: 640, margin: '0 auto', padding: 16, gap: 12 }}>
         <a href="#/club" className="small">← Back</a>
         <div className="seg light" role="group" aria-label="Show">
-          {[['numbers', 'Numbers'], ['feedback', 'Feedback'], ['problems', 'App problems'], ['stays', 'Stay cards']].map(([k, label]) => (
+          {[['numbers', 'Numbers'], ['door', 'Round door'], ['feedback', 'Feedback'], ['problems', 'App problems'], ['stays', 'Stay cards']].map(([k, label]) => (
             <button key={k} type="button" aria-pressed={tab === k} onClick={() => setTab(k)}>{label}</button>
           ))}
         </div>
         {tab === 'numbers' && <Numbers />}
+        {tab === 'door' && <Door />}
         {tab === 'feedback' && <Feedback />}
         {tab === 'problems' && <Problems />}
         {tab === 'stays' && <Stays />}
@@ -34,6 +36,47 @@ function Stat({ label, value }) {
     <div className="card" style={{ padding: '8px 6px', textAlign: 'center' }}>
       <div className="num" style={{ fontSize: 24 }}>{value ?? 0}</div>
       <div className="small muted">{label}</div>
+    </div>
+  );
+}
+
+// ov44: the round door's funnel — how many get from opening "Ask some mates" to a locked-in round, and where they
+// came from. Counts only (migration 113's door_counts and the no-group asks themselves); no person is attached.
+function Door() {
+  const [days, setDays] = useState(30);
+  const [f, setF] = useState(undefined);
+  useEffect(() => { setF(undefined); supabase.rpc('admin_door_funnel', { p_days: days }).then(({ data, error }) => setF(error ? null : data), () => setF(null)); }, [days]);
+  const rows = doorRows(f);
+  const top = Math.max(1, ...rows.map((r) => r.n));
+  const sources = doorSources(f);
+  return (
+    <div className="stack" style={{ gap: 12 }} data-testid="door-funnel">
+      <select className="select" value={days} onChange={(e) => setDays(Number(e.target.value))} aria-label="Period">
+        <option value={7}>Last 7 days</option><option value={30}>Last 30 days</option><option value={90}>Last 90 days</option><option value={365}>Last year</option>
+      </select>
+      {f === undefined ? <span className="muted">Loading…</span> : f === null ? <span className="small muted">Couldn’t load the round door’s numbers.</span> : (
+        <>
+          <strong>“Ask some mates for a round” — from opening it to a locked-in round</strong>
+          <div className="card pad stack" style={{ gap: 6 }}>
+            {rows.map((r) => (
+              <div key={r.step} className="stack" style={{ gap: 2 }} data-testid="door-row">
+                <div className="row between"><span className="small">{r.label}</span><span className="small"><strong>{r.n}</strong>{r.of != null ? <span className="muted"> · {r.of}%</span> : null}</span></div>
+                <div style={{ height: 6, borderRadius: 3, background: 'var(--ground)' }}><div style={{ height: 6, borderRadius: 3, width: `${Math.round((r.n / top) * 100)}%`, background: 'var(--navy)' }} /></div>
+              </div>
+            ))}
+          </div>
+          <span className="small muted">The % is the share of the step before (for “a replier started their own”: of the asks a mate answered). The first five steps are counted once per visit; “a mate answered”, “a 4-ball could play” and “locked in” are read from the no-group asks made in the period. No names, phones or asks are kept with the counts.</span>
+          <strong>Where they came from</strong>
+          {!sources.length ? <span className="small muted">Nothing yet.</span> : (
+            <div className="card" style={{ overflowX: 'auto' }}>
+              <table className="small" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead><tr><th style={{ textAlign: 'left', padding: '6px 10px' }}>From</th><th style={{ textAlign: 'right', padding: '6px 10px' }}>Opened</th><th style={{ textAlign: 'right', padding: '6px 10px' }}>Link made</th></tr></thead>
+                <tbody>{sources.map((x) => <tr key={x.source}><td style={{ padding: '6px 10px' }}>{x.source}</td><td style={{ textAlign: 'right', padding: '6px 10px' }}>{x.opened}</td><td style={{ textAlign: 'right', padding: '6px 10px' }}>{x.link_made}</td></tr>)}</tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

@@ -37,6 +37,8 @@ let me = { player_id: BO, is_admin: false, role: 'player' };
 const notifies = [];
 const fills = [];
 const startCalls = [];
+const doors = []; // ov44: door_count calls (step + source — never a person)
+const cards = []; // ov44: ask_set_card calls
 
 // ---------------------------------------------------------------- what 103 does
 function stampRsvp(row, old) {
@@ -180,10 +182,12 @@ function askPublic(b, signedIn) {
   const ans = db.callout_answers.filter((a) => a.plan_id === p.id);
   return { plan_id: p.id, group_id: GROUP, name: p.name, status: p.status, ask: p.ask, ask_full: p.ask_full || [], closes_at: p.closes_at, spots: p.spots,
     course: p.location_name, by: first(p.created_by), start_date: p.start_date, tee_time: p.tee_time, booked: !!p.booked_at, member: signedIn,
+    quick: true, weather: true,
     voting: db.plan_polls.some((x) => x.plan_id === p.id && x.kind === 'dates'),
     answers: ans.map((a) => ({ player_id: a.player_id, name: first(a.player_id), slots: a.slots, cant: a.cant, first_at: a.first_at })),
     me: g ? { player_id: g.player_id, name: db.players.find((x) => x.id === g.player_id).name, claimed: false,
-      answer: (() => { const a = ans.find((x) => x.player_id === g.player_id); return a ? { slots: a.slots, cant: a.cant, where: a.where } : null; })(), standing: null } : null };
+      answer: (() => { const a = ans.find((x) => x.player_id === g.player_id); return a ? { slots: a.slots, cant: a.cant, where: a.where } : null; })(),
+      standing: p.status === 'confirmed' ? { has_spot: true, place: 1 } : null } : null };
 }
 function guestAnswer(b) {
   const p = db.plans.find((x) => x.ask_token === String(b.p_token).toUpperCase());
@@ -248,6 +252,9 @@ async function fake(route) {
     if (fn === 'ask_contacts') { const b = body(); return json(db.callout_guests.filter((g) => g.plan_id === b.p_plan).map((g) => ({ player_id: g.player_id, name: db.players.find((x) => x.id === g.player_id).name, email: g.email, phone: g.phone, signed_in: false }))); }
     if (fn === 'start_round_ask') { const b = body(); const id = putRoundAsk({ p_ask: b.p_ask, p_spots: b.p_spots, p_closes_at: b.p_closes_at }); startCalls.push(b); return json({ group_id: GROUP, plan_id: id, token: db.plans.find((x) => x.id === id).ask_token }); }
     if (fn === 'callout_answer') return json(calloutAnswer(body()));
+    if (fn === 'door_count') { doors.push(body()); return json(null); }
+    if (fn === 'round_asks_open') return json(true);
+    if (fn === 'ask_set_card') { const b = body(); cards.push(b); const pl = db.plans.find((x) => x.id === b.p_plan); if (pl) pl.card_url = b.p_card_url; return json(null); }
     if (fn === 'callout_seen') { ev(body().p_plan, 'opened'); return json(null); }
     if (fn === 'callout_probably') { const b = body(); const answered = new Set(db.callout_answers.filter((x) => x.plan_id === b.p_plan).map((x) => x.player_id)); return json(db.player_usual_weeks.filter((u) => !answered.has(u.player_id)).map((u) => ({ player_id: u.player_id, pattern: u.usual.pattern }))); }
     if (fn === 'callout_ask_choose') return json(askChoose(body()));
@@ -542,6 +549,131 @@ await laptop.screenshot({ path: `${SHOTS}/10-ask-start.png`, fullPage: true });
 await laptop.getByTestId('ask-start-go').click();
 await laptop.waitForTimeout(1500);
 check(startCalls.length === 1 && startCalls[0].p_my_name === 'Josh' && startCalls[0].p_ask?.range?.days === 28 && startCalls[0].p_spots == null, 'no group: “Make the link” — every day, 4 weeks, no max');
+
+// ================================================================== ov44 — Open the round door (claude/round-door-addendum.md)
+// 0. Inside a group, signed in: the app's own name and icon are The Golf Trip (the group's look stays inside the app).
+const headG = await phone.evaluate(() => ({ title: document.title, apple: document.querySelector('meta[name="apple-mobile-web-app-title"]')?.content, icon: document.querySelector('link[rel="apple-touch-icon"]')?.getAttribute('href') }));
+check(headG.title === 'The Golf Trip' && headG.apple === 'Golf Trip' && /trip-192\.png$/.test(headG.icon), `inside a group: the app is The Golf Trip, not the group’s name (${JSON.stringify(headG)})`);
+// 16. A stranger, signed out, from the website's button: the form shows first; sign-in is asked for at "Make the
+//     link"; back from signing in, the link is made with the same choices; the share card is the first thing they see.
+const forecast = () => {
+  const days = Array.from({ length: 16 }, (_, i) => CO.addDays(today2, i));
+  return { daily: { time: days, weather_code: days.map((_, i) => (i % 3 === 0 ? 61 : 0)), temperature_2m_max: days.map((_, i) => 22 + (i % 5)), temperature_2m_min: days.map(() => 14),
+    precipitation_probability_max: days.map((_, i) => (i % 3 === 0 ? 80 : 10)), precipitation_sum: days.map(() => 0), wind_speed_10m_max: days.map(() => 12), wind_gusts_10m_max: days.map(() => 20), wind_direction_10m_dominant: days.map(() => 180) } };
+};
+let wxCalls = 0;
+const stranger = async () => {
+  const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, permissions: ['clipboard-read', 'clipboard-write'], timezoneId: 'Australia/Sydney' });
+  await ctx.route('https://*.supabase.co/**', fake);
+  await ctx.route('https://api.open-meteo.com/**', (route) => { wxCalls++; return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(forecast()) }); });
+  await ctx.addInitScript(() => { localStorage.setItem('tgt-whats-new', 'beta-1'); localStorage.setItem('tgt-first-open', JSON.stringify({ done: true })); localStorage.setItem('tgt-caddie-hello', '1'); localStorage.setItem('tgt-notify-prompt', String(Date.now())); });
+  const pg = await ctx.newPage(); pg.on('pageerror', (e) => fails.push(`page error (door): ${e}`)); return pg;
+};
+me = who(JOSH);
+const door = await stranger();
+const startsBefore = startCalls.length;
+await door.goto(`${BASE}#/ask?src=web-home`);
+await door.getByTestId('ask-start-form').waitFor({ timeout: 20000 });
+check(await door.title() === 'The Golf Trip', `door: the app is The Golf Trip (${await door.title()})`);
+check(!(await door.getByTestId('ask-start-signin').count()) && !(await door.getByPlaceholder('Your email').count()), 'door: signed out, the form shows first — no sign-in yet');
+const headD = await door.evaluate(() => ({ apple: document.querySelector('meta[name="apple-mobile-web-app-title"]')?.content, icon: document.querySelector('link[rel="apple-touch-icon"]')?.getAttribute('href'), og: document.querySelector('meta[property="og:title"]')?.content }));
+const manifest = await (await door.request.get(`${BASE}manifest.webmanifest`)).json();
+check(headD.apple === 'Golf Trip' && /trip-192\.png$/.test(headD.icon) && headD.og === 'The Golf Trip' && manifest.name === 'The Golf Trip' && manifest.short_name === 'Golf Trip' && manifest.icons.every((i) => /trip-/.test(i.src)),
+  `door: the Home Screen name, icon, link preview and install name are The Golf Trip (${JSON.stringify(headD)}, ${manifest.name})`);
+check(/sunrise \d+:\d\d · sunset \d+:\d\d · last tee for 18 about \d+:\d\d/.test(await door.getByTestId('ask-sun').innerText()), 'door: sunrise, sunset and the last tee for 18 on the first date');
+check((await door.getByTestId('ask-place-name').innerText()) === 'Sydney', 'door: the place starts as the city of the phone’s clock');
+await door.getByTestId('ask-start-name').fill('Josh');
+await door.getByTestId('ask-start-days').getByRole('button', { name: 'Sat', exact: true }).click();
+await door.getByTestId('ask-start-days').getByRole('button', { name: 'Sun', exact: true }).click();
+await door.getByTestId('ask-start-parts').getByRole('button', { name: 'Arvo', exact: true }).click();
+await door.getByTestId('ask-start-range').getByRole('button', { name: 'Next 2 weeks' }).click();
+const sunSydney = await door.getByTestId('ask-sun').innerText();
+await door.getByTestId('ask-place-change').click();
+await door.getByTestId('ask-place').getByRole('button', { name: 'Melbourne', exact: true }).click();
+check((await door.getByTestId('ask-place-name').innerText()) === 'Melbourne' && (await door.getByTestId('ask-sun').innerText()) !== sunSydney, 'door: change the place → Melbourne’s daylight');
+check(/Sat, Sun · arvo · next 2 weeks/.test(await door.getByTestId('ask-start-words').innerText()), 'door: the ask in a line');
+await door.screenshot({ path: `${SHOTS}/11-door-form.png`, fullPage: true });
+await door.getByTestId('ask-start-go').click();
+await door.getByTestId('ask-start-signin').waitFor({ timeout: 8000 });
+const signinText = await door.getByTestId('ask-start-signin').innerText();
+check(/Your ask: Sat, Sun · arvo · next 2 weeks/.test(signinText) && /so the answers come back to you/i.test(signinText), 'door: “Make the link” asks to sign in, with the reason, and shows what’s kept');
+check(startCalls.length === startsBefore, 'door: no link is made before signing in');
+await door.screenshot({ path: `${SHOTS}/12-door-signin.png`, fullPage: true });
+// Signing in: what the trip to Google and back does — a session on this phone, and the page loads again at #/ask.
+await door.evaluate(([uid]) => {
+  const exp = Math.floor(Date.now() / 1000) + 86400;
+  const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '');
+  const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, exp, role: 'authenticated', is_anonymous: false })}.x`;
+  localStorage.setItem('lgc-auth', JSON.stringify({ access_token: jwt, refresh_token: 'r', token_type: 'bearer', expires_in: 86400, expires_at: exp, user: { id: uid, aud: 'authenticated', role: 'authenticated', is_anonymous: false } }));
+}, ['99999999-9999-4999-8999-999999999934']);
+await door.goto(`${BASE}#/ask`);
+await door.reload();
+await door.waitForFunction(() => window.location.hash.startsWith('#/plan/'), null, { timeout: 20000 });
+const sc = startCalls[startCalls.length - 1];
+check(startCalls.length === startsBefore + 1 && sc.p_my_name === 'Josh' && (sc.p_ask.days || []).join() === 'sat,sun' && (sc.p_ask.parts || []).join() === 'arvo' && sc.p_ask.range.days === 14,
+  `door: back from signing in, the link is made with the same choices, nothing tapped again (${JSON.stringify(sc?.p_ask)})`);
+check(sc.p_ask.place?.name === 'Melbourne' && sc.p_ask.place.lat === -37.8, 'door: the place is kept inside the ask (about 10 km)');
+const steps = doors.map((d) => `${d.p_step}:${d.p_source}`);
+check(['opened:web-home', 'built:web-home', 'signed_in:web-home', 'link_made:web-home'].every((x) => steps.includes(x)) && steps.indexOf('opened:web-home') < steps.indexOf('link_made:web-home'),
+  `door: counted opened → built → signed in → link made, from the website (${steps.join(', ')})`);
+check(doors.every((d) => Object.keys(d).sort().join() === 'p_source,p_step'), 'door: the counts carry a step and a source — no person, no ask');
+const idD = (await door.evaluate(() => window.location.hash)).split('/')[2].split('?')[0];
+const tokD = db.plans.find((x) => x.id === idD)?.ask_token;
+await door.getByTestId('ask-share-card').waitFor({ timeout: 20000 });
+await door.getByRole('button', { name: '💬 Share to the group chat' }).waitFor({ timeout: 10000 });
+check(cards.some((c) => c.p_plan === idD && /\/storage\/v1\/object\/public\/photos\/.+\/asks\//.test(c.p_card_url)), `door: the share picture is drawn, uploaded and kept on the ask (${cards.map((c) => c.p_card_url).join()})`);
+await door.screenshot({ path: `${SHOTS}/13-door-share.png`, fullPage: true });
+await door.getByTestId('ask-share-copy').click();
+const copied = await door.evaluate(() => navigator.clipboard.readText()).catch(() => '');
+check(copied.includes(`#/a/${tokD}`), `door: the link to share is the ask’s own (${copied})`);
+await door.waitForTimeout(600);
+check(doors.some((d) => d.p_step === 'shared'), 'door: sharing is counted');
+
+// 17. A mate answers from the link, no sign-in: daylight for the ask's place, the forecast on the dates, then "Ask your own mates".
+const mate = await stranger();
+await mate.goto(`${BASE}#/a/${tokD}`);
+await mate.getByTestId('ask-public').waitFor({ timeout: 20000 });
+check(/Josh: anyone keen for a round\?/.test(await mate.getByTestId('ask-public').innerText()) && await mate.title() === 'The Golf Trip', 'mate: opens on Josh’s ask; the tab says The Golf Trip');
+check(!(await mate.getByTestId('ask-public-own').count()), 'mate: “Ask your own mates” waits until they’ve answered');
+const firstDateD = A.askCells(sc.p_ask, today2)[0].date;
+check((await mate.getByTestId('ask-sun').innerText()).includes(A.sunLine(firstDateD, sc.p_ask.place)), 'mate: the sun line is for the ask’s place (Melbourne), first date');
+await mate.getByTestId('ask-show-dates').click();
+await mate.getByTestId('ask-wx').first().waitFor({ timeout: 10000 });
+const wxText = await mate.getByTestId('ask-wx').first().innerText();
+check(/^\S+ \d+° \d+%$/.test(wxText.trim()), `mate: a forecast on each date inside the forecast (${wxText})`);
+check(await mate.getByTestId('ask-wx-credit').first().isVisible(), 'mate: the Open-Meteo credit is shown');
+await wsq(mate, 'Sat', 'Arvo').click();
+check(await stateOf(wsq(mate, 'Sat', 'Arvo')) === 'y', 'mate: taps Saturdays arvo ✓');
+await mate.getByTestId('ask-public-name').fill('Mick');
+await mate.getByTestId('ask-public-contact').fill('0412 345 678');
+await mate.screenshot({ path: `${SHOTS}/14-mate-reply.png`, fullPage: true });
+await mate.getByTestId('ask-send').click();
+await mate.getByTestId('ask-public-mine').waitFor({ timeout: 10000 });
+const mick = db.callout_guests.find((g) => g.plan_id === idD);
+const mickA = db.callout_answers.find((a) => a.plan_id === idD && a.player_id === mick?.player_id);
+const arvoD = A.askCells(sc.p_ask, today2).find((c) => c.part === 'arvo');
+check(mick?.phone === '0412 345 678' && mickA?.slots.some((x) => x.part === 'arvo' && !x.maybe && x.from === arvoD.from && x.to === arvoD.to), 'mate: answered with no sign-in — the square is saved as date + part + its daylight window');
+const own = mate.getByTestId('ask-public-own-go');
+check((await own.getAttribute('href')) === `#/ask?from=${tokD}&src=reply`, 'mate: “⛳ Ask your own mates” after answering');
+await mate.screenshot({ path: `${SHOTS}/15-mate-answered.png`, fullPage: true });
+await own.click();
+await mate.getByTestId('ask-start-form').waitFor({ timeout: 10000 });
+check((await mate.getByTestId('ask-start-days').getByRole('button', { name: 'Every day' }).getAttribute('aria-pressed')) === 'true' && (await mate.getByTestId('ask-start-name').inputValue()) === '', 'mate: it opens a fresh ask of their own');
+await mate.waitForTimeout(600);
+check(doors.some((d) => d.p_step === 'own_started' && d.p_source === 'reply') && doors.some((d) => d.p_step === 'opened' && d.p_source === 'reply'), 'mate: a replier starting their own is counted (no person attached)');
+check(wxCalls <= 2, `one forecast lookup per place per phone (${wxCalls} in all)`);
+
+// 18. Locked in: the link's card has "Add to calendar" for someone who answered by link, and "Ask your own mates".
+Object.assign(db.plans.find((x) => x.id === idD), { status: 'confirmed', start_date: firstDateD, end_date: firstDateD, tee_time: '12:30', location_name: 'Royal Park' });
+await mate.goto(`${BASE}#/a/${tokD}`);
+await mate.reload();
+await mate.getByTestId('ask-public-locked').waitFor({ timeout: 15000 });
+check(/You’re in/.test(await mate.getByTestId('ask-public-locked').innerText()), 'locked in: the link says you’re in');
+const [dl] = await Promise.all([mate.waitForEvent('download', { timeout: 10000 }), mate.getByTestId('ask-public-calendar').click()]);
+const ics = fs.readFileSync(await dl.path(), 'utf8');
+check(ics.includes(`DTSTART:${firstDateD.replace(/-/g, '')}T123000`) && /LOCATION:Royal Park/.test(ics) && ics.includes(`#/a/${tokD}`), 'locked in: “Add to calendar” gives a calendar file with the tee time, the course and the link');
+check((await mate.getByTestId('ask-public-own-go').getAttribute('href')) === `#/ask?from=${tokD}&src=locked`, 'locked in: “Ask your own mates” is on the locked-in card too');
+await mate.screenshot({ path: `${SHOTS}/16-mate-locked.png`, fullPage: true });
 
 await browser.close();
 console.log(fails.length ? `\n${fails.length} FAILED:\n- ${fails.join('\n- ')}` : '\nAll checks passed.');

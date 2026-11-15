@@ -190,3 +190,26 @@ describe('the leaderboard chip', () => {
     expect(showRoundWeather(null, '2026-10-21')).toBe(false);
   });
 });
+
+describe('ov44: weather on a round ask’s dates', () => {
+  const json = { daily: { time: ['2026-11-21', '2026-11-22', '2026-11-23'], weather_code: [0, 61, 3], temperature_2m_max: [26.6, 19.2, null], precipitation_probability_max: [10, 85, 40] } };
+  it('one small line per date in the forecast', async () => {
+    const { askWxDays, wxBit, wxWords } = await import('./weather.js');
+    const days = askWxDays(json);
+    expect(days['2026-11-21']).toEqual({ icon: '☀️', word: 'Sunny', max: 27, rain: 10 });
+    expect(wxBit(days['2026-11-21'])).toBe('☀️ 27° 10%');
+    expect(wxWords(days['2026-11-22'])).toBe('Showers, top of 19°, 85% chance of rain');
+    expect(days['2026-11-23']).toBeUndefined(); // no temperature → nothing shown
+    expect(askWxDays(null)).toEqual({});
+    expect(wxBit(undefined)).toBe('');
+  });
+  it('one lookup per place (about 10 km), kept 3 hours', async () => {
+    const { askWxKey, askWxFresh } = await import('./weather.js');
+    expect(askWxKey({ lat: -33.87, lng: 151.21 })).toBe(askWxKey({ lat: -33.91, lng: 151.19 }));
+    const now = Date.UTC(2026, 10, 15, 8);
+    expect(askWxFresh({ at: now - 2 * 3600000, days: {} }, now)).toBe(true);
+    expect(askWxFresh({ at: now - 4 * 3600000, days: {} }, now)).toBe(false);
+    expect(askWxFresh({ at: now + 60000, days: {} }, now)).toBe(false); // a clock that went backwards
+    expect(askWxFresh(null, now)).toBe(false);
+  });
+});

@@ -71,7 +71,7 @@ export function caddieHidden(pathname = '') {
   return /^\/(tv|start|join|c|club|privacy|terms|me|replay|score)(\/|$)/.test(pathname)
     || /^\/round\/[^/]+\/(present|print)(\/|$)/.test(pathname) || /^\/present(\/|$)/.test(pathname)
     || /^\/desk\/(present|print)(\/|$)/.test(pathname)
-    || pathname === '/ask';
+    || pathname === '/ask' || pathname === '/caddie';
 }
 
 /** The caddie is a side panel on a laptop (1024 px and up) and on the laptop tools (the players table, pasting a

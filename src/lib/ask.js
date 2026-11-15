@@ -46,23 +46,127 @@ export const dayWord = (k) => WEEKDAY_WORD[k] || k;
 
 /** Sunset on a date, in minutes (Sydney unless a place is given). */
 export function sunsetMin(date, place = SYDNEY) {
-  return sunTimes(date, place.lat, place.lng)?.sunset ?? 19 * 60 + 30;
+  const p = placeOf(place);
+  return sunTimes(date, p.lat, p.lng)?.sunset ?? 19 * 60 + 30;
 }
 
-/** A part's window on a date. Twilight: from about 3 h 15 before sunset to 1 h 45 before (enough light for 9+). */
-export function partWindow(date, part) {
+// ------------------------------------------------------------------ ov44 — daylight where the players are
+// (Josh 15 Nov 2026, claude/round-door-addendum.md piece 5). Every ask has a place (ask.place: the picked course, else
+// where the asker leaves from, else their home area, else the city of the phone's clock, else Sydney). For each date
+// at that place: the earliest tee (sunrise less 10 minutes — the day plan's rule — and never before 6:00), the last
+// tee for 18 (sunset less 4½ hours) and the last tee for 9. A part of the day is trimmed to the last tee for 18; if
+// none of it fits 18 but 9 fits it's a "9 holes" square; if neither fits it isn't offered. Twilight is unchanged.
+// A square is still saved as date + part + from–to and matched on overlap, so answers saved before this still match.
+const up5 = (m) => Math.ceil(m / 5) * 5;
+const down5 = (m) => Math.floor(m / 5) * 5;
+export const EARLY_FLOOR = 6 * 60;
+const okSpot = (p) => p && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && Math.abs(Number(p.lat)) <= 90 && Math.abs(Number(p.lng)) <= 180
+  && p.lat !== null && p.lng !== null && p.lat !== '' && p.lng !== '';
+/** A usable spot for the sun: the place if it has one, else Sydney. */
+export const placeOf = (place) => (okSpot(place) ? { lat: Number(place.lat), lng: Number(place.lng) } : SYDNEY);
+
+/** Daylight for golf on a date at a place, in minutes of that place's own clock (null where the sun doesn't rise or set). */
+export function dayLight(date, place = null) {
+  const p = placeOf(place);
+  const s = sunTimes(date, p.lat, p.lng);
+  if (!s) return null;
+  return { sunrise: s.sunrise, sunset: s.sunset, earliest: Math.max(EARLY_FLOOR, up5(s.sunrise - 10)), last18: down5(s.sunset - ROUND_MIN), last9: down5(s.sunset - NINE_MIN) };
+}
+
+/**
+ * A part's window on a date at a place → { from, to, nine? } or null (not offered: no daylight for even 9 holes).
+ * Twilight: from about 3 h 15 before sunset to 1 h 45 before (enough light for 9+).
+ */
+export function partWindow(date, part, place = null) {
   if (part === 'twilight') {
-    const ss = sunsetMin(date);
+    const ss = sunsetMin(date, place);
     return { from: toHm(r5(ss - 195)), to: toHm(r5(ss - 105)) };
   }
   const p = ASK_PARTS[part];
-  return p ? { from: p.from, to: p.to } : null;
+  if (!p) return null;
+  const dl = dayLight(date, place);
+  if (!dl) return { from: p.from, to: p.to };
+  const from = Math.max(toMin(p.from), dl.earliest);
+  const to = toMin(p.to);
+  if (from > to) return null;
+  if (dl.last18 >= from) return { from: toHm(from), to: toHm(Math.min(to, dl.last18)) };
+  if (dl.last9 >= from) return { from: toHm(from), to: toHm(Math.min(to, dl.last9)), nine: true };
+  return null;
 }
 
+/** '16:54' / minutes → "4:54" (the sun line reads better without am / pm). */
+const bare = (min) => { const h = Math.floor(min / 60) % 24; return `${h % 12 === 0 ? 12 : h % 12}:${pad(min % 60)}`; };
+
+/** "Sat 20 Jun · sunrise 7:00 · sunset 4:54 · last tee for 18 about 12:20" */
+export function sunLine(date, place = null) {
+  const dl = dayLight(date, place);
+  if (!dl) return '';
+  return `${dayLabel(date)} · sunrise ${bare(dl.sunrise)} · sunset ${bare(dl.sunset)} · last tee for 18 about ${bare(dl.last18)}`;
+}
+/** The line above the dates, and what changes by the last date when the light shifts 10 minutes or more. */
+export function sunLines(dates = [], place = null) {
+  const ds = [...new Set(dates)].sort();
+  if (!ds.length) return { line: '', later: '' };
+  const a = dayLight(ds[0], place); const b = dayLight(ds[ds.length - 1], place);
+  const line = sunLine(ds[0], place);
+  if (!a || !b || ds.length < 2 || Math.abs(a.last18 - b.last18) < 10) return { line, later: '' };
+  return { line, later: `By ${dayLabel(ds[ds.length - 1])}: sunset ${bare(b.sunset)}, last tee for 18 about ${bare(b.last18)}` };
+}
+
+// The place itself. Cities: for the default (the phone's clock) and for a name that gives nothing away.
+export const CITIES = [
+  { name: 'Sydney', lat: -33.87, lng: 151.21 }, { name: 'Melbourne', lat: -37.81, lng: 144.96 }, { name: 'Brisbane', lat: -27.47, lng: 153.03 },
+  { name: 'Perth', lat: -31.95, lng: 115.86 }, { name: 'Adelaide', lat: -34.93, lng: 138.6 }, { name: 'Hobart', lat: -42.88, lng: 147.33 },
+  { name: 'Darwin', lat: -12.46, lng: 130.84 }, { name: 'Canberra', lat: -35.28, lng: 149.13 },
+];
+const ZONE_CITY = {
+  sydney: 'Sydney', nsw: 'Sydney', lord_howe: 'Sydney', melbourne: 'Melbourne', victoria: 'Melbourne', brisbane: 'Brisbane', queensland: 'Brisbane',
+  lindeman: 'Brisbane', perth: 'Perth', west: 'Perth', eucla: 'Perth', adelaide: 'Adelaide', south: 'Adelaide', broken_hill: 'Adelaide',
+  yancowinna: 'Adelaide', hobart: 'Hobart', tasmania: 'Hobart', currie: 'Hobart', darwin: 'Darwin', north: 'Darwin', canberra: 'Canberra', act: 'Canberra',
+};
+/** The city for a phone's time zone ('Australia/Perth' → Perth), or null outside Australia. */
+export function zonePlace(tz) {
+  const m = /^Australia\/([A-Za-z_]+)$/.exec(String(tz || ''));
+  const c = m && CITIES.find((x) => x.name === ZONE_CITY[m[1].toLowerCase()]);
+  return c ? { ...c, src: 'zone' } : null;
+}
+/** The nearest city within about 150 km, or null. */
+export function nearestCity(spot) {
+  if (!okSpot(spot)) return null;
+  const best = CITIES.map((c) => ({ c, d: km(spot, c) })).sort((a, b) => a.d - b.d)[0];
+  return best && best.d <= 150 ? best.c.name : null;
+}
+const PLACE_SRC = ['course', 'from', 'home', 'zone', 'picked', 'default'];
+/** A clean place to keep on the ask: about 10 km (plenty for the sun), a short name, where it came from. */
+export function cleanPlace(p) {
+  if (!okSpot(p)) return null;
+  const r1 = (x) => Math.round(Number(x) * 10) / 10;
+  // eslint-disable-next-line no-control-regex
+  const name = String(p.name || '').replace(/[\u0000-\u001f<>]/g, ' ').trim().slice(0, 40);
+  return { lat: r1(p.lat), lng: r1(p.lng), ...(name ? { name } : {}), src: PLACE_SRC.includes(p.src) ? p.src : 'picked' };
+}
+/**
+ * Where an ask is, best first: the picked course { lat, lng, name }, the asker's first "leaving from" place
+ * { lat, lng, label }, their saved home area { lat, lng } (named by its nearest city, never the suburb — it may not
+ * be shared), the phone's time zone, else Sydney. Always returns a place.
+ */
+export function askPlace({ course = null, from = [], home = null, zone = null, picked = null } = {}) {
+  if (okSpot(picked)) return cleanPlace({ ...picked, src: 'picked' });
+  if (okSpot(course)) return cleanPlace({ ...course, src: 'course' });
+  const f = (from || []).find(okSpot);
+  if (f) return cleanPlace({ lat: f.lat, lng: f.lng, name: f.label || f.name, src: 'from' });
+  if (okSpot(home)) return cleanPlace({ lat: home.lat, lng: home.lng, name: nearestCity(home) || 'your area', src: 'home' });
+  const z = zonePlace(zone);
+  if (z) return cleanPlace(z);
+  return cleanPlace({ ...SYDNEY, name: 'Sydney', src: 'default' });
+}
+/** "Sydney" — what to call the ask's place. */
+export const placeName = (place) => (okSpot(place) ? place.name || nearestCity(place) || 'your area' : 'Sydney');
+
 /** The likely finish for a heading: "done 11" (18 holes from the window's start), or "till dark" for twilight. */
-export function finishWords(date, part) {
-  if (part === 'twilight') return `till dark ${clock(toHm(sunsetMin(date)))}`;
-  const w = partWindow(date, part);
+export function finishWords(date, part, place = null) {
+  if (part === 'twilight') return `till dark ${clock(toHm(sunsetMin(date, place)))}`;
+  const w = partWindow(date, part, place);
   return w ? `done ${clock(toHm(r5(toMin(w.from) + ROUND_MIN)))}` : '';
 }
 
@@ -70,7 +174,7 @@ export function finishWords(date, part) {
 export function cellWords(cell) {
   if (!cell) return '';
   const d = dayLabel(cell.date).split(' ').slice(0, 2).join(' ');
-  return cell.part ? `${d} ${ASK_PARTS[cell.part].label.toLowerCase()}` : `${d} · ${clock(cell.from)}`;
+  return cell.part ? `${d} ${ASK_PARTS[cell.part].label.toLowerCase()}${cell.nine ? ' (9 holes)' : ''}` : `${d} · ${clock(cell.from)}`;
 }
 
 // ------------------------------------------------------------------ the ask (what the organiser puts out)
@@ -125,7 +229,10 @@ export function askCells(ask, today) {
   const parts = askPartKeys(ask);
   const out = [];
   for (const date of askDates(ask, today)) {
-    for (const part of parts) out.push({ key: cellKey(date, part), date, part, ...partWindow(date, part) });
+    for (const part of parts) {
+      const w = partWindow(date, part, ask?.place); // ov44: trimmed to the daylight at the ask's place; null = not offered
+      if (w) out.push({ key: cellKey(date, part), date, part, ...w });
+    }
   }
   for (const t of ask?.times || []) {
     const at = cleanTime(t.at);
@@ -154,7 +261,8 @@ export function cleanAsk(ask = {}) {
     : r.kind === 'dates' ? { kind: 'dates', dates: [...new Set(r.dates || [])].filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort().slice(0, 40) }
       : { kind: 'next', days: Math.max(1, Math.min(90, Number(r.days) || 14)) };
   const times = (ask.times || []).map((t) => ({ date: t.date, at: cleanTime(t.at) })).filter((t) => /^\d{4}-\d{2}-\d{2}$/.test(t.date || '') && t.at).slice(0, 12);
-  return { days, parts, range, times };
+  const place = cleanPlace(ask.place); // ov44: where the ask is (for daylight and weather); older asks have none = Sydney
+  return { days, parts, range, times, ...(place ? { place } : {}) };
 }
 
 /** When replies close by default: 2 days (3 for "until we play"), but by 6pm the day before the first date — and never
@@ -645,7 +753,7 @@ export function slotsFrom(cells, st, notes = {}) {
     const w = narrow(c.from, c.to, note);
     if (!w) continue;
     const n = note ? parseNote(note) : null;
-    out.push({ date: c.date, from: w.from, to: w.to, part: c.part, ...(n ? { note: n.text, ...(n.nine ? { nine: true } : {}) } : {}), ...(s === MAYBE ? { maybe: true } : {}) });
+    out.push({ date: c.date, from: w.from, to: w.to, part: c.part, ...(n ? { note: n.text } : {}), ...(n?.nine || c.nine ? { nine: true } : {}), ...(s === MAYBE ? { maybe: true } : {}) });
   }
   return out.slice(0, 400);
 }
@@ -969,7 +1077,7 @@ export function fillContext(ask, today) {
     today, weekday: dayWord(dayKeyOf(today)),
     dates: dates.map((d) => `${d} ${dayWord(dayKeyOf(d))}`),
     parts: askPartKeys(ask).map((p) => {
-      const w = partWindow(dates[0] || today, p);
+      const w = partWindow(dates[0] || today, p, ask?.place) || ASK_PARTS[p];
       return `${p} ${w?.from}–${w?.to}${p === 'twilight' ? ' (from sunset)' : ''}`;
     }),
     week_first: weekFirst(ask, today),

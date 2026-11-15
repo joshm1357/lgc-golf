@@ -11,11 +11,13 @@ import { useRun, must } from '../lib/run.js';
 import { gate } from '../lib/savedgate.js';
 import {
   askCells, rankCells, decideReady, voteChoices, nextBest, cellSpots, cellWords, leaderLine, teeFor, teeTimes, teeWords,
-  courseCheck, whereSummary, prefill, answerSlots, funnel, funnelReading, againAsk, ASK_PARTS, rankCourses, centreOf, fromFor,
+  courseCheck, whereSummary, prefill, answerSlots, funnel, funnelReading, againAsk, ASK_PARTS, rankCourses, centreOf, fromFor, sunsetMin,
 } from '../lib/ask.js';
 import { fmtDrive } from '../lib/tripfinder.js';
 import { courseWindows } from '../lib/daytiming.js';
 import { clock, dayLabel, dowOf, sydneyToday, cleanTime } from '../lib/callout.js';
+import { SunLine, useAskWeather, WxCredit } from './AskDaylight.jsx';
+import { wxBit, wxWords } from '../lib/weather.js';
 import { openCallout } from '../lib/calloutopen.js';
 import { CourseFinder } from './CalloutSheet.jsx';
 import './callout.css';
@@ -44,6 +46,7 @@ export function useAsk(plan) {
 /** The live board: the leader and the best few windows. */
 export function AskBoard({ plan, asked = [], ad, manage, onChoose, onVote }) {
   const data = useData();
+  const wx = useAskWeather(plan.ask?.place || null, !!useFeature('weather')); // ov44: the forecast on each date
   const byId = data.playersById;
   const today = sydneyToday();
   const cells = useMemo(() => askCells(plan.ask, today), [JSON.stringify(plan.ask), today]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -69,7 +72,7 @@ export function AskBoard({ plan, asked = [], ad, manage, onChoose, onVote }) {
         return (
           <div key={r.cell.key} className="ask-slot" data-testid="ask-slot">
             <div className="grow" style={{ minWidth: 0 }}>
-              <strong>{cellWords(r.cell)}</strong> <span className="small muted">{windowWords(r.cell)} · {r.can.length} can{r.maybe.length ? ` · ${r.maybe.length} maybe` : ''}</span>
+              <strong>{cellWords(r.cell)}</strong> <span className="small muted">{windowWords(r.cell)} · {r.can.length} can{r.maybe.length ? ` · ${r.maybe.length} maybe` : ''}{wx[r.cell.date] ? <span title={wxWords(wx[r.cell.date])} data-testid="ask-slot-wx"> · {wxBit(wx[r.cell.date])}</span> : null}</span>
               <div className="small">{names(sp.in, byId) || '—'}{sp.reserve.length ? <span className="muted"> · reserve: {names(sp.reserve, byId)}</span> : null}</div>
               {r.maybe.length > 0 && <div className="small muted">? maybe: {names(r.maybe, byId)}</div>}
               {r.probably.length > 0 && <div className="small muted">+ probably (usual week, unconfirmed): {names(r.probably, byId)}</div>}
@@ -80,6 +83,8 @@ export function AskBoard({ plan, asked = [], ad, manage, onChoose, onVote }) {
         );
       })}
       {!shown.length && <span className="small muted">Nobody’s answered yet.</span>}
+      {top && top.can.length > 0 && <SunLine dates={[top.cell.date]} place={plan.ask?.place || null} />}
+      {shown.some((r) => wx[r.cell.date]) && <WxCredit />}
       {manage && voteChoices(ranked).length >= 2 && (
         <button {...gate('organise')} type="button" className="btn ghost block" onClick={() => onVote(voteChoices(ranked))} data-testid="ask-vote">🗳️ Put 2–3 to a vote</button>
       )}
@@ -160,7 +165,8 @@ function CourseChecks({ plan, r, answers }) {
           const i = info[c.libId] || {};
           const w = courseWindows(dowOf(r.cell.date), { booking: i.booking, research: i.research });
           const link = i.booking?.booking_url || i.research?.booking_url || (i.booking?.phone || i.research?.phone ? `tel:${i.booking?.phone || i.research?.phone}` : null);
-          const chk = courseCheck({ cell: r.cell, windows: w, booking: link, nine });
+          // ov44: dusk at the course itself when we know where it is, else at the ask's place (not always Sydney).
+          const chk = courseCheck({ cell: r.cell, windows: w, booking: link, nine: nine || !!r.cell.nine, sunset: sunsetMin(r.cell.date, c.lat != null && c.lng != null ? c : plan.ask?.place || null) });
           return (
             <div key={c.libId} className="small" data-testid="ask-course-row">
               <strong>{c.name}</strong>
@@ -177,7 +183,8 @@ function CourseChecks({ plan, r, answers }) {
   );
 }
 
-/** People who answered from the link (no sign-in): how to reach them (whoever runs it, and the booker). */
+/** People who answered from the link (no sign-in): how to reach them. ov44 (Josh 15 Nov): whoever put it out and the
+ *  group's organisers only — the database gives the booker nothing (migration 113), so this shows nothing for them. */
 export function GuestContacts({ plan }) {
   const [rows, setRows] = useState([]);
   useEffect(() => { supabase.rpc('ask_contacts', { p_plan: plan.id }).then(({ data }) => setRows(data || []), () => {}); }, [plan.id, plan.status]);

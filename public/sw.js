@@ -178,8 +178,8 @@ self.addEventListener('push', (event) => {
   try { msg = event.data ? event.data.json() : {}; } catch { msg = { title: 'The Golf Trip', body: event.data && event.data.text() }; }
   event.waitUntil(self.registration.showNotification(msg.title || 'The Golf Trip', {
     body: msg.body || '',
-    icon: `${BASE}brand/icon-192.png`,
-    badge: `${BASE}brand/icon-192.png`,
+    icon: `${BASE}brand/trip-192.png`,   // ov44: The Golf Trip's own icon for every group
+    badge: `${BASE}brand/trip-192.png`,
     tag: msg.tag,
     data: { url: msg.url || BASE },
   }));

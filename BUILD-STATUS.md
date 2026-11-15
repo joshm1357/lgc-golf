@@ -2273,3 +2273,86 @@ On release, the normal `supabase functions deploy ask-fill` (config.toml sets ve
 
 **Before release (live):** apply 111 then 112; deploy `ask-fill`; check live's Auth Site URL / redirect list (staging's
 fixed 12 Nov). The "why" field on ask-fill's error replies (outline only, no words) can come out once it's settled.
+
+
+## ov44 — Open the round door (15 Nov 2026, branch `ov44-round-door`, from `ov43-round-ask`; PR #36 into `ov43-round-ask`; migration 113 — on staging)
+Add-on: Project doc `claude/round-door-addendum.md`. Review behind it: `claude/front-door-review.md`. Josh said "go" to the
+audit's six recommendations (15 Nov).
+
+**Audit corrections (things the add-on didn't know)**
+- The door was still shut on live at the database: `start_round_ask` makes a hidden quick group, and 047's invite-only lock
+  refused it. Fixed with a separate switch (`round_asks_open`), not by opening groups.
+- "Make it official" would have been a back way from a round ask to a proper group. Now refused while groups are invite-only.
+- A link answerer's contacts were also seen by whoever was booking. Now: whoever asked and that group's organisers only.
+- Since ov43, `#/ask` (the round ask) had hidden the Caddie's full screen, which lived at the same address — the
+  leaderboard's "✨ Ask about this round" chip landed on the round ask. The Caddie's full screen is now `#/caddie`
+  (an old `#/ask?about=…` link still reaches it).
+- Notifications used the L.G.C crest as their icon for every group.
+
+**Built**
+1. *The app is The Golf Trip.* `index.html` (title, Apple title "Golf Trip", icons, plain preview tags), `manifest.webmanifest`
+   (name, short name, icons, colour), `sw.js` (notification icon), `lib/theme.js` (`appTitle` / `appIcon` are the same for
+   every look; the group's colours, crest and headers are untouched). Phones that already added the app keep the name and
+   icon they saved: iPhones until it's added again; Android usually updates itself within days.
+2. *The ask's link previews.* `functions/a/[token].js` + `lib/askpreview.js` (same page as the idea's, `lib/ideapreview.js`
+   now takes the words and the hop). On Cloudflare the shared link is `/a/<token>`; elsewhere `#/a/<token>`. The picture is
+   drawn and uploaded when whoever asked first sees the share card (`components/AskShare.jsx`, `ask_set_card`). `ask_preview`
+   gives a chat app the asker's first name, the ask, the course, the status and the picture — nothing else. `noindex`.
+3. *Build first, sign in at "Make the link".* `screens/AskStart.jsx`: the form shows to everyone; the choices are kept on
+   the phone (30 minutes) across sign-in; the link is then made without tapping again. After that the round screen opens on
+   a gold "Your link's ready" card until a mate answers.
+4. *A way out for a mate.* `screens/AskPublic.jsx`: "⛳ Ask your own mates" after answering and on the locked-in card
+   (`#/ask?from=<token>&src=reply|locked`); "📅 Add to calendar" on the locked-in card (`lib/plan.js` `icsForRound`: a timed
+   event when there's a tee time).
+5. *Daylight in the grid.* `lib/ask.js` (ov44 section): every ask has a place (`ask.place`, inside the ask's saved details:
+   the picked course → where the asker leaves from → their home area, named by its city → the city of the phone's clock →
+   Sydney; about 10 km). Per date there: earliest tee (sunrise less 10 min, never before 6:00), last tee for 18, last tee for
+   9. Early starts at the earliest tee; parts are trimmed to the last tee for 18; "9 holes" where only 9 fits; not offered
+   where neither does. Twilight unchanged. One line above the dates (`components/AskDaylight.jsx`). A square is still saved
+   as date + part + from–to and matched on overlap (phone and database), so earlier answers still match.
+6. *Weather on the dates.* Icon, top temperature, chance of rain under each date on the reply grid and on the organiser's
+   board. One Open-Meteo lookup per place, kept on the phone 3 hours; nothing shown if it fails; the credit link is shown.
+   On the link it follows the ask (`ask_public.weather`: always for a no-group ask; a group's Weather switch otherwise).
+7. *Before it opens.* Migration 113: `round_asks_open`; the lock's one way through; `make_group_official` refused while
+   groups are shut; 6 new link answers per connection per ask per day (a scrambled daily mark, never an address);
+   contacts narrowed; `round_door_tidy` nightly (a hidden group 30 days after its ask closed, nobody else answered, no
+   round); an index for counting AI uses by month. `ask-fill`: `ASK_AI_MONTH_CAP` across the platform per calendar month
+   (Sydney), 2,000 if not set, 0 = off; the reply's "why" field is gone. Privacy page: a new "Rounds by link" section
+   (draft) and the contact email.
+8. *Counting the door.* `door_counts` (day, step, source, how many — no person) through `door_count`; `lib/door.js`; Josh's
+   screen → "Round door" (`admin_door_funnel`): opened → tapped "Make the link" → signed in → link made → shared → a mate
+   answered → a 4-ball could play → locked in → a replier started their own.
+9. *The website.* `thegolftrip-site` PR #12 (draft): "⛳ Ask your mates for a round" on the home and players pages →
+   `#/ask?src=web-home|web-players`, counted there as `click:ask-round`. **Not to be merged until the app release is live.**
+
+**Tested**
+- Vitest 2,045 (all; was 2,012): `ask44.test.js` (Sydney 20 Jun, Melbourne 20 Jun, Perth 20 Dec, Sydney 28 Nov, both
+  daylight saving weekends, 9 holes, old answers still match), `askpreview.test.js`, `door.test.js`, weather, calendar
+  file, theme (the app's name).
+- Deno, `ask-fill/logic.test.ts`: 9 pass (the monthly cap and the start of the month in Sydney).
+- e2e `ask-round-test.mjs`: 85 checks pass at 375 px — the ov43 run unchanged, plus: the app's name / icon / install name;
+  build the ask signed out → sign in → the link made with the same choices; the share card and picture; a mate answers by
+  link with no sign-in (sun line for the ask's place, forecast on the dates); "Ask your own mates" opens a fresh ask; the
+  locked-in card's calendar file; the counts carry no person. `round-callout-test`, `ai-helper-test`, `ai-helper-v2-test` pass.
+- SQL `supabase/tests/113_round_door.sql` on staging: 63 checks, all as expected (the door and the lock, make-official
+  refused, the preview has no contacts or answers, who sees contacts, the connection limit, counts, another group reads
+  nothing, tidy-up).
+- The preview page on the test link (fetched as a chat app would): a live token → "⛳ Josh: anyone keen for a round?" and
+  the ask in a line; an unknown token → the plain The Golf Trip preview; no contact details in either.
+
+**Not done / known limits**
+- `ask-fill` on staging is still ov43's copy: the staging workflow only runs on `product`, and it can't be started from
+  the build session. Josh: Actions → "Deploy functions to staging" → Run workflow → branch `ov44-round-door`, functions
+  `ask-fill`. Until then the monthly cap is tested in its unit tests only.
+- The Check workflow only runs on pull requests into `product` or `main`, so #36 (into `ov43-round-ask`) shows no Check.
+  The Cloudflare workflow ran the unit tests before building the test link.
+- `tests/e2e/look-test.mjs`: its app-name checks are updated, but the test itself has been out of date since the
+  22 Oct sign-in changes (it stops at the front door). The name is checked in theme.test.js and ask-round-test instead.
+- "Today" for an ask is still Sydney's date (a Perth ask late at night starts a day later than it could).
+- A tidied-up group's share picture stays in storage (the photo clean-up isn't built yet — same as deleted groups).
+- An ask's cost in AI is an estimate from the size of the request, not yet measured: about half a US cent a fill on the
+  current model (kimi-k2.6), a few cents at the very worst. 2,000 a month ≈ US$10–12 typical.
+
+**Release (a STOP — nothing below is done)**: snapshot → live migrations 111, 112, 113 in order → deploy `ask-fill` to
+live → `ASK_AI_MONTH_CAP` secret → check live's Auth Site URL / redirect list → merge #36 into `ov43-round-ask`, then #35
+into `main` → tag → switch `round_asks_open` on → smoke test → then merge the website's #12. Privacy wording: Josh's OK first.

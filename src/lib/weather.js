@@ -233,3 +233,36 @@ export function showRoundWeather(round, today) {
   if (!round || round.status !== 'live') return false;
   return !round.play_date || round.play_date === today;
 }
+
+// ------------------------------------------------------------------ ov44: weather on a round ask's dates
+// (claude/round-door-addendum.md piece 6). A small line per date inside the forecast — the icon, the top temperature
+// and the chance of rain — on the reply grid and the organiser's board, so a group can pick between dates. One lookup
+// per ask place (kept to about 10 km), saved on the phone for 3 hours. No forecast → nothing shown.
+export const ASK_WX_HOURS = 3;
+const r1 = (x) => Math.round(Number(x) * 10) / 10;
+export function askWxKey(place) {
+  return `tgt-askwx-${r1(place.lat)},${r1(place.lng)}`;
+}
+/** Is the phone's saved copy still good? entry: { at: ms, days }. */
+export function askWxFresh(entry, now = Date.now()) {
+  return !!entry && typeof entry.at === 'number' && entry.at <= now && now - entry.at < ASK_WX_HOURS * 3600000
+    && !!entry.days && typeof entry.days === 'object';
+}
+/** Open-Meteo's daily answer → { 'YYYY-MM-DD': { icon, word, max, rain } } (days with no temperature are left out). */
+export function askWxDays(json) {
+  const out = {};
+  for (const d of parseDaily(json)) {
+    if (d.max == null || !/^\d{4}-\d{2}-\d{2}$/.test(String(d.date))) continue;
+    const look = weatherLook(d.code);
+    out[d.date] = { icon: look.icon, word: look.word, max: Math.round(d.max), rain: d.rain == null ? null : Math.round(d.rain) };
+  }
+  return out;
+}
+/** "☀️ 27° 10%" */
+export function wxBit(w) {
+  return w ? `${w.icon} ${w.max}°${w.rain == null ? '' : ` ${w.rain}%`}` : '';
+}
+/** "Sunny, top of 27°, 10% chance of rain" (for a screen reader, and the longer line on the board). */
+export function wxWords(w) {
+  return w ? [w.word, `top of ${w.max}°`, w.rain == null ? null : `${w.rain}% chance of rain`].filter(Boolean).join(', ') : '';
+}

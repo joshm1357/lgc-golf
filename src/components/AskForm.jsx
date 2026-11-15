@@ -12,8 +12,10 @@ import { useRun, must } from '../lib/run.js';
 import { gate } from '../lib/savedgate.js';
 import {
   ASK_PART_KEYS, ASK_PARTS, RANGE_CHOICES, askCells, askWords, cleanAsk, askCloses, askShareText, dayWord, weekFirst,
-  DEFAULT_ASK, WEEK_DAYS,
+  DEFAULT_ASK, WEEK_DAYS, askPlace,
 } from '../lib/ask.js';
+import { courseSpot } from '../lib/weather.js';
+import { SunLine, PlacePicker, phoneZone, savedPlace } from './AskDaylight.jsx';
 import { sydneyToday, askable, closesWords, clock, dayLabel, cleanTime } from '../lib/callout.js';
 import { CourseFinder } from './CalloutSheet.jsx';
 import AskReply from './AskReply.jsx';
@@ -46,6 +48,17 @@ export default function AskForm({ prefill = {}, onSaved }) {
   const [note, setNote] = useState('');
   const [last, setLast] = useState(null);
   const [preview, setPreview] = useState(false);
+  // ov44: where the round is, for daylight and weather — the picked course, else where you leave from, else your home
+  // area, else the city of this phone's clock. "change" overrides it.
+  const [placePick, setPlacePick] = useState(null);
+  const [mine, setMine] = useState({ from: [], home: null });
+  useEffect(() => {
+    if (!status.player_id) return;
+    Promise.all([
+      supabase.from('player_usual_weeks').select('where').eq('player_id', status.player_id).maybeSingle(),
+      supabase.from('player_home_areas').select('lat,lng').eq('player_id', status.player_id).maybeSingle(),
+    ]).then(([u, h]) => setMine({ from: u?.data?.where?.from || [], home: h?.data || null }), () => {});
+  }, [status.player_id]);
 
   // "Same as last time": your last ask.
   useEffect(() => {
@@ -55,7 +68,12 @@ export default function AskForm({ prefill = {}, onSaved }) {
       .then(({ data: rows }) => setLast(rows?.[0] || null), () => {});
   }, [status.player_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const ask = useMemo(() => cleanAsk({ days: days.length === 7 ? [] : days, parts, range: range.kind === 'dates' ? { kind: 'dates', dates } : range, times }), [days, parts, range, dates, times]);
+  const place = useMemo(() => {
+    const spot = course ? (course.kind === 'group' ? courseSpot(data.coursesById?.[course.id]) : null) || (course.lat != null && course.lng != null ? { lat: course.lat, lng: course.lng } : null) : null;
+    const p = askPlace({ picked: placePick, course: spot ? { ...spot, name: course.name } : null, from: mine.from, home: mine.home, zone: phoneZone() });
+    return (p.src === 'zone' || p.src === 'default') && savedPlace() ? savedPlace() : p; // nothing better to go on: what this phone picked last time
+  }, [placePick, course, mine, data.coursesById]);
+  const ask = useMemo(() => cleanAsk({ days: days.length === 7 ? [] : days, parts, range: range.kind === 'dates' ? { kind: 'dates', dates } : range, times, place }), [days, parts, range, dates, times, place]);
   const cells = useMemo(() => askCells(ask, today), [ask, today]);
   const autoCloses = useMemo(() => askCloses(ask, today), [JSON.stringify(ask), today]); // eslint-disable-line react-hooks/exhaustive-deps
   const closesAt = closes ? new Date(closes) : autoCloses;
@@ -126,6 +144,8 @@ export default function AskForm({ prefill = {}, onSaved }) {
           <button type="button" className="chip" aria-pressed={finding} onClick={() => setFinding(!finding)}>🔎 Another</button>
         </div>
         {finding && <CourseFinder onPick={(c) => { setCourse(c); setFinding(false); }} />}
+        <SunLine dates={[...new Set(cells.filter((c) => c.part).map((c) => c.date))]} place={place} />
+        <PlacePicker place={place} onPick={setPlacePick} />
       </div>
 
       <div className="co-step">

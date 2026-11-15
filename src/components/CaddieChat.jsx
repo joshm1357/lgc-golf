@@ -179,7 +179,7 @@ export default function CaddieChat({ onGo, ask: askNow }) {
           {mode.ai
             ? 'I read your group’s own trips, rounds, scores and rules, and can take you to the right screen. I can make mistakes — the leaderboard is the official record.'
             : 'Type what you’re after and I’ll find the screen.'}
-          {mode.ai && <> <a href="#/ask" onClick={(e) => { e.preventDefault(); onGo('/ask'); }}>Full screen</a></>}
+          {mode.ai && <> <a href="#/caddie" onClick={(e) => { e.preventDefault(); onGo('/caddie'); }}>Full screen</a></>}
         </p>
       )}
     </div>

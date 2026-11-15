@@ -24,6 +24,8 @@ import {
 import { dayLabel, clock, sydneyToday } from '../lib/callout.js';
 import { fmtDrive } from '../lib/tripfinder.js';
 import PlaceSearch from './PlaceSearch.jsx';
+import { SunLine, useAskWeather, WxCredit } from './AskDaylight.jsx';
+import { wxBit, wxWords } from '../lib/weather.js';
 import './callout.css';
 
 const shortDate = (d) => dayLabel(d).split(' ').slice(0, 2).join(' ');
@@ -56,7 +58,10 @@ export default function AskReply({ plan, answer = null, preview = false, guest =
   const today = sydneyToday();
   const whereOn = useFeature('ask_where') !== false;
   const usualOn = useFeature('ask_usual_week') !== false;
+  const wxSwitch = useFeature('weather');
   const ask = plan.ask || {};
+  // ov44: a forecast on the dates. On the link the ask says whether to (guest.weather); in the app it's the group's switch.
+  const wx = useAskWeather(ask.place || null, guest ? !!guest.weather : preview ? true : !!wxSwitch);
   const tok = token || plan.ask_token || null;
   const cells = useMemo(() => askCells(ask, today), [JSON.stringify(ask), today]); // eslint-disable-line react-hooks/exhaustive-deps
   const weekView = weekFirst(ask, today);
@@ -65,6 +70,9 @@ export default function AskReply({ plan, answer = null, preview = false, guest =
   const exactCells = cells.filter((c) => !c.part);
   const rows = weekRows(cells);
   const weeks = useMemo(() => weeksOf(gridCells), [gridCells]);
+  const gridDates = useMemo(() => [...new Set(gridCells.map((c) => c.date))].sort(), [gridCells]);
+  const rowCells = (rk) => gridCells.filter((c) => rowKey(c) === rk);
+  const hasWx = gridDates.some((d) => wx[d]);
 
   const [st, setSt] = useState(emptyState);
   const [notes, setNotes] = useState({});
@@ -205,12 +213,14 @@ export default function AskReply({ plan, answer = null, preview = false, guest =
     const ex = kind === 'date' && c && isException(c, st);
     const ref = c || gridCells.find((x) => rowKey(x) === key);
     const out = s !== NO && note && ref && !narrow(ref.from, ref.to, note); // e.g. "home by 12" on an arvo: won't count
+    // ov44: not enough daylight for 18 from here — it's a 9-hole square (a weekday square: when every one of its dates is).
+    const nine = kind === 'date' ? !!c?.nine : (() => { const cs = rowCells(key); return cs.length > 0 && cs.every((x) => x.nine); })();
     return (
       <button key={key} type="button" data-sq={key} data-kind={kind} className={`ask-cell ${out ? 'out' : CLS[s]}${ex ? ' ex' : ''}${result?.changed?.has(key) ? ' changed' : ''}`}
-        aria-label={`${label}: ${s === YES ? 'can' : s === NO ? 'can’t' : 'not said'}${note ? `, note: ${note}` : ''}${out ? ' (rules it out)' : ''}${ex ? ', changed from your week' : ''}`}
+        aria-label={`${label}${nine ? ' (9 holes — not enough light for 18)' : ''}: ${s === YES ? 'can' : s === NO ? 'can’t' : 'not said'}${note ? `, note: ${note}` : ''}${out ? ' (rules it out)' : ''}${ex ? ', changed from your week' : ''}`}
         onPointerDown={(e) => { try { e.currentTarget.releasePointerCapture?.(e.pointerId); } catch { /* fine */ } down(kind, key, s); }}
         onContextMenu={(e) => e.preventDefault()} data-testid={kind === 'week' ? 'ask-wsq' : 'ask-dsq'}>
-        {MARK[s]}{note ? <span className="ask-dot" aria-hidden="true">•</span> : null}
+        {MARK[s]}{note ? <span className="ask-dot" aria-hidden="true">•</span> : null}{nine ? <span className="ask-nine" aria-hidden="true">9</span> : null}
       </button>
     );
   };
@@ -219,7 +229,7 @@ export default function AskReply({ plan, answer = null, preview = false, guest =
       <span />
       {parts.map((p) => (
         <button key={p} type="button" className="ask-head" onClick={() => onHead(p)} data-testid="ask-head">
-          <strong>{ASK_PARTS[p].label}</strong><span>{finishWords(gridCells[0]?.date || today, p)}</span>
+          <strong>{ASK_PARTS[p].label}</strong><span>{finishWords(gridCells[0]?.date || today, p, ask.place || null)}</span>
         </button>
       ))}
     </>
@@ -230,7 +240,8 @@ export default function AskReply({ plan, answer = null, preview = false, guest =
       {dates.map((d) => (
         <React.Fragment key={d}>
           <button type="button" className="ask-rowhead" onClick={() => { const cs = gridCells.filter((c) => c.date === d); cycleAll('date', cs.map((c) => c.key), cs.map((c) => statusOf(c, st))); }}>
-            <strong>{shortDate(d).split(' ')[0]}</strong> {shortDate(d).split(' ')[1]}
+            <span><strong>{shortDate(d).split(' ')[0]}</strong> {shortDate(d).split(' ')[1]}</span>
+            {wx[d] && <span className="ask-wx" title={wxWords(wx[d])} aria-label={wxWords(wx[d])} data-testid="ask-wx">{wxBit(wx[d])}</span>}
           </button>
           {parts.map((p) => { const c = gridCells.find((x) => x.date === d && x.part === p); return c ? square('date', c.key, statusOf(c, st), c, `${shortDate(d)} ${ASK_PARTS[p].label}`) : <span key={p} />; })}
         </React.Fragment>
@@ -252,6 +263,7 @@ export default function AskReply({ plan, answer = null, preview = false, guest =
           <strong>{weekView ? 'Your week' : 'The dates'}</strong>
           <span className="small muted" data-testid="ask-span">{weekView ? `Applies to every week, ${spanWords(gridCells)}` : spanWords(gridCells)}</span>
         </div>
+        <SunLine dates={gridDates} place={ask.place || null} />
         <div className="ask-legend" aria-hidden="true"><span>Tap: ? → ✓ → ✗</span><span><b className="y">✓</b> can</span><span><b className="n">✗</b> can’t</span><span><b className="m">?</b> not said</span></div>
         <div className="co-chips" role="group" aria-label="Quick answers" data-testid="ask-quick">
           <button type="button" className="chip" onClick={() => { setSt(everythingElse(st, cells, NO, { weekView })); setResult(null); }} data-testid="ask-else-no">Everything else ✗</button>
@@ -267,7 +279,7 @@ export default function AskReply({ plan, answer = null, preview = false, guest =
                 <button type="button" className="ask-rowhead" onClick={() => { const ks = parts.map((p) => `${d}|${p}`); cycleAll('week', ks, ks.map(weekStatus)); }} data-testid="ask-rowhead">
                   <strong>{dayWord(d)}s</strong>
                 </button>
-                {parts.map((p) => square('week', `${d}|${p}`, weekStatus(`${d}|${p}`), null, `${dayWord(d)}s ${ASK_PARTS[p].label}`))}
+                {parts.map((p) => (rowCells(`${d}|${p}`).length ? square('week', `${d}|${p}`, weekStatus(`${d}|${p}`), null, `${dayWord(d)}s ${ASK_PARTS[p].label}`) : <span key={p} className="ask-none" title="Not enough daylight" />))}
               </React.Fragment>
             ))}
           </div>
@@ -277,6 +289,8 @@ export default function AskReply({ plan, answer = null, preview = false, guest =
             {datesGrid(w.dates, 'ask-grid')}
           </div>
         ))}
+        {gridCells.some((c) => c.nine) && <span className="small muted" data-testid="ask-nine-note">A small 9 means 9 holes: there isn’t the daylight for 18 from then.</span>}
+        {hasWx && <span className="small muted">{weekView && !showDates ? 'The forecast for each date is under “Show the dates”. ' : 'Under each date: the forecast, top temperature and chance of rain. '}<WxCredit /></span>}
         {Object.keys(notes).length > 0 && (
           <span className="small muted" data-testid="ask-notes">📝 {Object.entries(notes).map(([k, v]) => `${noteWhere(k)}: ${v}`).join(' · ')} — a gold square means your note rules that time out.</span>
         )}

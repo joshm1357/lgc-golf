@@ -9,6 +9,7 @@ import { resultsText, sameTimeNextYear, startOwnLink } from '../lib/quick.js';
 import { readHandicap } from '../lib/history.js';
 import { toast } from '../components/ui.jsx';
 import { SIGN_IN } from '../lib/auth.js';
+import { NEW_GROUPS } from '../lib/beta.js';
 import { SignInCard } from './Group.jsx';
 import SharePicture from '../components/SharePicture.jsx';
 import { boardCard } from '../lib/shareCard.js';
@@ -166,7 +167,8 @@ export function QuickRoundDone({ round, board, course }) {
         )}
         {status?.is_admin && status?.quick && round.status === 'locked' && (
           <>
-            <button type="button" className="btn ghost block" disabled={busy} onClick={official}>⭐ Make it official — name the group, add a crest</button>
+            {/* ov44: only where starting a group is open — the database refuses it otherwise (migration 113) */}
+            {NEW_GROUPS && <button type="button" className="btn ghost block" disabled={busy} onClick={official}>⭐ Make it official — name the group, add a crest</button>}
             <span className="small muted">Keeps everyone and today’s round. You become a proper group with your own Rulebook, trophies and trips.</span>
           </>
         )}

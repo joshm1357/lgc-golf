@@ -137,7 +137,7 @@ check(true, 'the guide shows the trip it made');
 await page.screenshot({ path: `${SHOTS}/2-done.png`, fullPage: true });
 
 // 4. Ask about our history: the full-screen Ask (the More item is now the Caddie button), example chips, an answer.
-await page.goto(`${BASE}#/ask`);
+await page.goto(`${BASE}#/caddie`);
 await page.getByRole('button', { name: 'Best Stableford round ever?' }).click();
 await page.getByText(/Bluey’s 44 points at Kurri/).waitFor({ timeout: 10000 });
 check(true, 'a history answer shows');
@@ -148,7 +148,7 @@ await page.screenshot({ path: `${SHOTS}/3-ask.png`, fullPage: true });
 await page.goto(`${BASE}#/more`);
 await page.getByText('Players & group').waitFor({ timeout: 10000 });
 check(await page.getByText('📜 History and import').isVisible(), 'More has "📜 History and import" for organisers');
-await page.goto(`${BASE}#/ask`);
+await page.goto(`${BASE}#/caddie`);
 await page.getByText(/Bluey’s 44 points at Kurri/).waitFor({ timeout: 10000 });
 check(await page.getByText('Best Stableford round ever?').last().isVisible(), 'back on Ask: the earlier question and answer are still there');
 // Busy once: retried by itself, the answer shows, no error.
@@ -179,7 +179,7 @@ check(!(await page.getByText('✨ Set it up for me').isVisible().catch(() => fal
 await page.goto(`${BASE}#/more`);
 await page.getByText('Players & group').waitFor({ timeout: 10000 });
 check(!(await page.getByText('✨ Ask the AI helper').isVisible().catch(() => false)), 'no Ask in More (the Caddie button is the way in)');
-await page.goto(`${BASE}#/ask`);
+await page.goto(`${BASE}#/caddie`);
 await page.getByText('The Caddie is switched off for this group.').waitFor({ timeout: 10000 });
 check(true, 'switched off: /ask says so');
 check(calls.length === before, 'switched off: the function isn’t called');

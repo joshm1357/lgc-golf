@@ -1,3 +1,7 @@
+// NOTE (ov44, 15 Nov 2026): this test's fake sign-in predates "links, not PINs" (083) and the sign-in-first front door,
+// so it stops at the front door before its first check — it was already out of date before ov44. Its app-name checks
+// below are updated for ov44 (the app is The Golf Trip for every group); the same thing is checked for real in
+// src/lib/theme.test.js and tests/e2e/ask-round-test.mjs (steps 0 and 16). Bringing this harness up to date is a job of its own.
 // Phone-width browser check of the built app (dist/) against a fake database.
 // No real database is touched: every request to Supabase is answered here.
 // Usage: node phone-test.mjs <baseUrl> <shotDir>
@@ -161,7 +165,7 @@ check(!(await page.locator('body').innerText()).includes('BD, Putt Buddies'), 'n
 check(!(await page.getByText('How the app works').count()), 'no L.G.C guide link for a new group');
 const head = () => page.evaluate(() => ({ title: document.title, apple: document.querySelector('meta[name="apple-mobile-web-app-title"]')?.content, icon: document.querySelector('link[rel="apple-touch-icon"]')?.getAttribute('href') }));
 let h = await head();
-check(!/L\.G\.C/.test(h.title + h.apple) && /trip-192\.png$/.test(h.icon), `new group: own app name and plain icon (${JSON.stringify(h)})`);
+check(h.title === 'The Golf Trip' && h.apple === 'Golf Trip' && /trip-192\.png$/.test(h.icon), `new group: the app is The Golf Trip (${JSON.stringify(h)})`);
 await page.screenshot({ path: `${SHOTS}/l1-new-group.png` });
 
 // The Look card: a pale main colour is refused before saving.
@@ -207,7 +211,8 @@ await page.getByText('Players & group').waitFor({ timeout: 15000 });
 check((await cssVar('--navy-2')).toUpperCase() === '#2E4561' && (await cssVar('--gold')).toUpperCase() === '#D9A521', 'L.G.C keeps exactly its colours');
 check(await page.getByRole('img', { name: /L\.G\.C/ }).first().isVisible(), 'L.G.C keeps its crest');
 h = await head();
-check(h.title === 'L.G.C Golf' && h.apple === 'L.G.C' && /icon-192\.png$/.test(h.icon), `L.G.C keeps its app name and icon (${JSON.stringify(h)})`);
+// ov44 (Josh 15 Nov 2026): the app's own name and icon are The Golf Trip for every group, L.G.C included; its crest and colours stay inside.
+check(h.title === 'The Golf Trip' && h.apple === 'Golf Trip' && /trip-192\.png$/.test(h.icon), `L.G.C: the app is The Golf Trip, its crest and colours stay inside (${JSON.stringify(h)})`);
 
 // No longer in a group: the old group's look is forgotten (an invite to another group shouldn't show L.G.C).
 STATUS.v = { is_member: false, is_admin: false, player_id: null, group_name: null, group_id: null, legacy: null, role: null, signed_in: false, look: null, groups: [] };

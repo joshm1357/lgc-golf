@@ -29,7 +29,8 @@ export function notifyItem() {
 
 /** The name iPhones show in Settings → Notifications (what the app is called on the Home Screen). */
 export function appName() {
-  try { return document.querySelector('meta[name="apple-mobile-web-app-title"]')?.content || 'The Golf Trip'; } catch { return 'The Golf Trip'; }
+  // ov44: it's "Golf Trip" now; a phone that added the app before then still has it as "L.G.C".
+  try { return document.querySelector('meta[name="apple-mobile-web-app-title"]')?.content || 'Golf Trip'; } catch { return 'Golf Trip'; }
 }
 
 /** This phone's notification state for me: null while checking, then 'on' | 'off' | 'blocked' | … */

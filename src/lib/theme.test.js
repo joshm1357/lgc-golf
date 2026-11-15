@@ -65,15 +65,15 @@ describe('mutedOn', () => {
 });
 
 describe('app name and icon', () => {
-  it('L.G.C keeps its name and icon', () => {
-    expect(appTitle(LGC_LOOK, 'Whatever')).toEqual({ title: 'L.G.C Golf', short: 'L.G.C' });
-    expect(appIcon(LGC_LOOK)).toMatch(/brand\/icon-192\.png$/);
+  // ov44 (Josh 15 Nov 2026): "needs to be The Golf Trip, not the app of the group".
+  it('is The Golf Trip for every group, L.G.C included', () => {
+    for (const [look, name] of [[LGC_LOOK, 'L.G.C'], [{ short_name: 'MULL', crest_url: 'https://x/crest.png' }, 'The Mulligans'], [DEFAULT_LOOK, 'A very long group name here'], [null, null]]) {
+      expect(appTitle(look, name)).toEqual({ title: 'The Golf Trip', short: 'Golf Trip' });
+      expect(appIcon(look)).toMatch(/brand\/trip-192\.png$/);
+    }
   });
-  it('other groups get their own name, crest or the plain icon', () => {
-    expect(appTitle({ short_name: 'MULL' }, 'The Mulligans')).toEqual({ title: 'The Mulligans', short: 'MULL' });
-    expect(appTitle(DEFAULT_LOOK, 'A very long group name here').short).toBe('Golf Trip');
-    expect(appTitle(null, null).title).toBe('The Golf Trip');
-    expect(appIcon({ crest_url: 'https://x/crest.png' })).toBe('https://x/crest.png');
-    expect(appIcon(DEFAULT_LOOK)).toMatch(/brand\/trip-192\.png$/);
+  it('the group’s own colours are untouched (its look stays inside the app)', () => {
+    expect(themeVars(LGC_LOOK)['--navy']).toBe('#1C2B3F');
+    expect(themeVars({ ...DEFAULT_LOOK, primary: '#2F6F9F' })['--navy']).toBe('#2F6F9F');
   });
 });

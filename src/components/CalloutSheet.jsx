@@ -57,7 +57,7 @@ export function CourseFinder({ onPick, placeholder = 'Search courses by name or 
       <input className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder={placeholder} aria-label="Search courses" data-testid="co-course-search" />
       {rows.map((r) => (
         <button key={r.id} type="button" className="co-opt" style={{ textAlign: 'left', font: 'inherit', color: 'inherit', cursor: 'pointer' }}
-          onClick={() => { const m = mine(r); onPick(m ? { kind: 'group', id: m.id, name: m.name } : { kind: 'library', id: r.id, name: r.name }); setQ(''); setRows([]); }}>
+          onClick={() => { const m = mine(r); onPick(m ? { kind: 'group', id: m.id, name: m.name, lat: r.lat ?? null, lng: r.lng ?? null } : { kind: 'library', id: r.id, name: r.name, lat: r.lat ?? null, lng: r.lng ?? null }); setQ(''); setRows([]); }}>
           <strong>{r.name}</strong><span className="small muted" style={{ paddingRight: 8 }}>{r.area || ''}</span>
         </button>
       ))}

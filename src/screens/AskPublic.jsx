@@ -15,6 +15,10 @@ import { SignInButtons } from './Join.jsx';
 import AskReply from '../components/AskReply.jsx';
 import { askCells, askWords, rankCells, cellWords, leaderLine, teeWords, contactOf, guestKeyName } from '../lib/ask.js';
 import { dayLabel, clock, sydneyToday } from '../lib/callout.js';
+import { icsForRound } from '../lib/plan.js';
+import { downloadFile } from '../lib/push.js';
+import { askShareLink } from '../lib/askpreview.js';
+import { count, ownAskLink } from '../lib/door.js';
 import '../components/callout.css';
 
 const keyOf = (token) => { try { return localStorage.getItem(guestKeyName(token)) || null; } catch { return null; } };
@@ -78,6 +82,15 @@ export default function AskPublic({ token }) {
   };
   const top = ranked[0];
   const standing = me?.standing;
+  const locked = d.status === 'confirmed' || d.status === 'done';
+  // ov44: a calendar file for people who answered by link (the app's own "Add to calendar" needs a sign-in).
+  const calendar = () => {
+    const link = askShareLink({ origin: window.location.origin, base: import.meta.env.BASE_URL, token });
+    const ics = icsForRound({ id: d.plan_id, name: `Golf${d.course ? ` at ${d.course}` : ''}${d.by ? ` (${d.by}’s round)` : ''}`, date: String(d.start_date).slice(0, 10), time: d.tee_time, course: d.course }, link);
+    if (!ics) return;
+    downloadFile('golf-round.ics', ics);
+    count(supabase, 'calendar');
+  };
 
   return (
     <Page>
@@ -96,6 +109,7 @@ export default function AskPublic({ token }) {
           {standing && <span>{standing.has_spot ? '✅ You’re in.' : `⏳ You’re reserve #${standing.place} — you’ll hear if a spot opens.`}</span>}
           {me && !standing && <span>🙁 Not this time — it’s the time you couldn’t make.</span>}
           {d.booked && <span className="small muted">Booked ✓</span>}
+          {standing?.has_spot && d.start_date && <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={calendar} data-testid="ask-public-calendar">📅 Add to calendar</button>}
         </div>
       )}
 
@@ -120,7 +134,7 @@ export default function AskPublic({ token }) {
             </div>
           )}
           <strong>When can you play?</strong>
-          <AskReply plan={plan} guest={{ submit, key }} token={token} answer={me?.answer ? { ...me.answer, updated_at: 'x' } : null} onSent={load} />
+          <AskReply plan={plan} guest={{ submit, key, weather: d.weather !== false }} token={token} answer={me?.answer ? { ...me.answer, updated_at: 'x' } : null} onSent={load} />
         </div>
       ))}
 
@@ -145,6 +159,13 @@ export default function AskPublic({ token }) {
         </div>
       )}
       {!me && !open && !signedIn && <SignInButtons returnHash={`#/a/${token}`} />}
+      {/* ov44: a way for a mate to start their own (after answering, and on the locked-in card) */}
+      {(me || locked) && d.status !== 'cancelled' && (
+        <div className="stack" style={{ gap: 4, alignItems: 'center', color: '#fff' }} data-testid="ask-public-own">
+          <a href={ownAskLink(token, locked ? 'locked' : 'reply')} className="btn ghost block" style={{ color: '#fff', background: 'transparent', borderColor: 'rgba(255,255,255,.5)' }} data-testid="ask-public-own-go">⛳ Ask your own mates for a round</a>
+          <span className="small" style={{ color: 'var(--on-navy-muted)' }}>About a minute. No group needed — they answer just like you did.</span>
+        </div>
+      )}
       <span className="small" style={{ color: 'var(--on-navy-muted)', textAlign: 'center' }}>The Golf Trip · <a href="#/privacy" style={{ color: 'inherit' }}>Privacy</a></span>
     </Page>
   );

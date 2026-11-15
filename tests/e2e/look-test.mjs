@@ -1,3 +1,7 @@
+// NOTE (ov44, 15 Nov 2026): this test's fake sign-in predates "links, not PINs" (083) and the sign-in-first front door,
+// so it stops at the front door before its first check — it was already out of date before ov44. Its app-name checks
+// below are updated for ov44 (the app is The Golf Trip for every group); the same thing is checked for real in
+// src/lib/theme.test.js and tests/e2e/ask-round-test.mjs (steps 0 and 16). Bringing this harness up to date is a job of its own.
 // Phone-width browser check of the built app (dist/) against a fake database.
 // No real database is touched: every request to Supabase is answered here.
 // Usage: node phone-test.mjs <baseUrl> <shotDir>

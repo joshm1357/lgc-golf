@@ -71,10 +71,15 @@ export function setDoorSource(source) {
 export function doorSource() {
   try { return cleanSource(ss()?.getItem(SRC_KEY)); } catch { return 'direct'; }
 }
-/** Count a step, once per visit. Never throws, never waits: counting must not get in anyone's way. */
-export function count(supabase, step, { once = true } = {}) {
-  if (!COUNTED.includes(step) || !supabase) return;
+/** Count a step, once per visit. Never throws and nobody has to wait for it: counting must not get in anyone's way.
+ *  It returns a promise that settles when the count has landed (or failed, or after `wait` ms) — only for the one
+ *  place that's about to load a new page and would otherwise cut the request off. */
+export function count(supabase, step, { once = true, wait = 800 } = {}) {
+  if (!COUNTED.includes(step) || !supabase) return Promise.resolve();
   const s = ss();
-  try { if (once && s?.getItem(seenKey(step))) return; s?.setItem(seenKey(step), '1'); } catch { /* fine */ }
-  try { Promise.resolve(supabase.rpc('door_count', { p_step: step, p_source: doorSource() })).then(() => {}, () => {}); } catch { /* fine */ }
+  try { if (once && s?.getItem(seenKey(step))) return Promise.resolve(); s?.setItem(seenKey(step), '1'); } catch { /* fine */ }
+  try {
+    const sent = Promise.resolve(supabase.rpc('door_count', { p_step: step, p_source: doorSource() })).then(() => {}, () => {});
+    return Promise.race([sent, new Promise((r) => setTimeout(r, wait))]);
+  } catch { return Promise.resolve(); }
 }

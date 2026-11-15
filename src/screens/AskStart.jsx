@@ -76,7 +76,7 @@ export default function AskStart() {
       throw e;
     }
     clearDraft();
-    count(supabase, 'link_made');
+    await count(supabase, 'link_made'); // the page is about to load again: let the count land first (under a second)
     setCurrentGroup(r.group_id);
     window.location.hash = `#/plan/${r.plan_id}`;
     window.location.reload();

@@ -35,7 +35,7 @@ export function Privacy() {
         or (organisers) download and delete your group.</P>
 
       <H>Who runs it</H>
-      <P>The Golf Trip is run by Josh [full name / business name, ABN if any]. Questions or requests: [contact email].</P>
+      <P>The Golf Trip is run by Josh [full name / business name, ABN if any]. Questions or requests: admin@thegolftrip.club.</P>
 
       <H>What the app keeps, and who sees it</H>
       <L items={[
@@ -71,6 +71,37 @@ export function Privacy() {
         <><strong>Clubhouse TV</strong> only if your organiser ticks “Show on the clubhouse TV” for that round: first names or
           nicknames, handicaps and scores, on that day only, on the club’s screen. Anyone with the club’s TV link can see it.</>,
         <>If you work at a club and claim its page, Josh keeps the contact details you give so he can check the claim.</>,
+      ]} />
+
+      {/* ov44 — the round door (claude/round-door-addendum.md piece 7). DRAFT wording: Josh checks it before it goes live. */}
+      <H>Rounds by link (“Anyone keen for a round?”)</H>
+      <P>Anyone can ask some mates for a round and send them a link. The people who get the link can answer without an
+        account. This is what’s kept for that, and why.</P>
+      <L items={[
+        <><strong>If you answer from a link</strong> (no sign-in): your first name, the times you say you can play, a suburb
+          if you choose to add one (for drive times; never an address), and the email or mobile you give. Why: so whoever
+          asked can see who can play when, and get hold of you about the round. Your first name and times are shown to
+          anyone who has the link. Your email or mobile is seen only by whoever sent the ask and, if the ask is inside a
+          group, that group’s organisers. Not the other people who answered, and not whoever books the tee time. It isn’t
+          used for anything else and isn’t added to any mailing list. Your phone keeps a key so you can change your answer.</>,
+        <><strong>If you send an ask</strong>: you sign in (Google or email) so the answers come back to you. Your first name,
+          the days and times you asked about and the course (if you picked one) are shown on the link, and in the preview a
+          chat app shows under it. The app also keeps the rough area the round is in (a city or suburb, to about 10 km) to
+          work out sunrise, sunset and the last tee time, and to show a forecast.</>,
+        <><strong>“Tell the Caddie when you can play”</strong>: if you type in that box and the app can’t read it by itself,
+          what you typed (up to 300 letters) is sent to the AI company the app uses to turn it into ticks on the grid. We don’t
+          keep what you typed or what came back, only that the box was used. There’s a limit on how often it can be used.</>,
+        <><strong>The forecast</strong> on the dates comes straight to your phone from Open-Meteo. They see your internet
+          address and the rough area, not who you are.</>,
+        <><strong>Stopping misuse</strong>: your internet address is used to limit how many new answers one connection can
+          add to an ask in a day. It’s scrambled with the date and the ask before it’s stored, can’t be turned back into an
+          address, and is deleted after two days.</>,
+        <><strong>Counting</strong>: we count how many times each step happens (opened, link made, shared, added to a
+          calendar) and where the visit came from (for example, the website). Numbers only, with no person, phone or ask
+          attached.</>,
+        <><strong>How long it’s kept</strong>: an ask that nobody else answered is deleted 30 days after it closes. Other asks
+          stay with whoever sent them until they delete the group or their account. To have your answer and contact details
+          removed sooner, email admin@thegolftrip.club with the link.</>,
       ]} />
 
       <H>Counting scans, and where groups come from</H>
@@ -135,7 +166,7 @@ export function Privacy() {
           from storage by a clean-up that isn’t running yet [to come] — until then, someone who already has a photo’s exact
           link could still open it.</>,
         <>Scan counts are kept for 2 years; app problem reports for 90 days.</>,
-        <>Anything else, or a copy of what we hold about you: email [contact email].</>,
+        <>Anything else, or a copy of what we hold about you: email admin@thegolftrip.club.</>,
       ]} />
 
       <H>Age</H>
@@ -178,7 +209,7 @@ export function Terms() {
         <>We may change or stop features. If we ever close the app, organisers get [notice period] to download their data.</>,
         <>These terms are under the law of [New South Wales], Australia.</>,
       ]} />
-      <P>Questions: [contact email]. Last updated: [date].</P>
+      <P>Questions: admin@thegolftrip.club. Last updated: [date].</P>
     </Page>
   );
 }

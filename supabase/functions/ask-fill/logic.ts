@@ -14,6 +14,34 @@ export function caps(get: (k: string) => string | undefined) {
   return { person: n('ASK_AI_PERSON_CAP', DEFAULT_CAPS.person), ask: n('ASK_AI_ASK_CAP', DEFAULT_CAPS.ask) };
 }
 
+// ov44 (claude/round-door-addendum.md piece 7): one cap across the whole platform per calendar month, so opening the
+// round door to anyone can't run up a bill. The secret ASK_AI_MONTH_CAP; not set → 2,000; 0 → the AI is off.
+// When it's reached the Caddie box says to tap the squares; easy phrases still fill on the phone (no AI needed).
+export const DEFAULT_MONTH_CAP = 2000;
+export function monthCap(get: (k: string) => string | undefined): number {
+  const raw = String(get('ASK_AI_MONTH_CAP') ?? '').trim();
+  if (raw === '') return DEFAULT_MONTH_CAP;
+  const v = Number.parseInt(raw, 10);
+  return Number.isFinite(v) && v >= 0 && v <= 1000000 ? v : DEFAULT_MONTH_CAP;
+}
+export const MONTH_FULL = 'The Caddie’s done for the month — tap the squares instead. Easy ones like “weekends” or “fri arvos” still fill in.';
+/** The start of this month on Sydney's clock, as an instant (ISO). */
+export function monthStart(now: Date = new Date()): string {
+  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' });
+  const parts = (d: Date) => Object.fromEntries(fmt.formatToParts(d).map((p) => [p.type, p.value]));
+  const p = parts(now);
+  const y = Number(p.year); const m = Number(p.month);
+  // Midnight on the 1st in Sydney is 10 or 11 hours behind in UTC, depending on daylight saving: take the one that fits.
+  for (const hours of [11, 10]) {
+    const t = new Date(Date.UTC(y, m - 1, 1) - hours * 3600000);
+    const q = parts(t);
+    if (Number(q.year) === y && Number(q.month) === m && Number(q.day) === 1 && Number(q.hour) === 0) return t.toISOString();
+  }
+  return new Date(Date.UTC(y, m - 1, 1) - 10 * 3600000).toISOString();
+}
+/** Is there room this month? used: uses so far this month that didn't fail. */
+export const monthRoom = (used: number, cap: number) => cap > 0 && used < cap;
+
 /** A link token looks like 111's: 16 of 23456789ABCDEFGHJKLMNPQRSTUVWXYZ. */
 export const okToken = (t: unknown) => typeof t === 'string' && /^[23456789A-HJ-NP-Z]{16}$/.test(t.trim().toUpperCase());
 /** A phone's own random id (for the per-person cap when nobody's signed in and there's no answer yet). */

@@ -7,7 +7,8 @@
 // Works on the no-sign-in link too (Josh 12 Nov: yes, capped), so this function checks for itself (verify_jwt off):
 //   * the ask's link token must be a real v2 ask that's still open for answers;
 //   * caps (migration 112's ask_ai_uses, server only): 5 a person per ask and 60 an ask (ASK_AI_PERSON_CAP /
-//     ASK_AI_ASK_CAP). "A person" is their sign-in, else the key their phone keeps for their answer, else a random id
+//     ASK_AI_ASK_CAP), and — ov44 — one cap across the whole platform per calendar month (ASK_AI_MONTH_CAP, 2,000 if
+//     not set; 0 switches the AI off). "A person" is their sign-in, else the key their phone keeps for their answer, else a random id
 //     the phone makes — so the per-ask cap of 60 is the hard ceiling on spend;
 //   * the text is cut to 300 characters and goes to the model as data it's told never to obey;
 //   * the reply is cleaned twice (here and on the phone) to the ask's own dates and parts.
@@ -15,7 +16,7 @@
 // AI: the same secrets as ai-helper (AI_PROVIDER, AI_BASE_URL, AI_API_KEY, AI_MODEL; AI_FAST_MODEL if set).
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 import { aiConfig, fastConfig } from '../ai-helper/providers.ts';
-import { caps, okToken, whoKey, room, fillOnce, MAX_TEXT } from './logic.ts';
+import { caps, okToken, whoKey, room, fillOnce, MAX_TEXT, monthCap, monthStart, monthRoom, MONTH_FULL } from './logic.ts';
 
 // deno-lint-ignore no-explicit-any
 type Any = any;
@@ -23,6 +24,7 @@ type Any = any;
 const AI = aiConfig((k) => Deno.env.get(k));
 const FAST = fastConfig((k) => Deno.env.get(k), AI.ok ? AI.cfg : null);
 const CAPS = caps((k) => Deno.env.get(k));
+const MONTH_CAP = monthCap((k) => Deno.env.get(k)); // ov44: across the whole platform, per calendar month
 const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false, autoRefreshToken: false } });
 
 const cors = {
@@ -61,11 +63,14 @@ Deno.serve(async (req) => {
 
   // Caps: uses that didn't fail (in-flight ones count, so two at once can't both slip through).
   const counted = (q: Any) => q.or('ok.eq.true,code.is.null');
-  const [mine, all] = await Promise.all([
+  const [mine, all, month] = await Promise.all([
     counted(admin.from('ask_ai_uses').select('id', { count: 'exact', head: true }).eq('plan_id', plan.id).eq('who', who)),
     counted(admin.from('ask_ai_uses').select('id', { count: 'exact', head: true }).eq('plan_id', plan.id)),
+    counted(admin.from('ask_ai_uses').select('id', { count: 'exact', head: true }).gte('at', monthStart())),
   ]);
-  if (mine.error || all.error) return json({ error: 'The Caddie hit a snag — tap the squares instead.' });
+  if (mine.error || all.error || month.error) return json({ error: 'The Caddie hit a snag — tap the squares instead.' });
+  // ov44: the platform's month is used up (or the AI is switched off with a cap of 0) — say so plainly; nothing is spent.
+  if (!monthRoom(month.count || 0, MONTH_CAP)) return json({ error: MONTH_FULL, capped: true, month: true });
   const left = room({ person: mine.count || 0, ask: all.count || 0 }, CAPS);
   if (!left.ok) {
     return json({ error: left.you ? 'The Caddie’s done its share on this one — tap the squares instead.' : 'That’s your Caddie goes used up on this one — tap the squares instead.', capped: true, remaining: left });
@@ -89,7 +94,7 @@ Deno.serve(async (req) => {
   if (row?.id) await admin.from('ask_ai_uses').update(r.ok ? { ok: true } : { code: String(r.code).slice(0, 40) }).eq('id', row.id);
   if (!r.ok) {
     console.warn('ask-fill: no fill', r.code, JSON.stringify({ shape: (r as Any).shape || null, seen })); // outline only
-    return json({ error: r.message, remaining: left, why: { code: r.code, seen } });
+    return json({ error: r.message, remaining: left });
   }
 
   // Places they'll leave from → a spot on the map, from the course library's towns (else the phone asks them to pick).

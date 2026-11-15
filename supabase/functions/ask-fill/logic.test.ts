@@ -1,7 +1,7 @@
 // Deno tests for ask-fill's pure parts, with a fake model — no network, no key.
 // Run: deno test --no-check supabase/functions/ask-fill/logic.test.ts
 import nodeAssert from 'node:assert/strict';
-import { caps, okToken, okDevice, whoKey, room, readFill, userMessage, fillOnce, TOOL, SYSTEM } from './logic.ts';
+import { caps, okToken, okDevice, whoKey, room, readFill, userMessage, fillOnce, TOOL, SYSTEM, monthCap, monthStart, monthRoom, MONTH_FULL, DEFAULT_MONTH_CAP } from './logic.ts';
 import type { AiConfig } from '../ai-helper/providers.ts';
 
 // deno-lint-ignore no-explicit-any
@@ -74,4 +74,24 @@ Deno.test('an empty reply is tried once more, then says so', async () => {
   eq(n, 2);
   eq(r.ok, false);
   if (!r.ok) { eq(r.code, 'empty'); eq((r as Any).shape, { keys: [], calls: 0, names: [], bad: false, text: 0 }); }
+});
+
+// ov44: one cap across the whole platform per calendar month (Sydney's clock).
+Deno.test('the monthly cap: the secret, 2,000 if not set, 0 switches the AI off', () => {
+  eq(monthCap(() => undefined), DEFAULT_MONTH_CAP);
+  eq(monthCap(() => ''), 2000);
+  eq(monthCap(() => '500'), 500);
+  eq(monthCap(() => '0'), 0);
+  eq(monthCap(() => 'lots'), 2000);
+  eq(monthCap(() => '-5'), 2000);
+  ok(monthRoom(1999, 2000));
+  ok(!monthRoom(2000, 2000), 'at the cap: stop');
+  ok(!monthRoom(0, 0), 'a cap of 0 is off');
+  ok(/tap the squares/.test(MONTH_FULL) && /still fill in/.test(MONTH_FULL), 'the message is plain and says easy phrases still work');
+});
+Deno.test('the month starts at midnight on the 1st in Sydney, summer and winter', () => {
+  eq(monthStart(new Date('2026-11-15T08:00:00Z')), '2026-10-31T13:00:00.000Z'); // daylight saving: UTC+11
+  eq(monthStart(new Date('2026-06-20T01:00:00Z')), '2026-05-31T14:00:00.000Z'); // winter: UTC+10
+  eq(monthStart(new Date('2026-11-30T13:30:00Z')), '2026-11-30T13:00:00.000Z'); // already 1 December in Sydney
+  eq(monthStart(new Date('2026-10-31T12:59:00Z')), '2026-09-30T14:00:00.000Z'); // still October in Sydney; October began in winter time
 });
